@@ -605,8 +605,12 @@ most <code class="docutils literal notranslate"><span class="pre">batch_dims</sp
 <dd><p>Shape (or batch_size) of a TensorDict.</p>
 <p>The shape of a tensordict corresponds to the common first <code class="docutils literal notranslate"><span class="pre">N</span></code>
 dimensions of the tensors it contains, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is an arbitrary
-number.
-The <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> shape is controlled by the user upon
+number. The batch-size contrasts with the “feature size” which repesents
+the semantically relevant shapes of a tensor. For instance, a batch of videos
+may have shape <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T,</span> <span class="pre">C,</span> <span class="pre">W,</span> <span class="pre">H]</span></code>, where <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> is the batch-size (batch and
+time dimensions) and <code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">W,</span> <span class="pre">H]</span></code> are the feature dimensions (channels and spacial
+dimensions).</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> shape is controlled by the user upon
 initialization (ie, it is not inferred from the tensor shapes).</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> can be edited dynamically if the new size is compatible
 with the TensorDict content. For instance, setting the batch size to
