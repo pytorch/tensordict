@@ -144,6 +144,9 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             for tensordict in self.tensordict.tensordicts
         )
 
+    def __repr__(self):
+        return f"{type(self).__name__}({tuple(self)})"
+
 
 def _fails_exclusive_keys(func):
     @wraps(func)
@@ -1300,6 +1303,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         key: NestedKey,
         default: Any = NO_DEFAULT,
+        *,
+        layout: torch.layout | None = None,
     ) -> CompatibleType:
         """Returns a nested tensor when stacking cannot be achieved.
 
@@ -1311,6 +1316,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 .. note:: In case the default is a tensor, this method will attempt
                   the construction of a nestedtensor with it. Otherwise, the default
                   value will be returned.
+
+        Keyword Args:
+            layout (torch.layout, optional): the layout for the nested tensor.
 
         Examples:
             >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
@@ -1340,14 +1348,14 @@ class LazyStackedTensorDict(TensorDictBase):
             tensordict = self.get(subkey, default)
             if tensordict is default:
                 return default
-            return tensordict.get_nestedtensor(key[1:], default=default)
+            return tensordict.get_nestedtensor(key[1:], default=default, layout=layout)
         tensors = [td.get(subkey, default=default) for td in self.tensordicts]
         if not isinstance(default, torch.Tensor) and any(
             tensor is default for tensor in tensors
         ):
             # we don't stack but return the default
             return default
-        return torch.nested.nested_tensor(tensors)
+        return torch.nested.nested_tensor(tensors, layout=layout)
 
     def is_contiguous(self) -> bool:
         return False
@@ -1369,7 +1377,10 @@ class LazyStackedTensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         name = None
-        if batch_size is not None:
+        if batch_size is not None and (
+            self.stack_dim
+            and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
+        ):
             return TensorDict.empty(
                 self,
                 recurse=recurse,
@@ -1381,6 +1392,10 @@ class LazyStackedTensorDict(TensorDictBase):
             if len(names) > self.stack_dim:
                 name = names[self.stack_dim]
             names = [name for i, name in enumerate(names) if i != self.stack_dim]
+        if batch_size is not None:
+            batch_size = torch.Size(
+                [b for i, b in enumerate(batch_size) if i != self.stack_dim]
+            )
         return type(self)(
             *[
                 td.empty(
@@ -1690,6 +1705,13 @@ class LazyStackedTensorDict(TensorDictBase):
             out = out.tensordicts
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
+            batch_size = torch.Size(batch_size)
+            out = TensorDict._new_unsafe(
+                {},
+                batch_size=batch_size,
+                device=device if device is not NO_DEFAULT else self.device,
+                names=names if names else self._maybe_names(),
+            )
             return TensorDict._apply_nest(
                 self,
                 fn,
@@ -1706,6 +1728,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
+                out=out,
                 **constructor_kwargs,
             )
 
@@ -1922,6 +1945,15 @@ class LazyStackedTensorDict(TensorDictBase):
                         value_unbind,
                     ):
                         if mask.any():
+                            assert (
+                                self.tensordicts[i][_idx].shape
+                                == torch.zeros(self.tensordicts[i].shape)[_idx].shape
+                            ), (
+                                self.tensordicts[i].shape,
+                                _idx,
+                                self.tensordicts[i][_idx],
+                                torch.zeros(self.tensordicts[i].shape)[_idx].shape,
+                            )
                             self.tensordicts[i][_idx] = _value
                 else:
                     for (i, _idx), _value in _zip_strict(

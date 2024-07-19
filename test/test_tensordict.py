@@ -4340,6 +4340,69 @@ class TestTensorDicts(TestTensorDictsBase):
         # cloning is type-preserving: we can do that operation
         td_stack.clone()
 
+    def test_new_empty(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_empty([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_empty(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_empty(2, 3)
+        assert tdn.shape == (2, 3)
+        # assert (tdn != 0).any()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_full(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_full([0], 2)
+        assert tdn.shape == (0,)
+        tdn = td.new_full((2, 3), 2)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 2).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_ones(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_ones([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(2, 3)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 1).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_tensor(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("td_params",):
+            td = td.data
+        tdn = td.new_tensor(torch.zeros(0, device="cpu"))
+        assert tdn.device == torch.device("cpu")
+        assert tdn.shape == (0,)
+        tdn = td.new_tensor(torch.zeros(2, device="cpu"))
+        assert tdn.device == torch.device("cpu")
+        assert tdn.shape == (2,)
+        tdn = td.new_tensor(td[0] * 0)
+        assert tdn.device == td.device
+        assert (tdn == 0).all()
+        assert tdn.shape == td.shape[1:]
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_zeros(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_zeros([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_zeros(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_zeros(2, 3)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 0).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
@@ -6152,6 +6215,19 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys():
             assert (td.get(k) == 0).all()
 
+    @pytest.mark.parametrize("set_to_none", [True, False])
+    def test_zero_grad(self, td_name, device, set_to_none):
+        td = getattr(self, td_name)(device)
+        tdr = td.float().requires_grad_()
+        td1 = tdr + 1
+        sum(td1.sum().values(True, True)).backward()
+        assert (tdr.grad == 1).all(), tdr.grad.to_dict()
+        tdr.zero_grad(set_to_none=set_to_none)
+        if set_to_none:
+            assert tdr.filter_non_tensor_data().grad is None, (td, tdr, tdr.grad)
+        else:
+            assert (tdr.grad == 0).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -7319,6 +7395,25 @@ class TestLazyStackedTensorDict:
         tdmask = td[index]
         assert tdmask["a"].shape == td["a"][index].shape
         assert (tdmask["a"] == td["a"][index]).all()
+
+    def test_lazy_mask_indexing_single(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.ones(())}),
+            TensorDict({"a": torch.zeros(())}),
+        )
+        tdi = td[torch.tensor([True, False])]
+        assert tdi.shape == (1,)
+
+        td[torch.tensor([True, False])] = TensorDict({"a": 0.0})
+        assert (td == 0).all()
+        td[torch.tensor([True, False])] = TensorDict({"b": 0.0})
+        td[torch.tensor([False, True])] = TensorDict({"b": 0.0})
+        assert (td["b"] == 0).all()
+        assert (td == 0).all()
+        td[torch.tensor([True, False])] = TensorDict({("c", "d"): 0.0})
+        td[torch.tensor([False, True])] = TensorDict({("c", "d"): 0.0})
+        assert (td["c", "d"] == 0).all()
+        assert (td == 0).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
@@ -8910,7 +9005,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-# @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
+@pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 

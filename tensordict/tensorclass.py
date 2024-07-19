@@ -43,10 +43,10 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (
-    _get_repr,
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
+    _td_fields,
     _zip_strict,
     DeviceType,
     IndexType,
@@ -103,6 +103,7 @@ _METHOD_FROM_TD = [
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_check_unlock",
+    "_check_dim_name",
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
@@ -140,21 +141,18 @@ _FALLBACK_METHOD_FROM_TD = [
     "__sub__",
     "__truediv__",
     "_add_batch_dim",
-    "_get_sub_tensordict",
-    "replace",
     "_apply_nest",
-    "_multithread_apply_flat",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
+    "_get_sub_tensordict",
+    "_multithread_apply_flat",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
-    # _set_str needs a special treatment to catch keys that are already in non tensor data
     "_set_tuple",
     "abs",
     "abs_",
-    "gather",
     "acos",
     "acos_",
     "add",
@@ -171,6 +169,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "asin_",
     "atan",
     "atan_",
+    "auto_batch_size_",
     "ceil",
     "ceil_",
     "clamp_max",
@@ -206,6 +205,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
+    "gather",
     "isfinite",
     "isnan",
     "isreal",
@@ -228,20 +228,32 @@ _FALLBACK_METHOD_FROM_TD = [
     "masked_fill_",
     "maximum",
     "maximum_",
+    "mean",
     "minimum",
     "minimum_",
     "mul",
     "mul_",
     "named_apply",
+    "nanmean",
+    "nansum",
     "neg",
     "neg_",
+    "new_empty",
+    "new_full",
+    "new_ones",
+    "new_tensor",
+    "new_zeros",
     "norm",
     "permute",
     "pow",
     "pow_",
+    "prod",
     "reciprocal",
     "reciprocal_",
+    "refine_names",
+    "requires_grad_",
     "rename_",  # TODO: must be specialized
+    "replace",
     "reshape",
     "round",
     "round_",
@@ -257,8 +269,10 @@ _FALLBACK_METHOD_FROM_TD = [
     "sqrt",
     "sqrt_",
     "squeeze",
+    "std",
     "sub",
     "sub_",
+    "sum",
     "tan",
     "tan_",
     "tanh",
@@ -270,9 +284,11 @@ _FALLBACK_METHOD_FROM_TD = [
     "unflatten",
     "unlock_",
     "unsqueeze",
+    "var",
     "view",
     "where",
     "zero_",
+    "zero_grad",
 ]
 assert not any(v in _METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD), set(
     _METHOD_FROM_TD
@@ -514,6 +530,8 @@ def _tensorclass(cls: T) -> T:
         cls.batch_size = property(_batch_size, _batch_size_setter)
     if not hasattr(cls, "names"):
         cls.names = property(_names, _names_setter)
+    if not hasattr(cls, "names"):
+        cls.require = property(_names, _names_setter)
     if not hasattr(cls, "to_dict"):
         cls.to_dict = _to_dict
 
@@ -1065,12 +1083,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             if copy_non_tensor:
                 # use tree_map to copy
                 non_tensordict = tree_map(lambda x: x, non_tensordict)
-            if not torch.compiler.is_dynamo_compiling():
-                return super(type(self), self).__getattribute__("_from_tensordict")(
-                    result, non_tensordict
-                )
-            else:
-                return self._from_tensordict(result, non_tensordict)
+            return self._from_tensordict(result, non_tensordict)
         return result
 
     return wrapped_func
@@ -1293,7 +1306,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
-    fields = _all_td_fields_as_str(self._tensordict)
+    fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
     batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
@@ -1310,7 +1323,7 @@ def _repr(self) -> str:
         )
     else:
         string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
-    return f"{type(self).__name__}(\n{string})"
+    return f"{type(self).__name__}({string})"
 
 
 def _len(self) -> int:
@@ -1964,41 +1977,6 @@ def _non_tensor_items(self, include_nested=False):
 
 def _bool(self):
     raise RuntimeError("Converting a tensorclass to boolean value is not permitted")
-
-
-def _single_td_field_as_str(key, item, tensordict):
-    """Returns a string as a  key-value pair of tensordict.
-
-    Args:
-        key (str): key of tensor dict item
-        item (tensor type): value to be returned for key
-        tensordict (Tensordict): Tensordict object
-
-    Returns:
-        String representation of a key-value pair
-
-    """
-    if is_tensor_collection(type(item)):
-        return f"{key}={repr(tensordict[key])}"
-    return f"{key}={_get_repr(item)}"
-
-
-def _all_td_fields_as_str(td: TensorDictBase) -> str:
-    """Returns indented representation of tensor dict values as a key-value pairs.
-
-    Args:
-        td (TensorDict) : Tensordict object
-
-    Returns:
-        String representation of all tensor data
-
-    """
-    return indent(
-        ",\n".join(
-            sorted([_single_td_field_as_str(key, item, td) for key, item in td.items()])
-        ),
-        4 * " ",
-    )
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
@@ -2776,6 +2754,13 @@ class NonTensorStack(LazyStackedTensorDict):
         """
         iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
         return [td.tolist() for td in iterator]
+
+    def maybe_to_stack(self):
+        """Placeholder for interchangeability between stack and non-stack of non-tensors."""
+        return type(self)(
+            *[ntd.maybe_to_stack() for ntd in self.tensordicts],
+            stack_dim=self.stack_dim,
+        )
 
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):

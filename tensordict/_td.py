@@ -24,6 +24,7 @@ import torch
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _expand_to_match_shape,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
@@ -43,7 +44,6 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _check_inbuild,
     _clone_value,
-    _expand_to_match_shape,
     _get_item,
     _get_leaf_tensordict,
     _get_shape_from_args,
@@ -1355,14 +1355,29 @@ class TensorDict(TensorDictBase):
     ) -> T:
         batch_size = self.batch_size
         batch_dims = len(batch_size)
-        if (
-            not batch_size
-            and index is not None
-            and (not isinstance(index, tuple) or any(idx is not None for idx in index))
-        ):
+
+        def _check_for_invalid_index(index):
+            if batch_size:
+                return
+            if index is None:
+                return
+            if (
+                isinstance(index, torch.Tensor)
+                and index.dtype == torch.bool
+                and not index.ndim
+            ):
+                return
+            if isinstance(index, tuple):
+                if len(index) == 1:
+                    return _check_for_invalid_index(index[0])
+                elif all(idx is None for idx in index):
+                    return
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
+
+        _check_for_invalid_index(index)
+
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
@@ -2117,7 +2132,7 @@ class TensorDict(TensorDictBase):
         tensor_in = self._get_str(key, NO_DEFAULT)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
-            dest = self._get_str(key, NO_DEFAULT)
+            dest = tensor_in
             is_diff = dest[idx].tolist() != value.tolist()
             if is_diff:
                 dest_val = dest.maybe_to_stack()
@@ -3193,14 +3208,25 @@ class _SubTensorDict(TensorDictBase):
             validated = True
         if not inplace:
             if _is_tensor_collection(type(value)):
+                # value has the shape of subtd[idx], so we want an expanded
+                #  version value_expand such that value_expand[idx] has the
+                #  shape of value
                 value_expand = _expand_to_match_shape(
-                    parent.batch_size, value, self.batch_dims, self.device
+                    parent.batch_size,
+                    value,
+                    self.batch_dims,
+                    self.device,
+                    index=self.idx,
                 )
                 for _key, _tensor in value.items():
                     value_expand._set_str(
                         _key,
                         _expand_to_match_shape(
-                            parent.batch_size, _tensor, self.batch_dims, self.device
+                            parent.batch_size,
+                            _tensor,
+                            self.batch_dims,
+                            self.device,
+                            index=self.idx,
                         ),
                         inplace=inplace,
                         validated=validated,

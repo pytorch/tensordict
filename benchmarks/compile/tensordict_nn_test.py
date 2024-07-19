@@ -4,12 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import gc
+import sys
 
 import pytest
 import torch
 from tensordict import TensorDict, TensorDictParams
 
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+
+sys.setrecursionlimit(10000)
 
 TORCH_VERSION = torch.__version__
 
@@ -21,6 +25,14 @@ compile = functools.partial(torch.compile, fullgraph=True)
 compile_overhead = functools.partial(
     torch.compile, fullgraph=True, mode="reduce-overhead"
 )
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_dynamo():
+    # Start a fresh compile for each parameter of the test case
+    torch._dynamo.reset()
+    gc.collect()
+    yield
 
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
@@ -70,6 +82,30 @@ def test_mod_wrap(mode, benchmark):
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+def test_mod_wrap_and_backward(mode, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    net = mlp(device, num_cells=1024, depth=5)
+    td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
+    module = Mod(net, in_keys=["a"], out_keys=[("c", "d")])
+    if mode == "compile":
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
+
+    def module_exec(td):
+        if torch.cuda.is_available():
+            torch.compiler.cudagraph_mark_step_begin()
+        module.zero_grad()
+        module(td)
+        td["c", "d"].mean().backward()
+
+    module_exec(td)
+    module_exec(td)
+    benchmark(module_exec, td)
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
@@ -110,7 +146,7 @@ def test_seq_wrap(mode, benchmark):
             Mod(
                 layer,
                 in_keys=["a" if i == 0 else "hidden"],
-                out_keys=["hidden" if i < len(net) - 1 else ("c", "d")],
+                out_keys=[("c", "d") if i == len(net) - 1 else "hidden"],
             )
             for i, layer in enumerate(net)
         ],
@@ -123,6 +159,46 @@ def test_seq_wrap(mode, benchmark):
     module(td)
     module(td)
     benchmark(module, td)
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+def test_seq_wrap_and_backward(mode, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    net = mlp(device, num_cells=1024, depth=5)
+    td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
+
+    def delhidden(td):
+        del td["hidden"]
+        return td
+
+    module = Seq(
+        lambda td: td.copy(),
+        *[
+            Mod(
+                layer,
+                in_keys=["a" if i == 0 else "hidden"],
+                out_keys=[("c", "d") if i == len(net) - 1 else "hidden"],
+            )
+            for i, layer in enumerate(net)
+        ],
+        delhidden,
+    )
+    if mode == "compile":
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
+
+    def module_exec(td):
+        module.zero_grad()
+        td = module(td.copy())
+        td["c", "d"].mean().backward()
+        return
+
+    module_exec(td)
+    module_exec(td)
+    benchmark(module_exec, td)
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
@@ -160,6 +236,49 @@ def test_func_call_runtime(mode, functional, benchmark):
         call(x)
         call(x)
         benchmark(call, x)
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+@pytest.mark.parametrize("functional", [False, True])
+def test_func_call_runtime_and_backward(mode, functional, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
+    # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
+    if functional:
+        td = TensorDict.from_module(module)
+        td = TensorDictParams(td.data.clone())
+
+        def call(x, td):
+            if torch.cuda.is_available():
+                torch.compiler.cudagraph_mark_step_begin()
+            # with needs registering
+            params = td.to_module(module, return_swap=True)
+            result = module(x)
+            params.to_module(module, return_swap=False)
+            return result
+
+    else:
+        call = module
+
+    if mode == "compile":
+        call = compile(call)
+    elif mode == "compile-overhead":
+        call = compile_overhead(call)
+
+    def call_with_backward(*args):
+        call(*args).mean().backward()
+
+    x = torch.randn(2, 2, 16)
+    if functional:
+        call_with_backward(x, td)
+        call_with_backward(x, td)
+        benchmark(call_with_backward, x, td)
+    else:
+        call_with_backward(x)
+        call_with_backward(x)
+        benchmark(call_with_backward, x)
 
 
 if __name__ == "__main__":

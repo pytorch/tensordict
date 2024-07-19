@@ -1179,7 +1179,7 @@ class _StringKeys(KeysView):
         yield from self.keys
 
     def __repr__(self):
-        return f"{type(self)}({self.keys})"
+        return f"{type(self).__name__}({self.keys})"
 
     def __len__(self):
         return len(self.keys)
@@ -1623,15 +1623,15 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     return f"{cls.__name__}({s})"
 
 
-def _make_repr(key: NestedKey, item, tensordict: T) -> str:
+def _make_repr(key: NestedKey, item, tensordict: T, sep) -> str:
     from tensordict.base import _is_tensor_collection
 
     if _is_tensor_collection(type(item)):
-        return f"{key}: {repr(tensordict.get(key))}"
-    return f"{key}: {_get_repr(item)}"
+        return sep.join([key, repr(tensordict.get(key))])
+    return sep.join([key, _get_repr(item)])
 
 
-def _td_fields(td: T, keys=None) -> str:
+def _td_fields(td: T, keys=None, sep=": ") -> str:
     strs = []
     if keys is None:
         keys = td.keys()
@@ -1639,7 +1639,7 @@ def _td_fields(td: T, keys=None) -> str:
         shape = td.get_item_shape(key)
         if -1 not in shape:
             item = td.get(key)
-            strs.append(_make_repr(key, item, td))
+            strs.append(_make_repr(key, item, td, sep=sep))
         else:
             # we know td is lazy stacked and the key is a leaf
             # so we can get the shape and escape the error
@@ -1667,7 +1667,7 @@ def _td_fields(td: T, keys=None) -> str:
                     dtype=tensor.dtype,
                     is_shared=is_shared,
                 )
-            strs.append(f"{key}: {substr}")
+            strs.append(sep.join([key, substr]))
 
     return indent(
         "\n" + ",\n".join(sorted(strs)),
@@ -1713,32 +1713,6 @@ def _check_keys(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
     return keys
-
-
-def _expand_to_match_shape(
-    parent_batch_size: torch.Size,
-    tensor: Tensor,
-    self_batch_dims: int,
-    self_device: DeviceType,
-) -> Tensor | TensorDictBase:
-    from tensordict.base import _is_tensor_collection
-
-    if not _is_tensor_collection(type(tensor)):
-        return torch.zeros(
-            (
-                *parent_batch_size,
-                *_shape(tensor)[self_batch_dims:],
-            ),
-            dtype=tensor.dtype,
-            device=self_device,
-        )
-    else:
-        # tensordict
-        out = tensor.empty()
-        out.batch_size = torch.Size(
-            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]]
-        )
-        return out
 
 
 def _set_max_batch_size(source: T, batch_dims=None):

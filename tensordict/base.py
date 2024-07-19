@@ -1292,6 +1292,10 @@ class TensorDictBase(MutableMapping):
         """See :obj:`~tensordict.TensorDictBase.batch_size`."""
         return self.batch_size
 
+    @shape.setter
+    def shape(self, value):
+        self.batch_size = value
+
     @property
     @abc.abstractmethod
     def batch_size(self) -> torch.Size:
@@ -1299,7 +1303,12 @@ class TensorDictBase(MutableMapping):
 
         The shape of a tensordict corresponds to the common first ``N``
         dimensions of the tensors it contains, where ``N`` is an arbitrary
-        number.
+        number. The batch-size contrasts with the "feature size" which repesents
+        the semantically relevant shapes of a tensor. For instance, a batch of videos
+        may have shape ``[B, T, C, W, H]``, where ``[B, T]`` is the batch-size (batch and
+        time dimensions) and ``[C, W, H]`` are the feature dimensions (channels and spacial
+        dimensions).
+
         The ``TensorDict`` shape is controlled by the user upon
         initialization (ie, it is not inferred from the tensor shapes).
 
@@ -1340,10 +1349,27 @@ class TensorDictBase(MutableMapping):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
 
+    def zero_grad(self, set_to_none: bool = True) -> T:
+        """Zeros all the gradients of the TensorDict recursively.
+
+        Args:
+            set_to_none (bool, optional): if ``True``, tensor.grad will be ``None``,
+                otherwise ``0``.
+                Defaults to ``True``.
+
+        """
+        if set_to_none:
+            for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                val.grad = None
+            return
+        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            val.grad.zero_()
+        return self
+
     @cache  # noqa
     def _dtype(self):
         dtype = None
-        for val in self.values(True, True):
+        for val in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             val_dtype = getattr(val, "dtype", None)
             if dtype is None and val_dtype is not None:
                 dtype = val_dtype
@@ -1506,6 +1532,276 @@ class TensorDictBase(MutableMapping):
                 lambda x, y: x.expand_as(y), other, batch_size=other.batch_size
             )
         return self.expand(other.shape)
+
+    def new_zeros(
+        self,
+        *size: torch.Size,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        pin_memory: bool = None,
+    ):  # noqa: D417
+        """Returns a TensorDict of size ``size`` filled with 0.
+
+        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+
+        Args:
+            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            layout (torch.layout, optional): the desired layout of returned TensorDict values.
+                Default: ``torch.strided``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if pin_memory is not None:
+            kwargs = {"pin_memory": pin_memory}
+        return self._new_impl(
+            size,
+            dtype=dtype,
+            device=device,
+            requires_grad=requires_grad,
+            layout=layout,
+            funcname="new_zeros",
+            **kwargs,
+        )
+
+    def new_ones(
+        self,
+        *size: torch.Size,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        pin_memory: bool = None,
+    ):  # noqa: D417
+        """Returns a TensorDict of size ``size`` filled with 1.
+
+        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+
+        Args:
+            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            layout (torch.layout, optional): the desired layout of returned TensorDict values.
+                Default: ``torch.strided``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if pin_memory is not None:
+            kwargs = {"pin_memory": pin_memory}
+        return self._new_impl(
+            size,
+            dtype=dtype,
+            device=device,
+            requires_grad=requires_grad,
+            layout=layout,
+            funcname="new_ones",
+            **kwargs,
+        )
+
+    def new_empty(
+        self,
+        *size: torch.Size,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        pin_memory: bool = None,
+    ):  # noqa: D417
+        """Returns a TensorDict of size ``size`` with emtpy tensors.
+
+        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+
+        Args:
+            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            layout (torch.layout, optional): the desired layout of returned TensorDict values.
+                Default: ``torch.strided``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if pin_memory is not None:
+            kwargs = {"pin_memory": pin_memory}
+        return self._new_impl(
+            size,
+            dtype=dtype,
+            device=device,
+            requires_grad=requires_grad,
+            layout=layout,
+            funcname="new_empty",
+            **kwargs,
+        )
+
+    def new_full(
+        self,
+        size: torch.Size,
+        fill_value,
+        *,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        pin_memory: bool = None,
+    ):  # noqa: D417
+        """Returns a TensorDict of size ``size`` filled with 1.
+
+        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+
+        Args:
+            size (sequence of int): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+            fill_value (scalar): the number to fill the output tensor with.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            layout (torch.layout, optional): the desired layout of returned TensorDict values.
+                Default: ``torch.strided``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if pin_memory is not None:
+            kwargs = {"pin_memory": pin_memory}
+        return self._new_impl(
+            size,
+            dtype=dtype,
+            device=device,
+            requires_grad=requires_grad,
+            layout=layout,
+            funcname="new_full",
+            fill_value=fill_value,
+            **kwargs,
+        )
+
+    def _new_impl(
+        self,
+        size: torch.Size,
+        *,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        funcname: str,
+        **kwargs,
+    ):
+        if isinstance(size, int):
+            size = (size,)
+        elif len(size) == 1 and not isinstance(size[0], int):
+            size = size[0]
+
+        ndim = self.ndim
+        if device is not NO_DEFAULT:
+            kwargs["device"] = device
+
+        def func(tensor, size=size):
+            feature_shape = tensor.shape[ndim:]
+            size = torch.Size((*size, *feature_shape))
+            return getattr(tensor, funcname)(
+                size,
+                dtype=dtype,
+                requires_grad=requires_grad,
+                layout=layout,
+                **kwargs,
+            )
+
+        return self._fast_apply(
+            func, call_on_nested=True, device=device, batch_size=size
+        )
+
+    def new_tensor(
+        self,
+        data: torch.Tensor | TensorDictBase,
+        *,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        pin_memory: bool | None = None,
+    ):  # noqa: D417
+        """Returns a new TensorDict with data as the tensor ``data``.
+
+        By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
+
+        The ``data`` can also be a tensor collection (``TensorDict`` or ``tensorclass``), in which case
+        the ``new_tensor`` method iterates over the tensor pairs of ``self`` and ``data``.
+
+        Args:
+            data (torch.Tensor or TensorDictBase): the data to be copied.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if device is not NO_DEFAULT:
+            kwargs["device"] = device
+        else:
+            device = kwargs["device"] = data.device
+        if pin_memory is not None:
+            kwargs["pin_memory"] = pin_memory
+
+        def func(x, tensor_b=None):
+            if tensor_b is None:
+                tensor_b = data
+            return x.new_tensor(
+                tensor_b,
+                dtype=dtype,
+                requires_grad=requires_grad,
+                **kwargs,
+            )
+
+        if _is_tensor_collection(type(data)):
+            return self._fast_apply(
+                func,
+                data,
+                call_on_nested=True,
+                device=device,
+                batch_size=data.shape,
+            )
+        return self._fast_apply(
+            func,
+            call_on_nested=True,
+            device=device,
+            batch_size=data.shape,
+        )
 
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
@@ -2224,7 +2520,7 @@ class TensorDictBase(MutableMapping):
         else:
             return False
 
-    def refine_names(self, *names):
+    def refine_names(self, *names) -> T:
         """Refines the dimension names of self according to names.
 
         Refining is a special case of renaming that “lifts” unnamed dimensions.
@@ -4782,7 +5078,9 @@ class TensorDictBase(MutableMapping):
 
     @cache  # noqa: B019
     def _grad(self):
-        result = self._fast_apply(lambda x: x.grad, propagate_lock=True)
+        result = self._fast_apply(
+            lambda x: x.grad, propagate_lock=True, filter_empty=True
+        )
         return result
 
     @cache  # noqa: B019
@@ -7628,9 +7926,11 @@ class TensorDictBase(MutableMapping):
                     dim0 = out.ndim + dim0
                 dim1 = dim0 + len(unflattened_size) - 1
                 if not out.is_locked:
-                    return out.update(self.flatten(dim0, dim1), inplace=False)
+                    unflattened = self.flatten(dim0, dim1)
+                    return out.update(unflattened, inplace=False)
                 else:
-                    return out.update_(self.flatten(dim0, dim1))
+                    unflattened = self.flatten(dim0, dim1)
+                    return out.update_(unflattened)
 
             elif last_op == type(self).permute.__name__:
                 dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
@@ -8889,6 +9189,20 @@ class TensorDictBase(MutableMapping):
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
 
+    def requires_grad_(self, requires_grad=True) -> T:
+        """Change if autograd should record operations on this tensor: sets this tensor’s requires_grad attribute in-place.
+
+        Returns this tensordict.
+
+        Args:
+            requires_grad (bool, optional): whether or not autograd should record operations on this tensordict.
+                Defaults to ``True``.
+
+        """
+        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            val.requires_grad_(requires_grad)
+        return self
+
     @abc.abstractmethod
     def detach_(self) -> T:
         """Detach the tensors in the tensordict in-place.
@@ -9071,3 +9385,36 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
+
+
+def _expand_to_match_shape(
+    parent_batch_size: torch.Size,
+    data: Tensor | TensorDictBase,
+    self_batch_dims: int,
+    self_device: DeviceType,
+    index: Any = None,
+) -> Tensor | TensorDictBase:
+    """Creates and empty tensor / tensordict that can host values.
+
+    Given a tensordict with shape ``parent_batch_size``, this function creates an expanded version
+    of ``data`` such that ``data_expand[index].shape == data.shape``.
+
+    """
+    if not parent_batch_size and self_batch_dims == 1:
+        # This is what happens when indexing an empty tensor with a bool:
+        #  torch.zeros(())[True].shape == torch.Size((1,))
+        return data.new_zeros(data.shape[1:])
+    if not _is_tensor_collection(type(data)):
+        result = torch.zeros(
+            (
+                *parent_batch_size,
+                *_shape(data)[self_batch_dims:],
+            ),
+            dtype=data.dtype,
+            device=self_device,
+        )
+    else:
+        # tensordict
+        batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
+        result = data.empty(batch_size=batch_size)
+    return result
