@@ -2126,7 +2126,7 @@ class TensorDict(TensorDictBase):
         tensor_in = self._get_str(key, NO_DEFAULT)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
-            dest = self._get_str(key, NO_DEFAULT)
+            dest = tensor_in
             is_diff = dest[idx].tolist() != value.tolist()
             if is_diff:
                 dest_val = dest.maybe_to_stack()

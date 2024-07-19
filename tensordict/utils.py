@@ -1734,11 +1734,8 @@ def _expand_to_match_shape(
         )
     else:
         # tensordict
-        out = tensor.empty(
-            batch_size=torch.Size(
-                [*parent_batch_size, *_shape(tensor)[self_batch_dims:]]
-            )
-        )
+        batch_size = torch.Size([*parent_batch_size, *_shape(tensor)[self_batch_dims:]])
+        out = tensor.empty(batch_size=batch_size)
         return out
 
 

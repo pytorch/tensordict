@@ -1071,12 +1071,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             if copy_non_tensor:
                 # use tree_map to copy
                 non_tensordict = tree_map(lambda x: x, non_tensordict)
-            if not torch.compiler.is_dynamo_compiling():
-                return super(type(self), self).__getattribute__("_from_tensordict")(
-                    result, non_tensordict
-                )
-            else:
-                return self._from_tensordict(result, non_tensordict)
+            return self._from_tensordict(result, non_tensordict)
         return result
 
     return wrapped_func
@@ -2747,6 +2742,13 @@ class NonTensorStack(LazyStackedTensorDict):
         """
         iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
         return [td.tolist() for td in iterator]
+
+    def maybe_to_stack(self):
+        """Placeholder for interchangeability between stack and non-stack of non-tensors."""
+        return type(self)(
+            *[ntd.maybe_to_stack() for ntd in self.tensordicts],
+            stack_dim=self.stack_dim,
+        )
 
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):

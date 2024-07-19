@@ -1379,7 +1379,10 @@ class LazyStackedTensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         name = None
-        if batch_size is not None:
+        if batch_size is not None and (
+            self.stack_dim
+            and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
+        ):
             return TensorDict.empty(
                 self,
                 recurse=recurse,
@@ -1391,6 +1394,10 @@ class LazyStackedTensorDict(TensorDictBase):
             if len(names) > self.stack_dim:
                 name = names[self.stack_dim]
             names = [name for i, name in enumerate(names) if i != self.stack_dim]
+        if batch_size is not None:
+            batch_size = torch.Size(
+                [b for i, b in enumerate(batch_size) if i != self.stack_dim]
+            )
         return type(self)(
             *[
                 td.empty(

@@ -534,7 +534,7 @@ def _stack(
                                         return _stack(list_of_tensordicts, dim=dim)
                                 else:
                                     raise RuntimeError(
-                                        "The shapes of the tensors to stack is incompatible."
+                                        f"The shapes of the tensors to stack is incompatible: {new_tensor_shape} vs {tensor_shape} for key {key}."
                                     )
                         else:
                             tensor_shape = new_tensor_shape
