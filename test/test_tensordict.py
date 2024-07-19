@@ -6201,6 +6201,19 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys():
             assert (td.get(k) == 0).all()
 
+    @pytest.mark.parametrize("set_to_none", [True, False])
+    def test_zero_grad(self, td_name, device, set_to_none):
+        td = getattr(self, td_name)(device)
+        tdr = td.float().requires_grad_()
+        td1 = tdr + 1
+        sum(td1.sum().values(True, True)).backward()
+        assert (tdr.grad == 1).all(), tdr.grad.to_dict()
+        tdr.zero_grad(set_to_none=set_to_none)
+        if set_to_none:
+            assert tdr.filter_non_tensor_data().grad is None, (td, tdr, tdr.grad)
+        else:
+            assert (tdr.grad == 0).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])

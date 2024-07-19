@@ -169,6 +169,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "asin_",
     "atan",
     "atan_",
+    "auto_batch_size_",
     "ceil",
     "ceil_",
     "clamp_max",
@@ -227,11 +228,14 @@ _FALLBACK_METHOD_FROM_TD = [
     "masked_fill_",
     "maximum",
     "maximum_",
+    "mean",
     "minimum",
     "minimum_",
     "mul",
     "mul_",
     "named_apply",
+    "nanmean",
+    "nansum",
     "neg",
     "neg_",
     "new_empty",
@@ -243,9 +247,11 @@ _FALLBACK_METHOD_FROM_TD = [
     "permute",
     "pow",
     "pow_",
+    "prod",
     "reciprocal",
     "reciprocal_",
     "refine_names",
+    "requires_grad_",
     "rename_",  # TODO: must be specialized
     "replace",
     "reshape",
@@ -263,8 +269,10 @@ _FALLBACK_METHOD_FROM_TD = [
     "sqrt",
     "sqrt_",
     "squeeze",
+    "std",
     "sub",
     "sub_",
+    "sum",
     "tan",
     "tan_",
     "tanh",
@@ -276,9 +284,11 @@ _FALLBACK_METHOD_FROM_TD = [
     "unflatten",
     "unlock_",
     "unsqueeze",
+    "var",
     "view",
     "where",
     "zero_",
+    "zero_grad",
 ]
 assert not any(v in _METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD), set(
     _METHOD_FROM_TD
@@ -520,6 +530,8 @@ def _tensorclass(cls: T) -> T:
         cls.batch_size = property(_batch_size, _batch_size_setter)
     if not hasattr(cls, "names"):
         cls.names = property(_names, _names_setter)
+    if not hasattr(cls, "names"):
+        cls.require = property(_names, _names_setter)
     if not hasattr(cls, "to_dict"):
         cls.to_dict = _to_dict
 
