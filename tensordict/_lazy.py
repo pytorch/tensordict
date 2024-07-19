@@ -1702,6 +1702,13 @@ class LazyStackedTensorDict(TensorDictBase):
             out = out.tensordicts
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
+            batch_size = torch.Size(batch_size)
+            out = TensorDict._new_unsafe(
+                {},
+                batch_size=batch_size,
+                device=device if device is not NO_DEFAULT else self.device,
+                names=names if names else self._maybe_names(),
+            )
             return TensorDict._apply_nest(
                 self,
                 fn,
@@ -1718,6 +1725,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
+                out=out,
                 **constructor_kwargs,
             )
 

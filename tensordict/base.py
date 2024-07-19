@@ -7955,9 +7955,11 @@ class TensorDictBase(MutableMapping):
                     dim0 = out.ndim + dim0
                 dim1 = dim0 + len(unflattened_size) - 1
                 if not out.is_locked:
-                    return out.update(self.flatten(dim0, dim1), inplace=False)
+                    unflattened = self.flatten(dim0, dim1)
+                    return out.update(unflattened, inplace=False)
                 else:
-                    return out.update_(self.flatten(dim0, dim1))
+                    unflattened = self.flatten(dim0, dim1)
+                    return out.update_(unflattened)
 
             elif last_op == type(self).permute.__name__:
                 dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
