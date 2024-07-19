@@ -8,13 +8,13 @@
 
 namespace py = pybind11;
 
-py::tuple _unravel_key_to_tuple(const py::object& key) {
+py::tuple _unravel_key_to_tuple(const py::object &key) {
   bool is_tuple = py::isinstance<py::tuple>(key);
   bool is_str = py::isinstance<py::str>(key);
 
   if (is_tuple) {
     py::list newkey;
-    for (const auto& subkey : key) {
+    for (const auto &subkey : key) {
       if (py::isinstance<py::str>(subkey)) {
         newkey.append(subkey);
       } else {
@@ -34,14 +34,14 @@ py::tuple _unravel_key_to_tuple(const py::object& key) {
   }
 }
 
-py::object unravel_key(const py::object& key) {
+py::object unravel_key(const py::object &key) {
   bool is_tuple = py::isinstance<py::tuple>(key);
   bool is_str = py::isinstance<py::str>(key);
 
   if (is_tuple) {
     py::list newkey;
     int count = 0;
-    for (const auto& subkey : key) {
+    for (const auto &subkey : key) {
       if (py::isinstance<py::str>(subkey)) {
         newkey.append(subkey);
         count++;
@@ -63,15 +63,15 @@ py::object unravel_key(const py::object& key) {
   }
 }
 
-py::list unravel_key_list(const py::list& keys) {
+py::list unravel_key_list(const py::list &keys) {
   py::list newkeys;
-  for (const auto& key : keys) {
+  for (const auto &key : keys) {
     auto _key = unravel_key(key.cast<py::object>());
     newkeys.append(_key);
   }
   return newkeys;
 }
 
-py::list unravel_key_list(const py::tuple& keys) {
+py::list unravel_key_list(const py::tuple &keys) {
   return unravel_key_list(py::list(keys));
 }

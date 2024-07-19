@@ -17,12 +17,10 @@ PYBIND11_MODULE(_C, m) {
   m.def("unravel_keys", &unravel_key, py::arg("key")); // for bc compat
   m.def("unravel_key", &unravel_key, py::arg("key"));
   m.def("_unravel_key_to_tuple", &_unravel_key_to_tuple, py::arg("key"));
-  m.def(
-      "unravel_key_list",
-      py::overload_cast<const py::list&>(&unravel_key_list),
-      py::arg("keys"));
-  m.def(
-      "unravel_key_list",
-      py::overload_cast<const py::tuple&>(&unravel_key_list),
-      py::arg("keys"));
+  m.def("unravel_key_list",
+        py::overload_cast<const py::list &>(&unravel_key_list),
+        py::arg("keys"));
+  m.def("unravel_key_list",
+        py::overload_cast<const py::tuple &>(&unravel_key_list),
+        py::arg("keys"));
 }
