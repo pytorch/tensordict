@@ -13,7 +13,7 @@ README Tutos
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to control where the contents of a TensorDict are stored in...">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to control where the contents of a TensorDict are stored in memory, either by sending those contents to a device, or by utilizing memory maps.">
 
 .. only:: html
 
@@ -81,7 +81,7 @@ README Tutos
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to work with and manipulate the keys in a TensorDict, inclu...">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to work with and manipulate the keys in a TensorDict, including getting and setting keys, iterating over keys, manipulating nested values, and flattening the keys.">
 
 .. only:: html
 

@@ -209,6 +209,10 @@ Subsequent iterations, we update the pre-allocated tensors in-place.
 
       :download:`Download Python source code: tensordict_preallocation.py <tensordict_preallocation.py>`
 
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: tensordict_preallocation.zip <tensordict_preallocation.zip>`
+
 
 .. only:: html
 

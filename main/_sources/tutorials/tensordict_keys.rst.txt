@@ -769,7 +769,7 @@ We can obtain a new :class:`~.TensorDict` with a subset of the keys by using
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.010 seconds)
+   **Total running time of the script:** (0 minutes 0.009 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_keys.py:
@@ -785,6 +785,10 @@ We can obtain a new :class:`~.TensorDict` with a subset of the keys by using
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: tensordict_keys.py <tensordict_keys.py>`
+
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: tensordict_keys.zip <tensordict_keys.zip>`
 
 
 .. only:: html

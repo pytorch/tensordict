@@ -274,6 +274,10 @@ We mask :class:`TensorDict` as we mask tensors.
 
       :download:`Download Python source code: tensordict_slicing.py <tensordict_slicing.py>`
 
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: tensordict_slicing.zip <tensordict_slicing.zip>`
+
 
 .. only:: html
 

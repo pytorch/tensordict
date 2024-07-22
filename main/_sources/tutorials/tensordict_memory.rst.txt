@@ -222,7 +222,7 @@ the above :class:`TensorDict` is saved as follows:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.024 seconds)
+   **Total running time of the script:** (0 minutes 0.023 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_memory.py:
@@ -238,6 +238,10 @@ the above :class:`TensorDict` is saved as follows:
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: tensordict_memory.py <tensordict_memory.py>`
+
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: tensordict_memory.zip <tensordict_memory.zip>`
 
 
 .. only:: html

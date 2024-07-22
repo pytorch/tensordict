@@ -237,6 +237,10 @@ parameters as regular inputs:
 
       :download:`Download Python source code: tensordict_module_functional.py <tensordict_module_functional.py>`
 
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: tensordict_module_functional.zip <tensordict_module_functional.zip>`
+
 
 .. only:: html
 
