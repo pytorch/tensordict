@@ -1302,6 +1302,12 @@ strings are acceptable.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.filter_empty_">
+<span class="sig-name descname"><span class="pre">filter_empty_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.filter_empty_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Filters out all empty tensordicts in-place.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.filter_non_tensor_data">
 <span class="sig-name descname"><span class="pre">filter_non_tensor_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.filter_non_tensor_data" title="Permalink to this definition">¶</a></dt>
 <dd><p>Filters out all non-tensor-data.</p>
@@ -4521,6 +4527,11 @@ will return an error or not. Default: <a class="reference external" href="https:
 <dd class="field-even"><p>A new tensordict (or the same if <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>) with the selected keys only.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>To select keys in a tensordict and return a version of this tensordict
+deprived of these keys, see the <a class="reference internal" href="#tensordict.TensorDictParams.split_keys" title="tensordict.TensorDictParams.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a> method.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>
@@ -4926,6 +4937,46 @@ is unlocked for faster execution.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">split</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td0</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">])</span>
 <span class="go">torch.Tensor([[0, 1, 2, 3]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.split_keys">
+<span class="sig-name descname"><span class="pre">split_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">key_sets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reproduce_struct</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.split_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Splits the tensordict in subsets given one or more set of keys.</p>
+<p>The method will return <code class="docutils literal notranslate"><span class="pre">N+1</span></code> tensordicts, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of
+the arguments provided.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the keys are removed from <code class="docutils literal notranslate"><span class="pre">self</span></code>
+in-place. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an exception is raised when a key
+is missing. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>reproduce_struct</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, all tensordict returned have
+the same tree structure as <code class="docutils literal notranslate"><span class="pre">self</span></code>, even if some sub-tensordicts
+contain no leaves.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">None</span></code> non-tensor values will be ignored and not returned.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>the method does not check for duplicates in the provided lists.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">d</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_a</span><span class="p">,</span> <span class="n">td_bc</span><span class="p">,</span> <span class="n">td_d</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">split_keys</span><span class="p">([</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_bc</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>
