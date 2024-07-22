@@ -1367,7 +1367,7 @@ class TensorDictBase(MutableMapping):
         if set_to_none:
             for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
                 val.grad = None
-            return
+            return self
         for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             val.grad.zero_()
         return self
@@ -7539,16 +7539,15 @@ class TensorDictBase(MutableMapping):
         return self
 
     def sub(self, other: TensorDictBase | float, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_sub(val, other_val, alpha=alpha)
+            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
         else:
-            vals = torch._foreach_sub(val, other_val)
+            vals = torch._foreach_sub(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items.get(name, val),
