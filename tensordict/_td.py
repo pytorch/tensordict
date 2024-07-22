@@ -2952,7 +2952,7 @@ class TensorDict(TensorDictBase):
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
-        if not include_nested and not leaves_only:
+        if not include_nested and not leaves_only and is_leaf is None:
             return _StringKeys(self._tensordict.keys())
         else:
             return self._nested_keys(

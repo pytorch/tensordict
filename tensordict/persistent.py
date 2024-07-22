@@ -36,6 +36,7 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
+    _as_context_manager,
     _CloudpickleWrapper,
     _KEY_ERROR,
     _LOCK_ERROR,
@@ -943,6 +944,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:
             raise ValueError(
@@ -950,6 +952,7 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:
             raise ValueError(

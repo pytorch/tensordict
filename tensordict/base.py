@@ -7931,6 +7931,18 @@ class TensorDictBase(MutableMapping):
                     return out.update(self.transpose(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.transpose(dim0, dim1))
+            elif last_op == type(self).flatten_keys.__name__:
+                sep = args[0] if args else "."
+                if not out.is_locked:
+                    return out.update(self.unflatten_keys(sep), inplace=False)
+                else:
+                    return out.update_(self.unflatten_keys(sep))
+            elif last_op == type(self).unflatten_keys.__name__:
+                sep = args[0] if args else "."
+                if not out.is_locked:
+                    return out.update(self.flatten_keys(sep), inplace=False)
+                else:
+                    return out.update_(self.flatten_keys(sep))
             elif last_op == type(self).flatten.__name__:
                 if len(args) == 2:
                     dim0, dim1 = args
@@ -8623,6 +8635,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @cache  # noqa: B019
+    @_as_context_manager()
     def flatten_keys(
         self,
         separator: str = ".",
@@ -8778,6 +8791,7 @@ class TensorDictBase(MutableMapping):
         return self
 
     @cache  # noqa: B019
+    @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         """Converts a flat tensordict into a nested one, recursively.
 

@@ -3514,6 +3514,21 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert td_flatten is not td
 
+    def test_flatten_keys_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.flatten_keys(",") as tdflat:
+            assert set(tdflat.keys(True, True, is_leaf=_is_leaf_nontensor)) == set(
+                tdflat.keys(is_leaf=_is_leaf_nontensor)
+            )
+            with tdflat.unflatten_keys(",") as td_orig:
+                assert (td_orig == td).all()
+                if not td.is_locked:
+                    td_orig["new", "data"] = torch.zeros(td_orig.shape)
+            if not td.is_locked:
+                assert (tdflat["new,data"] == 0).all()
+        if not td.is_locked:
+            assert (td["new", "data"] == 0).all()
+
     def test_flatten_unflatten(self, td_name, device):
         td = getattr(self, td_name)(device)
         shape = td.shape[:3]
