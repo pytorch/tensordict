@@ -1992,6 +1992,32 @@ class TestGeneric:
             td0 = td0.squeeze(0)
             assert_shared(td0)
 
+    def test_split_keys(self):
+        td = TensorDict(
+            {
+                "a": 0,
+                "b": {"c": 1},
+                "d": {"e": "a string!", "f": 2},
+                "g": 3,
+            }
+        )
+        td0, td1, td3 = td.split_keys(["b"], ["d"])
+        assert set(td0.keys()) == {"b"}
+        assert set(td1.keys()) == {"d"}
+        assert "b" not in td3
+        assert "d" not in td3
+        assert "a" in td3
+        assert "g" in td3
+        assert td3 is not td
+        td0, td1, td3 = td.split_keys(
+            [("b", "c")], [("d", "e"), ("d", "f")], inplace=True
+        )
+        assert ("b", "c") in td0
+        assert ("d", "e") in td1
+        assert ("d", "f") in td1
+        assert td is td3
+        assert "d" not in td
+
     def test_setitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)
@@ -5304,6 +5330,30 @@ class TestTensorDicts(TestTensorDictsBase):
                             assert item["inner"].shape == torch.Size(
                                 expected_inner_tensor_size
                             )
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_split_keys(self, td_name, device, strict, inplace):
+        td = getattr(self, td_name)(device)
+        keys = list(td.keys(True, True))[:3]
+        keys.append("something that does not exist")
+        if strict:
+            with pytest.raises(KeyError):
+                td.split_keys(keys, strict=strict)
+            keys = keys[:-1]
+        if td.is_locked and inplace:
+            with pytest.raises(RuntimeError, match="Cannot modify"):
+                td0, td1 = td.split_keys(keys, inplace=inplace, strict=strict)
+            return
+        td0, td1 = td.split_keys(keys, inplace=inplace, strict=strict)
+        if inplace:
+            assert td1 is td
+        else:
+            assert td is not td1
+        for key in td0.keys(True, True):
+            assert key not in td1
+        for key in td1.keys(True, True):
+            assert key not in td0
 
     @set_lazy_legacy(True)
     def test_squeeze_legacy(self, td_name, device, squeeze_dim=-1):

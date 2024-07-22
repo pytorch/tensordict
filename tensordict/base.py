@@ -4296,6 +4296,13 @@ class TensorDictBase(MutableMapping):
 
         return self._apply_nest(_filter, call_on_nested=True, filter_empty=False)
 
+    def filter_empty_(self):
+        """Filters out all empty tensordicts in-place."""
+        for key, val in list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS)):
+            if _is_tensor_collection(type(val)) and val.is_empty():
+                del self[key]
+        return self
+
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
             has_key = key in self.keys()
@@ -5180,7 +5187,8 @@ class TensorDictBase(MutableMapping):
             if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
-                    f"without providing default value."
+                    f"without providing default value. "
+                    f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
                 ) from err
         return out
 
@@ -8900,6 +8908,79 @@ class TensorDictBase(MutableMapping):
                             f"Unflattening key(s) in tensordict will override an existing for unflattened key {new_key}."
                         )
             return self
+
+    def split_keys(
+        self,
+        *key_sets,
+        inplace=False,
+        strict: bool = True,
+        reproduce_struct: bool = False,
+    ):
+        """Splits the tensordict in subsets given one or more set of keys.
+
+        The method will return ``N+1`` tensordicts, where ``N`` is the number of
+        the arguments provided.
+
+        Args:
+            inplace (bool, optional): if ``True``, the keys are removed from ``self``
+                in-place. Defaults to ``False``.
+            strict (bool, optional): if ``True``, an exception is raised when a key
+                is missing. Defaults to ``True``.
+            reproduce_struct (bool, optional): if ``True``, all tensordict returned have
+                the same tree structure as ``self``, even if some sub-tensordicts
+                contain no leaves.
+
+        .. note:: ``None`` non-tensor values will be ignored and not returned.
+
+        .. note:: the method does not check for duplicates in the provided lists.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     a=0,
+            ...     b=0,
+            ...     c=0,
+            ...     d=0,
+            ... )
+            >>> td_a, td_bc, td_d = td.split_keys(["a"], ["b", "c"])
+            >>> print(td_bc)
+        """
+        from tensordict import PersistentTensorDict
+
+        if isinstance(self, PersistentTensorDict):
+            last_out = self.to_tensordict()
+        else:
+            last_out = self.copy()
+        if strict:
+            default = NO_DEFAULT
+        else:
+            default = None
+        outs = []
+        if inplace:
+            keys_to_del = set()
+        for key_set in key_sets:
+            outs.append(self.empty(recurse=reproduce_struct))
+            for key in key_set:
+                val = last_out.pop(key, default)
+                if val is not None:
+                    outs[-1].set(key, val)
+                if inplace:
+                    keys_to_del.add(key)
+        if inplace:
+            # We update self here because doing it in the loop would
+            #  possibly break people's code when doing a try/except KeyError
+            #  around this method
+            for key in keys_to_del:
+                try:
+                    del self[key]
+                except KeyError:
+                    # We're good if strict is False
+                    if strict:
+                        raise
+            last_out = self
+        if not reproduce_struct:
+            last_out.filter_empty_()
+        outs.append(last_out)
+        return tuple(outs)
 
     @abc.abstractmethod
     def _index_tensordict(
