@@ -8063,7 +8063,7 @@ class TensorDictBase(MutableMapping):
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.
 
         .. note:: To select keys in a tensordict and return a version of this tensordict
-            deprived from these keys, see the :meth:`~.split_keys` method.
+            deprived of these keys, see the :meth:`~.split_keys` method.
 
         Examples:
             >>> from tensordict import TensorDict
