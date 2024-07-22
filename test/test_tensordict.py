@@ -380,6 +380,12 @@ class TestGeneric:
                 )
             ), td_c.to_dict()
 
+    def test_construct_from_kwargs(self):
+        with pytest.raises(ValueError, match="not both"):
+            TensorDict(a=1, source={"b": 2})
+        td = TensorDict(a=1, b=1, batch_size=[])
+        assert td.batch_size == ()
+
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
         [
