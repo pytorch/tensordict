@@ -588,7 +588,7 @@ class TestNN:
         assert module_compile(td) is not td
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
