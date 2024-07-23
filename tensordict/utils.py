@@ -1853,6 +1853,10 @@ class Buffer(Tensor, metaclass=_ParameterMeta):
     def __new__(cls, data=None, requires_grad=False):
         if data is None:
             data = torch.empty(0)
+
+        if type(data) is torch.Tensor or type(data) is Buffer:
+            return data.as_subclass(cls)
+
         # Path for custom tensors: set a flag on the instance to indicate parameter-ness.
         if requires_grad:
             t = data.detach().requires_grad_(requires_grad)
