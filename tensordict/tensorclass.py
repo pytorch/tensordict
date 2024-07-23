@@ -635,7 +635,7 @@ def _init_wrapper(__init__: Callable) -> Callable:
         if batch_size is None:
             batch_size = torch.Size([])
         if not is_dynamo_compiling():
-            for key, field in self.__dataclass_fields__.items():
+            for key, field in type(self).__dataclass_fields__.items():
                 if field.default_factory is not dataclasses.MISSING:
                     default = field.default_factory()
                 else:
@@ -985,7 +985,7 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 def _getattr(self, item: str) -> Any:
     _non_tensordict = self._non_tensordict
     _tensordict = self._tensordict
-    __dataclass_fields__ = self.__dataclass_fields__
+    __dataclass_fields__ = type(self).__expected_keys__
 
     if item in __dataclass_fields__:
         if _non_tensordict:

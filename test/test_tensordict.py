@@ -871,7 +871,7 @@ class TestGeneric:
             assert data["d", "g"].batch_size == torch.Size(batch_size)
 
     def test_from_dict_instance(self):
-        @tensorclass
+        @tensorclass(autocast=True)
         class MyClass:
             x: torch.Tensor = None
             y: int = None
