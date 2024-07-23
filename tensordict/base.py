@@ -1089,6 +1089,7 @@ class TensorDictBase(MutableMapping):
         lock: bool = True,
         use_state_dict: bool = False,
         lazy_stack: bool = False,
+        expand_identical: bool = False,
     ):
         """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
 
@@ -1134,6 +1135,9 @@ class TensorDictBase(MutableMapping):
                     or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
                     to be executed. In general, ``lazy_stack`` should be reserved
                     to very few use cases.
+            expand_identical (bool, optional): if ``True`` and the same parameter (same
+                identity) is being stacked to itself, an expanded version of this parameter
+                will be returned instead. This argument is ignored when ``lazy_stack=True``.
 
         Examples:
             >>> from torch import nn
@@ -1200,6 +1204,36 @@ class TensorDictBase(MutableMapping):
                         "lasy_stack=True is not compatible with lazy modules."
                     )
             params = LazyStackedTensorDict.lazy_stack(param_list)
+        elif expand_identical:
+            from tensordict._torch_func import _stack_uninit_params
+
+            # Check the keys
+            #  If not expand_identical, `stack` takes care of that check but
+            #  here we use apply which will ignore keys that are in one TD but not another
+            sets = [set(param.keys(True, True)) for param in param_list]
+            for set_ in sets[1:]:
+                if set_ != sets[0]:
+                    raise ValueError(
+                        f"All key sets must match. "
+                        f"Got {set_.symmetric_difference(sets[0])} in one but not another."
+                    )
+
+            def maybe_stack(*params):
+                param = params[0]
+                if isinstance(param, UninitializedTensorMixin):
+                    return _stack_uninit_params(params, 0)
+                if len(set(params)) == 1:
+                    return param.expand((len(params), *param.shape))
+                result = torch.stack(params)
+                if isinstance(param, nn.Parameter):
+                    return nn.Parameter(result.detach(), param.requires_grad)
+                return Buffer(result)
+
+            params = param_list[0]._fast_apply(
+                maybe_stack,
+                *param_list[1:],
+                batch_size=torch.Size([len(param_list), *param_list[0].batch_size]),
+            )
         else:
             with set_lazy_legacy(False), torch.no_grad():
                 params = torch.stack(param_list)
