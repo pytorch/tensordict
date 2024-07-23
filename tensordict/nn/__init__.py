@@ -35,28 +35,10 @@ from tensordict.nn.probabilistic import (
 )
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import (
+    add_custom_mapping,
     biased_softplus,
     inv_softplus,
+    mappings,
     set_skip_existing,
     skip_existing,
 )
-
-__all__ = [
-    "dispatch",
-    "TensorDictModule",
-    "TensorDictModuleWrapper",
-    "get_functional",
-    "make_functional",
-    "repopulate_module",
-    "InteractionType",
-    "ProbabilisticTensorDictModule",
-    "ProbabilisticTensorDictSequential",
-    "set_interaction_mode",
-    "set_interaction_type",
-    "TensorDictSequential",
-    "make_tensordict",
-    "biased_softplus",
-    "inv_softplus",
-    "TensorDictParams",
-    "is_functional",
-]
