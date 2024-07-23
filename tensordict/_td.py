@@ -20,7 +20,6 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
-from torch.nn.parameter import UninitializedTensorMixin
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -84,6 +83,7 @@ from tensordict.utils import (
 from torch import Tensor
 from torch._dynamo import graph_break
 from torch.jit._shape_functions import infer_size_impl
+from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
 try:
@@ -335,7 +335,10 @@ class TensorDict(TensorDictBase):
         filter_empty: bool = True,
     ):
         result = cls._from_module(
-            module=module, as_module=as_module, use_state_dict=use_state_dict, filter_empty=filter_empty,
+            module=module,
+            as_module=as_module,
+            use_state_dict=use_state_dict,
+            filter_empty=filter_empty,
         )
         if result is None:
             return TensorDict._new_unsafe()
@@ -350,7 +353,7 @@ class TensorDict(TensorDictBase):
         as_module: bool = False,
         use_state_dict: bool = False,
         prefix="",
-        filter_empty: bool=True,
+        filter_empty: bool = True,
     ):
         from tensordict.nn import TensorDictParams
 
@@ -509,7 +512,14 @@ class TensorDict(TensorDictBase):
                 if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
-                        __dict__, _parameters, _buffers, hooks, module, key, value, inplace
+                        __dict__,
+                        _parameters,
+                        _buffers,
+                        hooks,
+                        module,
+                        key,
+                        value,
+                        inplace,
                     )
                 else:
                     if return_swap:
@@ -4132,8 +4142,8 @@ class _TensorDictKeysView:
 
 def _set_tensor_dict(  # noqa: F811
     __dict__,
-_parameters,
-        _buffers,
+    _parameters,
+    _buffers,
     hooks,
     module: torch.nn.Module,
     name: str,

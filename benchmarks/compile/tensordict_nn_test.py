@@ -275,7 +275,9 @@ def test_func_call_cm_runtime(mode, functional, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
-@pytest.mark.parametrize("functional,plain_decorator", [[False, None], [True, False], [True, True]])
+@pytest.mark.parametrize(
+    "functional,plain_decorator", [[False, None], [True, False], [True, True]]
+)
 def test_func_call_runtime_and_backward(mode, functional, plain_decorator, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
@@ -284,6 +286,7 @@ def test_func_call_runtime_and_backward(mode, functional, plain_decorator, bench
         td = TensorDict.from_module(module)
         td = TensorDictParams(td.data.clone())
         if not plain_decorator:
+
             def call(x, td):
                 if torch.cuda.is_available():
                     torch.compiler.cudagraph_mark_step_begin()
@@ -292,7 +295,9 @@ def test_func_call_runtime_and_backward(mode, functional, plain_decorator, bench
                 result = module(x)
                 params.to_module(module, return_swap=False)
                 return result
+
         else:
+
             def call(x, td):
                 if torch.cuda.is_available():
                     torch.compiler.cudagraph_mark_step_begin()
@@ -306,7 +311,9 @@ def test_func_call_runtime_and_backward(mode, functional, plain_decorator, bench
     if mode == "compile":
         call = torch.compile(call, fullgraph=not plain_decorator)
     elif mode == "compile-overhead":
-        call = torch.compile(call, fullgraph=not plain_decorator, mode="reduce-overhead")
+        call = torch.compile(
+            call, fullgraph=not plain_decorator, mode="reduce-overhead"
+        )
 
     def call_with_backward(*args):
         call(*args).mean().backward()
