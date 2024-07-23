@@ -983,6 +983,41 @@ class TestGeneric:
             assert all(param.grad is not None for param in params.values(True, True))
 
     @pytest.mark.parametrize("as_module", [False, True])
+    def test_from_modules_expand(self, as_module):
+        empty_module = nn.Sequential(
+            nn.Linear(3, 3, device="meta"), nn.Linear(3, 4, device="meta")
+        )
+        module0 = nn.Linear(3, 3)
+        modules = [nn.Sequential(module0, nn.Linear(3, 4)) for _ in range(3)]
+        params = TensorDict.from_modules(
+            *modules, as_module=as_module, expand_identical=True
+        )
+        assert not isinstance(params["0", "weight"], nn.Parameter)
+        assert params["0", "weight"].data.data_ptr() == module0.weight.data.data_ptr()
+        assert isinstance(params["1", "weight"], nn.Parameter)
+        assert (
+            params["1", "weight"].data.data_ptr()
+            != modules[0][1].weight.data.data_ptr()
+        )
+
+        def exec_module(params, x):
+            with params.to_module(empty_module):
+                return empty_module(x)
+
+        x = torch.zeros(3)
+        y = torch.vmap(exec_module, (0, None))(params, x)
+        y.sum().backward()
+        for k, p in modules[0].named_parameters():
+            print(k)
+            print(params[tuple(k.split("."))])
+            assert p.grad is None if k.startswith("1") else p.grad is not None
+        assert all(
+            param.grad is not None
+            for param in params.values(True, True)
+            if isinstance(param, nn.Parameter)
+        )
+
+    @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_from_modules_lazy(self, as_module, lazy_stack, device):

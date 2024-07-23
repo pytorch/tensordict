@@ -1207,6 +1207,17 @@ class TensorDictBase(MutableMapping):
         elif expand_identical:
             from tensordict._torch_func import _stack_uninit_params
 
+            # Check the keys
+            #  If not expand_identical, `stack` takes care of that check but
+            #  here we use apply which will ignore keys that are in one TD but not another
+            sets = [set(param.keys(True, True)) for param in param_list]
+            for set_ in sets[1:]:
+                if set_ != sets[0]:
+                    raise ValueError(
+                        f"All key sets must match. "
+                        f"Got {set_.symmetric_difference(sets[0])} in one but not another."
+                    )
+
             def maybe_stack(*params):
                 param = params[0]
                 if isinstance(param, UninitializedTensorMixin):
@@ -1218,7 +1229,11 @@ class TensorDictBase(MutableMapping):
                     return nn.Parameter(result.detach(), param.requires_grad)
                 return Buffer(result)
 
-            params = param_list[0].apply(maybe_stack, *param_list[1:])
+            params = param_list[0]._fast_apply(
+                maybe_stack,
+                *param_list[1:],
+                batch_size=torch.Size([len(param_list), *param_list[0].batch_size]),
+            )
         else:
             with set_lazy_legacy(False), torch.no_grad():
                 params = torch.stack(param_list)
