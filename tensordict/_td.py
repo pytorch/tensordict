@@ -20,6 +20,7 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
+from torch.nn.parameter import UninitializedTensorMixin
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -331,10 +332,13 @@ class TensorDict(TensorDictBase):
         as_module: bool = False,
         lock: bool = False,
         use_state_dict: bool = False,
+        filter_empty: bool = True,
     ):
         result = cls._from_module(
-            module=module, as_module=as_module, use_state_dict=use_state_dict
+            module=module, as_module=as_module, use_state_dict=use_state_dict, filter_empty=filter_empty,
         )
+        if result is None:
+            return TensorDict._new_unsafe()
         if lock:
             result.lock_()
         return result
@@ -346,6 +350,7 @@ class TensorDict(TensorDictBase):
         as_module: bool = False,
         use_state_dict: bool = False,
         prefix="",
+        filter_empty: bool=True,
     ):
         from tensordict.nn import TensorDictParams
 
@@ -376,7 +381,11 @@ class TensorDict(TensorDictBase):
                 hook_result = hook(module, destination, prefix, local_metadata)
                 if hook_result is not None:
                     destination = hook_result
-        destination = TensorDict(destination, batch_size=[])
+        if not filter_empty or destination:
+            destination_set = True
+            destination = TensorDict._new_unsafe(destination)
+        else:
+            destination_set = False
         for name, submodule in module._modules.items():
             if submodule is not None:
                 subtd = cls._from_module(
@@ -384,10 +393,17 @@ class TensorDict(TensorDictBase):
                     as_module=False,
                     use_state_dict=use_state_dict,
                     prefix=prefix + name + ".",
+                    filter_empty=filter_empty,
                 )
-                destination._set_str(
-                    name, subtd, validated=True, inplace=False, non_blocking=False
-                )
+                if subtd is not None:
+                    if not destination_set:
+                        destination = TensorDict()
+                        destination_set = True
+                    destination._set_str(
+                        name, subtd, validated=True, inplace=False, non_blocking=False
+                    )
+        if not destination_set:
+            return
 
         if as_module:
             from tensordict.nn.params import TensorDictParams
@@ -480,6 +496,8 @@ class TensorDict(TensorDictBase):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
+            _parameters = __dict__["_parameters"]
+            _buffers = __dict__["_buffers"]
         else:
             __dict__ = None
 
@@ -491,7 +509,7 @@ class TensorDict(TensorDictBase):
                 if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
-                        __dict__, hooks, module, key, value, inplace
+                        __dict__, _parameters, _buffers, hooks, module, key, value, inplace
                     )
                 else:
                     if return_swap:
@@ -506,10 +524,6 @@ class TensorDict(TensorDictBase):
                             local_out = local_out.clone()
                         new_val.data.copy_(value.data, non_blocking=non_blocking)
             else:
-                if value.is_empty():
-                    # if there is at least one key, we must populate the module.
-                    # Otherwise, we just go to the next key
-                    continue
                 if __dict__ is not None:
                     child = __dict__["_modules"][key]
                 else:
@@ -4118,6 +4132,8 @@ class _TensorDictKeysView:
 
 def _set_tensor_dict(  # noqa: F811
     __dict__,
+_parameters,
+        _buffers,
     hooks,
     module: torch.nn.Module,
     name: str,
@@ -4126,9 +4142,9 @@ def _set_tensor_dict(  # noqa: F811
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = __dict__["_parameters"].pop(name, None)  # type: ignore[assignment]
+    out = _parameters.pop(name, None)  # type: ignore[assignment]
     if out is None:
-        out = __dict__["_buffers"].pop(name, None)
+        out = _buffers.pop(name, None)
         was_buffer = out is not None
     if out is None:
         out = __dict__.pop(name)
@@ -4144,17 +4160,15 @@ def _set_tensor_dict(  # noqa: F811
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
-        __dict__["_parameters"][name] = tensor
+        _parameters[name] = tensor
 
-        if isinstance(
-            tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
-        ):
+        if isinstance(tensor, UninitializedTensorMixin):
             module.register_forward_pre_hook(
                 _add_batch_dim_pre_hook(), with_kwargs=True
             )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
-        __dict__["_buffers"][name] = tensor
+        _buffers[name] = tensor
     else:
         __dict__[name] = tensor
     return out
