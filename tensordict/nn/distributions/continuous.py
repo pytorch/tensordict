@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from numbers import Number
 from typing import Sequence, Union
 
@@ -62,6 +63,10 @@ class NormalParamWrapper(nn.Module):
         scale_mapping: str = "biased_softplus_1.0",
         scale_lb: Number = 1e-4,
     ) -> None:
+        warnings.warn(
+            "The NormalParamWrapper class will be deprecated in v0.7 in favor of :class:`~tensordict.nn.NormalParamExtractor`.",
+            category=DeprecationWarning,
+        )
         super().__init__()
         self.operator = operator
         self.scale_mapping = scale_mapping
@@ -84,8 +89,9 @@ class NormalParamExtractor(nn.Module):
 
     Args:
         scale_mapping (str, optional): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
+            default = ``"biased_softplus_1.0"`` (i.e. softplus map with bias such that fn(0.0) = 1.0)
+            choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"`` or ``"none"`` (no mapping).
+            See :func:`~tensordict.nn.mappings` for more details.
         scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
 
     Examples:
@@ -115,13 +121,13 @@ class NormalParamExtractor(nn.Module):
         scale_lb: Number = 1e-4,
     ) -> None:
         super().__init__()
-        self.scale_mapping = scale_mapping
+        self.scale_mapping = mappings(scale_mapping)
         self.scale_lb = scale_lb
 
     def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
         tensor, *others = tensors
         loc, scale = tensor.chunk(2, -1)
-        scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
+        scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
         return (loc, scale, *others)
 
 
