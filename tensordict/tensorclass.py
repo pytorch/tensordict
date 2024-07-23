@@ -973,11 +973,10 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 
 def _getattr(self, item: str) -> Any:
-    # if not item.startswith("__"):
     __dict__ = self.__dict__
     _non_tensordict = __dict__.get("_non_tensordict")
 
-    if _non_tensordict is not None:
+    if _non_tensordict:
         out = _non_tensordict.get(item, NO_DEFAULT)
         if out is not NO_DEFAULT:
             if (
@@ -991,19 +990,16 @@ def _getattr(self, item: str) -> Any:
         _tensordict = __dict__.get("_tensordict")
     else:
         _tensordict = self._tensordict
-    if _tensordict is not None:
-        out = _tensordict._get_str(item, default=None)
-        if out is not None:
+    out = _tensordict._get_str(item, default=None)
+    if out is not None:
+        return out
+    out = getattr(_tensordict, item, NO_DEFAULT)
+    if out is not NO_DEFAULT:
+        if not callable(out):
             if is_non_tensor(out):
                 return out.data if hasattr(out, "data") else out.tolist()
             return out
-        out = getattr(_tensordict, item, NO_DEFAULT)
-        if out is not NO_DEFAULT:
-            if not callable(out):
-                if is_non_tensor(out):
-                    return out.data if hasattr(out, "data") else out.tolist()
-                return out
-            return _wrap_method(self, item, out)
+        return _wrap_method(self, item, out)
     raise AttributeError(item)
 
 
