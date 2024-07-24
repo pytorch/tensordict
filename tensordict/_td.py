@@ -341,7 +341,7 @@ class TensorDict(TensorDictBase):
             filter_empty=filter_empty,
         )
         if result is None:
-            return TensorDict._new_unsafe()
+            result = TensorDict._new_unsafe({}, batch_size=torch.Size(()))
         if lock:
             result.lock_()
         return result
@@ -386,7 +386,7 @@ class TensorDict(TensorDictBase):
                     destination = hook_result
         if not filter_empty or destination:
             destination_set = True
-            destination = TensorDict._new_unsafe(destination)
+            destination = TensorDict._new_unsafe(destination, batch_size=torch.Size(()))
         else:
             destination_set = False
         for name, submodule in module._modules.items():
@@ -400,7 +400,7 @@ class TensorDict(TensorDictBase):
                 )
                 if subtd is not None:
                     if not destination_set:
-                        destination = TensorDict()
+                        destination = TensorDict._new_unsafe(batch_size=torch.Size(()))
                         destination_set = True
                     destination._set_str(
                         name, subtd, validated=True, inplace=False, non_blocking=False
