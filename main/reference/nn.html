@@ -369,7 +369,7 @@
 ML pipelines.</p>
 <p>Since TensorDict turns parts of one’s code to a key-based structure, it is now
 possible to build complex graph structures using these keys as hooks.
-The basic building block is <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, which wraps an <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
+The basic building block is <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, which wraps an <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.4)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
 instance with a list of input and output keys:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">Transformer</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
@@ -389,7 +389,7 @@ instance with a list of input and output keys:</p>
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
-<p>One does not necessarily need to use <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, a custom <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
+<p>One does not necessarily need to use <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, a custom <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.4)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
 with an ordered list of input and output keys (named <code class="xref py py-obj docutils literal notranslate"><span class="pre">module.in_keys</span></code> and
 <code class="xref py py-obj docutils literal notranslate"><span class="pre">module.out_keys</span></code>) will suffice.</p>
 <p>A key pain-point of multiple PyTorch users is the inability of nn.Sequential to
@@ -665,7 +665,7 @@ We can duplicate and reinitialize model copies using the <a class="reference int
 </section>
 <section id="tracing-and-compiling">
 <h2>Tracing and compiling<a class="headerlink" href="#tracing-and-compiling" title="Permalink to this heading">¶</a></h2>
-<p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> can be compiled using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.3)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> if it is
+<p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> can be compiled using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> if it is
 first traced using <a class="reference internal" href="generated/tensordict.prototype.symbolic_trace.html#tensordict.prototype.symbolic_trace" title="tensordict.prototype.symbolic_trace"><code class="xref py py-func docutils literal notranslate"><span class="pre">symbolic_trace()</span></code></a>.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
