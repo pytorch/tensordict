@@ -973,12 +973,12 @@ class PersistentTensorDict(TensorDictBase):
             non_blocking,
             convert_to_format,
             batch_size,
-            pin_memory,
+            non_blocking_pin,
             num_threads,
         ) = _parse_to(*args, **kwargs)
-        if pin_memory:
+        if non_blocking_pin:
             raise RuntimeError(
-                f"Cannot call pin_memory {type(self).__name__}.to(). Call "
+                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
                 f"`to_tensordict()` before executing this code."
             )
         result = self
