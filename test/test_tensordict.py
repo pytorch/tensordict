@@ -3035,30 +3035,39 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     @pytest.mark.parametrize("device_cast", get_available_devices())
     @pytest.mark.parametrize(
-        "pin_memory", [False] if not torch.cuda.is_available() else [False, True]
+        "non_blocking_pin", [False] if not torch.cuda.is_available() else [False, True]
     )
     @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
-    def test_cast_device(self, td_name, device, device_cast, pin_memory, num_threads):
+    def test_cast_device(
+        self, td_name, device, device_cast, non_blocking_pin, num_threads
+    ):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if pin_memory and td_name == "td_h5":
+        if non_blocking_pin and td_name == "td_h5":
             with pytest.raises(
-                RuntimeError, match="Cannot call pin_memory PersistentTensorDict.to()"
+                RuntimeError,
+                match="Cannot use non_blocking_pin with PersistentTensorDict.to()",
             ):
                 td_device = td.to(
-                    device_cast, pin_memory=pin_memory, num_threads=num_threads
+                    device_cast,
+                    non_blocking_pin=non_blocking_pin,
+                    num_threads=num_threads,
                 )
             return
 
-        if device.type == "cuda" and device_cast.type == "cpu" and pin_memory:
+        if device.type == "cuda" and device_cast.type == "cpu" and non_blocking_pin:
             with pytest.raises(
                 RuntimeError, match="only dense CPU tensors can be pinned"
             ):
                 td_device = td.to(
-                    device_cast, pin_memory=pin_memory, num_threads=num_threads
+                    device_cast,
+                    non_blocking_pin=non_blocking_pin,
+                    num_threads=num_threads,
                 )
             return
-        td_device = td.to(device_cast, pin_memory=pin_memory, num_threads=num_threads)
+        td_device = td.to(
+            device_cast, non_blocking_pin=non_blocking_pin, num_threads=num_threads
+        )
 
         for item in td_device.values():
             assert item.device == device_cast
@@ -8606,16 +8615,16 @@ class TestNamedDims(TestTensorDictsBase):
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
-        "pin_memory", [False] if not torch.cuda.is_available() else [False, True]
+        "non_blocking_pin", [False] if not torch.cuda.is_available() else [False, True]
     )
     @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
-    def test_to(self, device, pin_memory, num_threads):
+    def test_to(self, device, non_blocking_pin, num_threads):
         td = TensorDict(
             {"": TensorDict({}, [3, 4, 1, 6])},
             batch_size=[3, 4, 1, 6],
             names=["a", "b", "c", "d"],
         )
-        tdt = td.to(device, pin_memory=pin_memory, num_threads=num_threads)
+        tdt = td.to(device, non_blocking_pin=non_blocking_pin, num_threads=num_threads)
         assert tdt.names == ["a", "b", "c", "d"]
 
     def test_unbind(self):

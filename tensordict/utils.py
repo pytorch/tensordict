@@ -1214,45 +1214,6 @@ def lock_blocked(func):
     return new_func
 
 
-# class as_decorator:
-#     """Converts a method to a decorator.
-#
-#     Examples:
-#         >>> from tensordict import TensorDict
-#         >>> data = TensorDict({}, [])
-#         >>> with data.lock_(): # lock_ is decorated
-#         ...     assert data.is_locked
-#         >>> assert not data.is_locked
-#     """
-#
-#     def __init__(self, attr=None):
-#         self.attr = attr
-#
-#     def __call__(self, func):
-#         if self.attr is not None:
-#
-#             @wraps(func)
-#             def new_func(_self, *args, **kwargs):
-#                 _attr_pre = getattr(_self, self.attr)
-#                 out = func(_self, *args, **kwargs)
-#                 _attr_post = getattr(_self, self.attr)
-#                 if out is not None:
-#                     if _attr_post is not _attr_pre:
-#                         out._last_op = (new_func.__name__, (args, kwargs, _self))
-#                     else:
-#                         out._last_op = None
-#                 return out
-#
-#         else:
-#
-#             @wraps(func)
-#             def new_func(_self, *args, **kwargs):
-#                 out = func(_self, *args, **kwargs)
-#                 if out is not None:
-#                     out._last_op = (new_func.__name__, (args, kwargs, _self))
-#                 return out
-#
-#         return new_func
 def _as_context_manager(attr=None):
     """Converts a method to a decorator.
 
@@ -1401,7 +1362,7 @@ def _split_tensordict(
 
 def _parse_to(*args, **kwargs):
     batch_size = kwargs.pop("batch_size", None)
-    pin_memory = kwargs.pop("pin_memory", False)
+    non_blocking_pin = kwargs.pop("non_blocking_pin", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     if not torch.compiler.is_dynamo_compiling():
@@ -1440,7 +1401,7 @@ def _parse_to(*args, **kwargs):
         non_blocking,
         convert_to_format,
         batch_size,
-        pin_memory,
+        non_blocking_pin,
         num_threads,
     )
 

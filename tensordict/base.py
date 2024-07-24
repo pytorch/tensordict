@@ -9233,15 +9233,15 @@ class TensorDictBase(MutableMapping):
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
-            pin_memory (bool, optional): if ``True``, the tensors are pinned before
+            non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
                 controlled via the ``num_threads`` argument.
 
                 .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
-                    be much slower than ``tensordict.to("cuda", pin_memory=True)`` as
+                    be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
 
-            num_threads (int or None, optional): if ``pin_memory=True``, the number
+            num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
                 of threads to be used for ``pin_memory``. By default, multithreading
                 will be used with ``num_threads=None`` in
                 :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
@@ -9269,7 +9269,7 @@ class TensorDictBase(MutableMapping):
             _,
             convert_to_format,
             batch_size,
-            pin_memory,
+            non_blocking_pin,
             num_threads,
         ) = _parse_to(*args, **kwargs)
         result = self
@@ -9302,7 +9302,7 @@ class TensorDictBase(MutableMapping):
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
-            if pin_memory and num_threads != 0:
+            if non_blocking_pin and num_threads != 0:
                 result = self._multithread_apply_nest(
                     lambda x: x.pin_memory(),
                     num_threads=num_threads,
@@ -9311,7 +9311,7 @@ class TensorDictBase(MutableMapping):
                     checked=True,
                 )
             else:
-                if pin_memory:
+                if non_blocking_pin:
                     result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
