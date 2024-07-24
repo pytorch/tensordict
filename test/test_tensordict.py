@@ -3046,7 +3046,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if non_blocking_pin and td_name == "td_h5":
             with pytest.raises(
                 RuntimeError,
-                match="Cannot use non_blocking_pin with PersistentTensorDict.to()",
+                match="Cannot use non_blocking_pin=True PersistentTensorDict.to()",
             ):
                 td_device = td.to(
                     device_cast,
