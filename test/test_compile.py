@@ -10,11 +10,12 @@ from typing import Any
 import pytest
 
 import torch
+from packaging import version
 
 from tensordict import assert_close, tensorclass, TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
-TORCH_VERSION = torch.__version__
+TORCH_VERSION = version.parse(torch.__version__).base_version
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
