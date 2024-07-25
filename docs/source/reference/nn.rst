@@ -309,6 +309,9 @@ Tracing and compiling
 .. currentmodule:: tensordict.nn
 
 Since v0.5, TensorDict components are compatible with :func:`~torch.compile`.
+For instance, a :class:`~tensordict.TensorDictSequential` module can be compiled with
+``torch.compile`` and reach a runtime similar to a regular PyTorch module wrapped in
+a :class:`~tensordict.nn.TensorDictModule`.
 
 Distributions
 -------------
