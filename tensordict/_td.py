@@ -82,7 +82,6 @@ from tensordict.utils import (
 )
 from torch import Tensor
 from torch._dynamo import graph_break
-from torch.compiler import is_dynamo_compiling
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
 
@@ -94,6 +93,10 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 _register_tensor_class(ftdim.Tensor)
 

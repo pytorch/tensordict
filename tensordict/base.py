@@ -91,9 +91,13 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
-from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.

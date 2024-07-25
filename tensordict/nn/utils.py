@@ -13,7 +13,11 @@ from typing import Any, Callable
 import torch
 from tensordict.utils import strtobool
 from torch import nn
-from torch.compiler import is_dynamo_compiling
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 

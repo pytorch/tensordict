@@ -32,12 +32,16 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import Tensor
-from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
 )
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}

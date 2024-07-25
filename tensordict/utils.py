@@ -39,14 +39,6 @@ from typing import (
 
 import numpy as np
 import torch
-from torch.compiler import is_dynamo_compiling
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    _has_funcdim = False
 from packaging.version import parse
 from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
@@ -65,6 +57,20 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
+try:
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import (
+        assume_constant_result,
+        is_compiling as is_dynamo_compiling,
+    )
 
 if TYPE_CHECKING:
     from tensordict.tensordict import TensorDictBase
@@ -2503,7 +2509,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = torch.compiler.assume_constant_result(_lock_warn)
+_lock_warn = assume_constant_result(_lock_warn)
 
 
 def _check_inbuild():
@@ -2513,7 +2519,7 @@ def _check_inbuild():
         )
 
 
-_check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)
+_check_inbuild = assume_constant_result(_check_inbuild)
 
 if sys.version_info >= (3, 10):
     _zip_strict = functools.partial(zip, strict=True)

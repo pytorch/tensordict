@@ -34,7 +34,11 @@ from tensordict.nn.utils import (
 )
 from tensordict.utils import _zip_strict, implement_for, NestedKey
 from torch import nn, Tensor
-from torch.compiler import is_dynamo_compiling
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 try:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
