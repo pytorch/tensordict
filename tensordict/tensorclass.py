@@ -55,9 +55,13 @@ from tensordict.utils import (
     NestedKey,
 )
 from torch import multiprocessing as mp, Tensor
-from torch.compiler import is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 T = TypeVar("T", bound=TensorDictBase)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10

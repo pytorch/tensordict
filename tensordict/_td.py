@@ -93,6 +93,10 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 _register_tensor_class(ftdim.Tensor)
 
@@ -235,7 +239,7 @@ class TensorDict(TensorDictBase):
                 "Either a dictionary or a sequence of kwargs must be provided, not both."
             )
         source = source if not kwargs else kwargs
-        if names and torch.compiler.is_dynamo_compiling():
+        if names and is_dynamo_compiling():
             graph_break()
         has_device = False
         sub_non_blocking = False
@@ -262,7 +266,7 @@ class TensorDict(TensorDictBase):
             )
         self._batch_size = self._parse_batch_size(source, batch_size)
         # TODO: this breaks when stacking tensorclasses with dynamo
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             self.names = names
 
         for key, value in source.items():
@@ -283,7 +287,7 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
-        if torch.compiler.is_dynamo_compiling():
+        if is_dynamo_compiling():
             return TensorDict(
                 source,
                 batch_size=batch_size,
@@ -420,7 +424,7 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         non_blocking: bool = False,
     ):
-        is_dynamo = torch.compiler.is_dynamo_compiling()
+        is_dynamo = is_dynamo_compiling()
         if is_dynamo:
             _check_inbuild()
 
@@ -1931,7 +1935,7 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        if torch.compiler.is_dynamo_compiling() or torch.compiler.is_compiling():
+        if is_dynamo_compiling():
             if value is not None:
                 graph_break()
             else:
@@ -2985,7 +2989,7 @@ class TensorDict(TensorDictBase):
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
             result = []
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
 
                 def fast_iter():
                     for key, val in self._tensordict.items():

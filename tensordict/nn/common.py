@@ -36,6 +36,11 @@ from tensordict.utils import _zip_strict, implement_for, NestedKey
 from torch import nn, Tensor
 
 try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
+try:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
 
     _has_functorch = True
@@ -1254,7 +1259,7 @@ class TensorDictModule(TensorDictModuleBase):
         return f"{type(self).__name__}(\n{fields})"
 
     def __getattr__(self, name: str) -> Any:
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             __dict__ = self.__dict__
             _parameters = __dict__.get("_parameters")
             if _parameters:
@@ -1331,7 +1336,7 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     def __getattr__(self, name: str) -> Any:
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             __dict__ = self.__dict__
             _parameters = __dict__.get("_parameters")
             if _parameters:

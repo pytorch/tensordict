@@ -39,13 +39,6 @@ from typing import (
 
 import numpy as np
 import torch
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    _has_funcdim = False
 from packaging.version import parse
 from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
@@ -64,6 +57,20 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
+try:
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import (
+        assume_constant_result,
+        is_compiling as is_dynamo_compiling,
+    )
 
 if TYPE_CHECKING:
     from tensordict.tensordict import TensorDictBase
@@ -1126,7 +1133,7 @@ def cache(fun):
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
-        if not _self.is_locked or torch.compiler.is_compiling():
+        if not _self.is_locked or is_dynamo_compiling():
             return fun(_self, *args, **kwargs)
         cache = _self._cache
         if cache is None:
@@ -1365,7 +1372,7 @@ def _parse_to(*args, **kwargs):
     non_blocking_pin = kwargs.pop("non_blocking_pin", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
         )
@@ -1652,7 +1659,7 @@ def _check_keys(
         is_leaf=_is_leaf_nontensor,
     )
     # TODO: compile doesn't like set() over an arbitrary object
-    if torch.compiler.is_dynamo_compiling():
+    if is_dynamo_compiling():
         keys = {k for k in keys}  # noqa: C416
     else:
         keys: set[str] = set(keys)
@@ -1665,7 +1672,7 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
@@ -1931,7 +1938,7 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 out.append(len(range(*_slice_indices(idx, batch))))
             else:
                 out.append(len(range(*idx.indices(batch))))
@@ -2396,7 +2403,7 @@ def _make_dtype_promotion(func):
 
 
 def _unravel_key_to_tuple(key):
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return _unravel_key_to_tuple_cpp(key)
     if isinstance(key, str):
         return (key,)
@@ -2417,7 +2424,7 @@ def unravel_key(key):
         ("a", "b")
 
     """
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
@@ -2430,14 +2437,14 @@ def unravel_key(key):
 
 def unravel_keys(*keys):
     """Unravels a sequence of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_keys_cpp(*keys)
     return tuple(unravel_key(key) for key in keys)
 
 
 def unravel_key_list(keys):
     """Unravels a list of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_list_cpp(keys)
     return [unravel_key(key) for key in keys]
 
@@ -2502,7 +2509,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = torch.compiler.assume_constant_result(_lock_warn)
+_lock_warn = assume_constant_result(_lock_warn)
 
 
 def _check_inbuild():
@@ -2512,7 +2519,7 @@ def _check_inbuild():
         )
 
 
-_check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)
+_check_inbuild = assume_constant_result(_check_inbuild)
 
 if sys.version_info >= (3, 10):
     _zip_strict = functools.partial(zip, strict=True)
