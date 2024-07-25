@@ -13,6 +13,7 @@ from typing import Any, Callable
 import torch
 from tensordict.utils import strtobool
 from torch import nn
+from torch.compiler import is_dynamo_compiling
 
 AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
@@ -290,7 +291,7 @@ class set_skip_existing(_DecoratorContextManager):
         return super().__call__(wrapper)
 
     def __enter__(self) -> None:
-        if self.mode and torch.compiler.is_dynamo_compiling():
+        if self.mode and is_dynamo_compiling():
             raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
         global _SKIP_EXISTING
         self.prev = _SKIP_EXISTING
@@ -330,7 +331,7 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
-            if skip_existing() and torch.compiler.is_dynamo_compiling():
+            if skip_existing() and is_dynamo_compiling():
                 raise RuntimeError(
                     "skip_existing is not compatible with torch.compile."
                 )
@@ -343,7 +344,7 @@ class _set_skip_existing_None(set_skip_existing):
                 and not any(key in out_keys for key in in_keys)
             ):
                 return tensordict
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 return func(_self, tensordict, *args, **kwargs)
             global _SKIP_EXISTING
             self.prev = _SKIP_EXISTING

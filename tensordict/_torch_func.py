@@ -32,6 +32,7 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import Tensor
+from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
@@ -278,7 +279,7 @@ def _cat(
         out = {}
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 ):
@@ -310,7 +311,7 @@ def _cat(
         for key in keys:
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
-            ) if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
+            ) if not is_dynamo_compiling() else contextlib.nullcontext():
                 if isinstance(out, TensorDict):
                     torch.cat(
                         [td.get(key) for td in list_of_tensordicts],
@@ -549,7 +550,7 @@ def _stack(
                     return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
-                ) if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
+                ) if not is_dynamo_compiling() else contextlib.nullcontext():
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {

@@ -91,6 +91,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -5116,7 +5117,7 @@ class TensorDictBase(MutableMapping):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 key_to_index = {key: i for i, key in enumerate(keys)}
                 return [vals[key_to_index[key]] for key in sorting_keys]
             else:
@@ -8930,7 +8931,7 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 key_list = list(self.keys())
             else:
                 key_list = [k for k in self.keys()]  # noqa
@@ -9111,7 +9112,7 @@ class TensorDictBase(MutableMapping):
         """
         if self.is_locked:
             return self
-        is_compiling = torch.compiler.is_dynamo_compiling()
+        is_compiling = is_dynamo_compiling()
         if is_compiling:
             _lock_warn()
         self._propagate_lock(is_compiling=is_compiling)
@@ -9325,7 +9326,7 @@ class TensorDictBase(MutableMapping):
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
-            if not torch.compiler.is_dynamo_compiling() and torch.cuda.is_initialized():
+            if not is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
