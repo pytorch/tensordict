@@ -902,8 +902,8 @@ class TestGeneric:
             num_encoder_layers=3,
             dim_feedforward=12,
         )
-        td = TensorDict.from_module(net, as_module=params)
-        # check that we have empty tensordicts, reflecting modules wihout params
+        td = TensorDict.from_module(net, as_module=params, filter_empty=False)
+        # check that we have empty tensordicts, reflecting modules without params
         for subtd in td.values(True):
             if isinstance(subtd, TensorDictBase) and subtd.is_empty():
                 break

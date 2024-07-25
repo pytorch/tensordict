@@ -238,34 +238,82 @@ def test_func_call_runtime(mode, functional, benchmark):
         benchmark(call, x)
 
 
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+@pytest.mark.parametrize("functional", [False, True])
+def test_func_call_cm_runtime(mode, functional, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
+    # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
+    if functional:
+        td = TensorDict.from_module(module)
+        td = TensorDictParams(td.clone())
+
+        def call(x, td):
+            # with needs registering
+            with td.to_module(module):
+                return module(x)
+
+    else:
+        call = module
+
+    if mode == "compile":
+        call = torch.compile(call)
+    elif mode == "compile-overhead":
+        call = torch.compile(call, mode="reduce-overhead")
+
+    x = torch.randn(2, 2, 16)
+    if functional:
+        call(x, td)
+        call(x, td)
+        benchmark(call, x, td)
+    else:
+        call(x)
+        call(x)
+        benchmark(call, x)
+
+
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
-@pytest.mark.parametrize("functional", [False, True])
-def test_func_call_runtime_and_backward(mode, functional, benchmark):
+@pytest.mark.parametrize(
+    "functional,plain_decorator", [[False, None], [True, False], [True, True]]
+)
+def test_func_call_runtime_and_backward(mode, functional, plain_decorator, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
     if functional:
         td = TensorDict.from_module(module)
         td = TensorDictParams(td.data.clone())
+        if not plain_decorator:
 
-        def call(x, td):
-            if torch.cuda.is_available():
-                torch.compiler.cudagraph_mark_step_begin()
-            # with needs registering
-            params = td.to_module(module, return_swap=True)
-            result = module(x)
-            params.to_module(module, return_swap=False)
-            return result
+            def call(x, td):
+                if torch.cuda.is_available():
+                    torch.compiler.cudagraph_mark_step_begin()
+                # with needs registering
+                params = td.to_module(module, return_swap=True)
+                result = module(x)
+                params.to_module(module, return_swap=False)
+                return result
+
+        else:
+
+            def call(x, td):
+                if torch.cuda.is_available():
+                    torch.compiler.cudagraph_mark_step_begin()
+                # with needs registering
+                with td.to_module(module):
+                    return module(x)
 
     else:
         call = module
 
     if mode == "compile":
-        call = compile(call)
+        call = torch.compile(call, fullgraph=not plain_decorator)
     elif mode == "compile-overhead":
-        call = compile_overhead(call)
+        call = torch.compile(
+            call, fullgraph=not plain_decorator, mode="reduce-overhead"
+        )
 
     def call_with_backward(*args):
         call(*args).mean().backward()
