@@ -19,12 +19,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
 
-python -c """
-import torch
-print('torch version:', torch.__version__)
-print('torch version > 2.4:', torch.__version__ > 2.4)
-"""
-
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest --instafail -v --durations 20 --timeout 120
 coverage run -m pytest ./benchmarks --instafail -v --durations 20
