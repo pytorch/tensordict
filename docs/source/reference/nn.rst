@@ -303,8 +303,8 @@ We can duplicate and reinitialize model copies using the :class:`tensordict.nn.E
 
     EnsembleModule
 
-Tracing and compiling
----------------------
+Compiling TensorDictModules
+---------------------------
 
 .. currentmodule:: tensordict.nn
 
