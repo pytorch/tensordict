@@ -39,7 +39,7 @@ from tensordict import (
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import _is_leaf_nontensor, TensorDictBase
+from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
@@ -377,6 +377,30 @@ class TestGeneric:
                     td.unbind(0), torch.load(filename, weights_only=False).unbind(0)
                 )
             ), td_c.to_dict()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
+    def test_consolidate_to_device(self):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(1, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(1, 3).clone()},
+                "d": "a string!",
+            },
+            device="cpu",
+            batch_size=[1, 3],
+        )
+        td_c = td.consolidate()
+        assert td_c.device == torch.device("cpu")
+        td_c_device = td_c.to("cuda")
+        assert td_c_device.device == torch.device("cuda:0")
+        assert td_c_device.is_consolidated()
+        dataptrs = set()
+        for tensor in td_c_device.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            assert tensor.device == torch.device("cuda:0")
+            dataptrs.add(tensor.untyped_storage().data_ptr())
+        assert (td_c_device.cpu() == td).all()
+        assert td_c_device["d"] == "a string!"
+        assert len(dataptrs) == 1
 
     def test_construct_from_kwargs(self):
         with pytest.raises(ValueError, match="not both"):
@@ -3259,7 +3283,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_device = td.cuda()
         td_back = td_device.cpu()
-        assert td_device.device == torch.device("cuda")
+        assert td_device.device == torch.device("cuda:0")
         assert td_back.device == torch.device("cpu")
 
     # getting values from lazy tensordicts in non-lazy contexts messes things up
@@ -7387,6 +7411,31 @@ class TestLazyStackedTensorDict:
         td_c = td.consolidate()
         torch.save(td_c, filename)
         assert (td == torch.load(filename, weights_only=False)).all()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
+    def test_consolidate_to_device(self):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(1, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(1, 3).clone()},
+                "d": "a string!",
+            },
+            device="cpu",
+            batch_size=[1, 3],
+        )
+        td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        td_c = td.consolidate()
+        assert td_c.device == torch.device("cpu")
+        td_c_device = td_c.to("cuda")
+        assert td_c_device.device == torch.device("cuda:0")
+        assert td_c_device.is_consolidated()
+        dataptrs = set()
+        for tensor in td_c_device.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            assert tensor.device == torch.device("cuda:0")
+            dataptrs.add(tensor.untyped_storage().data_ptr())
+        assert (td_c_device.cpu() == td).all()
+        assert td_c_device["d"] == [["a string!"] * 3]
+        assert len(dataptrs) == 1
 
     def test_create_empty(self):
         td = LazyStackedTensorDict(stack_dim=0)

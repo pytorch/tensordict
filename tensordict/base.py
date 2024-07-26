@@ -21,7 +21,7 @@ import weakref
 from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from copy import copy
+from copy import copy, deepcopy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
@@ -51,7 +51,6 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
-    _DEVICE2STRDEVICE,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
@@ -62,6 +61,8 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _parse_to,
+    _pin_mem,
+    _PIN_MEM_TIMEOUT,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -136,8 +137,6 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 _TENSOR_COLLECTION_MEMO = {}
-
-_PIN_MEM_TIMEOUT = 10
 
 
 class TensorDictBase(MutableMapping):
@@ -3179,9 +3178,7 @@ class TensorDictBase(MutableMapping):
         flat_size = []
         start = 0
 
-        def add_single_value(
-            value, key, metadata_dict, dtype, shape, device, flat_size
-        ):
+        def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
             nonlocal start
             n = value.element_size() * value.numel()
             if need_padding:
@@ -3196,7 +3193,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict["leaves"][key] = (
                     _DTYPE2STRDTYPE[dtype],
                     list(shape),
-                    _DEVICE2STRDEVICE[device],
+                    # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
@@ -3266,7 +3263,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         values.dtype,
                         shape,
-                        values.device,
+                        # values.device,
                         flat_size,
                     )
                     flat_key_values[
@@ -3278,7 +3275,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
-                        offsets.device,
+                        # offsets.device,
                         flat_size,
                     )
                 else:
@@ -3293,7 +3290,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict,
                 value.dtype,
                 value.shape,
-                value.device,
+                # value.device,
                 flat_size,
             )
 
@@ -3353,6 +3350,9 @@ class TensorDictBase(MutableMapping):
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
 
+        .. note:: If the tensordict is already consolidated, all arguments are ignored and ``self``
+            is returned. Call :meth:`~.contiguous` to re-consolidate.
+
         Examples:
             >>> import pickle
             >>> import tempfile
@@ -3374,7 +3374,7 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        if hasattr(self, "_consolidated"):
+        if self.is_consolidated():
             return self
 
         (
@@ -3539,7 +3539,8 @@ class TensorDictBase(MutableMapping):
             for v in flat_dict.values():
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
-                if v.stride()[-1] != 1 or v.storage_offset():
+                stride = v.stride()
+                if (stride and stride[-1] != 1) or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
@@ -3622,6 +3623,10 @@ class TensorDictBase(MutableMapping):
         return _rebuild_tensordict_files_consolidated(
             metadata, file[: -metadata_size - 8]
         )
+
+    def is_consolidated(self):
+        """Checks if a TensorDict has a consolidated storage."""
+        return hasattr(self, "_consolidated")
 
     def memmap_(
         self,
@@ -9317,6 +9322,9 @@ class TensorDictBase(MutableMapping):
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
+        .. note:: if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+            Each new tensor will be a view on the consolidated storage cast to the desired device.
+
         Examples:
             >>> data = TensorDict({"a": 1.0}, [], device=None)
             >>> data_cuda = data.to("cuda:0")  # casts to cuda
@@ -9347,6 +9355,11 @@ class TensorDictBase(MutableMapping):
         else:
             sub_non_blocking = non_blocking
 
+        if self.is_consolidated() and dtype is None:
+            return self._to_consolidated(
+                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
+            )
+
         if convert_to_format is not None:
 
             def to(tensor):
@@ -9373,15 +9386,50 @@ class TensorDictBase(MutableMapping):
                     num_threads=num_threads, to=to, device=device
                 )
             else:
-                if non_blocking_pin:
-                    result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
-                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                if non_blocking_pin:
+
+                    def to_pinmem(tensor, _to=to):
+                        return to(tensor.pin_memory())
+
+                    result = result._fast_apply(
+                        to_pinmem, propagate_lock=True, **apply_kwargs
+                    )
+                else:
+                    result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not None and sub_non_blocking and not non_blocking:
             self._sync_all()
+        return result
+
+    def _to_consolidated(self, *, device, pin_memory, num_threads):
+        if num_threads is None:
+            # unspecified num_threads should mean 0
+            num_threads = 0
+        storage = self._consolidated["storage"]
+        if pin_memory:
+            storage = storage.pin_memory()
+        storage_cast = storage.to(device, non_blocking=True)
+        untyped_storage = storage_cast.untyped_storage()
+
+        def set_(x):
+            storage_offset = x.storage_offset()
+            stride = x.stride()
+            return torch.empty_like(x, device=device).set_(
+                untyped_storage,
+                size=x.shape,
+                stride=stride,
+                storage_offset=storage_offset,
+            )
+
+        result = self._fast_apply(
+            set_, device=torch.device(device), num_threads=num_threads
+        )
+        result._consolidated = {"storage": storage_cast}
+        if "metadata" in self._consolidated:
+            result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
         return result
 
     def _sync_all(self):
@@ -9681,15 +9729,3 @@ def _expand_to_match_shape(
         batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
         result = data.empty(batch_size=batch_size)
     return result
-
-
-def _pin_mem(q_in, q_out):
-    while not q_in.empty():
-        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
-        try:
-            key, val = input[0], input[1].pin_memory()
-        except Exception as err:
-            # Surface the exception
-            q_out.put(err)
-            return
-        q_out.put((key, val))

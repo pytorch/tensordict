@@ -118,6 +118,7 @@ if not _has_funcdim:
 
 T = TypeVar("T", bound="TensorDictBase")
 
+_PIN_MEM_TIMEOUT = 10
 _TORCH_DTYPES = (
     torch.bfloat16,
     torch.bool,
@@ -1393,6 +1394,9 @@ def _parse_to(*args, **kwargs):
         if device is not None:
             device = torch.device(device)
 
+    if device and device.type == "cuda" and device.index is None:
+        device = torch.device("cuda:0")
+
     if other is not None:
         if device is not None and device != other.device:
             raise ValueError("other and device cannot be both passed")
@@ -2531,3 +2535,15 @@ else:
             raise ValueError("lengths of iterables differ.")
 
         return zip(*iterables)
+
+
+def _pin_mem(q_in, q_out):
+    while not q_in.empty():
+        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+        try:
+            key, val = input[0], input[1].pin_memory()
+        except Exception as err:
+            # Surface the exception
+            q_out.put(err)
+            return
+        q_out.put((key, val))
