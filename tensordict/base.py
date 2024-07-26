@@ -9378,7 +9378,9 @@ class TensorDictBase(MutableMapping):
                     def to_pinmem(tensor, _to=to):
                         return to(tensor.pin_memory())
 
-                    result = result._fast_apply(to_pinmem, propagate_lock=True, **apply_kwargs)
+                    result = result._fast_apply(
+                        to_pinmem, propagate_lock=True, **apply_kwargs
+                    )
                 else:
                     result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
