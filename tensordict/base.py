@@ -9229,16 +9229,16 @@ class TensorDictBase(MutableMapping):
         q_in = queue.SimpleQueue()
         q_out = queue.SimpleQueue()
         threads = []
+        items = {}
         for key, val in _zip_strict(keys, vals):
             q_in.put((key, val))
         for i in range(min(num_threads, lkeys)):
-            thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out))
+            thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out, items))
             thread.start()
             threads.append(thread)
-        items = {}
         while len(items) < lkeys:
-            key, val = q_out.get()
-            items[key] = val.to("cuda:0", non_blocking=True)
+            key = q_out.get()
+            items[key] = items[key].to("cuda:0", non_blocking=True)
         for thread in threads:
             thread.join()
         result = self._fast_apply(
@@ -9668,7 +9668,9 @@ def _expand_to_match_shape(
 def _pin_memory(x):
     return x.pin_memory()
 
-def _pin_mem_and_cuda(q_in, q_out):
+def _pin_mem_and_cuda(q_in, q_out, items):
     while not q_in.empty():
         input = q_in.get()
-        q_out.put((input[0], input[1].pin_memory()))
+        key, val = input[0], input[1].pin_memory()
+        items[key] = val
+        q_out.put(key)
