@@ -48,6 +48,8 @@ from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
 )
 from tensordict._contextlib import _DecoratorContextManager
 
+from tensordict.base import _PIN_MEM_TIMEOUT
+
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -2534,3 +2536,15 @@ else:
             raise ValueError("lengths of iterables differ.")
 
         return zip(*iterables)
+
+
+def _pin_mem(q_in, q_out):
+    while not q_in.empty():
+        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+        try:
+            key, val = input[0], input[1].pin_memory()
+        except Exception as err:
+            # Surface the exception
+            q_out.put(err)
+            return
+        q_out.put((key, val))

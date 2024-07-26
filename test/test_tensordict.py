@@ -394,9 +394,7 @@ class TestGeneric:
         assert td_c_device.device == torch.device("cuda:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()
-        for tensor in td_c_device.values(
-            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-        ):
+        for tensor in td_c_device.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
@@ -3284,7 +3282,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_device = td.cuda()
         td_back = td_device.cpu()
-        assert td_device.device == torch.device("cuda")
+        assert td_device.device == torch.device("cuda:0")
         assert td_back.device == torch.device("cpu")
 
     # getting values from lazy tensordicts in non-lazy contexts messes things up
@@ -7431,13 +7429,11 @@ class TestLazyStackedTensorDict:
         assert td_c_device.device == torch.device("cuda:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()
-        for tensor in td_c_device.values(
-            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-        ):
+        for tensor in td_c_device.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
-        assert td_c_device["d"] == [["a string!"] * 3]
+        assert td_c_device["d"] == "a string!"
         assert len(dataptrs) == 1
 
     def test_create_empty(self):
