@@ -6365,8 +6365,13 @@ class TensorDictBase(MutableMapping):
         )
         if call_when_done is not None:
             subs_results = {}
+            def cb(fut):
+                fut._result = call_when_done(fut.result())
+                return fut
+            for fut in futures:
+                fut.add_done_callback(cb)
             for fut in as_completed(futures):
-                subs_results[fut] = call_when_done(fut.result())
+                subs_results[fut] = fut.result()
                 fut._result = None
                 # futures.remove(fut)
                 # del fut
@@ -9312,7 +9317,7 @@ class TensorDictBase(MutableMapping):
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
                 result = self._multithread_apply_nest(
-                    lambda x: x.pin_memory(),
+                    _pin_memory,
                     num_threads=num_threads,
                     call_when_done=to,
                     device=device,
@@ -9627,3 +9632,6 @@ def _expand_to_match_shape(
         batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
         result = data.empty(batch_size=batch_size)
     return result
+
+def _pin_memory(x):
+    return x.pin_memory()
