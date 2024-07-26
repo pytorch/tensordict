@@ -14,16 +14,18 @@ import gc
 import importlib
 import numbers
 import os.path
+import queue
 import uuid
 import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor, wait
-from copy import copy
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from copy import copy, deepcopy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
+from threading import Thread
 from typing import (
     Any,
     Callable,
@@ -49,7 +51,6 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
-    _DEVICE2STRDEVICE,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
@@ -60,6 +61,8 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _parse_to,
+    _pin_mem,
+    _PIN_MEM_TIMEOUT,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -93,6 +96,11 @@ from tensordict.utils import (
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -1087,6 +1095,7 @@ class TensorDictBase(MutableMapping):
         lock: bool = True,
         use_state_dict: bool = False,
         lazy_stack: bool = False,
+        expand_identical: bool = False,
     ):
         """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
 
@@ -1132,6 +1141,9 @@ class TensorDictBase(MutableMapping):
                     or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
                     to be executed. In general, ``lazy_stack`` should be reserved
                     to very few use cases.
+            expand_identical (bool, optional): if ``True`` and the same parameter (same
+                identity) is being stacked to itself, an expanded version of this parameter
+                will be returned instead. This argument is ignored when ``lazy_stack=True``.
 
         Examples:
             >>> from torch import nn
@@ -1198,6 +1210,36 @@ class TensorDictBase(MutableMapping):
                         "lasy_stack=True is not compatible with lazy modules."
                     )
             params = LazyStackedTensorDict.lazy_stack(param_list)
+        elif expand_identical:
+            from tensordict._torch_func import _stack_uninit_params
+
+            # Check the keys
+            #  If not expand_identical, `stack` takes care of that check but
+            #  here we use apply which will ignore keys that are in one TD but not another
+            sets = [set(param.keys(True, True)) for param in param_list]
+            for set_ in sets[1:]:
+                if set_ != sets[0]:
+                    raise ValueError(
+                        f"All key sets must match. "
+                        f"Got {set_.symmetric_difference(sets[0])} in one but not another."
+                    )
+
+            def maybe_stack(*params):
+                param = params[0]
+                if isinstance(param, UninitializedTensorMixin):
+                    return _stack_uninit_params(params, 0)
+                if len(set(params)) == 1:
+                    return param.expand((len(params), *param.shape))
+                result = torch.stack(params)
+                if isinstance(param, nn.Parameter):
+                    return nn.Parameter(result.detach(), param.requires_grad)
+                return Buffer(result)
+
+            params = param_list[0]._fast_apply(
+                maybe_stack,
+                *param_list[1:],
+                batch_size=torch.Size([len(param_list), *param_list[0].batch_size]),
+            )
         else:
             with set_lazy_legacy(False), torch.no_grad():
                 params = torch.stack(param_list)
@@ -3113,9 +3155,7 @@ class TensorDictBase(MutableMapping):
         flat_size = []
         start = 0
 
-        def add_single_value(
-            value, key, metadata_dict, dtype, shape, device, flat_size
-        ):
+        def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
             nonlocal start
             n = value.element_size() * value.numel()
             if need_padding:
@@ -3130,7 +3170,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict["leaves"][key] = (
                     _DTYPE2STRDTYPE[dtype],
                     list(shape),
-                    _DEVICE2STRDEVICE[device],
+                    # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
@@ -3200,7 +3240,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         values.dtype,
                         shape,
-                        values.device,
+                        # values.device,
                         flat_size,
                     )
                     flat_key_values[_prefix_last_key(total_key, "<NJT_OFFSETS>")] = (
@@ -3212,7 +3252,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
-                        offsets.device,
+                        # offsets.device,
                         flat_size,
                     )
                 else:
@@ -3227,7 +3267,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict,
                 value.dtype,
                 value.shape,
-                value.device,
+                # value.device,
                 flat_size,
             )
 
@@ -3287,6 +3327,9 @@ class TensorDictBase(MutableMapping):
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
 
+        .. note:: If the tensordict is already consolidated, all arguments are ignored and ``self``
+            is returned. Call :meth:`~.contiguous` to re-consolidate.
+
         Examples:
             >>> import pickle
             >>> import tempfile
@@ -3308,7 +3351,7 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        if hasattr(self, "_consolidated"):
+        if self.is_consolidated():
             return self
 
         (
@@ -3473,7 +3516,8 @@ class TensorDictBase(MutableMapping):
             for v in flat_dict.values():
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
-                if v.stride()[-1] != 1 or v.storage_offset():
+                stride = v.stride()
+                if (stride and stride[-1] != 1) or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
@@ -3556,6 +3600,10 @@ class TensorDictBase(MutableMapping):
         return _rebuild_tensordict_files_consolidated(
             metadata, file[: -metadata_size - 8]
         )
+
+    def is_consolidated(self):
+        """Checks if a TensorDict has a consolidated storage."""
+        return hasattr(self, "_consolidated")
 
     def memmap_(
         self,
@@ -4269,6 +4317,13 @@ class TensorDictBase(MutableMapping):
                 return x
 
         return self._apply_nest(_filter, call_on_nested=True, filter_empty=False)
+
+    def filter_empty_(self):
+        """Filters out all empty tensordicts in-place."""
+        for key, val in list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS)):
+            if _is_tensor_collection(type(val)) and val.is_empty():
+                del self[key]
+        return self
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
@@ -5045,7 +5100,7 @@ class TensorDictBase(MutableMapping):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 key_to_index = {key: i for i, key in enumerate(keys)}
                 return [vals[key_to_index[key]] for key in sorting_keys]
             else:
@@ -5150,7 +5205,8 @@ class TensorDictBase(MutableMapping):
             if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
-                    f"without providing default value."
+                    f"without providing default value. "
+                    f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
                 ) from err
         return out
 
@@ -6226,6 +6282,7 @@ class TensorDictBase(MutableMapping):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None: ...
 
@@ -6286,8 +6343,19 @@ class TensorDictBase(MutableMapping):
         )
         if call_when_done is not None:
             subs_results = {}
-            for fut in as_completed(futures):
-                subs_results[fut] = call_when_done(fut.result())
+
+            def cb(fut):
+                fut._result = call_when_done(fut.result())
+                return fut
+
+            for fut in futures:
+                fut.add_done_callback(cb)
+            # wait(futures)
+            # for fut in as_completed(futures):
+            #     subs_results[fut] = call_when_done(fut.result())
+            #     fut._result = None
+            #     # futures.remove(fut)
+            #     # del fut
         else:
             subs_results = None
         return self._multithread_rebuild(
@@ -7893,6 +7961,18 @@ class TensorDictBase(MutableMapping):
                     return out.update(self.transpose(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.transpose(dim0, dim1))
+            elif last_op == type(self).flatten_keys.__name__:
+                sep = args[0] if args else "."
+                if not out.is_locked:
+                    return out.update(self.unflatten_keys(sep), inplace=False)
+                else:
+                    return out.update_(self.unflatten_keys(sep))
+            elif last_op == type(self).unflatten_keys.__name__:
+                sep = args[0] if args else "."
+                if not out.is_locked:
+                    return out.update(self.flatten_keys(sep), inplace=False)
+                else:
+                    return out.update_(self.flatten_keys(sep))
             elif last_op == type(self).flatten.__name__:
                 if len(args) == 2:
                     dim0, dim1 = args
@@ -8003,6 +8083,9 @@ class TensorDictBase(MutableMapping):
 
         Returns:
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.
+
+        .. note:: To select keys in a tensordict and return a version of this tensordict
+            deprived of these keys, see the :meth:`~.split_keys` method.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -8581,6 +8664,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @cache  # noqa: B019
+    @_as_context_manager()
     def flatten_keys(
         self,
         separator: str = ".",
@@ -8736,6 +8820,7 @@ class TensorDictBase(MutableMapping):
         return self
 
     @cache  # noqa: B019
+    @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         """Converts a flat tensordict into a nested one, recursively.
 
@@ -8829,7 +8914,7 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 key_list = list(self.keys())
             else:
                 key_list = [k for k in self.keys()]  # noqa
@@ -8844,6 +8929,79 @@ class TensorDictBase(MutableMapping):
                             f"Unflattening key(s) in tensordict will override an existing for unflattened key {new_key}."
                         )
             return self
+
+    def split_keys(
+        self,
+        *key_sets,
+        inplace=False,
+        strict: bool = True,
+        reproduce_struct: bool = False,
+    ):
+        """Splits the tensordict in subsets given one or more set of keys.
+
+        The method will return ``N+1`` tensordicts, where ``N`` is the number of
+        the arguments provided.
+
+        Args:
+            inplace (bool, optional): if ``True``, the keys are removed from ``self``
+                in-place. Defaults to ``False``.
+            strict (bool, optional): if ``True``, an exception is raised when a key
+                is missing. Defaults to ``True``.
+            reproduce_struct (bool, optional): if ``True``, all tensordict returned have
+                the same tree structure as ``self``, even if some sub-tensordicts
+                contain no leaves.
+
+        .. note:: ``None`` non-tensor values will be ignored and not returned.
+
+        .. note:: the method does not check for duplicates in the provided lists.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     a=0,
+            ...     b=0,
+            ...     c=0,
+            ...     d=0,
+            ... )
+            >>> td_a, td_bc, td_d = td.split_keys(["a"], ["b", "c"])
+            >>> print(td_bc)
+        """
+        from tensordict import PersistentTensorDict
+
+        if isinstance(self, PersistentTensorDict):
+            last_out = self.to_tensordict()
+        else:
+            last_out = self.copy()
+        if strict:
+            default = NO_DEFAULT
+        else:
+            default = None
+        outs = []
+        if inplace:
+            keys_to_del = set()
+        for key_set in key_sets:
+            outs.append(self.empty(recurse=reproduce_struct))
+            for key in key_set:
+                val = last_out.pop(key, default)
+                if val is not None:
+                    outs[-1].set(key, val)
+                if inplace:
+                    keys_to_del.add(key)
+        if inplace:
+            # We update self here because doing it in the loop would
+            #  possibly break people's code when doing a try/except KeyError
+            #  around this method
+            for key in keys_to_del:
+                try:
+                    del self[key]
+                except KeyError:
+                    # We're good if strict is False
+                    if strict:
+                        raise
+            last_out = self
+        if not reproduce_struct:
+            last_out.filter_empty_()
+        outs.append(last_out)
+        return tuple(outs)
 
     @abc.abstractmethod
     def _index_tensordict(
@@ -8936,7 +9094,7 @@ class TensorDictBase(MutableMapping):
         """
         if self.is_locked:
             return self
-        is_compiling = torch.compiler.is_dynamo_compiling()
+        is_compiling = is_dynamo_compiling()
         if is_compiling:
             _lock_warn()
         self._propagate_lock(is_compiling=is_compiling)
@@ -9027,6 +9185,45 @@ class TensorDictBase(MutableMapping):
     @overload
     def to(self: T, *, batch_size: torch.Size) -> T: ...
 
+    def _to_cuda_with_pin_mem(
+        self, *, num_threads, device="cuda", non_blocking=None, to: Callable
+    ):
+        if self.is_empty():
+            return self.to(device)
+        keys, vals = self._items_list(
+            leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        )
+        lkeys = len(keys)
+        q_in = queue.SimpleQueue()
+        q_out = queue.SimpleQueue()
+        threads = []
+        items = {}
+        for key, val in _zip_strict(keys, vals):
+            q_in.put_nowait((key, val))
+        for _ in range(min(num_threads, lkeys)):
+            thread = Thread(target=_pin_mem, args=(q_in, q_out))
+            thread.start()
+            threads.append(thread)
+        try:
+            while len(items) < lkeys:
+                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                if not isinstance(keyval, tuple):
+                    raise keyval
+                key, val = keyval
+                items[key] = to(val)
+        finally:
+            for thread in threads:
+                thread.join(timeout=_PIN_MEM_TIMEOUT)
+        result = self._fast_apply(
+            lambda name, val: items.get(name, val),
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            device=device,
+        )
+        return result
+
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -9053,25 +9250,32 @@ class TensorDictBase(MutableMapping):
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
-            pin_memory (bool, optional): if ``True``, the tensors are pinned before
+            non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
                 controlled via the ``num_threads`` argument.
 
                 .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
-                    be much slower than ``tensordict.to("cuda", pin_memory=True)`` as
+                    be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
+                    Multithreaded ``pin_memory`` will usually be beneficial if the tensors
+                    are large and numerous: when there are too few tensors to be sent,
+                    the overhead of spawning threads and collecting data outweighs the benefits
+                    of multithreading, and if the tensors are small the overhead of iterating
+                    over a long list is also prohibitively large.
 
-            num_threads (int or None, optional): if ``pin_memory=True``, the number
-                of threads to be used for ``pin_memory``. By default, multithreading
-                will be used with ``num_threads=None`` in
-                :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
-                result in a high number of threads. ``num_threads=0`` will cancel any
+            num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
+                of threads to be used for ``pin_memory``. By default,
+                ``max(1, torch.get_num_threads())`` threads will be spawn.
+                ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
+
+        .. note:: if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+            Each new tensor will be a view on the consolidated storage cast to the desired device.
 
         Examples:
             >>> data = TensorDict({"a": 1.0}, [], device=None)
@@ -9089,7 +9293,7 @@ class TensorDictBase(MutableMapping):
             _,
             convert_to_format,
             batch_size,
-            pin_memory,
+            non_blocking_pin,
             num_threads,
         ) = _parse_to(*args, **kwargs)
         result = self
@@ -9102,6 +9306,11 @@ class TensorDictBase(MutableMapping):
             non_blocking = False
         else:
             sub_non_blocking = non_blocking
+
+        if self.is_consolidated() and dtype is None:
+            return self._to_consolidated(
+                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
+            )
 
         if convert_to_format is not None:
 
@@ -9122,30 +9331,63 @@ class TensorDictBase(MutableMapping):
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
-            if pin_memory and num_threads != 0:
-                result = self._multithread_apply_nest(
-                    lambda x: x.pin_memory(),
-                    num_threads=num_threads,
-                    call_when_done=to,
-                    device=device,
-                    checked=True,
+            if non_blocking_pin and num_threads != 0:
+                if num_threads is None:
+                    num_threads = max(1, torch.get_num_threads() // 2)
+                result = self._to_cuda_with_pin_mem(
+                    num_threads=num_threads, to=to, device=device
                 )
             else:
-                if pin_memory:
-                    result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
-                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                if non_blocking_pin:
+
+                    def to_pinmem(tensor, _to=to):
+                        return to(tensor.pin_memory())
+
+                    result = result._fast_apply(
+                        to_pinmem, propagate_lock=True, **apply_kwargs
+                    )
+                else:
+                    result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not None and sub_non_blocking and not non_blocking:
             self._sync_all()
         return result
 
+    def _to_consolidated(self, *, device, pin_memory, num_threads):
+        if num_threads is None:
+            # unspecified num_threads should mean 0
+            num_threads = 0
+        storage = self._consolidated["storage"]
+        if pin_memory:
+            storage = storage.pin_memory()
+        storage_cast = storage.to(device, non_blocking=True)
+        untyped_storage = storage_cast.untyped_storage()
+
+        def set_(x):
+            storage_offset = x.storage_offset()
+            stride = x.stride()
+            return torch.empty_like(x, device=device).set_(
+                untyped_storage,
+                size=x.shape,
+                stride=stride,
+                storage_offset=storage_offset,
+            )
+
+        result = self._fast_apply(
+            set_, device=torch.device(device), num_threads=num_threads
+        )
+        result._consolidated = {"storage": storage_cast}
+        if "metadata" in self._consolidated:
+            result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
+        return result
+
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
-            if not torch.compiler.is_dynamo_compiling() and torch.cuda.is_initialized():
+            if not is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()

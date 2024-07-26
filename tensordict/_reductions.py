@@ -82,7 +82,7 @@ def _rebuild_tensordict_files_consolidated(
             key: NonTensorData(data, batch_size=batch_size)
             for (key, (data, batch_size)) in non_tensor.items()
         }
-        for key, (dtype, local_shape, _, start, stop, pad) in leaves.items():
+        for key, (dtype, local_shape, start, stop, pad) in leaves.items():
             dtype = _STRDTYPE2DTYPE[dtype]
             # device = torch.device(device)
             local_shape = torch.Size(local_shape)

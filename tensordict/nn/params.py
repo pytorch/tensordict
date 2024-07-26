@@ -112,7 +112,9 @@ def _maybe_make_param_or_buffer(tensor):
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
         # convert all non-parameters to buffers
+        # dataptr = tensor.data.data_ptr()
         tensor = Buffer(tensor)
+        # assert tensor.data.data_ptr() == dataptr
     return tensor
 
 
@@ -540,6 +542,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None: ...
 

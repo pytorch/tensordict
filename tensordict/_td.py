@@ -83,6 +83,7 @@ from tensordict.utils import (
 from torch import Tensor
 from torch._dynamo import graph_break
 from torch.jit._shape_functions import infer_size_impl
+from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
 try:
@@ -93,6 +94,10 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 _register_tensor_class(ftdim.Tensor)
 
@@ -235,7 +240,7 @@ class TensorDict(TensorDictBase):
                 "Either a dictionary or a sequence of kwargs must be provided, not both."
             )
         source = source if not kwargs else kwargs
-        if names and torch.compiler.is_dynamo_compiling():
+        if names and is_dynamo_compiling():
             graph_break()
         has_device = False
         sub_non_blocking = False
@@ -262,7 +267,7 @@ class TensorDict(TensorDictBase):
             )
         self._batch_size = self._parse_batch_size(source, batch_size)
         # TODO: this breaks when stacking tensorclasses with dynamo
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             self.names = names
 
         for key, value in source.items():
@@ -283,7 +288,7 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
-        if torch.compiler.is_dynamo_compiling():
+        if is_dynamo_compiling():
             return TensorDict(
                 source,
                 batch_size=batch_size,
@@ -331,10 +336,16 @@ class TensorDict(TensorDictBase):
         as_module: bool = False,
         lock: bool = False,
         use_state_dict: bool = False,
+        filter_empty: bool = True,
     ):
         result = cls._from_module(
-            module=module, as_module=as_module, use_state_dict=use_state_dict
+            module=module,
+            as_module=as_module,
+            use_state_dict=use_state_dict,
+            filter_empty=filter_empty,
         )
+        if result is None:
+            result = TensorDict._new_unsafe({}, batch_size=torch.Size(()))
         if lock:
             result.lock_()
         return result
@@ -346,6 +357,7 @@ class TensorDict(TensorDictBase):
         as_module: bool = False,
         use_state_dict: bool = False,
         prefix="",
+        filter_empty: bool = True,
     ):
         from tensordict.nn import TensorDictParams
 
@@ -376,7 +388,11 @@ class TensorDict(TensorDictBase):
                 hook_result = hook(module, destination, prefix, local_metadata)
                 if hook_result is not None:
                     destination = hook_result
-        destination = TensorDict(destination, batch_size=[])
+        if not filter_empty or destination:
+            destination_set = True
+            destination = TensorDict._new_unsafe(destination, batch_size=torch.Size(()))
+        else:
+            destination_set = False
         for name, submodule in module._modules.items():
             if submodule is not None:
                 subtd = cls._from_module(
@@ -384,10 +400,17 @@ class TensorDict(TensorDictBase):
                     as_module=False,
                     use_state_dict=use_state_dict,
                     prefix=prefix + name + ".",
+                    filter_empty=filter_empty,
                 )
-                destination._set_str(
-                    name, subtd, validated=True, inplace=False, non_blocking=False
-                )
+                if subtd is not None:
+                    if not destination_set:
+                        destination = TensorDict._new_unsafe(batch_size=torch.Size(()))
+                        destination_set = True
+                    destination._set_str(
+                        name, subtd, validated=True, inplace=False, non_blocking=False
+                    )
+        if not destination_set:
+            return
 
         if as_module:
             from tensordict.nn.params import TensorDictParams
@@ -420,7 +443,7 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         non_blocking: bool = False,
     ):
-        is_dynamo = torch.compiler.is_dynamo_compiling()
+        is_dynamo = is_dynamo_compiling()
         if is_dynamo:
             _check_inbuild()
 
@@ -480,6 +503,8 @@ class TensorDict(TensorDictBase):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
+            _parameters = __dict__["_parameters"]
+            _buffers = __dict__["_buffers"]
         else:
             __dict__ = None
 
@@ -491,7 +516,14 @@ class TensorDict(TensorDictBase):
                 if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
-                        __dict__, hooks, module, key, value, inplace
+                        __dict__,
+                        _parameters,
+                        _buffers,
+                        hooks,
+                        module,
+                        key,
+                        value,
+                        inplace,
                     )
                 else:
                     if return_swap:
@@ -506,10 +538,6 @@ class TensorDict(TensorDictBase):
                             local_out = local_out.clone()
                         new_val.data.copy_(value.data, non_blocking=non_blocking)
             else:
-                if value.is_empty():
-                    # if there is at least one key, we must populate the module.
-                    # Otherwise, we just go to the next key
-                    continue
                 if __dict__ is not None:
                     child = __dict__["_modules"][key]
                 else:
@@ -1051,6 +1079,7 @@ class TensorDict(TensorDictBase):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         if constructor_kwargs:
@@ -1090,30 +1119,59 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
+        if isinstance(result, _SubTensorDict):
 
             def setter(
                 item_trsf,
-                key=key,
+                key,
                 inplace=inplace,
+                result=result,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if not set_item:
+                    return
+                result.set(key, item_trsf, inplace=inplace)
+
+        elif isinstance(result, TensorDict) and checked and (inplace is not True):
+
+            def setter(
+                item_trsf,
+                key,
+                result=result,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if not set_item:
+                    return
+                result._tensordict[key] = item_trsf
+
+        else:
+
+            local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
+
+            def setter(
+                item_trsf,
+                key,
                 result=result,
                 checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
-                if set_item:
-                    if isinstance(self, _SubTensorDict):
-                        result.set(key, item_trsf, inplace=inplace)
-                    else:
-                        result._set_str(
-                            key,
-                            item_trsf,
-                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                            validated=checked,
-                            non_blocking=False,
-                        )
+                if not set_item:
+                    return
+
+                result._set_str(
+                    key,
+                    item_trsf,
+                    inplace=local_inplace,
+                    validated=checked,
+                    non_blocking=False,
+                )
+
+        for i, (key, local_future) in enumerate(
+            _zip_strict(self.keys(), local_futures)
+        ):
 
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
@@ -1134,24 +1192,35 @@ class TensorDict(TensorDictBase):
                     futures=futures,
                     local_futures=local_future,
                     subs_results=subs_results,
+                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
-                local_future = executor.submit(setter, item_trsf=item_trsf)
-                local_futures[i] = local_future
-                futures.append(local_future)
-            else:
-                if subs_results is not None:
-                    local_result = subs_results[local_future]
+                if multithread_set:
+                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
+                    local_futures[i] = local_future
+                    futures.append(local_future)
                 else:
-                    # TODO: check if add_done_callback can safely be used here
-                    #  The issue is that it does not raises an exception encountered during the
-                    #  execution, resulting in UBs.
+                    setter(item_trsf=item_trsf, key=key)
+            else:
+                if multithread_set:
+                    if subs_results is not None:
+                        local_result = subs_results[local_future]
+                    else:
+                        # TODO: check if add_done_callback can safely be used here
+                        #  The issue is that it does not raises an exception encountered during the
+                        #  execution, resulting in UBs.
+                        local_result = local_future.result()
+                    local_future = executor.submit(
+                        setter, item_trsf=local_result, key=key
+                    )
+                    futures.append(local_future)
+                    local_futures[i] = local_future
+                else:
                     local_result = local_future.result()
-                local_future = executor.submit(setter, item_trsf=local_result)
-                futures.append(local_future)
-                local_futures[i] = local_future
+                    setter(item_trsf=local_result, key=key)
 
-        wait(local_futures)
+        if multithread_set:
+            wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:
@@ -1937,7 +2006,7 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        if torch.compiler.is_dynamo_compiling() or torch.compiler.is_compiling():
+        if is_dynamo_compiling():
             if value is not None:
                 graph_break()
             else:
@@ -2960,7 +3029,7 @@ class TensorDict(TensorDictBase):
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
-        if not include_nested and not leaves_only:
+        if not include_nested and not leaves_only and is_leaf is None:
             return _StringKeys(self._tensordict.keys())
         else:
             return self._nested_keys(
@@ -2993,7 +3062,7 @@ class TensorDict(TensorDictBase):
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
             result = []
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
 
                 def fast_iter():
                     for key, val in self._tensordict.items():
@@ -4126,6 +4195,8 @@ class _TensorDictKeysView:
 
 def _set_tensor_dict(  # noqa: F811
     __dict__,
+    _parameters,
+    _buffers,
     hooks,
     module: torch.nn.Module,
     name: str,
@@ -4134,9 +4205,9 @@ def _set_tensor_dict(  # noqa: F811
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = __dict__["_parameters"].pop(name, None)  # type: ignore[assignment]
+    out = _parameters.pop(name, None)  # type: ignore[assignment]
     if out is None:
-        out = __dict__["_buffers"].pop(name, None)
+        out = _buffers.pop(name, None)
         was_buffer = out is not None
     if out is None:
         out = __dict__.pop(name)
@@ -4152,17 +4223,15 @@ def _set_tensor_dict(  # noqa: F811
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
-        __dict__["_parameters"][name] = tensor
+        _parameters[name] = tensor
 
-        if isinstance(
-            tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
-        ):
+        if isinstance(tensor, UninitializedTensorMixin):
             module.register_forward_pre_hook(
                 _add_batch_dim_pre_hook(), with_kwargs=True
             )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
-        __dict__["_buffers"][name] = tensor
+        _buffers[name] = tensor
     else:
         __dict__[name] = tensor
     return out

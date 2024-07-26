@@ -36,6 +36,7 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
+    _as_context_manager,
     _CloudpickleWrapper,
     _KEY_ERROR,
     _LOCK_ERROR,
@@ -945,6 +946,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    @_as_context_manager()
     def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:
             raise ValueError(
@@ -952,6 +954,7 @@ class PersistentTensorDict(TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator)
 
+    @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:
             raise ValueError(
@@ -972,12 +975,12 @@ class PersistentTensorDict(TensorDictBase):
             non_blocking,
             convert_to_format,
             batch_size,
-            pin_memory,
+            non_blocking_pin,
             num_threads,
         ) = _parse_to(*args, **kwargs)
-        if pin_memory:
+        if non_blocking_pin:
             raise RuntimeError(
-                f"Cannot call pin_memory {type(self).__name__}.to(). Call "
+                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
                 f"`to_tensordict()` before executing this code."
             )
         result = self

@@ -39,13 +39,6 @@ from typing import (
 
 import numpy as np
 import torch
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    _has_funcdim = False
 from packaging.version import parse
 from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
@@ -64,6 +57,20 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
+try:
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import (
+        assume_constant_result,
+        is_compiling as is_dynamo_compiling,
+    )
 
 if TYPE_CHECKING:
     from tensordict.tensordict import TensorDictBase
@@ -111,6 +118,7 @@ if not _has_funcdim:
 
 T = TypeVar("T", bound="TensorDictBase")
 
+_PIN_MEM_TIMEOUT = 10
 _TORCH_DTYPES = (
     torch.bfloat16,
     torch.bool,
@@ -1126,7 +1134,7 @@ def cache(fun):
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
-        if not _self.is_locked or torch.compiler.is_compiling():
+        if not _self.is_locked or is_dynamo_compiling():
             return fun(_self, *args, **kwargs)
         cache = _self._cache
         if cache is None:
@@ -1214,45 +1222,6 @@ def lock_blocked(func):
     return new_func
 
 
-# class as_decorator:
-#     """Converts a method to a decorator.
-#
-#     Examples:
-#         >>> from tensordict import TensorDict
-#         >>> data = TensorDict({}, [])
-#         >>> with data.lock_(): # lock_ is decorated
-#         ...     assert data.is_locked
-#         >>> assert not data.is_locked
-#     """
-#
-#     def __init__(self, attr=None):
-#         self.attr = attr
-#
-#     def __call__(self, func):
-#         if self.attr is not None:
-#
-#             @wraps(func)
-#             def new_func(_self, *args, **kwargs):
-#                 _attr_pre = getattr(_self, self.attr)
-#                 out = func(_self, *args, **kwargs)
-#                 _attr_post = getattr(_self, self.attr)
-#                 if out is not None:
-#                     if _attr_post is not _attr_pre:
-#                         out._last_op = (new_func.__name__, (args, kwargs, _self))
-#                     else:
-#                         out._last_op = None
-#                 return out
-#
-#         else:
-#
-#             @wraps(func)
-#             def new_func(_self, *args, **kwargs):
-#                 out = func(_self, *args, **kwargs)
-#                 if out is not None:
-#                     out._last_op = (new_func.__name__, (args, kwargs, _self))
-#                 return out
-#
-#         return new_func
 def _as_context_manager(attr=None):
     """Converts a method to a decorator.
 
@@ -1401,10 +1370,10 @@ def _split_tensordict(
 
 def _parse_to(*args, **kwargs):
     batch_size = kwargs.pop("batch_size", None)
-    pin_memory = kwargs.pop("pin_memory", False)
+    non_blocking_pin = kwargs.pop("non_blocking_pin", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
         )
@@ -1425,6 +1394,9 @@ def _parse_to(*args, **kwargs):
         if device is not None:
             device = torch.device(device)
 
+    if device and device.type == "cuda" and device.index is None:
+        device = torch.device("cuda:0")
+
     if other is not None:
         if device is not None and device != other.device:
             raise ValueError("other and device cannot be both passed")
@@ -1440,7 +1412,7 @@ def _parse_to(*args, **kwargs):
         non_blocking,
         convert_to_format,
         batch_size,
-        pin_memory,
+        non_blocking_pin,
         num_threads,
     )
 
@@ -1691,7 +1663,7 @@ def _check_keys(
         is_leaf=_is_leaf_nontensor,
     )
     # TODO: compile doesn't like set() over an arbitrary object
-    if torch.compiler.is_dynamo_compiling():
+    if is_dynamo_compiling():
         keys = {k for k in keys}  # noqa: C416
     else:
         keys: set[str] = set(keys)
@@ -1704,7 +1676,7 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
@@ -1853,13 +1825,15 @@ class Buffer(Tensor, metaclass=_ParameterMeta):
     def __new__(cls, data=None, requires_grad=False):
         if data is None:
             data = torch.empty(0)
-        if type(data) is Tensor or type(data) is Buffer:
-            # For ease of BC maintenance, keep this path for standard Tensor.
-            # Eventually (tm), we should change the behavior for standard Tensor to match.
-            return Tensor._make_subclass(cls, data, requires_grad)
+
+        if type(data) is torch.Tensor or type(data) is Buffer:
+            return data.as_subclass(cls)
 
         # Path for custom tensors: set a flag on the instance to indicate parameter-ness.
-        t = data.detach().requires_grad_(requires_grad)
+        if requires_grad:
+            t = data.detach().requires_grad_(requires_grad)
+        else:
+            t = data
         t._is_buffer = True
         return t
 
@@ -1968,7 +1942,7 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 out.append(len(range(*_slice_indices(idx, batch))))
             else:
                 out.append(len(range(*idx.indices(batch))))
@@ -2433,7 +2407,7 @@ def _make_dtype_promotion(func):
 
 
 def _unravel_key_to_tuple(key):
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return _unravel_key_to_tuple_cpp(key)
     if isinstance(key, str):
         return (key,)
@@ -2454,7 +2428,7 @@ def unravel_key(key):
         ("a", "b")
 
     """
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
@@ -2467,14 +2441,14 @@ def unravel_key(key):
 
 def unravel_keys(*keys):
     """Unravels a sequence of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_keys_cpp(*keys)
     return tuple(unravel_key(key) for key in keys)
 
 
 def unravel_key_list(keys):
     """Unravels a list of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_list_cpp(keys)
     return [unravel_key(key) for key in keys]
 
@@ -2539,7 +2513,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = torch.compiler.assume_constant_result(_lock_warn)
+_lock_warn = assume_constant_result(_lock_warn)
 
 
 def _check_inbuild():
@@ -2549,7 +2523,7 @@ def _check_inbuild():
         )
 
 
-_check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)
+_check_inbuild = assume_constant_result(_check_inbuild)
 
 if sys.version_info >= (3, 10):
     _zip_strict = functools.partial(zip, strict=True)
@@ -2561,3 +2535,15 @@ else:
             raise ValueError("lengths of iterables differ.")
 
         return zip(*iterables)
+
+
+def _pin_mem(q_in, q_out):
+    while not q_in.empty():
+        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+        try:
+            key, val = input[0], input[1].pin_memory()
+        except Exception as err:
+            # Surface the exception
+            q_out.put(err)
+            return
+        q_out.put((key, val))

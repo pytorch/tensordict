@@ -303,19 +303,15 @@ We can duplicate and reinitialize model copies using the :class:`tensordict.nn.E
 
     EnsembleModule
 
-Tracing and compiling
----------------------
+Compiling TensorDictModules
+---------------------------
 
-.. currentmodule:: tensordict.prototype
+.. currentmodule:: tensordict.nn
 
-:class:`~.TensorDictModule` can be compiled using :func:`torch.compile` if it is
-first traced using :func:`~.symbolic_trace`.
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_noinherit.rst
-
-    symbolic_trace
+Since v0.5, TensorDict components are compatible with :func:`~torch.compile`.
+For instance, a :class:`~tensordict.TensorDictSequential` module can be compiled with
+``torch.compile`` and reach a runtime similar to a regular PyTorch module wrapped in
+a :class:`~tensordict.nn.TensorDictModule`.
 
 Distributions
 -------------

@@ -14,6 +14,11 @@ import torch
 from tensordict.utils import strtobool
 from torch import nn
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ModuleNotFoundError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
 
@@ -64,30 +69,40 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
+_MAPPINGS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
+    "softplus": torch.nn.functional.softplus,
+    "exp": torch.exp,
+    "relu": torch.relu,
+    "biased_softplus": biased_softplus(1.0),
+    "none": lambda x: x,
+}
+
+
 def mappings(key: str) -> Callable:
     """Given an input string, returns a surjective function f(x): R -> R^+.
 
     Args:
-        key (str): one of "softplus", "exp", "relu", "expln",
-            or "biased_softplus". If the key beggins with "biased_softplus",
-            then it needs to take the following form:
-            ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be used to bias the softplus function.
-            Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used. In that case, the additional ```min_val``` term is a floating point
-            number that will be used to encode the minimum value of the softplus transform.
-            In practice, the equation used is softplus(x + bias) + min_val, where bias and min_val are values computed such that the conditions above are met.
+        key (str): one of `"softplus"`, `"exp"`, `"relu"`, `"expln"`,
+            `"biased_softplus"` or `"none"` (no mapping).
+
+    .. note:: If the key begins with `"biased_softplus"`,
+      then it needs to take the following form:
+      ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
+      used to bias the softplus function.
+      Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
+      In that case, the additional ```min_val``` term is a floating point
+      number that will be used to encode the minimum value of the softplus transform.
+      In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
+      such that the conditions above are met.
+
+    .. note:: Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
 
     Returns:
          a Callable
 
     """
-    _mappings: dict[str, Callable] = {
-        "softplus": torch.nn.functional.softplus,
-        "exp": torch.exp,
-        "relu": torch.relu,
-        "biased_softplus": biased_softplus(1.0),
-    }
-    if key in _mappings:
-        return _mappings[key]
+    if key in _MAPPINGS:
+        return _MAPPINGS[key]
     elif key.startswith("biased_softplus"):
         stripped_key = key.split("_")
         if len(stripped_key) == 3:
@@ -101,6 +116,23 @@ def mappings(key: str) -> Callable:
 
     else:
         raise NotImplementedError(f"Unknown mapping {key}")
+
+
+def add_custom_mapping(name: str, mapping: Callable[[torch.Tensor], torch.Tensor]):
+    """Adds a custom mapping to be used in mapping classes.
+
+    Args:
+        name (str): a mapping name.
+        mapping (callable): a callable that takes a tensor as input and outputs a tensor
+            with the same shape.
+
+    Examples:
+        >>> from tensordict.nn import add_custom_mapping, NormalParamExtractor
+        >>> add_custom_mapping("my_mapping", lambda x: torch.zeros_like(x))
+        >>> npe = NormalParamExtractor(scale_mapping="my_mapping", scale_lb=0.0)
+        >>> assert (npe(torch.randn(10))[1] == torch.zeros(5)).all()
+    """
+    _MAPPINGS[name] = mapping
 
 
 class set_skip_existing(_DecoratorContextManager):
@@ -263,7 +295,7 @@ class set_skip_existing(_DecoratorContextManager):
         return super().__call__(wrapper)
 
     def __enter__(self) -> None:
-        if self.mode and torch.compiler.is_dynamo_compiling():
+        if self.mode and is_dynamo_compiling():
             raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
         global _SKIP_EXISTING
         self.prev = _SKIP_EXISTING
@@ -303,7 +335,7 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
-            if skip_existing() and torch.compiler.is_dynamo_compiling():
+            if skip_existing() and is_dynamo_compiling():
                 raise RuntimeError(
                     "skip_existing is not compatible with torch.compile."
                 )
@@ -316,7 +348,7 @@ class _set_skip_existing_None(set_skip_existing):
                 and not any(key in out_keys for key in in_keys)
             ):
                 return tensordict
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 return func(_self, tensordict, *args, **kwargs)
             global _SKIP_EXISTING
             self.prev = _SKIP_EXISTING
