@@ -14,6 +14,7 @@ import gc
 import importlib
 import numbers
 import os.path
+import queue
 import uuid
 import warnings
 import weakref
@@ -24,6 +25,7 @@ from copy import copy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
+from threading import Thread
 from typing import (
     Any,
     Callable,
@@ -9221,6 +9223,32 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
+    def _to_cuda_with_pin_mem(self, num_threads):
+        keys, vals = self._items_list(leaves_only=True, include_nested=True)
+        lkeys = len(keys)
+        q_in = queue.Queue()
+        q_out = queue.Queue()
+        threads = []
+        for key, val in _zip_strict(keys, vals):
+            q_in.put((key, val))
+        for i in range(min(num_threads, lkeys)):
+            thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out))
+            thread.start()
+            threads.append(thread)
+        items = {}
+        while len(items) < lkeys:
+            key, val = q_out.get()
+            items[key] = val
+        for thread in threads:
+            thread.join()
+        return self._fast_apply(
+            lambda name, val: items.get(name, val),
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -9636,3 +9664,10 @@ def _expand_to_match_shape(
 
 def _pin_memory(x):
     return x.pin_memory()
+
+def _pin_mem_and_cuda(q_in, q_out):
+    while True:
+        input = q_in.get()
+        if isinstance(input, bool):
+            break
+        q_out.put(input[0], input[1].pin_memory())
