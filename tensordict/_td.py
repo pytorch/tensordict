@@ -9,7 +9,7 @@ import numbers
 import os
 import weakref
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from numbers import Number
 from pathlib import Path
@@ -1077,6 +1077,7 @@ class TensorDict(TensorDictBase):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         if constructor_kwargs:
@@ -1186,27 +1187,33 @@ class TensorDict(TensorDictBase):
                     futures=futures,
                     local_futures=local_future,
                     subs_results=subs_results,
+                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
-                setter(item_trsf=item_trsf, key=key)
-                # local_future = executor.submit(setter, item_trsf=item_trsf)
-                # local_futures[i] = local_future
-                # futures.append(local_future)
+                if multithread_set:
+                    local_future = executor.submit(setter, item_trsf=item_trsf)
+                    local_futures[i] = local_future
+                    futures.append(local_future)
+                else:
+                    setter(item_trsf=item_trsf, key=key)
             else:
-                local_result = local_future.result()
-                # if subs_results is not None:
-                #     local_result = subs_results[local_future]
-                # else:
-                #     # TODO: check if add_done_callback can safely be used here
-                #     #  The issue is that it does not raises an exception encountered during the
-                #     #  execution, resulting in UBs.
-                #     pass
-                setter(item_trsf=local_result, key=key)
-                # local_future = executor.submit(setter, item_trsf=local_result)
-                # futures.append(local_future)
-                # local_futures[i] = local_future
+                if multithread_set:
+                    if subs_results is not None:
+                        local_result = subs_results[local_future]
+                    else:
+                        # TODO: check if add_done_callback can safely be used here
+                        #  The issue is that it does not raises an exception encountered during the
+                        #  execution, resulting in UBs.
+                        local_result = local_future.result()
+                    local_future = executor.submit(setter, item_trsf=local_result)
+                    futures.append(local_future)
+                    local_futures[i] = local_future
+                else:
+                    local_result = local_future.result()
+                    setter(item_trsf=local_result, key=key)
 
-        # wait(local_futures)
+        if multithread_set:
+            wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:

@@ -551,6 +551,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         ...

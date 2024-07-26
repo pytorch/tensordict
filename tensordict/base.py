@@ -139,6 +139,7 @@ _TENSOR_COLLECTION_MEMO = {}
 
 _PIN_MEM_TIMEOUT = 10
 
+
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
@@ -6307,6 +6308,7 @@ class TensorDictBase(MutableMapping):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         ...
