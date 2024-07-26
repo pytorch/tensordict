@@ -128,9 +128,7 @@ BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
-CompatibleType = Union[
-    Tensor,
-]
+CompatibleType = Union[Tensor,]
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -370,8 +368,7 @@ class TensorDictBase(MutableMapping):
         self,
         index: IndexType,
         value: T | dict | numbers.Number | CompatibleType,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def __delitem__(self, key: NestedKey) -> T:
         return self.del_(key)
@@ -739,8 +736,7 @@ class TensorDictBase(MutableMapping):
         dtype,
         tuple_ok=True,
         **kwargs,
-    ):
-        ...
+    ): ...
 
     def auto_batch_size_(self, batch_dims: int | None = None) -> T:
         """Sets the maximum batch-size for the tensordict, up to an optional batch_dims.
@@ -1019,9 +1015,11 @@ class TensorDictBase(MutableMapping):
         if _pytree_type is dict:
             items = dict(
                 (
-                    (val["key"], val["value"])
-                    if key.startswith("<NON_NESTED>")
-                    else (key, val)
+                    (
+                        (val["key"], val["value"])
+                        if key.startswith("<NON_NESTED>")
+                        else (key, val)
+                    )
                     for (key, val) in items.items()
                 )
             )
@@ -1331,8 +1329,7 @@ class TensorDictBase(MutableMapping):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-    ):
-        ...
+    ): ...
 
     # Shape functionality
     @property
@@ -1517,12 +1514,10 @@ class TensorDictBase(MutableMapping):
         return depth
 
     @overload
-    def expand(self, *shape: int) -> T:
-        ...
+    def expand(self, *shape: int) -> T: ...
 
     @overload
-    def expand(self, shape: torch.Size) -> T:
-        ...
+    def expand(self, shape: torch.Size) -> T: ...
 
     @abc.abstractmethod
     def expand(self, *args: int | torch.Size) -> T:
@@ -1881,8 +1876,7 @@ class TensorDictBase(MutableMapping):
         return results
 
     @abc.abstractmethod
-    def _unbind(self, dim: int) -> tuple[T, ...]:
-        ...
+    def _unbind(self, dim: int) -> tuple[T, ...]: ...
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         """Splits a tensordict into the specified number of chunks, if possible.
@@ -1917,8 +1911,7 @@ class TensorDictBase(MutableMapping):
         return self.split(split_size, dim=dim)
 
     @overload
-    def unsqueeze(self, dim: int) -> T:
-        ...
+    def unsqueeze(self, dim: int) -> T: ...
 
     @_as_context_manager()
     def unsqueeze(self, *args, **kwargs):
@@ -1961,8 +1954,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _unsqueeze(self, dim):
-        ...
+    def _unsqueeze(self, dim): ...
 
     def _legacy_unsqueeze(self, dim: int) -> T:
         if dim < 0:
@@ -1985,8 +1977,7 @@ class TensorDictBase(MutableMapping):
         )
 
     @overload
-    def squeeze(self, dim: int | None = None) -> T:
-        ...
+    def squeeze(self, dim: int | None = None) -> T: ...
 
     @_as_context_manager()
     def squeeze(self, *args, **kwargs):
@@ -2032,8 +2023,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _squeeze(self, dim=None):
-        ...
+    def _squeeze(self, dim=None): ...
 
     def _legacy_squeeze(self, dim: int | None = None) -> T:
         from tensordict._lazy import _SqueezedTensorDict
@@ -2075,12 +2065,10 @@ class TensorDictBase(MutableMapping):
         )
 
     @overload
-    def reshape(self, *shape: int):
-        ...
+    def reshape(self, *shape: int): ...
 
     @overload
-    def reshape(self, shape: list | tuple):
-        ...
+    def reshape(self, shape: list | tuple): ...
 
     @abc.abstractmethod
     def reshape(
@@ -2222,24 +2210,20 @@ class TensorDictBase(MutableMapping):
         return torch.gather(self, dim, index, out=out)
 
     @overload
-    def view(self, *shape: int):
-        ...
+    def view(self, *shape: int): ...
 
     @overload
-    def view(self, dtype):
-        ...
+    def view(self, dtype): ...
 
     @overload
-    def view(self, shape: torch.Size):
-        ...
+    def view(self, shape: torch.Size): ...
 
     @abc.abstractmethod
     def _view(
         self,
         *args,
         **kwargs,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @_as_context_manager()
     def view(
@@ -2358,8 +2342,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _transpose(self, dim0, dim1):
-        ...
+    def _transpose(self, dim0, dim1): ...
 
     def _legacy_transpose(self, dim0, dim1):
         if dim0 < 0:
@@ -2383,12 +2366,10 @@ class TensorDictBase(MutableMapping):
         )
 
     @overload
-    def permute(self, *dims: int):
-        ...
+    def permute(self, *dims: int): ...
 
     @overload
-    def permute(self, dims: list | tuple):
-        ...
+    def permute(self, dims: list | tuple): ...
 
     @_as_context_manager()
     def permute(self, *args, **kwargs):
@@ -2447,8 +2428,7 @@ class TensorDictBase(MutableMapping):
         self,
         *args,
         **kwargs,
-    ):
-        ...
+    ): ...
 
     def _legacy_permute(
         self,
@@ -2714,8 +2694,7 @@ class TensorDictBase(MutableMapping):
         return self
 
     @abc.abstractmethod
-    def _has_names(self):
-        ...
+    def _has_names(self): ...
 
     def _maybe_names(self):
         if self._has_names():
@@ -2779,8 +2758,7 @@ class TensorDictBase(MutableMapping):
 
     @device.setter
     @abc.abstractmethod
-    def device(self, value: DeviceType) -> None:
-        ...
+    def device(self, value: DeviceType) -> None: ...
 
     @lock_blocked
     def clear(self) -> T:
@@ -3126,8 +3104,7 @@ class TensorDictBase(MutableMapping):
         inplace,
         like,
         share_non_tensor,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @property
     def saved_path(self):
@@ -3266,9 +3243,9 @@ class TensorDictBase(MutableMapping):
                         # values.device,
                         flat_size,
                     )
-                    flat_key_values[
-                        _prefix_last_key(total_key, "<NJT_OFFSETS>")
-                    ] = offsets
+                    flat_key_values[_prefix_last_key(total_key, "<NJT_OFFSETS>")] = (
+                        offsets
+                    )
                     add_single_value(
                         offsets,
                         _prefix_last_key(key, "<NJT_OFFSETS>"),
@@ -4149,8 +4126,7 @@ class TensorDictBase(MutableMapping):
         device: torch.device | None = None,
         *,
         out=None,
-    ):
-        ...
+    ): ...
 
     # Key functionality: set, get, set_, set_at_, update, update_
     @abc.abstractmethod
@@ -4221,12 +4197,10 @@ class TensorDictBase(MutableMapping):
         validated: bool,
         ignore_lock: bool = False,
         non_blocking: bool = False,
-    ):
-        ...
+    ): ...
 
     @abc.abstractmethod
-    def _set_tuple(self, key, value, *, inplace, validated, non_blocking: bool):
-        ...
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking: bool): ...
 
     @lock_blocked
     def set_non_tensor(self, key: NestedKey, value: Any):
@@ -4397,12 +4371,10 @@ class TensorDictBase(MutableMapping):
         )
 
     @abc.abstractmethod
-    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
-        ...
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool): ...
 
     @abc.abstractmethod
-    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
-        ...
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool): ...
 
     def set_(
         self,
@@ -4503,12 +4475,10 @@ class TensorDictBase(MutableMapping):
         return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
-    def _get_str(self, key, default):
-        ...
+    def _get_str(self, key, default): ...
 
     @abc.abstractmethod
-    def _get_tuple(self, key, default):
-        ...
+    def _get_tuple(self, key, default): ...
 
     def get_at(
         self, key: NestedKey, index: IndexType, default: CompatibleType = NO_DEFAULT
@@ -4855,7 +4825,7 @@ class TensorDictBase(MutableMapping):
         """Creates a shallow copy of the tensordict where entries have been replaced.
 
         Accepts one unnamed argument which must be a dictionary of a :class:`~tensordict.TensorDictBase` subclass.
-        Additionaly, first-level entries can be updated with the named keyword arguments.
+        Additionally, first-level entries can be updated with the named keyword arguments.
 
         Returns:
             a copy of ``self`` with updated entries if the input is non-empty. If an empty dict or no dict is provided
@@ -6295,8 +6265,7 @@ class TensorDictBase(MutableMapping):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
     def _multithread_rebuild(
@@ -6315,8 +6284,7 @@ class TensorDictBase(MutableMapping):
         subs_results: Dict[Future, Any] | None = None,
         multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def _multithread_apply_nest(
         self,
@@ -6424,8 +6392,7 @@ class TensorDictBase(MutableMapping):
         is_leaf: Callable = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
-    ) -> T | None:
-        ...
+    ) -> T | None: ...
 
     def _fast_apply(
         self,
@@ -6606,7 +6573,7 @@ class TensorDictBase(MutableMapping):
             ...
             tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
 
-        .. note:: This method is particularily useful when working with large
+        .. note:: This method is particularly useful when working with large
             datasets stored on disk (e.g. memory-mapped tensordicts) where
             chunks will be zero-copied slices of the original data which can
             be passed to the processes with virtually zero-cost. This allows
@@ -6789,7 +6756,7 @@ class TensorDictBase(MutableMapping):
             ...
             tensor([[1., 1., 1., 1., 1.]])
 
-        .. note:: This method is particularily useful when working with large
+        .. note:: This method is particularly useful when working with large
             datasets stored on disk (e.g. memory-mapped tensordicts) where
             chunks will be zero-copied slices of the original data which can
             be passed to the processes with virtually zero-cost. This allows
@@ -7839,13 +7806,11 @@ class TensorDictBase(MutableMapping):
     # Functorch compatibility
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        ...
+    def _add_batch_dim(self, *, in_dim, vmap_level): ...
 
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-        ...
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
 
     # Validation and checks
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
@@ -7871,8 +7836,7 @@ class TensorDictBase(MutableMapping):
             )
 
     @abc.abstractmethod
-    def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
-        ...
+    def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T: ...
 
     def _check_batch_size(self) -> None:
         batch_dims = self.batch_dims
@@ -7886,8 +7850,7 @@ class TensorDictBase(MutableMapping):
                 )
 
     @abc.abstractmethod
-    def _check_is_shared(self) -> bool:
-        ...
+    def _check_is_shared(self) -> bool: ...
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         batch_dims = len(new_size)
@@ -7899,8 +7862,7 @@ class TensorDictBase(MutableMapping):
                 )
 
     @abc.abstractmethod
-    def _check_device(self) -> None:
-        ...
+    def _check_device(self) -> None: ...
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
@@ -8176,8 +8138,7 @@ class TensorDictBase(MutableMapping):
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     def exclude(self, *keys: NestedKey, inplace: bool = False) -> T:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
@@ -8230,8 +8191,7 @@ class TensorDictBase(MutableMapping):
         *keys: NestedKey,
         inplace: bool = False,
         set_shared: bool = True,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     def _maybe_set_shared_attributes(self, result, lock=False):
         # We must use _is_shared to avoid having issues with CUDA tensordicts
@@ -8255,11 +8215,11 @@ class TensorDictBase(MutableMapping):
 
         return TensorDict(
             {
-                key: value.clone()
-                if not _is_tensor_collection(type(value))
-                else value
-                if is_non_tensor(value)
-                else value.to_tensordict()
+                key: (
+                    value.clone()
+                    if not _is_tensor_collection(type(value))
+                    else value if is_non_tensor(value) else value.to_tensordict()
+                )
                 for key, value in self.items(is_leaf=_is_leaf_nontensor)
             },
             device=self.device,
@@ -8289,8 +8249,7 @@ class TensorDictBase(MutableMapping):
         return result
 
     @abc.abstractmethod
-    def _clone(self, recurse: bool = False):
-        ...
+    def _clone(self, recurse: bool = False): ...
 
     def copy(self):
         """Return a shallow copy of the tensordict (ie, copies the structure but not the data).
@@ -8692,8 +8651,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def _change_batch_size(self, new_size: torch.Size) -> None:
-        ...
+    def _change_batch_size(self, new_size: torch.Size) -> None: ...
 
     @abc.abstractmethod
     def is_contiguous(self) -> bool:
@@ -8737,7 +8695,7 @@ class TensorDictBase(MutableMapping):
                 device=None,
                 is_shared=False)
 
-        This method and :meth:`~.unflatten_keys` are particularily useful when
+        This method and :meth:`~.unflatten_keys` are particularly useful when
         handling state-dicts, as they make it possible to seamlessly convert
         flat dictionaries into data structures that mimic the structure of the
         model.
@@ -8904,7 +8862,7 @@ class TensorDictBase(MutableMapping):
                 device=None,
                 is_shared=False)
 
-        This method and :meth:`~.unflatten_keys` are particularily useful when
+        This method and :meth:`~.unflatten_keys` are particularly useful when
         handling state-dicts, as they make it possible to seamlessly convert
         flat dictionaries into data structures that mimic the structure of the
         model.
@@ -9051,8 +9009,7 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         new_batch_size: torch.Size | None = None,
         names: List[str] | None = None,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     # Locking functionality
     @property
@@ -9214,24 +9171,19 @@ class TensorDictBase(MutableMapping):
         device: Optional[Union[int, device]] = ...,
         dtype: Optional[Union[torch.device, str]] = ...,
         non_blocking: bool = ...,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @overload
-    def to(self: T, dtype: Union[torch.device, str], non_blocking: bool = ...) -> T:
-        ...
+    def to(self: T, dtype: Union[torch.device, str], non_blocking: bool = ...) -> T: ...
 
     @overload
-    def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> T:
-        ...
+    def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> T: ...
 
     @overload
-    def to(self: T, *, other: T, non_blocking: bool = ...) -> T:
-        ...
+    def to(self: T, *, other: T, non_blocking: bool = ...) -> T: ...
 
     @overload
-    def to(self: T, *, batch_size: torch.Size) -> T:
-        ...
+    def to(self: T, *, batch_size: torch.Size) -> T: ...
 
     def _to_cuda_with_pin_mem(
         self, *, num_threads, device="cuda", non_blocking=None, to: Callable
@@ -9519,80 +9471,61 @@ class TensorDictBase(MutableMapping):
         )
 
     @_make_dtype_promotion
-    def bfloat16(self):
-        ...
+    def bfloat16(self): ...
 
     @_make_dtype_promotion
-    def complex128(self):
-        ...
+    def complex128(self): ...
 
     @_make_dtype_promotion
-    def complex32(self):
-        ...
+    def complex32(self): ...
 
     @_make_dtype_promotion
-    def complex64(self):
-        ...
+    def complex64(self): ...
 
     @_make_dtype_promotion
-    def float16(self):
-        ...
+    def float16(self): ...
 
     @_make_dtype_promotion
-    def float32(self):
-        ...
+    def float32(self): ...
 
     @_make_dtype_promotion
-    def float64(self):
-        ...
+    def float64(self): ...
 
     @_make_dtype_promotion
-    def int16(self):
-        ...
+    def int16(self): ...
 
     @_make_dtype_promotion
-    def int32(self):
-        ...
+    def int32(self): ...
 
     @_make_dtype_promotion
-    def int64(self):
-        ...
+    def int64(self): ...
 
     @_make_dtype_promotion
-    def int8(self):
-        ...
+    def int8(self): ...
 
     @_make_dtype_promotion
-    def qint32(self):
-        ...
+    def qint32(self): ...
 
     @_make_dtype_promotion
-    def qint8(self):
-        ...
+    def qint8(self): ...
 
     @_make_dtype_promotion
-    def quint4x2(self):
-        ...
+    def quint4x2(self): ...
 
     @_make_dtype_promotion
-    def quint8(self):
-        ...
+    def quint8(self): ...
 
     @_make_dtype_promotion
-    def uint16(self):
-        ...
+    def uint16(self): ...
 
     @_make_dtype_promotion
-    def uint32(self):
-        ...
+    def uint32(self): ...
 
     @_make_dtype_promotion
-    def uint64(self):
-        ...
+    def uint64(self): ...
 
     @_make_dtype_promotion
-    def uint8(self):
-        ...
+    def uint8(self): ...
 
 
 _ACCEPTED_CLASSES = (

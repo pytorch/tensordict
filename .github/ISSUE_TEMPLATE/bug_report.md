@@ -25,7 +25,7 @@ import tensordict
 
 ```bash
 Traceback (most recent call last):
-  File ... 
+  File ...
 ```
 
 ## Expected behavior

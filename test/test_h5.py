@@ -30,11 +30,7 @@ class TestH5Serialization:
     def worker(cls, cyberbliptronics, q1, q2):
         assert isinstance(cyberbliptronics, PersistentTensorDict)
         assert cyberbliptronics.file.filename.endswith("groups.hdf5")
-        q1.put(
-            cyberbliptronics["Base_Group"][
-                "Sub_Group",
-            ]
-        )
+        q1.put(cyberbliptronics["Base_Group"]["Sub_Group"])
         assert q2.get(timeout=TIMEOUT) == "checked"
         val = cyberbliptronics["Base_Group", "Sub_Group", "default"] + 1
         q1.put(val)

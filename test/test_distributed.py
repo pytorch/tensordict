@@ -60,8 +60,10 @@ class TestFSDP:
 
     @classmethod
     def make_module(cls, device=None):
-        with torch.device(f"cuda:{device}") if device is not None else torch.device(
-            "cuda"
+        with (
+            torch.device(f"cuda:{device}")
+            if device is not None
+            else torch.device("cuda")
         ):
             my_module = cls.MyDModule()
             my_sharded_module = FSDP(my_module, device_id=device)

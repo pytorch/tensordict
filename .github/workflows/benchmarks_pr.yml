@@ -46,7 +46,7 @@ jobs:
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
-          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}          
+          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
         uses: apbard/pytest-benchmark-commenter@v3
         with:

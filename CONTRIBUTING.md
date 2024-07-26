@@ -3,7 +3,7 @@ We want to make contributing to this project as easy and transparent as
 possible.
 
 ## Installing the library
-Install the library as suggested in the README. For advanced features, 
+Install the library as suggested in the README. For advanced features,
 it is preferable to install the nightly built of pytorch.
 
 Make sure you install tensordict in develop mode by running
@@ -12,7 +12,7 @@ python setup.py develop
 ```
 in your shell.
 
-If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
@@ -20,17 +20,17 @@ ARCHFLAGS="-arch arm64" python setup.py develop
 ```
 
 ## Formatting your code
-**Type annotation** 
+**Type annotation**
 
-tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment. 
+tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment.
 
 **Linting**
 
-Before your PR is ready, you'll probably want your code to be checked. This can be done easily by installing 
+Before your PR is ready, you'll probably want your code to be checked. This can be done easily by installing
 ```
 pip install pre-commit
 ```
-and running 
+and running
 ```
 pre-commit run --all-files
 ```

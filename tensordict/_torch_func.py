@@ -313,9 +313,13 @@ def _cat(
             )
 
         for key in keys:
-            with _ErrorInteceptor(
-                key, "Attempted to concatenate tensors on different devices at key"
-            ) if not is_dynamo_compiling() else contextlib.nullcontext():
+            with (
+                _ErrorInteceptor(
+                    key, "Attempted to concatenate tensors on different devices at key"
+                )
+                if not is_dynamo_compiling()
+                else contextlib.nullcontext()
+            ):
                 if isinstance(out, TensorDict):
                     torch.cat(
                         [td.get(key) for td in list_of_tensordicts],
@@ -552,9 +556,13 @@ def _stack(
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
                     return torch.stack(values, dim)
-                with _ErrorInteceptor(
-                    key, "Attempted to stack tensors on different devices at key"
-                ) if not is_dynamo_compiling() else contextlib.nullcontext():
+                with (
+                    _ErrorInteceptor(
+                        key, "Attempted to stack tensors on different devices at key"
+                    )
+                    if not is_dynamo_compiling()
+                    else contextlib.nullcontext()
+                ):
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {

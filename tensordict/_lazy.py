@@ -318,8 +318,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return False
 
     @_fails_exclusive_keys
-    def to_dict(self) -> dict[str, Any]:
-        ...
+    def to_dict(self) -> dict[str, Any]: ...
 
     def _reduce_get_metadata(self):
         metadata = {}
@@ -351,8 +350,7 @@ class LazyStackedTensorDict(TensorDictBase):
         prefix="",
         keep_vars=False,
         flatten=False,
-    ) -> OrderedDict[str, Any]:
-        ...
+    ) -> OrderedDict[str, Any]: ...
 
     @_fails_exclusive_keys
     def flatten_keys(
@@ -360,12 +358,10 @@ class LazyStackedTensorDict(TensorDictBase):
         separator: str = ".",
         inplace: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @_fails_exclusive_keys
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
-        ...
+    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T: ...
 
     @property
     def device(self) -> torch.device | None:
@@ -1218,9 +1214,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 td._fast_apply(
                     lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
                     batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-                    names=[name for i, name in enumerate(td.names) if i != in_dim]
-                    if self._has_names()
-                    else None,
+                    names=(
+                        [name for i, name in enumerate(td.names) if i != in_dim]
+                        if self._has_names()
+                        else None
+                    ),
                 )
                 for td in td.tensordicts
             ]
@@ -1596,10 +1594,15 @@ class LazyStackedTensorDict(TensorDictBase):
                     default=default,
                     named=named,
                     nested_keys=nested_keys,
-                    prefix=prefix + (str(i),)
-                    if is_leaf
-                    in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
-                    else prefix,
+                    prefix=(
+                        prefix + (str(i),)
+                        if is_leaf
+                        in (
+                            _NESTED_TENSORS_AS_LISTS,
+                            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+                        )
+                        else prefix
+                    ),
                     is_leaf=is_leaf,
                     executor=executor,
                     futures=futures,
@@ -1760,10 +1763,15 @@ class LazyStackedTensorDict(TensorDictBase):
                     default=default,
                     named=named,
                     nested_keys=nested_keys,
-                    prefix=prefix + (str(i),)
-                    if is_leaf
-                    in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
-                    else prefix,
+                    prefix=(
+                        prefix + (str(i),)
+                        if is_leaf
+                        in (
+                            _NESTED_TENSORS_AS_LISTS,
+                            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+                        )
+                        else prefix
+                    ),
                     inplace=inplace,
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
@@ -1837,9 +1845,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 self._set_tuple(
                     index_unravel,
                     value,
-                    inplace=BEST_ATTEMPT_INPLACE
-                    if isinstance(self, _SubTensorDict)
-                    else False,
+                    inplace=(
+                        BEST_ATTEMPT_INPLACE
+                        if isinstance(self, _SubTensorDict)
+                        else False
+                    ),
                     validated=False,
                     non_blocking=False,
                 )
@@ -1849,9 +1859,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 isinstance(sub_index, (list, range, np.ndarray)) for sub_index in index
             ):
                 index = tuple(
-                    torch.as_tensor(sub_index, device=self.device)
-                    if isinstance(sub_index, (list, range, np.ndarray))
-                    else sub_index
+                    (
+                        torch.as_tensor(sub_index, device=self.device)
+                        if isinstance(sub_index, (list, range, np.ndarray))
+                        else sub_index
+                    )
                     for sub_index in index
                 )
 

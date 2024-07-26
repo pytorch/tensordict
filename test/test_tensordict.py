@@ -257,9 +257,11 @@ class TestGeneric:
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize(
         "nested,hetdtype",
-        [[False, False], [False, True]]
-        if torch.__version__ < "2.4"
-        else [[False, False], [False, True], ["NJT", True]],
+        (
+            [[False, False], [False, True]]
+            if torch.__version__ < "2.4"
+            else [[False, False], [False, True], ["NJT", True]]
+        ),
     )
     def test_consolidate(self, device, use_file, tmpdir, num_threads, nested, hetdtype):
         if not nested:
@@ -4528,10 +4530,14 @@ class TestTensorDicts(TestTensorDictsBase):
         with td.unlock_():
             td.set(("this", "tensor"), torch.zeros(td.shape))
             reached = False
-            with pytest.raises(
-                RuntimeError,
-                match="set_non_tensor is not compatible with the tensordict type",
-            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+            with (
+                pytest.raises(
+                    RuntimeError,
+                    match="set_non_tensor is not compatible with the tensordict type",
+                )
+                if td_name in ("td_h5",)
+                else contextlib.nullcontext()
+            ):
                 td.set_non_tensor(("this", "will"), "succeed")
                 reached = True
             if not reached:
@@ -4569,10 +4575,14 @@ class TestTensorDicts(TestTensorDictsBase):
         with td.unlock_():
             td.set(("this", "tensor"), torch.zeros(td.shape))
             reached = False
-            with pytest.raises(
-                RuntimeError,
-                match="set_non_tensor is not compatible with the tensordict type",
-            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+            with (
+                pytest.raises(
+                    RuntimeError,
+                    match="set_non_tensor is not compatible with the tensordict type",
+                )
+                if td_name in ("td_h5",)
+                else contextlib.nullcontext()
+            ):
                 td.set_non_tensor(("this", "will"), "succeed")
                 reached = True
             if not reached:
@@ -4594,10 +4604,14 @@ class TestTensorDicts(TestTensorDictsBase):
         with td.unlock_():
             td.set(("this", "tensor"), torch.zeros(td.shape))
             reached = False
-            with pytest.raises(
-                RuntimeError,
-                match="set_non_tensor is not compatible with the tensordict type",
-            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+            with (
+                pytest.raises(
+                    RuntimeError,
+                    match="set_non_tensor is not compatible with the tensordict type",
+                )
+                if td_name in ("td_h5",)
+                else contextlib.nullcontext()
+            ):
                 td.set_non_tensor(("this", "will"), "succeed")
                 reached = True
             if not reached:
@@ -7028,7 +7042,7 @@ class TestMPInplace:
             raise NotImplementedError
         self._driver_func(
             tensordict,
-            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1))
+            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
             # tensordict,
             # tensordict.unbind(0),
         )
@@ -8791,7 +8805,7 @@ class TestLock:
     def test_nested_lock(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td = td.lock_()
-        td._lock_parents_weakrefs, id(td)
+        assert not td._lock_parents_weakrefs, id(td)
         a = td["a"]
         b = td["a", "b"]
         c = td["a", "b", "c"]
@@ -9981,28 +9995,24 @@ class TestNonTensorData:
 
 class TestSubclassing:
     def test_td_inheritance(self):
-        class SubTD(TensorDict):
-            ...
+        class SubTD(TensorDict): ...
 
         assert is_tensor_collection(SubTD)
 
     def test_tc_inheritance(self):
         @tensorclass
-        class MyClass:
-            ...
+        class MyClass: ...
 
         assert is_tensor_collection(MyClass)
         assert is_tensorclass(MyClass)
 
-        class SubTC(MyClass):
-            ...
+        class SubTC(MyClass): ...
 
         assert is_tensor_collection(SubTC)
         assert is_tensorclass(SubTC)
 
     def test_nontensor_inheritance(self):
-        class SubTC(NonTensorData):
-            ...
+        class SubTC(NonTensorData): ...
 
         assert is_tensor_collection(SubTC)
         assert is_tensorclass(SubTC)

@@ -2075,7 +2075,7 @@ class NonTensorData:
     any level of a tensordict instance.
 
     :class:`~tensordict.tensorclass.NonTensorData` instances can be created
-    explicitely or using :meth:`~tensordict.TensorDictBase.set_non_tensor`.
+    explicitly or using :meth:`~tensordict.TensorDictBase.set_non_tensor`.
 
     This class is serializable using :meth:`tensordict.TensorDictBase.memmap`
     and related methods, and can be loaded through :meth:`~tensordict.TensorDictBase.load_memmap`.

@@ -725,9 +725,11 @@ class PersistentTensorDict(TensorDictBase):
                 ):
                     val = MemoryMappedTensor.from_tensor(
                         value,
-                        filename=str(prefix / f"{key}.memmap")
-                        if prefix is not None
-                        else None,
+                        filename=(
+                            str(prefix / f"{key}.memmap")
+                            if prefix is not None
+                            else None
+                        ),
                         copy_data=not like,
                         copy_existing=copy_existing,
                         existsok=True,
@@ -1091,9 +1093,11 @@ class PersistentTensorDict(TensorDictBase):
                         "This is suboptimal and may lead to performance issue."
                     )
                     idx = tuple(
-                        expand_right(torch.as_tensor(_idx), array.shape).numpy()
-                        if _idx.dtype == np.dtype("bool")
-                        else _idx
+                        (
+                            expand_right(torch.as_tensor(_idx), array.shape).numpy()
+                            if _idx.dtype == np.dtype("bool")
+                            else _idx
+                        )
                         for _idx in idx
                     )
                     array[idx] = torch.as_tensor(value)

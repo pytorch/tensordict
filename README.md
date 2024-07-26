@@ -37,11 +37,11 @@
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors,
 such as indexing, shape operations, casting to device or point-to-point communication
-in distributed settings. Whenever you need to execute an operation over a batch of tensors, 
+in distributed settings. Whenever you need to execute an operation over a batch of tensors,
 TensorDict is there to help you.
 
-The primary goal of TensorDict is to make your code-bases more _readable_, _compact_, and _modular_. 
-It abstracts away tailored operations, making your code less error-prone as it takes care of 
+The primary goal of TensorDict is to make your code-bases more _readable_, _compact_, and _modular_.
+It abstracts away tailored operations, making your code less error-prone as it takes care of
 dispatching the operation on the leaves for you.
 
 Using tensordict primitives, most supervised training loops can be rewritten in a generic way:
@@ -66,13 +66,13 @@ For instance, the above example can be easily used across classification and seg
 
 Unlike other [pytrees](https://github.com/pytorch/pytorch/blob/main/torch/utils/_pytree.py), TensorDict
 carries metadata that make it easy to query the state of the container. The main metadata
-are the [``batch_size``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.batch_size) 
-(also referred as ``shape``), 
-the [``device``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device), 
+are the [``batch_size``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.batch_size)
+(also referred as ``shape``),
+the [``device``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device),
 the shared status
-([``is_memmap``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_memmap) or 
-[``is_shared``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_shared)), 
-the dimension [``names``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.names) 
+([``is_memmap``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_memmap) or
+[``is_shared``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_shared)),
+the dimension [``names``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.names)
 and the [``lock``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.lock_) status.
 
 A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-value pairs:
@@ -85,7 +85,7 @@ A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-v
 ... }, batch_size=[3, 4])
 ```
 The `batch_size` and the first dimensions of each of the tensors must be compliant.
-The tensors can be of any dtype and device. 
+The tensors can be of any dtype and device.
 
 Optionally, one can restrict a tensordict to
 live on a dedicated ``device``, which will send each tensor that is written there:
@@ -101,22 +101,22 @@ TensorDict device:
 >>> data["key 3"] = torch.randn(3, 4, device="cpu")
 >>> assert data["key 3"].device is torch.device("cuda:0")
 ```
-Once the device is set, it can be cleared with the 
+Once the device is set, it can be cleared with the
 [``clear_device_``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_)
-method. 
+method.
 
 ### TensorDict as a specialized dictionary
-TensorDict possesses all the basic features of a dictionary such as 
-[``clear``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear), 
-[``copy``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.copy), 
-[``fromkeys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.fromkeys), 
-[``get``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get), 
-[``items``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items), 
-[``keys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys), 
-[``pop``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pop), 
-[``popitem``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.popitem), 
-[``setdefault``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.setdefault), 
-[``update``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update) and 
+TensorDict possesses all the basic features of a dictionary such as
+[``clear``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear),
+[``copy``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.copy),
+[``fromkeys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.fromkeys),
+[``get``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get),
+[``items``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items),
+[``keys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys),
+[``pop``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pop),
+[``popitem``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.popitem),
+[``setdefault``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.setdefault),
+[``update``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update) and
 [``values``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.values).
 
 But that is not all, you can also store nested values in a tensordict:
@@ -471,7 +471,7 @@ conda install -c conda-forge tensordict
 If you're using TensorDict, please refer to this BibTeX entry to cite this work:
 ```
 @misc{bou2023torchrl,
-      title={TorchRL: A data-driven decision-making library for PyTorch}, 
+      title={TorchRL: A data-driven decision-making library for PyTorch},
       author={Albert Bou and Matteo Bettini and Sebastian Dittert and Vikash Kumar and Shagun Sodhani and Xiaomeng Yang and Gianni De Fabritiis and Vincent Moens},
       year={2023},
       eprint={2306.00577},
@@ -482,9 +482,9 @@ If you're using TensorDict, please refer to this BibTeX entry to cite this work:
 
 ## Disclaimer
 
-TensorDict is at the *beta*-stage, meaning that there may be bc-breaking changes introduced, but 
+TensorDict is at the *beta*-stage, meaning that there may be bc-breaking changes introduced, but
 they should come with a warranty.
-Hopefully these should not happen too often, as the current roadmap mostly 
+Hopefully these should not happen too often, as the current roadmap mostly
 involves adding new features and building compatibility with the broader
 PyTorch ecosystem.
 

@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.0.1
+    rev: v4.6.0
     hooks:
       - id: check-docstring-first
       - id: check-toml
@@ -9,15 +9,21 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: end-of-file-fixer
+      - id: trailing-whitespace
 
   - repo: https://github.com/omnilib/ufmt
-    rev: v2.0.0b2
+    rev: v2.7.0
     hooks:
       - id: ufmt
         additional_dependencies:
-          - black == 22.3.0
+          - black == 24.4.2
           - usort == 1.0.3
           - libcst == 0.4.7
+
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.0
@@ -27,12 +33,12 @@ repos:
         additional_dependencies:
           - flake8-bugbear==22.10.27
           - flake8-comprehensions==3.10.1
-          - torchfix==0.0.2
+          - torchfix==0.5.0
           - flake8-print==5.0.0
 #          - flake8-unused-arguments==0.0.13
 
   - repo: https://github.com/PyCQA/pydocstyle
-    rev: 6.1.1
+    rev: 6.3.0
     hooks:
       - id: pydocstyle
         files: ^tensordict/

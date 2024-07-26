@@ -2169,9 +2169,13 @@ class TestAutoCasting:
             assert obj.tc.tc is None
 
     def test_autocast_or(self):
-        with pytest.warns(
-            UserWarning, match="This may be caused by annotations that use plain"
-        ) if not PY10 else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning, match="This may be caused by annotations that use plain"
+            )
+            if not PY10
+            else contextlib.nullcontext()
+        ):
             obj = AutoCastOr(
                 tensor=torch.zeros(()),
                 non_tensor="x",

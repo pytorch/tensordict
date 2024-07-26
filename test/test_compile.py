@@ -250,9 +250,11 @@ class TestTD:
         locked_op_c = torch.compile(locked_op, fullgraph=True, mode=mode)
         td_op = locked_op(td)
         # no warning the second time this is run
-        with pytest.warns(
-            UserWarning, match="Using lock_"
-        ) if mode is None else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="Using lock_")
+            if mode is None
+            else contextlib.nullcontext()
+        ):
             _ = locked_op_c(td)
         td_op_c = locked_op_c(td)
         assert (td_op == td_op_c).all()
@@ -532,9 +534,11 @@ class TestTC:
         locked_op_c = torch.compile(locked_op, fullgraph=True, mode=mode)
         tc_op = locked_op(data)
         # no warning the second time this is run
-        with pytest.warns(
-            UserWarning, match="Using lock_"
-        ) if mode is None else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="Using lock_")
+            if mode is None
+            else contextlib.nullcontext()
+        ):
             _ = locked_op_c(data)
         tc_op_c = locked_op_c(data)
         assert (tc_op == tc_op_c).all()
@@ -633,9 +637,9 @@ class TestFunctional:
                 call_compile(x, td_zero)
         finally:
             if TORCHDYNAMO_INLINE_INBUILT_NN_MODULES is not None:
-                os.environ[
-                    "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
-                ] = TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
+                os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = (
+                    TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
+                )
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
