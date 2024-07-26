@@ -21,7 +21,7 @@ import weakref
 from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from copy import copy
+from copy import copy, deepcopy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
@@ -3179,9 +3179,7 @@ class TensorDictBase(MutableMapping):
         flat_size = []
         start = 0
 
-        def add_single_value(
-            value, key, metadata_dict, dtype, shape, device, flat_size
-        ):
+        def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
             nonlocal start
             n = value.element_size() * value.numel()
             if need_padding:
@@ -3196,7 +3194,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict["leaves"][key] = (
                     _DTYPE2STRDTYPE[dtype],
                     list(shape),
-                    _DEVICE2STRDEVICE[device],
+                    # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
@@ -3266,7 +3264,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         values.dtype,
                         shape,
-                        values.device,
+                        # values.device,
                         flat_size,
                     )
                     flat_key_values[
@@ -3278,7 +3276,7 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
-                        offsets.device,
+                        # offsets.device,
                         flat_size,
                     )
                 else:
@@ -3293,7 +3291,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict,
                 value.dtype,
                 value.shape,
-                value.device,
+                # value.device,
                 flat_size,
             )
 
@@ -9429,7 +9427,9 @@ class TensorDictBase(MutableMapping):
         result = self._fast_apply(
             set_, device=torch.device(device), num_threads=num_threads
         )
-        result._consolidated["storage"] = storage_cast
+        result._consolidated = {"storage": storage_cast}
+        if "metadata" in self._consolidated:
+            result._consolidated = deepcopy(self._consolidated["metadata"])
         return result
 
     def _sync_all(self):
