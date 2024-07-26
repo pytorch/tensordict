@@ -9223,22 +9223,22 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    def _to_cuda_with_pin_mem(self, num_threads):
-        keys, vals = self._items_list(leaves_only=True, include_nested=True)
+    def _to_cuda_with_pin_mem(self, num_threads, device, non_blocking):
+        keys, vals = self._items_list(leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         lkeys = len(keys)
         q_in = queue.SimpleQueue()
         q_out = queue.SimpleQueue()
         threads = []
         items = {}
         for key, val in _zip_strict(keys, vals):
-            q_in.put((key, val))
+            q_in.put_nowait((key, val))
         for i in range(min(num_threads, lkeys)):
-            thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out, items))
+            thread = Thread(target=_pin_mem, args=(q_in, q_out))
             thread.start()
             threads.append(thread)
         while len(items) < lkeys:
-            key = q_out.get()
-            # items[key] = items[key].to("cuda:0", non_blocking=True)
+            key, val = q_out.get()
+            items[key] = val.to(device, non_blocking=True)
         for thread in threads:
             thread.join()
         result = self._fast_apply(
@@ -9247,9 +9247,10 @@ class TensorDictBase(MutableMapping):
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
-            device="cuda:0"
+            device=device,
         )
-        torch.cuda.synchronize()
+        if non_blocking is not True:
+            torch.cuda.synchronize()
         return result
 
     def to(self, *args, **kwargs) -> T:
@@ -9665,12 +9666,8 @@ def _expand_to_match_shape(
         result = data.empty(batch_size=batch_size)
     return result
 
-def _pin_memory(x):
-    return x.pin_memory()
-
-def _pin_mem_and_cuda(q_in, q_out, items):
+def _pin_mem(q_in, q_out):
     while not q_in.empty():
         input = q_in.get()
-        key, val = input[0], input[1].pin_memory().to("cuda:0", non_blocking=True)
-        items[key] = val
-        q_out.put(key)
+        key, val = input[0], input[1].pin_memory()
+        q_out.put((key, val))
