@@ -9223,7 +9223,7 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    def _to_cuda_with_pin_mem(self, num_threads, device="cuda", non_blocking=None):
+    def _to_cuda_with_pin_mem(self, *, num_threads, device="cuda", non_blocking=None, to: Callable):
         keys, vals = self._items_list(leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         lkeys = len(keys)
         q_in = queue.SimpleQueue()
@@ -9238,7 +9238,7 @@ class TensorDictBase(MutableMapping):
             threads.append(thread)
         while len(items) < lkeys:
             key, val = q_out.get()
-            items[key] = val.to(device, non_blocking=True)
+            items[key] = to(val)
         for thread in threads:
             thread.join()
         result = self._fast_apply(
@@ -9249,8 +9249,6 @@ class TensorDictBase(MutableMapping):
             propagate_lock=True,
             device=device,
         )
-        if non_blocking is not True:
-            torch.cuda.synchronize()
         return result
 
     def to(self, *args, **kwargs) -> T:
@@ -9349,13 +9347,7 @@ class TensorDictBase(MutableMapping):
         apply_kwargs = {}
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
-                result = self._multithread_apply_nest(
-                    lambda x: x.pin_memory(),
-                    num_threads=num_threads,
-                    call_when_done=to,
-                    device=device,
-                    checked=True,
-                )
+                result = self._to_cuda_with_pin_mem(num_threads=num_threads, to=to, device=device)
             else:
                 if non_blocking_pin:
                     result = result.pin_memory()
