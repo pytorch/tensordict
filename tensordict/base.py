@@ -9669,8 +9669,6 @@ def _pin_memory(x):
     return x.pin_memory()
 
 def _pin_mem_and_cuda(q_in, q_out):
-    while True:
+    while not q_in.empty():
         input = q_in.get()
-        if isinstance(input, bool):
-            break
         q_out.put((input[0], input[1].pin_memory()))
