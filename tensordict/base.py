@@ -9226,11 +9226,11 @@ class TensorDictBase(MutableMapping):
     def _to_cuda_with_pin_mem(self, num_threads):
         keys, vals = self._items_list(leaves_only=True, include_nested=True)
         lkeys = len(keys)
-        q_in = queue.Queue()
-        q_out = queue.Queue()
+        q_in = queue.SimpleQueue()
+        q_out = queue.SimpleQueue()
         threads = []
         for key, val in _zip_strict(keys, vals):
-            q_in.put_nowait((key, val))
+            q_in.put((key, val))
         for i in range(min(num_threads, lkeys)):
             thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out))
             thread.start()
