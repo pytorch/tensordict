@@ -1393,6 +1393,9 @@ def _parse_to(*args, **kwargs):
         if device is not None:
             device = torch.device(device)
 
+    if device.type == "cuda" and device.index is None:
+        device = torch.device("cuda:0")
+
     if other is not None:
         if device is not None and device != other.device:
             raise ValueError("other and device cannot be both passed")
