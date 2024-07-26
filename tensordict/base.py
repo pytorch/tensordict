@@ -14,16 +14,18 @@ import gc
 import importlib
 import numbers
 import os.path
+import queue
 import uuid
 import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
+from threading import Thread
 from typing import (
     Any,
     Callable,
@@ -134,6 +136,8 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 _TENSOR_COLLECTION_MEMO = {}
+
+_PIN_MEM_TIMEOUT = 10
 
 
 class TensorDictBase(MutableMapping):
@@ -6304,6 +6308,7 @@ class TensorDictBase(MutableMapping):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         ...
@@ -6365,8 +6370,19 @@ class TensorDictBase(MutableMapping):
         )
         if call_when_done is not None:
             subs_results = {}
-            for fut in as_completed(futures):
-                subs_results[fut] = call_when_done(fut.result())
+
+            def cb(fut):
+                fut._result = call_when_done(fut.result())
+                return fut
+
+            for fut in futures:
+                fut.add_done_callback(cb)
+            # wait(futures)
+            # for fut in as_completed(futures):
+            #     subs_results[fut] = call_when_done(fut.result())
+            #     fut._result = None
+            #     # futures.remove(fut)
+            #     # del fut
         else:
             subs_results = None
         return self._multithread_rebuild(
@@ -9212,6 +9228,45 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
+    def _to_cuda_with_pin_mem(
+        self, *, num_threads, device="cuda", non_blocking=None, to: Callable
+    ):
+        if self.is_empty():
+            return self.to(device)
+        keys, vals = self._items_list(
+            leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        )
+        lkeys = len(keys)
+        q_in = queue.SimpleQueue()
+        q_out = queue.SimpleQueue()
+        threads = []
+        items = {}
+        for key, val in _zip_strict(keys, vals):
+            q_in.put_nowait((key, val))
+        for _ in range(min(num_threads, lkeys)):
+            thread = Thread(target=_pin_mem, args=(q_in, q_out))
+            thread.start()
+            threads.append(thread)
+        try:
+            while len(items) < lkeys:
+                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                if not isinstance(keyval, tuple):
+                    raise keyval
+                key, val = keyval
+                items[key] = to(val)
+        finally:
+            for thread in threads:
+                thread.join(timeout=_PIN_MEM_TIMEOUT)
+        result = self._fast_apply(
+            lambda name, val: items.get(name, val),
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            device=device,
+        )
+        return result
+
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -9245,12 +9300,16 @@ class TensorDictBase(MutableMapping):
                 .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
                     be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
+                    Multithreaded ``pin_memory`` will usually be beneficial if the tensors
+                    are large and numerous: when there are too few tensors to be sent,
+                    the overhead of spawning threads and collecting data outweighs the benefits
+                    of multithreading, and if the tensors are small the overhead of iterating
+                    over a long list is also prohibitively large.
 
             num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
-                of threads to be used for ``pin_memory``. By default, multithreading
-                will be used with ``num_threads=None`` in
-                :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
-                result in a high number of threads. ``num_threads=0`` will cancel any
+                of threads to be used for ``pin_memory``. By default,
+                ``max(1, torch.get_num_threads())`` threads will be spawn.
+                ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
 
         Returns:
@@ -9308,12 +9367,10 @@ class TensorDictBase(MutableMapping):
         apply_kwargs = {}
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
-                result = self._multithread_apply_nest(
-                    lambda x: x.pin_memory(),
-                    num_threads=num_threads,
-                    call_when_done=to,
-                    device=device,
-                    checked=True,
+                if num_threads is None:
+                    num_threads = max(1, torch.get_num_threads() // 2)
+                result = self._to_cuda_with_pin_mem(
+                    num_threads=num_threads, to=to, device=device
                 )
             else:
                 if non_blocking_pin:
@@ -9624,3 +9681,15 @@ def _expand_to_match_shape(
         batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
         result = data.empty(batch_size=batch_size)
     return result
+
+
+def _pin_mem(q_in, q_out):
+    while not q_in.empty():
+        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
+        try:
+            key, val = input[0], input[1].pin_memory()
+        except Exception as err:
+            # Surface the exception
+            q_out.put(err)
+            return
+        q_out.put((key, val))

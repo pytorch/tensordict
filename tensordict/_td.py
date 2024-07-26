@@ -1077,6 +1077,7 @@ class TensorDict(TensorDictBase):
         futures: List[Future],
         local_futures: List,
         subs_results: Dict[Future, Any] | None = None,
+        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         if constructor_kwargs:
@@ -1116,30 +1117,59 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
+        if isinstance(result, _SubTensorDict):
 
             def setter(
                 item_trsf,
-                key=key,
+                key,
                 inplace=inplace,
+                result=result,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if not set_item:
+                    return
+                result.set(key, item_trsf, inplace=inplace)
+
+        elif isinstance(result, TensorDict) and checked and (inplace is not True):
+
+            def setter(
+                item_trsf,
+                key,
+                result=result,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if not set_item:
+                    return
+                result._tensordict[key] = item_trsf
+
+        else:
+
+            local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
+
+            def setter(
+                item_trsf,
+                key,
                 result=result,
                 checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
-                if set_item:
-                    if isinstance(self, _SubTensorDict):
-                        result.set(key, item_trsf, inplace=inplace)
-                    else:
-                        result._set_str(
-                            key,
-                            item_trsf,
-                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                            validated=checked,
-                            non_blocking=False,
-                        )
+                if not set_item:
+                    return
+
+                result._set_str(
+                    key,
+                    item_trsf,
+                    inplace=local_inplace,
+                    validated=checked,
+                    non_blocking=False,
+                )
+
+        for i, (key, local_future) in enumerate(
+            _zip_strict(self.keys(), local_futures)
+        ):
 
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
@@ -1160,24 +1190,35 @@ class TensorDict(TensorDictBase):
                     futures=futures,
                     local_futures=local_future,
                     subs_results=subs_results,
+                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
-                local_future = executor.submit(setter, item_trsf=item_trsf)
-                local_futures[i] = local_future
-                futures.append(local_future)
-            else:
-                if subs_results is not None:
-                    local_result = subs_results[local_future]
+                if multithread_set:
+                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
+                    local_futures[i] = local_future
+                    futures.append(local_future)
                 else:
-                    # TODO: check if add_done_callback can safely be used here
-                    #  The issue is that it does not raises an exception encountered during the
-                    #  execution, resulting in UBs.
+                    setter(item_trsf=item_trsf, key=key)
+            else:
+                if multithread_set:
+                    if subs_results is not None:
+                        local_result = subs_results[local_future]
+                    else:
+                        # TODO: check if add_done_callback can safely be used here
+                        #  The issue is that it does not raises an exception encountered during the
+                        #  execution, resulting in UBs.
+                        local_result = local_future.result()
+                    local_future = executor.submit(
+                        setter, item_trsf=local_result, key=key
+                    )
+                    futures.append(local_future)
+                    local_futures[i] = local_future
+                else:
                     local_result = local_future.result()
-                local_future = executor.submit(setter, item_trsf=local_result)
-                futures.append(local_future)
-                local_futures[i] = local_future
+                    setter(item_trsf=local_result, key=key)
 
-        wait(local_futures)
+        if multithread_set:
+            wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:
