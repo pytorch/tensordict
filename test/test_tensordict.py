@@ -7409,6 +7409,8 @@ class TestLazyStackedTensorDict:
         for key, tensor in td_c.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
+        assert (td_c_device.cpu() == td).all()
+        assert td_c_device["d"] == [["a string!"] * 3]
         assert len(dataptrs) == 1
 
     def test_create_empty(self):

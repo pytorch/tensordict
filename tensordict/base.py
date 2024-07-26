@@ -9426,9 +9426,11 @@ class TensorDictBase(MutableMapping):
                 storage_offset=storage_offset,
             )
 
-        return self._fast_apply(
+        result = self._fast_apply(
             set_, device=torch.device(device), num_threads=num_threads
         )
+        result._consolidated["storage"] = storage_cast
+        return result
 
     def _sync_all(self):
         if _has_cuda:
