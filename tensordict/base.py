@@ -6367,6 +6367,9 @@ class TensorDictBase(MutableMapping):
             subs_results = {}
             for fut in as_completed(futures):
                 subs_results[fut] = call_when_done(fut.result())
+                fut._result = None
+                # futures.remove(fut)
+                # del fut
         else:
             subs_results = None
         return self._multithread_rebuild(
