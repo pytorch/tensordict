@@ -9673,4 +9673,4 @@ def _pin_mem_and_cuda(q_in, q_out):
         input = q_in.get()
         if isinstance(input, bool):
             break
-        q_out.put(input[0], input[1].pin_memory())
+        q_out.put((input[0], input[1].pin_memory()))
