@@ -9238,16 +9238,19 @@ class TensorDictBase(MutableMapping):
         items = {}
         while len(items) < lkeys:
             key, val = q_out.get()
-            items[key] = val
+            items[key] = val.to("cuda:0", non_blocking=True)
         for thread in threads:
             thread.join()
-        return self._fast_apply(
+        result = self._fast_apply(
             lambda name, val: items.get(name, val),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            device="cuda:0"
         )
+        torch.cuda.synchronize()
+        return result
 
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
