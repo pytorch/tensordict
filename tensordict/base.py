@@ -9223,7 +9223,7 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    def _to_cuda_with_pin_mem(self, num_threads, device, non_blocking):
+    def _to_cuda_with_pin_mem(self, num_threads, device="cuda", non_blocking=None):
         keys, vals = self._items_list(leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         lkeys = len(keys)
         q_in = queue.SimpleQueue()
