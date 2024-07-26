@@ -1393,7 +1393,7 @@ def _parse_to(*args, **kwargs):
         if device is not None:
             device = torch.device(device)
 
-    if device.type == "cuda" and device.index is None:
+    if device and device.type == "cuda" and device.index is None:
         device = torch.device("cuda:0")
 
     if other is not None:
