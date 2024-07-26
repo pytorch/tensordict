@@ -3508,6 +3508,27 @@ if <code class="docutils literal notranslate"><span class="pre">assign</span></c
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.mtia">
+<span class="sig-name descname"><span class="pre">mtia</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">torch.preserve_format</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.MemoryMappedTensor.mtia" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a copy of this object in MTIA memory.</p>
+<p>If this object is already in MTIA memory and on the correct device,
+then no copy is performed and the original object is returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a>) – The destination MTIA device.
+Defaults to the current MTIA device.</p></li>
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
+the copy will be asynchronous with respect to the host.
+Otherwise, the argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>memory_format</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.4)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of
+returned Tensor. Default: <code class="docutils literal notranslate"><span class="pre">torch.preserve_format</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.mul">
 <span class="sig-name descname"><span class="pre">mul</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.MemoryMappedTensor.mul" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.mul.html#torch.mul" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.mul()</span></code></a>.</p>

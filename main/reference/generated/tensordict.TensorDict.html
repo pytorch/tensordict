@@ -4337,14 +4337,18 @@ controlled via the <code class="docutils literal notranslate"><span class="pre">
 <p class="admonition-title">Note</p>
 <p>Calling <code class="docutils literal notranslate"><span class="pre">tensordict.pin_memory().to(&quot;cuda&quot;)</span></code> will usually
 be much slower than <code class="docutils literal notranslate"><span class="pre">tensordict.to(&quot;cuda&quot;,</span> <span class="pre">non_blocking_pin=True)</span></code> as
-the pin_memory is called asynchronously in the second case.</p>
+the pin_memory is called asynchronously in the second case.
+Multithreaded <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code> will usually be beneficial if the tensors
+are large and numerous: when there are too few tensors to be sent,
+the overhead of spawning threads and collecting data outweighs the benefits
+of multithreading, and if the tensors are small the overhead of iterating
+over a long list is also prohibitively large.</p>
 </div>
 </p></li>
 <li><p><strong>num_threads</strong> (<a class="reference internal" href="#tensordict.TensorDict.int" title="tensordict.TensorDict.int"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><em>None</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">non_blocking_pin=True</span></code>, the number
-of threads to be used for <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>. By default, multithreading
-will be used with <code class="docutils literal notranslate"><span class="pre">num_threads=None</span></code> in
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">ThreadPoolExecutor(max_workers=None)()</span></code>, which will
-result in a high number of threads. <code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> will cancel any
+of threads to be used for <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>. By default,
+<code class="docutils literal notranslate"><span class="pre">max(1,</span> <span class="pre">torch.get_num_threads())</span></code> threads will be spawn.
+<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> will cancel any
 multithreading for the <cite>pin_memory()</cite> calls.</p></li>
 </ul>
 </dd>
