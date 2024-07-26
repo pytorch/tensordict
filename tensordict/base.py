@@ -9245,11 +9245,16 @@ class TensorDictBase(MutableMapping):
             thread = Thread(target=_pin_mem, args=(q_in, q_out))
             thread.start()
             threads.append(thread)
-        while len(items) < lkeys:
-            key, val = q_out.get(timeout=_PIN_MEM_TIMEOUT)
-            items[key] = to(val)
-        for thread in threads:
-            thread.join()
+        try:
+            while len(items) < lkeys:
+                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                if not isinstance(keyval, tuple):
+                    raise keyval
+                key, val = keyval
+                items[key] = to(val)
+        finally:
+            for thread in threads:
+                thread.join(timeout=_PIN_MEM_TIMEOUT)
         result = self._fast_apply(
             lambda name, val: items.get(name, val),
             named=True,
@@ -9679,5 +9684,10 @@ def _expand_to_match_shape(
 def _pin_mem(q_in, q_out):
     while not q_in.empty():
         input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
-        key, val = input[0], input[1].pin_memory()
+        try:
+            key, val = input[0], input[1].pin_memory()
+        except Exception as err:
+            # Surface the exception
+            q_out.put(err)
+            return
         q_out.put((key, val))
