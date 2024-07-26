@@ -1116,30 +1116,52 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
-
+        local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
+        if isinstance(self, _SubTensorDict):
             def setter(
-                item_trsf,
-                key=key,
-                inplace=inplace,
-                result=result,
-                checked=checked,
+                    item_trsf,
+                    key,
+                    inplace=inplace,
+                    result=result,
+                    checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
-                if set_item:
-                    if isinstance(self, _SubTensorDict):
-                        result.set(key, item_trsf, inplace=inplace)
-                    else:
-                        result._set_str(
-                            key,
-                            item_trsf,
-                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                            validated=checked,
-                            non_blocking=False,
-                        )
+                result.set(key, item_trsf, inplace=inplace)
+        elif isinstance(self, TensorDict) and checked and not inplace:
+            def setter(
+                    item_trsf,
+                    key,
+                    inplace=inplace,
+                    result=result,
+                    checked=checked,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                result._tensordict[key] = item_trsf
+        else:
+
+            def setter(
+                    item_trsf,
+                    key,
+                    inplace=inplace,
+                    result=result,
+                    checked=checked,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+
+                result._set_str(
+                    key,
+                    item_trsf,
+                    inplace=local_inplace,
+                    validated=checked,
+                    non_blocking=False,
+                )
+
+        for i, (key, local_future) in enumerate(
+            _zip_strict(self.keys(), local_futures)
+        ):
 
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
@@ -1162,7 +1184,7 @@ class TensorDict(TensorDictBase):
                     subs_results=subs_results,
                     **constructor_kwargs,
                 )
-                setter(item_trsf=item_trsf)
+                setter(item_trsf=item_trsf, key=key)
                 # local_future = executor.submit(setter, item_trsf=item_trsf)
                 # local_futures[i] = local_future
                 # futures.append(local_future)
@@ -1175,7 +1197,7 @@ class TensorDict(TensorDictBase):
                 #     #  The issue is that it does not raises an exception encountered during the
                 #     #  execution, resulting in UBs.
                 #     pass
-                setter(item_trsf=local_result)
+                setter(item_trsf=local_result, key=key)
                 # local_future = executor.submit(setter, item_trsf=local_result)
                 # futures.append(local_future)
                 # local_futures[i] = local_future
