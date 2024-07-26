@@ -798,6 +798,11 @@ differently if the metadata is or isn’t available.</p></li>
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the tensordict is already consolidated, all arguments are ignored and <code class="docutils literal notranslate"><span class="pre">self</span></code>
+is returned. Call <a class="reference internal" href="#tensordict.NonTensorStack.contiguous" title="tensordict.NonTensorStack.contiguous"><code class="xref py py-meth docutils literal notranslate"><span class="pre">contiguous()</span></code></a> to re-consolidate.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">pickle</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">tempfile</span>
@@ -2056,6 +2061,12 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.is_consolidated">
+<span class="sig-name descname"><span class="pre">is_consolidated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.is_consolidated" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if a TensorDict has a consolidated storage.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4422,6 +4433,11 @@ device and/or if the dtype is passed. The same tensordict otherwise.
 <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> only modifications are done in-place.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+Each new tensor will be a view on the consolidated storage cast to the desired device.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="p">[],</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_cuda</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>  <span class="c1"># casts to cuda</span>
