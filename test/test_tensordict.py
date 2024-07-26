@@ -378,6 +378,31 @@ class TestGeneric:
                 )
             ), td_c.to_dict()
 
+    def test_consolidate_to_device(self):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(1, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(1, 3).clone()},
+                "d": "a string!",
+            },
+            device="cpu",
+            batch_size=[1, 3],
+        )
+        td_c = td.consolidate()
+        assert td_c.device == torch.device("cpu")
+        td_c_device = td_c.to("cuda")
+        assert td_c_device.device == torch.device("cuda:0")
+        assert td_c_device.is_consolidated()
+        dataptrs = set()
+        for tensor in td_c_device.values(
+            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        ):
+            assert tensor.device == torch.device("cuda:0")
+            dataptrs.add(tensor.untyped_storage().data_ptr())
+        assert (td_c_device.cpu() == td).all()
+        assert td_c_device["d"] == [["a string!"] * 3]
+        assert len(dataptrs) == 1
+
     def test_construct_from_kwargs(self):
         with pytest.raises(ValueError, match="not both"):
             TensorDict(a=1, source={"b": 2})
@@ -7406,7 +7431,9 @@ class TestLazyStackedTensorDict:
         assert td_c_device.device == torch.device("cuda:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()
-        for key, tensor in td_c_device.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for tensor in td_c_device.values(
+            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        ):
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
