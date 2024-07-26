@@ -48,8 +48,6 @@ from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
 )
 from tensordict._contextlib import _DecoratorContextManager
 
-from tensordict.base import _PIN_MEM_TIMEOUT
-
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -120,6 +118,7 @@ if not _has_funcdim:
 
 T = TypeVar("T", bound="TensorDictBase")
 
+_PIN_MEM_TIMEOUT = 10
 _TORCH_DTYPES = (
     torch.bfloat16,
     torch.bool,
