@@ -9,7 +9,7 @@ import numbers
 import os
 import weakref
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy
 from numbers import Number
 from pathlib import Path
@@ -1118,35 +1118,39 @@ class TensorDict(TensorDictBase):
 
         local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
         if isinstance(self, _SubTensorDict):
+
             def setter(
-                    item_trsf,
-                    key,
-                    inplace=inplace,
-                    result=result,
-                    checked=checked,
+                item_trsf,
+                key,
+                inplace=inplace,
+                result=result,
+                checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
                 result.set(key, item_trsf, inplace=inplace)
+
         elif isinstance(self, TensorDict) and checked and not inplace:
+
             def setter(
-                    item_trsf,
-                    key,
-                    inplace=inplace,
-                    result=result,
-                    checked=checked,
+                item_trsf,
+                key,
+                inplace=inplace,
+                result=result,
+                checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
                 result._tensordict[key] = item_trsf
+
         else:
 
             def setter(
-                    item_trsf,
-                    key,
-                    inplace=inplace,
-                    result=result,
-                    checked=checked,
+                item_trsf,
+                key,
+                inplace=inplace,
+                result=result,
+                checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)

@@ -20,7 +20,7 @@ import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
@@ -137,6 +137,7 @@ _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 _TENSOR_COLLECTION_MEMO = {}
 
+_PIN_MEM_TIMEOUT = 10
 
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
@@ -6367,9 +6368,11 @@ class TensorDictBase(MutableMapping):
         )
         if call_when_done is not None:
             subs_results = {}
+
             def cb(fut):
                 fut._result = call_when_done(fut.result())
                 return fut
+
             for fut in futures:
                 fut.add_done_callback(cb)
             # wait(futures)
@@ -9223,8 +9226,12 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    def _to_cuda_with_pin_mem(self, *, num_threads, device="cuda", non_blocking=None, to: Callable):
-        keys, vals = self._items_list(leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    def _to_cuda_with_pin_mem(
+        self, *, num_threads, device="cuda", non_blocking=None, to: Callable
+    ):
+        keys, vals = self._items_list(
+            leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        )
         lkeys = len(keys)
         q_in = queue.SimpleQueue()
         q_out = queue.SimpleQueue()
@@ -9232,12 +9239,12 @@ class TensorDictBase(MutableMapping):
         items = {}
         for key, val in _zip_strict(keys, vals):
             q_in.put_nowait((key, val))
-        for i in range(min(num_threads, lkeys)):
+        for _ in range(min(num_threads, lkeys)):
             thread = Thread(target=_pin_mem, args=(q_in, q_out))
             thread.start()
             threads.append(thread)
         while len(items) < lkeys:
-            key, val = q_out.get()
+            key, val = q_out.get(timeout=_PIN_MEM_TIMEOUT)
             items[key] = to(val)
         for thread in threads:
             thread.join()
@@ -9284,12 +9291,16 @@ class TensorDictBase(MutableMapping):
                 .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
                     be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
+                    Multithreaded ``pin_memory`` will usually be beneficial if the tensors
+                    are large and numerous: when there are too few tensors to be sent,
+                    the overhead of spawning threads and collecting data outweighs the benefits
+                    of multithreading, and if the tensors are small the overhead of iterating
+                    over a long list is also prohibitively large.
 
             num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
-                of threads to be used for ``pin_memory``. By default, multithreading
-                will be used with ``num_threads=None`` in
-                :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
-                result in a high number of threads. ``num_threads=0`` will cancel any
+                of threads to be used for ``pin_memory``. By default,
+                ``max(1, torch.get_num_threads())`` threads will be spawn.
+                ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
 
         Returns:
@@ -9348,8 +9359,10 @@ class TensorDictBase(MutableMapping):
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
                 if num_threads is None:
-                    num_threads = torch.get_num_threads()
-                result = self._to_cuda_with_pin_mem(num_threads=num_threads, to=to, device=device)
+                    num_threads = max(1, torch.get_num_threads() // 2)
+                result = self._to_cuda_with_pin_mem(
+                    num_threads=num_threads, to=to, device=device
+                )
             else:
                 if non_blocking_pin:
                     result = result.pin_memory()
@@ -9660,8 +9673,9 @@ def _expand_to_match_shape(
         result = data.empty(batch_size=batch_size)
     return result
 
+
 def _pin_mem(q_in, q_out):
     while not q_in.empty():
-        input = q_in.get()
+        input = q_in.get(timeout=_PIN_MEM_TIMEOUT)
         key, val = input[0], input[1].pin_memory()
         q_out.put((key, val))
