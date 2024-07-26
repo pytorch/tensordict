@@ -90,7 +90,7 @@ from tensordict.utils import (
     set_lazy_legacy,
     TensorDictFuture,
     unravel_key,
-    unravel_key_list,
+    unravel_key_list, _PIN_MEM_TIMEOUT,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
