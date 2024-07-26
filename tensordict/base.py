@@ -3353,6 +3353,9 @@ class TensorDictBase(MutableMapping):
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
 
+        .. note:: If the tensordict is already consolidated, all arguments are ignored and ``self``
+            is returned. Call :meth:`~.contiguous` to re-consolidate.
+
         Examples:
             >>> import pickle
             >>> import tempfile
@@ -3374,7 +3377,7 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        if hasattr(self, "_consolidated"):
+        if self.is_consolidated():
             return self
 
         (
@@ -3539,7 +3542,8 @@ class TensorDictBase(MutableMapping):
             for v in flat_dict.values():
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
-                if v.stride()[-1] != 1 or v.storage_offset():
+                stride = v.stride()
+                if (stride and stride[-1] != 1) or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
@@ -3622,6 +3626,9 @@ class TensorDictBase(MutableMapping):
         return _rebuild_tensordict_files_consolidated(
             metadata, file[: -metadata_size - 8]
         )
+
+    def is_consolidated(self):
+        return hasattr(self, "_consolidated")
 
     def memmap_(
         self,
@@ -9310,6 +9317,9 @@ class TensorDictBase(MutableMapping):
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
+        .. note:: if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+            Each new tensor will be a view on the consolidated storage cast to the desired device.
+
         Examples:
             >>> data = TensorDict({"a": 1.0}, [], device=None)
             >>> data_cuda = data.to("cuda:0")  # casts to cuda
@@ -9340,7 +9350,7 @@ class TensorDictBase(MutableMapping):
         else:
             sub_non_blocking = non_blocking
 
-        if getattr(self, "_consolidated", False) and dtype is None:
+        if self.is_consolidated() and dtype is None:
             return self._to_consolidated(
                 device=device, pin_memory=non_blocking_pin, num_threads=num_threads
             )
