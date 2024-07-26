@@ -9231,6 +9231,8 @@ class TensorDictBase(MutableMapping):
     def _to_cuda_with_pin_mem(
         self, *, num_threads, device="cuda", non_blocking=None, to: Callable
     ):
+        if self.is_empty():
+            return self.to(device)
         keys, vals = self._items_list(
             leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
