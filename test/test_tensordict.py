@@ -378,6 +378,7 @@ class TestGeneric:
                 )
             ), td_c.to_dict()
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
     def test_consolidate_to_device(self):
         td = TensorDict(
             {
