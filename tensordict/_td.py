@@ -1162,9 +1162,10 @@ class TensorDict(TensorDictBase):
                     subs_results=subs_results,
                     **constructor_kwargs,
                 )
-                local_future = executor.submit(setter, item_trsf=item_trsf)
-                local_futures[i] = local_future
-                futures.append(local_future)
+                setter(item_trsf=item_trsf)
+                # local_future = executor.submit(setter, item_trsf=item_trsf)
+                # local_futures[i] = local_future
+                # futures.append(local_future)
             else:
                 if subs_results is not None:
                     local_result = subs_results[local_future]
@@ -1173,11 +1174,12 @@ class TensorDict(TensorDictBase):
                     #  The issue is that it does not raises an exception encountered during the
                     #  execution, resulting in UBs.
                     local_result = local_future.result()
-                local_future = executor.submit(setter, item_trsf=local_result)
-                futures.append(local_future)
-                local_futures[i] = local_future
+                setter(item_trsf=local_result)
+                # local_future = executor.submit(setter, item_trsf=local_result)
+                # futures.append(local_future)
+                # local_futures[i] = local_future
 
-        wait(local_futures)
+        # wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:
