@@ -9347,6 +9347,8 @@ class TensorDictBase(MutableMapping):
         apply_kwargs = {}
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
+                if num_threads is None:
+                    num_threads = torch.get_num_thread()
                 result = self._to_cuda_with_pin_mem(num_threads=num_threads, to=to, device=device)
             else:
                 if non_blocking_pin:
