@@ -9342,7 +9342,7 @@ class TensorDictBase(MutableMapping):
 
         if getattr(self, "_consolidated", False) and dtype is None:
             return self._to_consolidated(
-                device=device, pin_memory=pin_memory, num_threads=num_threads
+                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
             )
 
         if convert_to_format is not None:
@@ -9371,14 +9371,12 @@ class TensorDictBase(MutableMapping):
                     num_threads=num_threads, to=to, device=device
                 )
             else:
-                if non_blocking_pin:
-                    result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
-                        return _to(tensor.pin_memory())
+                        return to(tensor.pin_memory())
 
                     result = result._fast_apply(to_pinmem, propagate_lock=True, **apply_kwargs)
                 else:
