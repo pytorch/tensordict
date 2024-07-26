@@ -1117,44 +1117,47 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
-        if isinstance(self, _SubTensorDict):
+        if isinstance(result, _SubTensorDict):
 
             def setter(
                 item_trsf,
                 key,
                 inplace=inplace,
                 result=result,
-                checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
+                if not set_item:
+                    return
                 result.set(key, item_trsf, inplace=inplace)
 
-        elif isinstance(self, TensorDict) and checked and not inplace:
+        elif isinstance(result, TensorDict) and checked and (inplace is not True):
 
             def setter(
                 item_trsf,
                 key,
-                inplace=inplace,
                 result=result,
-                checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
+                if not set_item:
+                    return
                 result._tensordict[key] = item_trsf
 
         else:
 
+            local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
+
             def setter(
                 item_trsf,
                 key,
-                inplace=inplace,
                 result=result,
                 checked=checked,
             ):
                 set_item = item_trsf is not None
                 any_set.add(set_item)
+                if not set_item:
+                    return
 
                 result._set_str(
                     key,
@@ -1191,7 +1194,7 @@ class TensorDict(TensorDictBase):
                     **constructor_kwargs,
                 )
                 if multithread_set:
-                    local_future = executor.submit(setter, item_trsf=item_trsf)
+                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
                     local_futures[i] = local_future
                     futures.append(local_future)
                 else:
@@ -1205,7 +1208,9 @@ class TensorDict(TensorDictBase):
                         #  The issue is that it does not raises an exception encountered during the
                         #  execution, resulting in UBs.
                         local_result = local_future.result()
-                    local_future = executor.submit(setter, item_trsf=local_result)
+                    local_future = executor.submit(
+                        setter, item_trsf=local_result, key=key
+                    )
                     futures.append(local_future)
                     local_futures[i] = local_future
                 else:
