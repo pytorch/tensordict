@@ -39,7 +39,7 @@ from tensordict import (
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import _is_leaf_nontensor, TensorDictBase, _NESTED_TENSORS_AS_LISTS
+from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
@@ -7406,7 +7406,7 @@ class TestLazyStackedTensorDict:
         assert td_c_device.device == torch.device("cuda:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()
-        for key, tensor in td_c.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for key, tensor in td_c_device.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
