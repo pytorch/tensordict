@@ -51,7 +51,6 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
-    _DEVICE2STRDEVICE,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
@@ -9429,7 +9428,7 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
-            result._consolidated = deepcopy(self._consolidated["metadata"])
+            result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
         return result
 
     def _sync_all(self):
