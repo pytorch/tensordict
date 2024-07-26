@@ -9230,7 +9230,7 @@ class TensorDictBase(MutableMapping):
         q_out = queue.Queue()
         threads = []
         for key, val in _zip_strict(keys, vals):
-            q_in.put((key, val))
+            q_in.put_nowait((key, val))
         for i in range(min(num_threads, lkeys)):
             thread = Thread(target=_pin_mem_and_cuda, args=(q_in, q_out))
             thread.start()
