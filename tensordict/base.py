@@ -6367,7 +6367,7 @@ class TensorDictBase(MutableMapping):
             subs_results = {}
             def cb(fut):
                 subs_results[fut] = call_when_done(fut.result())
-                fut._result = None
+                fut.set_result(None)
                 return fut
             for fut in futures:
                 fut.add_done_callback(cb)
