@@ -62,6 +62,7 @@ from tensordict.utils import (
     _make_dtype_promotion,
     _parse_to,
     _pin_mem,
+    _PIN_MEM_TIMEOUT,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -90,7 +91,7 @@ from tensordict.utils import (
     set_lazy_legacy,
     TensorDictFuture,
     unravel_key,
-    unravel_key_list, _PIN_MEM_TIMEOUT,
+    unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin

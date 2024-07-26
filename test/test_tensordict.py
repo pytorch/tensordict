@@ -398,7 +398,7 @@ class TestGeneric:
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
-        assert td_c_device["d"] == [["a string!"] * 3]
+        assert td_c_device["d"] == "a string!"
         assert len(dataptrs) == 1
 
     def test_construct_from_kwargs(self):
@@ -7433,7 +7433,7 @@ class TestLazyStackedTensorDict:
             assert tensor.device == torch.device("cuda:0")
             dataptrs.add(tensor.untyped_storage().data_ptr())
         assert (td_c_device.cpu() == td).all()
-        assert td_c_device["d"] == "a string!"
+        assert td_c_device["d"] == [["a string!"] * 3]
         assert len(dataptrs) == 1
 
     def test_create_empty(self):
