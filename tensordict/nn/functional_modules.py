@@ -142,12 +142,16 @@ except ImportError:
 
 
 class _exclude_td_from_pytree:
+
     def __init__(self):
         self.tdnodes = {}
 
     def __enter__(self):
+        global SUPPORTED_NODES
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
+            # self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
+            self.tdnodes[tdtype] = SUPPORTED_NODES.get(tdtype)
+        SUPPORTED_NODES = {key: val for key, val in SUPPORTED_NODES.items() if key not in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS}
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
@@ -175,16 +179,17 @@ The latter is unsupported."""
             )
 
         # we want to escape TensorDicts as they take care of adding the batch dimension
-        with _exclude_td_from_pytree():
-            flat_args, args_spec = tree_flatten(args)
-            flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
-            if flat_in_dims is None:
-                raise ValueError(
-                    f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
-    in_dims is not compatible with the structure of `inputs`.
-    in_dims has structure {tree_flatten(in_dims)[1]} but inputs
-    has structure {args_spec}."""
-                )
+        excluder_dynamo = _exclude_td_from_pytree()
+        excluder_dynamo.__enter__()
+        flat_args, args_spec = tree_flatten(args)
+        flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
+        if flat_in_dims is None:
+            raise ValueError(
+                f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
+in_dims is not compatible with the structure of `inputs`.
+in_dims has structure {tree_flatten(in_dims)[1]} but inputs
+has structure {args_spec}."""
+            )
 
         for i, (arg, in_dim) in enumerate(zip(flat_args, flat_in_dims)):
             if not isinstance(in_dim, int) and in_dim is not None:
@@ -245,8 +250,11 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(batched_inputs, args_spec)
+        excluder = _exclude_td_from_pytree()
+        excluder.__enter__()
+        result = tree_unflatten(batched_inputs, args_spec)
+        excluder.__exit__(None, None, None)
+        return result
 
     vmap_src._create_batched_inputs = _create_batched_inputs
 
@@ -257,8 +265,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         batch_size: int,
         func: Callable,
     ) -> Any:
-        with _exclude_td_from_pytree():
-            flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
+        excluder = _exclude_td_from_pytree()
+        excluder.__enter__()
+        flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
+        excluder.__exit__(None, None, None)
 
         for out in flat_batched_outputs:
             # Change here:
@@ -301,8 +311,11 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
             flat_outputs.append(out)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(flat_outputs, output_spec)
+        excluder = _exclude_td_from_pytree()
+        excluder.__enter__()
+        result = tree_unflatten(flat_outputs, output_spec)
+        excluder.__exit__(None, None, None)
+        return result
 
     vmap_src._unwrap_batched = _unwrap_batched
 
