@@ -519,7 +519,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the mean value of all elements in the input tensordict.
 
         Args:
@@ -534,12 +535,20 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
+        # if dim is NO_DEFAULT and not keepdim:
+        #     dim = None
+        #     keepdim = False
         return self._cast_reduction(
-            reduction_name="mean", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="mean",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def nanmean(
@@ -548,7 +557,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the mean of all non-NaN elements in the input tensordict.
 
         Args:
@@ -563,12 +573,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="nanmean", keepdim=keepdim, dim=dim, dtype=dtype
+            reduction_name="nanmean",
+            keepdim=keepdim,
+            dim=dim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def prod(
@@ -577,7 +592,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the produce of values of all elements in the input tensordict.
 
         Args:
@@ -592,10 +608,18 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
         result = self._cast_reduction(
-            reduction_name="prod", dim=dim, keepdim=False, tuple_ok=False, dtype=dtype
+            reduction_name="prod",
+            dim=dim,
+            keepdim=False,
+            tuple_ok=False,
+            dtype=dtype,
+            further_reduce=reduce,
         )
         if keepdim:
             if isinstance(dim, tuple):
@@ -612,7 +636,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the sum value of all elements in the input tensordict.
 
         Args:
@@ -627,12 +652,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="sum", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="sum",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def nansum(
@@ -641,7 +671,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the sum of all non-NaN elements in the input tensordict.
 
         Args:
@@ -656,12 +687,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="nansum", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="nansum",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def std(
@@ -670,7 +706,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the standard deviation value of all elements in the input tensordict.
 
         Args:
@@ -684,15 +721,17 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel’s correction, correction=1.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
             reduction_name="std",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
+            further_reduce=reduce,
         )
 
     def var(
@@ -701,7 +740,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the variance value of all elements in the input tensordict.
 
         Args:
@@ -715,15 +755,17 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel’s correction, correction=1.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
             reduction_name="var",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
+            further_reduce=reduce,
         )
 
     @abc.abstractmethod
@@ -735,6 +777,7 @@ class TensorDictBase(MutableMapping):
         keepdim=NO_DEFAULT,
         dtype,
         tuple_ok=True,
+        further_reduce: bool,
         **kwargs,
     ): ...
 
