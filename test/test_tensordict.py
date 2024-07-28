@@ -4811,6 +4811,21 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 key, val = td.popitem()
 
+    @pytest.mark.parametrize(
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+    )
+    def test_reduction(self, td_name, device, red, tmpdir):
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        assert getattr(td, red)().batch_size == torch.Size(())
+        assert getattr(td, red)(1).shape == torch.Size(
+            [s for i, s in enumerate(td.shape) if i != 1]
+        )
+        assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
+            [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+        )
+        assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
+
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
         torch.manual_seed(1)
@@ -10017,6 +10032,23 @@ class TestSubclassing:
         assert is_tensor_collection(SubTC)
         assert is_tensorclass(SubTC)
         assert is_non_tensor(SubTC(data=1, batch_size=[]))
+
+
+def _to_float(td, td_name, tmpdir):
+    if hasattr(td, "_source"):
+        td._source = td._source.float()
+    elif td_name in ("td_h5",):
+        td = PersistentTensorDict.from_dict(
+            td.float().to_dict(), filename=tmpdir + "/file.t"
+        )
+    elif td_name in ("td_params",):
+        td = TensorDictParams(td.data.float())
+    else:
+        with td.unlock_():
+            td_typed = td.apply(lambda x: x.float())
+        assert isinstance(td_typed, type(td))
+        td = td_typed
+    return td
 
 
 if __name__ == "__main__":
