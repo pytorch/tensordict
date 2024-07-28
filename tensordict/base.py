@@ -5173,10 +5173,19 @@ class TensorDictBase(MutableMapping):
             # TODO: check that lists are identical
             if is_dynamo_compiling():
                 key_to_index = {key: i for i, key in enumerate(keys)}
-                return sorting_keys, [vals[key_to_index[key]] for key in sorting_keys]
+                new_vals = [vals[key_to_index[key]] for key in sorting_keys]
+                if len(new_vals) < len(vals):
+                    raise KeyError(
+                        f"Some keys were not found: {set(sorting_keys).symmetric_difference(keys)}."
+                    )
             else:
                 source = dict(zip(keys, vals))
-                return sorting_keys, [source[key] for key in sorting_keys]
+                new_vals = [source[key] for key in sorting_keys]
+            if len(new_vals) < len(vals):
+                raise KeyError(
+                    f"Some keys were not found: {set(sorting_keys).symmetric_difference(keys)}."
+                )
+            return sorting_keys, new_vals
         if isinstance(default, str) and default == "intersection":
             new_keys = list(set(sorting_keys).intersection(keys))
         else:

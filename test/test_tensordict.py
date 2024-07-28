@@ -2577,6 +2577,10 @@ class TestPointwiseOps:
         td1 = TensorDict(b=2, c=2, d=2)
         with pytest.raises(KeyError):
             td0.add(td1)
+        with pytest.raises(KeyError):
+            td0.exclude("a").add(td1)
+        with pytest.raises(KeyError):
+            td0.add(td1.exclude("d"))
         tdadd = td0.add(td1, default=torch.tensor(3))
         assert tdadd["a"] == 4  # 1 + 3
         assert tdadd["d"] == 5  # 2 + 3
