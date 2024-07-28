@@ -106,30 +106,32 @@ _METHOD_FROM_TD = [
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
-    "_check_unlock",
     "_check_dim_name",
+    "_check_unlock",
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
+    "_get_names_idx",  # no wrap output
     "_get_str",
     "_get_tuple",
     "_has_names",
     "_items_list",
+    "_maybe_names",
     "_multithread_apply_flat",
     "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
     "_propagate_unlock",
     "_values_list",
+    "dim",
     "is_empty",
     "is_memmap",
     "is_shared",
     "items",
     "keys",
-    "_maybe_names",
+    # "ndim",
     "ndimension",
     "numel",
     "values",
-    "_get_names_idx",  # no wrap output
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'

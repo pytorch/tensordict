@@ -178,8 +178,10 @@ has structure {args_spec}."""
 Got in_dim={in_dim} for an input but in_dim must be either
 an integer dimension or None."""
                 )
-            if isinstance(in_dim, int) and not isinstance(
-                arg, (Tensor, TensorDictBase)
+            if (
+                isinstance(in_dim, int)
+                and not isinstance(arg, (Tensor,))
+                and not is_tensor_collection(arg)
             ):
                 raise ValueError(
                     f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
@@ -216,14 +218,14 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         batched_inputs = []
         for in_dim, arg in zip(flat_in_dims, flat_args):
             if in_dim is None:
-                if isinstance(arg, TensorDictBase):
+                if is_tensor_collection(arg):
                     # this may be a perf bottleneck and could benefit from caching
                     # arg = cache(arg.clone)(False)
                     arg = arg.clone(False)
 
                 batched_input = arg
             else:
-                if isinstance(arg, TensorDictBase):
+                if is_tensor_collection(arg):
                     batched_input = arg._add_batch_dim(
                         in_dim=in_dim, vmap_level=vmap_level
                     )
@@ -248,7 +250,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 
         for out in flat_batched_outputs:
             # Change here:
-            if isinstance(out, (TensorDictBase, torch.Tensor)):
+            if isinstance(out, torch.Tensor) or is_tensor_collection(out):
                 continue
             raise ValueError(
                 f"vmap({_get_name(func)}, ...): `{_get_name(func)}` must only return "
@@ -280,7 +282,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 incompatible_error()
         flat_outputs = []
         for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims):
-            if not isinstance(batched_output, TensorDictBase):
+            if not is_tensor_collection(batched_output):
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
                 out = batched_output._remove_batch_dim(
