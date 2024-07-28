@@ -2571,6 +2571,35 @@ class TestPointwiseOps:
         assert r.is_locked is locked
         assert (r == 1).all()
 
+    def test_add_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=1, b=1, c=1)
+        td1 = TensorDict(b=2, c=2, d=2)
+        with pytest.raises(KeyError):
+            td0.add(td1)
+        tdadd = td0.add(td1, default=torch.tensor(3))
+        assert tdadd["a"] == 4  # 1 + 3
+        assert tdadd["d"] == 5  # 2 + 3
+        tdadd = td0.add(td1, default="intersection")
+        assert "a" not in tdadd
+        assert "d" not in tdadd
+        assert "b" in tdadd
+
+    def test_sub_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=1, b=1, c=1)
+        td1 = TensorDict(b=2, c=2, d=2)
+        with pytest.raises(KeyError):
+            td0.sub(td1)
+        tdsub = td0.sub(td1, default=torch.tensor(3))
+        assert tdsub["b"] == -1
+        assert tdsub["a"] == -2
+        assert tdsub["d"] == 1
+        tdsub = td0.sub(td1, default="intersection")
+        assert "a" not in tdsub
+        assert "d" not in tdsub
+        assert "b" in tdsub
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_add_(self, locked):
         td = self.dummy_td_0
@@ -2619,6 +2648,20 @@ class TestPointwiseOps:
         assert td.is_locked is locked
         assert (td == 0).all()
 
+    def test_mul_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=1, b=1, c=1)
+        td1 = TensorDict(b=4, c=4, d=4)
+        with pytest.raises(KeyError):
+            td0.mul(td1)
+        tdmul = td0.mul(td1, default=torch.tensor(2))
+        assert tdmul["a"] == 2
+        assert tdmul["d"] == 8
+        tdmul = td0.mul(td1, default="intersection")
+        assert "a" not in tdmul
+        assert "d" not in tdmul
+        assert "b" in tdmul
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_mul_(self, locked):
         td = self.dummy_td_1
@@ -2665,6 +2708,20 @@ class TestPointwiseOps:
         r = td / other
         assert r.is_locked is locked
         assert (r == 1).all()
+
+    def test_div_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=1, b=1, c=1)
+        td1 = TensorDict(b=4, c=4, d=4)
+        with pytest.raises(KeyError):
+            td0.div(td1)
+        tddiv = td0.div(td1, default=torch.tensor(2))
+        assert tddiv["a"] == 0.5
+        assert tddiv["d"] == 0.5
+        tddiv = td0.div(td1, default="intersection")
+        assert "a" not in tddiv
+        assert "d" not in tddiv
+        assert "b" in tddiv
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_div_(self, locked):
@@ -2715,6 +2772,20 @@ class TestPointwiseOps:
 
         assert (r == 4).all()
 
+    def test_pow_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=2, b=2, c=2)
+        td1 = TensorDict(b=3, c=3, d=3)
+        with pytest.raises(KeyError):
+            td0.pow(td1)
+        tdpow = td0.pow(td1, default=torch.tensor(1))
+        assert tdpow["a"] == 2
+        assert tdpow["d"] == 1
+        tdpow = td0.pow(td1, default="intersection")
+        assert "a" not in tdpow
+        assert "d" not in tdpow
+        assert "b" in tdpow
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_pow_(self, locked):
         td = self.dummy_td_2.float()
@@ -2757,6 +2828,34 @@ class TestPointwiseOps:
         td += self._lazy_td
         assert (td == self._lazy_td * 2).all()
         assert ((td.abs() ** 2).clamp_max(td) == td).all()
+
+    def test_clamp_min_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=2, b=2, c=2)
+        td1 = TensorDict(b=3, c=3, d=3)
+        with pytest.raises(KeyError):
+            td0.clamp_min(td1)
+        tdpow = td0.clamp_min(td1, default=torch.tensor(10))
+        assert tdpow["a"] == 10
+        assert tdpow["d"] == 10
+        tdpow = td0.clamp_min(td1, default="intersection")
+        assert "a" not in tdpow
+        assert "d" not in tdpow
+        assert "b" in tdpow
+
+    def test_clamp_max_default(self):
+        # Create two tds with different key sets
+        td0 = TensorDict(a=2, b=2, c=2)
+        td1 = TensorDict(b=3, c=3, d=3)
+        with pytest.raises(KeyError):
+            td0.clamp_max(td1)
+        tdpow = td0.clamp_max(td1, default=torch.tensor(1))
+        assert tdpow["a"] == 1
+        assert tdpow["d"] == 1
+        tdpow = td0.clamp_max(td1, default="intersection")
+        assert "a" not in tdpow
+        assert "d" not in tdpow
+        assert "b" in tdpow
 
 
 @pytest.mark.parametrize(
@@ -4810,6 +4909,21 @@ class TestTensorDicts(TestTensorDictsBase):
                     key, val = td.popitem()
             else:
                 key, val = td.popitem()
+
+    @pytest.mark.parametrize(
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+    )
+    def test_reduction(self, td_name, device, red, tmpdir):
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        assert getattr(td, red)().batch_size == torch.Size(())
+        assert getattr(td, red)(1).shape == torch.Size(
+            [s for i, s in enumerate(td.shape) if i != 1]
+        )
+        assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
+            [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+        )
+        assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
 
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
@@ -10017,6 +10131,23 @@ class TestSubclassing:
         assert is_tensor_collection(SubTC)
         assert is_tensorclass(SubTC)
         assert is_non_tensor(SubTC(data=1, batch_size=[]))
+
+
+def _to_float(td, td_name, tmpdir):
+    if hasattr(td, "_source"):
+        td._source = td._source.float()
+    elif td_name in ("td_h5",):
+        td = PersistentTensorDict.from_dict(
+            td.float().to_dict(), filename=tmpdir + "/file.t"
+        )
+    elif td_name in ("td_params",):
+        td = TensorDictParams(td.data.float())
+    else:
+        with td.unlock_():
+            td_typed = td.apply(lambda x: x.float())
+        assert isinstance(td_typed, type(td))
+        td = td_typed
+    return td
 
 
 if __name__ == "__main__":

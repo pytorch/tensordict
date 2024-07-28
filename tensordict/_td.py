@@ -28,6 +28,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
+    _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -923,8 +924,29 @@ class TensorDict(TensorDictBase):
         dim=NO_DEFAULT,
         keepdim=NO_DEFAULT,
         tuple_ok=True,
+        further_reduce: bool,
         **kwargs,
     ):
+        if further_reduce:
+            # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
+            if dim is NO_DEFAULT:
+                agglomerate = [
+                    val.contiguous().flatten()
+                    for val in self._values_list(
+                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                    )
+                ]
+                agglomerate = torch.cat(agglomerate, dim=0)
+                return getattr(torch, reduction_name)(agglomerate)
+            else:
+                agglomerate = list(
+                    self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+                )
+                agglomerate = torch.cat(agglomerate, dim=0)
+                return getattr(torch, reduction_name)(
+                    agglomerate, keepdim=keepdim, dim=dim
+                )
+
         def proc_dim(dim, tuple_ok=True):
             if dim is None:
                 return dim

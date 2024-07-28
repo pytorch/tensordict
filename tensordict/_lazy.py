@@ -2140,10 +2140,22 @@ class LazyStackedTensorDict(TensorDictBase):
         dim=NO_DEFAULT,
         keepdim=NO_DEFAULT,
         tuple_ok=True,
+        further_reduce: bool,
         **kwargs,
     ):
+        if further_reduce:
+            # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
+            agglomerate = [
+                val.contiguous().flatten()
+                for val in self._values_list(
+                    True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                )
+            ]
+            agglomerate = torch.cat(agglomerate, dim=0)
+            return getattr(torch, reduction_name)(agglomerate)
+
         try:
-            td = self.to_tensordict()
+            td: TensorDict = self.to_tensordict()
         except Exception:
             raise RuntimeError(
                 f"{reduction_name} requires this object to be cast to a regular TensorDict. "
@@ -2155,6 +2167,7 @@ class LazyStackedTensorDict(TensorDictBase):
             dim=dim,
             keepdim=keepdim,
             tuple_ok=tuple_ok,
+            further_reduce=further_reduce,
             **kwargs,
         )
 

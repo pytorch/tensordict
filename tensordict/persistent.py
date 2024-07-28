@@ -116,8 +116,9 @@ class PersistentTensorDict(TensorDictBase):
     on that device, but rather that when loaded, the data will be cast onto
     the desired device.
 
-    Args:
+    Keyword Args:
         batch_size (torch.Size or compatible): the tensordict batch size.
+            Defaults to ``torch.Size(())``.
         filename (str, optional): the path to the h5 file. Exclusive with ``group``.
         group (h5py.Group, optional): a file or a group that contains data. Exclusive with ``filename``.
         mode (str, optional): Reading mode. Defaults to ``"r"``.
@@ -145,7 +146,7 @@ class PersistentTensorDict(TensorDictBase):
     def __init__(
         self,
         *,
-        batch_size,
+        batch_size=None,
         filename=None,
         group=None,
         mode="r",
@@ -153,6 +154,8 @@ class PersistentTensorDict(TensorDictBase):
         device=None,
         **kwargs,
     ):
+        if device is None:
+            device = torch.Size(())
         self._locked_tensordicts = []
         self._lock_id = set()
         if not _has_h5:

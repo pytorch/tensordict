@@ -185,7 +185,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def __or__(self, other: TensorDictBase | float) -> T:
+    def __or__(self, other: TensorDictBase | torch.Tensor) -> T:
         """OR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -519,7 +519,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the mean value of all elements in the input tensordict.
 
         Args:
@@ -534,12 +535,20 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
+        # if dim is NO_DEFAULT and not keepdim:
+        #     dim = None
+        #     keepdim = False
         return self._cast_reduction(
-            reduction_name="mean", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="mean",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def nanmean(
@@ -548,7 +557,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the mean of all non-NaN elements in the input tensordict.
 
         Args:
@@ -563,12 +573,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="nanmean", keepdim=keepdim, dim=dim, dtype=dtype
+            reduction_name="nanmean",
+            keepdim=keepdim,
+            dim=dim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def prod(
@@ -577,7 +592,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the produce of values of all elements in the input tensordict.
 
         Args:
@@ -592,10 +608,18 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
         result = self._cast_reduction(
-            reduction_name="prod", dim=dim, keepdim=False, tuple_ok=False, dtype=dtype
+            reduction_name="prod",
+            dim=dim,
+            keepdim=False,
+            tuple_ok=False,
+            dtype=dtype,
+            further_reduce=reduce,
         )
         if keepdim:
             if isinstance(dim, tuple):
@@ -612,7 +636,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the sum value of all elements in the input tensordict.
 
         Args:
@@ -627,12 +652,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="sum", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="sum",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def nansum(
@@ -641,7 +671,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the sum of all non-NaN elements in the input tensordict.
 
         Args:
@@ -656,12 +687,17 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional) – the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
-            reduction_name="nansum", dim=dim, keepdim=keepdim, dtype=dtype
+            reduction_name="nansum",
+            dim=dim,
+            keepdim=keepdim,
+            dtype=dtype,
+            further_reduce=reduce,
         )
 
     def std(
@@ -670,7 +706,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the standard deviation value of all elements in the input tensordict.
 
         Args:
@@ -684,15 +721,17 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel’s correction, correction=1.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
             reduction_name="std",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
+            further_reduce=reduce,
         )
 
     def var(
@@ -701,7 +740,8 @@ class TensorDictBase(MutableMapping):
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
-    ) -> bool | TensorDictBase:  # noqa: D417
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
         """Returns the variance value of all elements in the input tensordict.
 
         Args:
@@ -715,15 +755,17 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel’s correction, correction=1.
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
 
         """
-        if dim is NO_DEFAULT and keepdim:
-            dim = None
         return self._cast_reduction(
             reduction_name="var",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
+            further_reduce=reduce,
         )
 
     @abc.abstractmethod
@@ -735,6 +777,7 @@ class TensorDictBase(MutableMapping):
         keepdim=NO_DEFAULT,
         dtype,
         tuple_ok=True,
+        further_reduce: bool,
         **kwargs,
     ): ...
 
@@ -5115,24 +5158,35 @@ class TensorDictBase(MutableMapping):
         *,
         collapse: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        sorting_keys: List[NestedKey] | None = None,
+        default: str | CompatibleType | None = None,
     ) -> Tuple[List, List]:
-        # return tuple(
-        #     tuple(key_or_val)
-        #     for key_or_val in zip(
-        #         *self.items(
-        #             include_nested=include_nested,
-        #             leaves_only=leaves_only,
-        #             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
-        #         )
-        #     )
-        # )
         items = self.items(
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
         keys, vals = zip(*items)
-        return list(keys), list(vals)
+        if sorting_keys is None:
+            return list(keys), list(vals)
+        if default is None:
+            # TODO: check that lists are identical
+            if is_dynamo_compiling():
+                key_to_index = {key: i for i, key in enumerate(keys)}
+                return sorting_keys, [vals[key_to_index[key]] for key in sorting_keys]
+            else:
+                source = dict(zip(keys, vals))
+                return sorting_keys, [source[key] for key in sorting_keys]
+        if isinstance(default, str) and default == "intersection":
+            new_keys = list(set(sorting_keys).intersection(keys))
+        else:
+            new_keys = list(set(sorting_keys).union(keys))
+        if is_dynamo_compiling():
+            ...
+        else:
+            source = dict(zip(keys, vals))
+            vals = [source.get(key, default) for key in new_keys]
+            return new_keys, vals
 
     @cache  # noqa: B019
     def _grad(self):
@@ -6924,37 +6978,37 @@ class TensorDictBase(MutableMapping):
             return out
 
     # point-wise arithmetic ops
-    def __add__(self, other: TensorDictBase | float) -> T:
+    def __add__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.add(other)
 
-    def __iadd__(self, other: TensorDictBase | float) -> T:
+    def __iadd__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.add_(other)
 
     def __abs__(self):
         return self.abs()
 
-    def __truediv__(self, other: TensorDictBase | float) -> T:
+    def __truediv__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.div(other)
 
-    def __itruediv__(self, other: TensorDictBase | float) -> T:
+    def __itruediv__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.div_(other)
 
-    def __mul__(self, other: TensorDictBase | float) -> T:
+    def __mul__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.mul(other)
 
-    def __imul__(self, other: TensorDictBase | float) -> T:
+    def __imul__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.mul_(other)
 
-    def __sub__(self, other: TensorDictBase | float) -> T:
+    def __sub__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.sub(other)
 
-    def __isub__(self, other: TensorDictBase | float) -> T:
+    def __isub__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.sub_(other)
 
-    def __pow__(self, other: TensorDictBase | float) -> T:
+    def __pow__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.pow(other)
 
-    def __ipow__(self, other: TensorDictBase | float) -> T:
+    def __ipow__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.pow_(other)
 
     def abs(self) -> T:
@@ -7441,10 +7495,21 @@ class TensorDictBase(MutableMapping):
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
-    def add(self, other: TensorDictBase | float, alpha: float | None = None):
+    def add(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        alpha: float | None = None,
+        default: str | CompatibleType | None = None,
+    ) -> TensorDictBase:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         if alpha is not None:
@@ -7452,25 +7517,30 @@ class TensorDictBase(MutableMapping):
         else:
             vals = torch._foreach_add(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
     def add_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_add_(val, other_val, alpha=alpha)
+            torch._foreach_add_(vals, other_val, alpha=alpha)
         else:
-            torch._foreach_add_(val, other_val)
+            torch._foreach_add_(vals, other_val)
         return self
 
     def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
@@ -7573,10 +7643,21 @@ class TensorDictBase(MutableMapping):
         )
         return self
 
-    def sub(self, other: TensorDictBase | float, alpha: float | None = None):
+    def sub(
+        self,
+        other: TensorDictBase | float,
+        alpha: float | None = None,
+        default: str | CompatibleType | None = None,
+    ):
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         if alpha is not None:
@@ -7584,208 +7665,318 @@ class TensorDictBase(MutableMapping):
         else:
             vals = torch._foreach_sub(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_sub_(val, other_val, alpha=alpha)
+            torch._foreach_sub_(vals, other_val, alpha=alpha)
         else:
-            torch._foreach_sub_(val, other_val)
+            torch._foreach_sub_(vals, other_val)
         return self
 
-    def mul_(self, other: TensorDictBase | float) -> T:
+    def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_mul_(val, other_val)
+        torch._foreach_mul_(vals, other_val)
         return self
 
-    def mul(self, other: TensorDictBase | float) -> T:
-        keys, val = self._items_list(True, True)
+    def mul(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_mul(val, other_val)
+        vals = torch._foreach_mul(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def maximum_(self, other: TensorDictBase | float) -> T:
+    def maximum_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_maximum_(val, other_val)
+        torch._foreach_maximum_(vals, other_val)
         return self
 
-    def maximum(self, other: TensorDictBase | float) -> T:
+    def maximum(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_maximum(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def minimum_(self, other: TensorDictBase | float) -> T:
+    def minimum_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_minimum_(val, other_val)
+        torch._foreach_minimum_(vals, other_val)
         return self
 
-    def minimum(self, other: TensorDictBase | float) -> T:
+    def minimum(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_minimum(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def clamp_max_(self, other: TensorDictBase | float) -> T:
+    def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_max_(val, other_val)
+        torch._foreach_clamp_max_(vals, other_val)
         return self
 
-    def clamp_max(self, other: TensorDictBase | float) -> T:
+    def clamp_max(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_clamp_max(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def clamp_min_(self, other: TensorDictBase | float) -> T:
+    def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_min_(val, other_val)
+        torch._foreach_clamp_min_(vals, other_val)
         return self
 
-    def clamp_min(self, other: TensorDictBase | float) -> T:
+    def clamp_min(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_clamp_min(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def pow_(self, other: TensorDictBase | float) -> T:
+    def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_pow_(val, other_val)
+        torch._foreach_pow_(vals, other_val)
         return self
 
-    def pow(self, other: TensorDictBase | float) -> T:
+    def pow(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_pow(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
-    def div_(self, other: TensorDictBase | float) -> T:
+    def div_(self, other: TensorDictBase | torch.Tensor) -> T:
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
+            keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
+            vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_div_(val, other_val)
+        torch._foreach_div_(vals, other_val)
         return self
 
-    def div(self, other: TensorDictBase | float) -> T:
+    def div(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        default: str | CompatibleType | None = None,
+    ) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
         else:
             other_val = other
         vals = torch._foreach_div(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(
-            lambda name, val: items.get(name, val),
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
+            filter_empty=True,
+            default=None,
         )
+        if items:
+            result.update(items)
+        return result
 
     def sqrt_(self):
         torch._foreach_sqrt_(self._values_list(True, True))
