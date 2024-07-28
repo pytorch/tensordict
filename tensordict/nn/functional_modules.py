@@ -14,14 +14,13 @@ from functools import wraps
 from typing import Any, Callable, Iterable
 
 import torch
-from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
+import torch.utils._pytree
 
 from tensordict._td import TensorDict
-from tensordict.base import _is_tensor_collection, TensorDictBase
+from tensordict.base import _is_tensor_collection, is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
 from torch import nn
-from torch.utils._pytree import SUPPORTED_NODES
 
 try:
     from torch.nn.modules.module import _global_parameter_registration_hooks
@@ -141,23 +140,6 @@ except ImportError:
         _has_functorch = False
 
 
-class _exclude_td_from_pytree:
-
-    def __init__(self):
-        self.tdnodes = {}
-
-    def __enter__(self):
-        global SUPPORTED_NODES
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            # self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
-            self.tdnodes[tdtype] = SUPPORTED_NODES.get(tdtype)
-        SUPPORTED_NODES = {key: val for key, val in SUPPORTED_NODES.items() if key not in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS}
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
-
-
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
     # Monkey-patches
@@ -179,9 +161,7 @@ The latter is unsupported."""
             )
 
         # we want to escape TensorDicts as they take care of adding the batch dimension
-        excluder_dynamo = _exclude_td_from_pytree()
-        excluder_dynamo.__enter__()
-        flat_args, args_spec = tree_flatten(args)
+        flat_args, args_spec = tree_flatten(args, is_leaf=is_tensor_collection)
         flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
         if flat_in_dims is None:
             raise ValueError(
@@ -250,10 +230,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
-        excluder = _exclude_td_from_pytree()
-        excluder.__enter__()
         result = tree_unflatten(batched_inputs, args_spec)
-        excluder.__exit__(None, None, None)
         return result
 
     vmap_src._create_batched_inputs = _create_batched_inputs
@@ -265,10 +242,9 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         batch_size: int,
         func: Callable,
     ) -> Any:
-        excluder = _exclude_td_from_pytree()
-        excluder.__enter__()
-        flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
-        excluder.__exit__(None, None, None)
+        flat_batched_outputs, output_spec = tree_flatten(
+            batched_outputs, is_leaf=is_tensor_collection
+        )
 
         for out in flat_batched_outputs:
             # Change here:
@@ -311,10 +287,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
             flat_outputs.append(out)
-        excluder = _exclude_td_from_pytree()
-        excluder.__enter__()
         result = tree_unflatten(flat_outputs, output_spec)
-        excluder.__exit__(None, None, None)
         return result
 
     vmap_src._unwrap_batched = _unwrap_batched
