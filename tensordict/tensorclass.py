@@ -114,6 +114,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_get_str",
     "_get_tuple",
     "_has_names",
+    "_items_list",
     "_multithread_apply_flat",
     "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
