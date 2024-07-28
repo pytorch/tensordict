@@ -7012,6 +7012,7 @@ class TensorDictBase(MutableMapping):
         return self.pow_(other)
 
     def abs(self) -> T:
+        """Computes the absolute value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_abs(vals)
         items = dict(zip(keys, vals))
@@ -7024,10 +7025,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def abs_(self) -> T:
+        """Computes the absolute value of each element of the TensorDict in-place."""
         torch._foreach_abs_(self._values_list(True, True))
         return self
 
     def acos(self) -> T:
+        """Computes the :meth:`~torch.acos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_acos(vals)
         items = dict(zip(keys, vals))
@@ -7040,10 +7043,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def acos_(self) -> T:
+        """Computes the :meth:`~torch.acos` value of each element of the TensorDict in-place."""
         torch._foreach_acos_(self._values_list(True, True))
         return self
 
     def exp(self) -> T:
+        """Computes the :meth:`~torch.exp` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_exp(vals)
         items = dict(zip(keys, vals))
@@ -7056,10 +7061,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def exp_(self) -> T:
+        """Computes the :meth:`~torch.exp` value of each element of the TensorDict in-place."""
         torch._foreach_exp_(self._values_list(True, True))
         return self
 
     def neg(self) -> T:
+        """Computes the :meth:`~torch.neg` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_neg(vals)
         items = dict(zip(keys, vals))
@@ -7072,10 +7079,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def neg_(self) -> T:
+        """Computes the :meth:`~torch.neg` value of each element of the TensorDict in-place."""
         torch._foreach_neg_(self._values_list(True, True))
         return self
 
     def reciprocal(self) -> T:
+        """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_reciprocal(vals)
         items = dict(zip(keys, vals))
@@ -7088,10 +7097,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def reciprocal_(self) -> T:
+        """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict in-place."""
         torch._foreach_reciprocal_(self._values_list(True, True))
         return self
 
     def sigmoid(self) -> T:
+        """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sigmoid(vals)
         items = dict(zip(keys, vals))
@@ -7104,10 +7115,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def sigmoid_(self) -> T:
+        """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict in-place."""
         torch._foreach_sigmoid_(self._values_list(True, True))
         return self
 
     def sign(self) -> T:
+        """Computes the :meth:`~torch.sign` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sign(vals)
         items = dict(zip(keys, vals))
@@ -7120,10 +7133,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def sign_(self) -> T:
+        """Computes the :meth:`~torch.sign` value of each element of the TensorDict in-place."""
         torch._foreach_sign_(self._values_list(True, True))
         return self
 
     def sin(self) -> T:
+        """Computes the :meth:`~torch.sin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sin(vals)
         items = dict(zip(keys, vals))
@@ -7136,10 +7151,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def sin_(self) -> T:
+        """Computes the :meth:`~torch.sin` value of each element of the TensorDict in-place."""
         torch._foreach_sin_(self._values_list(True, True))
         return self
 
     def sinh(self) -> T:
+        """Computes the :meth:`~torch.sinh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sinh(vals)
         items = dict(zip(keys, vals))
@@ -7152,10 +7169,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def sinh_(self) -> T:
+        """Computes the :meth:`~torch.sinh` value of each element of the TensorDict in-place."""
         torch._foreach_sinh_(self._values_list(True, True))
         return self
 
     def tan(self) -> T:
+        """Computes the :meth:`~torch.tan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tan(vals)
         items = dict(zip(keys, vals))
@@ -7168,10 +7187,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def tan_(self) -> T:
+        """Computes the :meth:`~torch.tan` value of each element of the TensorDict in-place."""
         torch._foreach_tan_(self._values_list(True, True))
         return self
 
     def tanh(self) -> T:
+        """Computes the :meth:`~torch.tanh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tanh(vals)
         items = dict(zip(keys, vals))
@@ -7184,10 +7205,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def tanh_(self) -> T:
+        """Computes the :meth:`~torch.tanh` value of each element of the TensorDict in-place."""
         torch._foreach_tanh_(self._values_list(True, True))
         return self
 
     def trunc(self) -> T:
+        """Computes the :meth:`~torch.trunc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_trunc(vals)
         items = dict(zip(keys, vals))
@@ -7200,15 +7223,24 @@ class TensorDictBase(MutableMapping):
         )
 
     def trunc_(self) -> T:
+        """Computes the :meth:`~torch.trunc` value of each element of the TensorDict in-place."""
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
     @implement_for("torch", None, "2.4")
     def norm(
         self,
+        *,
         out=None,
         dtype: torch.dtype | None = None,
     ):
+        """Computes the norm of each tensor in the tensordict.
+
+        Keyword Args:
+            out (TensorDict, optional): the output tensordict.
+            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+
+        """
         keys, vals = self._items_list(True, True, collapse=True)
         if dtype is not None:
             raise RuntimeError("dtype must be None for torch <= 2.3")
@@ -7220,14 +7252,23 @@ class TensorDictBase(MutableMapping):
             nested_keys=True,
             batch_size=[],
             propagate_lock=True,
+            out=out,
         )
 
     @implement_for("torch", "2.4")
     def norm(  # noqa: F811
         self,
+        *,
         out=None,
         dtype: torch.dtype | None = None,
     ):
+        """Computes the norm of each tensor in the tensordict.
+
+        Keyword Args:
+            out (TensorDict, optional): the output tensordict.
+            dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+
+        """
         keys, vals = self._items_list(True, True, collapse=True)
         vals = torch._foreach_norm(vals, dtype=dtype)
         items = dict(zip(keys, vals))
@@ -7237,9 +7278,11 @@ class TensorDictBase(MutableMapping):
             nested_keys=True,
             batch_size=[],
             propagate_lock=True,
+            out=out,
         )
 
     def lgamma(self) -> T:
+        """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_lgamma(vals)
         items = dict(zip(keys, vals))
@@ -7252,10 +7295,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def lgamma_(self) -> T:
+        """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict in-place."""
         torch._foreach_lgamma_(self._values_list(True, True))
         return self
 
     def frac(self) -> T:
+        """Computes the :meth:`~torch.frac` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_frac(vals)
         items = dict(zip(keys, vals))
@@ -7268,10 +7313,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def frac_(self) -> T:
+        """Computes the :meth:`~torch.frac` value of each element of the TensorDict in-place."""
         torch._foreach_frac_(self._values_list(True, True))
         return self
 
     def expm1(self) -> T:
+        """Computes the :meth:`~torch.expm1` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_expm1(vals)
         items = dict(zip(keys, vals))
@@ -7284,10 +7331,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def expm1_(self) -> T:
+        """Computes the :meth:`~torch.expm1` value of each element of the TensorDict in-place."""
         torch._foreach_expm1_(self._values_list(True, True))
         return self
 
     def log(self) -> T:
+        """Computes the :meth:`~torch.log` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log(vals)
         items = dict(zip(keys, vals))
@@ -7300,10 +7349,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def log_(self) -> T:
+        """Computes the :meth:`~torch.log` value of each element of the TensorDict in-place."""
         torch._foreach_log_(self._values_list(True, True))
         return self
 
     def log10(self) -> T:
+        """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log10(vals)
         items = dict(zip(keys, vals))
@@ -7316,10 +7367,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def log10_(self) -> T:
+        """Computes the :meth:`~torch.log10` value of each element of the TensorDict in-place."""
         torch._foreach_log10_(self._values_list(True, True))
         return self
 
     def log1p(self) -> T:
+        """Computes the :meth:`~torch.log1p` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log1p(vals)
         items = dict(zip(keys, vals))
@@ -7332,10 +7385,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def log1p_(self) -> T:
+        """Computes the :meth:`~torch.log1p` value of each element of the TensorDict in-place."""
         torch._foreach_log1p_(self._values_list(True, True))
         return self
 
     def log2(self) -> T:
+        """Computes the :meth:`~torch.log2` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log2(vals)
         items = dict(zip(keys, vals))
@@ -7348,10 +7403,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def log2_(self) -> T:
+        """Computes the :meth:`~torch.log2` value of each element of the TensorDict in-place."""
         torch._foreach_log2_(self._values_list(True, True))
         return self
 
     def ceil(self) -> T:
+        """Computes the :meth:`~torch.ceil` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_ceil(vals)
         items = dict(zip(keys, vals))
@@ -7364,10 +7421,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def ceil_(self) -> T:
+        """Computes the :meth:`~torch.ceil` value of each element of the TensorDict in-place."""
         torch._foreach_ceil_(self._values_list(True, True))
         return self
 
     def floor(self) -> T:
+        """Computes the :meth:`~torch.floor` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_floor(vals)
         items = dict(zip(keys, vals))
@@ -7380,10 +7439,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def floor_(self) -> T:
+        """Computes the :meth:`~torch.floor` value of each element of the TensorDict in-place."""
         torch._foreach_floor_(self._values_list(True, True))
         return self
 
     def round(self) -> T:
+        """Computes the :meth:`~torch.round` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_round(vals)
         items = dict(zip(keys, vals))
@@ -7396,10 +7457,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def round_(self) -> T:
+        """Computes the :meth:`~torch.round` value of each element of the TensorDict in-place."""
         torch._foreach_round_(self._values_list(True, True))
         return self
 
     def erf(self) -> T:
+        """Computes the :meth:`~torch.erf` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erf(vals)
         items = dict(zip(keys, vals))
@@ -7412,10 +7475,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def erf_(self) -> T:
+        """Computes the :meth:`~torch.erf` value of each element of the TensorDict in-place."""
         torch._foreach_erf_(self._values_list(True, True))
         return self
 
     def erfc(self) -> T:
+        """Computes the :meth:`~torch.erfc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erfc(vals)
         items = dict(zip(keys, vals))
@@ -7428,10 +7493,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def erfc_(self) -> T:
+        """Computes the :meth:`~torch.erfc` value of each element of the TensorDict in-place."""
         torch._foreach_erfc_(self._values_list(True, True))
         return self
 
     def asin(self) -> T:
+        """Computes the :meth:`~torch.asin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_asin(vals)
         items = dict(zip(keys, vals))
@@ -7444,10 +7511,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def asin_(self) -> T:
+        """Computes the :meth:`~torch.asin` value of each element of the TensorDict in-place."""
         torch._foreach_asin_(self._values_list(True, True))
         return self
 
     def atan(self) -> T:
+        """Computes the :meth:`~torch.atan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_atan(vals)
         items = dict(zip(keys, vals))
@@ -7460,10 +7529,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def atan_(self) -> T:
+        """Computes the :meth:`~torch.atan` value of each element of the TensorDict in-place."""
         torch._foreach_atan_(self._values_list(True, True))
         return self
 
     def cos(self) -> T:
+        """Computes the :meth:`~torch.cos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cos(vals)
         items = dict(zip(keys, vals))
@@ -7476,10 +7547,12 @@ class TensorDictBase(MutableMapping):
         )
 
     def cos_(self) -> T:
+        """Computes the :meth:`~torch.cos` value of each element of the TensorDict in-place."""
         torch._foreach_cos_(self._values_list(True, True))
         return self
 
     def cosh(self) -> T:
+        """Computes the :meth:`~torch.cosh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cosh(vals)
         items = dict(zip(keys, vals))
@@ -7492,15 +7565,35 @@ class TensorDictBase(MutableMapping):
         )
 
     def cosh_(self) -> T:
+        """Computes the :meth:`~torch.cosh` value of each element of the TensorDict in-place."""
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
     def add(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase:  # noqa: D417
+        r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
+
+        .. math::
+            \text{{out}}_i = \text{{input}}_i + \text{{alpha}} \times \text{{other}}_i
+
+        Args:
+            other (TensorDictBase or torch.Tensor): the tensor or TensorDict to add to ``self``.
+
+        Keyword Args:
+            alpha (Number, optional): the multiplier for :attr:`other`.
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7530,7 +7623,12 @@ class TensorDictBase(MutableMapping):
             result.update(items)
         return result
 
-    def add_(self, other: TensorDictBase | float, alpha: float | None = None):
+    def add_(self, other: TensorDictBase | float, *, alpha: float | None = None):
+        """In-place version of :meth:`~.add`.
+
+        .. note:: inplace ``add`` does not support ``default`` keyword argument.
+        """
+        torch.Tensor.add_
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7543,7 +7641,25 @@ class TensorDictBase(MutableMapping):
             torch._foreach_add_(vals, other_val)
         return self
 
-    def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+    def lerp(
+        self,
+        end: TensorDictBase | torch.Tensor,
+        weight: TensorDictBase | torch.Tensor | float,
+    ):
+        r"""Does a linear interpolation of two tensors :attr:`start` (given by ``self``) and :attr:`end` based on a scalar or tensor :attr:`weight`.
+
+        .. math::
+            \text{out}_i = \text{start}_i + \text{weight}_i \times (\text{end}_i - \text{start}_i)
+
+        The shapes of :attr:`start` and :attr:`end` must be
+        broadcastable. If :attr:`weight` is a tensor, then
+        the shapes of :attr:`weight`, :attr:`start`, and :attr:`end` must be broadcastable.
+
+        Args:
+            end (TensorDict): the tensordict with the ending points.
+            weight (TensorDict, tensor or float): the weight for the interpolation formula.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(end)):
             end_val = end._values_list(True, True)
@@ -7564,6 +7680,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def lerp_(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+        """In-place version of :meth:`~.lerp`."""
         if _is_tensor_collection(type(end)):
             end_val = end._values_list(True, True)
         else:
@@ -7575,7 +7692,30 @@ class TensorDictBase(MutableMapping):
         torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
         return self
 
-    def addcdiv(self, other1, other2, value: float | None = 1):
+    def addcdiv(
+        self,
+        other1: TensorDictBase | torch.Tensor,
+        other2: TensorDictBase | torch.Tensor,
+        value: float | None = 1,
+    ):  # noqa: D417
+        r"""Performs the element-wise division of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
+
+        .. math::
+            \text{out}_i = \text{input}_i + \text{value} \times \frac{\text{tensor1}_i}{\text{tensor2}_i}
+
+        The shapes of the elements of ``self``, :attr:`other1`, and :attr:`other2` must be
+        broadcastable.
+
+        For inputs of type `FloatTensor` or `DoubleTensor`, :attr:`value` must be
+        a real number, otherwise an integer.
+
+        Args:
+            other1 (TensorDict or Tensor): the numerator tensordict (or tensor)
+            tensor2 (TensorDict or Tensor): the denominator tensordict (or tensor)
+
+        Keyword Args:
+            value (Number, optional): multiplier for :math:`\text{tensor1} / \text{tensor2}`
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
             other1_val = other1._values_list(True, True)
@@ -7595,7 +7735,8 @@ class TensorDictBase(MutableMapping):
             propagate_lock=True,
         )
 
-    def addcdiv_(self, other1, other2, value: float | None = 1):
+    def addcdiv_(self, other1, other2, *, value: float | None = 1):
+        """The in-place version of :meth:`~.addcdiv`."""
         if _is_tensor_collection(type(other1)):
             other1_val = other1._values_list(True, True)
         else:
@@ -7609,7 +7750,25 @@ class TensorDictBase(MutableMapping):
         )
         return self
 
-    def addcmul(self, other1, other2, value: float | None = 1):
+    def addcmul(self, other1, other2, *, value: float | None = 1):  # noqa: D417
+        r"""Performs the element-wise multiplication of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
+
+        .. math::
+            \text{out}_i = \text{input}_i + \text{value} \times \text{other1}_i \times \text{other2}_i
+
+        The shapes of ``self``, :attr:`other1`, and :attr:`other2` must be
+        broadcastable.
+
+        For inputs of type `FloatTensor` or `DoubleTensor`, :attr:`value` must be
+        a real number, otherwise an integer.
+
+        Args:
+            other1 (TensorDict or Tensor): the tensordict or tensor to be multiplied
+            other2 (TensorDict or Tensor): the tensordict or tensor to be multiplied
+
+        Keyword Args:
+            value (Number, optional): multiplier for :math:`other1 .* other2`
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other1)):
             other1_val = other1._values_list(True, True)
@@ -7629,7 +7788,8 @@ class TensorDictBase(MutableMapping):
             propagate_lock=True,
         )
 
-    def addcmul_(self, other1, other2, value: float | None = 1):
+    def addcmul_(self, other1, other2, *, value: float | None = 1):
+        """The in-place version of :meth:`~.addcmul`."""
         if _is_tensor_collection(type(other1)):
             other1_val = other1._values_list(True, True)
         else:
@@ -7646,9 +7806,31 @@ class TensorDictBase(MutableMapping):
     def sub(
         self,
         other: TensorDictBase | float,
+        *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ):
+    ):  # noqa: D417
+        r"""Subtracts :attr:`other`, scaled by :attr:`alpha`, from ``self``.
+
+        .. math::
+            \text{{out}}_i = \text{{input}}_i - \text{{alpha}} \times \text{{other}}_i
+
+        Supports broadcasting,
+        type promotion, and integer, float, and complex inputs.
+
+        Args:
+            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+
+        Keyword Args:
+            alpha (Number): the multiplier for :attr:`other`.
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7679,6 +7861,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
+        """In-place version of :meth:`~.sub`.
+
+        .. note:: inplace ``sub`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7692,6 +7878,10 @@ class TensorDictBase(MutableMapping):
         return self
 
     def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.mul`.
+
+        .. note:: inplace ``mul`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7704,8 +7894,28 @@ class TensorDictBase(MutableMapping):
     def mul(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        r"""Multiplies :attr:`other` to ``self``.
+
+        .. math::
+            \text{{out}}_i = \text{{input}}_i \times \text{{other}}_i
+
+        Supports broadcasting, type promotion, and integer, float, and complex inputs.
+
+        Args:
+            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7733,6 +7943,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def maximum_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.maximum`.
+
+        .. note:: inplace ``maximum`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7745,8 +7959,23 @@ class TensorDictBase(MutableMapping):
     def maximum(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        """Computes the element-wise maximum of ``self`` and :attr:`other`.
+
+        Args:
+            other (TensorDict or Tensor): the other input tensordict or tensor.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7774,6 +8003,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def minimum_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.minimum`.
+
+        .. note:: inplace ``minimum`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7786,8 +8019,23 @@ class TensorDictBase(MutableMapping):
     def minimum(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        """Computes the element-wise minimum of ``self`` and :attr:`other`.
+
+        Args:
+            other (TensorDict or Tensor): the other input tensordict or tensor.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7815,6 +8063,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.clamp_max`.
+
+        .. note:: inplace ``clamp_max`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7827,8 +8079,23 @@ class TensorDictBase(MutableMapping):
     def clamp_max(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        """Clamps the elements of ``self`` to :attr:`other` if they're superior to that value.
+
+        Args:
+            other (TensorDict or Tensor): the other input tensordict or tensor.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7856,6 +8123,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.clamp_min`.
+
+        .. note:: inplace ``clamp_min`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7869,7 +8140,21 @@ class TensorDictBase(MutableMapping):
         self,
         other: TensorDictBase | torch.Tensor,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        """Clamps the elements of ``self`` to :attr:`other` if they're inferior to that value.
+
+        Args:
+            other (TensorDict or Tensor): the other input tensordict or tensor.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7897,6 +8182,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.pow`.
+
+        .. note:: inplace ``pow`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7909,8 +8198,28 @@ class TensorDictBase(MutableMapping):
     def pow(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        r"""Takes the power of each element in ``self`` with :attr:`other` and returns a tensor with the result.
+
+        :attr:`other` can be either a single ``float`` number, a `Tensor` or a ``TensorDict``.
+
+        When :attr:`other` is a tensor, the shapes of :attr:`input`
+        and :attr:`other` must be broadcastable.
+
+        Args:
+            other (float, tensor or tensordict): the exponent value
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7938,6 +8247,10 @@ class TensorDictBase(MutableMapping):
         return result
 
     def div_(self, other: TensorDictBase | torch.Tensor) -> T:
+        """In-place version of :meth:`~.div`.
+
+        .. note:: inplace ``div`` does not support ``default`` keyword argument.
+        """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7950,8 +8263,29 @@ class TensorDictBase(MutableMapping):
     def div(
         self,
         other: TensorDictBase | torch.Tensor,
+        *,
         default: str | CompatibleType | None = None,
-    ) -> T:
+    ) -> T:  # noqa: D417
+        r"""Divides each element of the input ``self`` by the corresponding element of :attr:`other`.
+
+        .. math::
+            \text{out}_i = \frac{\text{input}_i}{\text{other}_i}
+
+        Supports broadcasting, type promotion and integer, float, tensordict or tensor inputs.
+        Always promotes integer types to the default scalar type.
+
+        Args:
+            other (TensorDict, Tensor or Number): the divisor.
+
+        Keyword Args:
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -7979,10 +8313,12 @@ class TensorDictBase(MutableMapping):
         return result
 
     def sqrt_(self):
+        """In-place version of :meth:`~.sqrt`."""
         torch._foreach_sqrt_(self._values_list(True, True))
         return self
 
     def sqrt(self):
+        """Computes the element-wise square root of ``self``."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sqrt(vals)
         items = dict(zip(keys, vals))
