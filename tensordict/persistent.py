@@ -154,8 +154,8 @@ class PersistentTensorDict(TensorDictBase):
         device=None,
         **kwargs,
     ):
-        if device is None:
-            device = torch.Size(())
+        if batch_size is None:
+            batch_size = torch.Size(())
         self._locked_tensordicts = []
         self._lock_id = set()
         if not _has_h5:
