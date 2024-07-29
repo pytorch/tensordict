@@ -266,7 +266,9 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             )
 
         # Here:
-        if isinstance(batched_outputs, torch.Tensor) or is_tensor_collection(batched_outputs):
+        if isinstance(batched_outputs, torch.Tensor) or is_tensor_collection(
+            batched_outputs
+        ):
             # Some weird edge case requires us to spell out the following
             # see test_out_dims_edge_case
             if isinstance(out_dims, int):
