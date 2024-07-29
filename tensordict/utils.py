@@ -66,7 +66,7 @@ except ImportError:
     _has_funcdim = False
 try:
     from torch.compiler import assume_constant_result, is_dynamo_compiling
-except ModuleNotFoundError:  # torch 2.0
+except ImportError:  # torch 2.0
     from torch._dynamo import (
         assume_constant_result,
         is_compiling as is_dynamo_compiling,

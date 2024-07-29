@@ -40,7 +40,7 @@ from torch.nn.parameter import (
 
 try:
     from torch.compiler import is_dynamo_compiling
-except ModuleNotFoundError:  # torch 2.0
+except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}

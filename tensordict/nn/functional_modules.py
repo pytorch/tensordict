@@ -11,16 +11,19 @@ import types
 import warnings
 from copy import deepcopy
 from functools import wraps
+from inspect import signature
 from typing import Any, Callable, Iterable
 
 import torch
 import torch.utils._pytree
+from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 
 from tensordict._td import TensorDict
 from tensordict.base import _is_tensor_collection, is_tensor_collection
 
 from tensordict.utils import implement_for
 from torch import nn
+from torch.utils._pytree import SUPPORTED_NODES
 
 try:
     from torch.nn.modules.module import _global_parameter_registration_hooks
@@ -29,6 +32,8 @@ except ImportError:
     pass
 
 __base__setattr__ = nn.Module.__setattr__
+
+PYTREE_HAS_ISLEAF = "is_leaf" in signature(torch.utils._pytree.tree_map).parameters
 
 
 @implement_for("torch", "2.0", None)
@@ -140,6 +145,19 @@ except ImportError:
         _has_functorch = False
 
 
+class _exclude_td_from_pytree:
+    def __init__(self):
+        self.tdnodes = {}
+
+    def __enter__(self):
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
+            self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
+            SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
+
+
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
     # Monkey-patches
@@ -161,15 +179,27 @@ The latter is unsupported."""
             )
 
         # we want to escape TensorDicts as they take care of adding the batch dimension
-        flat_args, args_spec = tree_flatten(args, is_leaf=is_tensor_collection)
-        flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
-        if flat_in_dims is None:
-            raise ValueError(
-                f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
-in_dims is not compatible with the structure of `inputs`.
-in_dims has structure {tree_flatten(in_dims)[1]} but inputs
-has structure {args_spec}."""
-            )
+        if PYTREE_HAS_ISLEAF:
+            flat_args, args_spec = tree_flatten(args, is_leaf=is_tensor_collection)
+            flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
+            if flat_in_dims is None:
+                raise ValueError(
+                    f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
+    in_dims is not compatible with the structure of `inputs`.
+    in_dims has structure {tree_flatten(in_dims)[1]} but inputs
+    has structure {args_spec}."""
+                )
+        else:
+            with _exclude_td_from_pytree():
+                flat_args, args_spec = tree_flatten(args)
+                flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
+                if flat_in_dims is None:
+                    raise ValueError(
+                        f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
+            in_dims is not compatible with the structure of `inputs`.
+            in_dims has structure {tree_flatten(in_dims)[1]} but inputs
+            has structure {args_spec}."""
+                    )
 
         for i, (arg, in_dim) in enumerate(zip(flat_args, flat_in_dims)):
             if not isinstance(in_dim, int) and in_dim is not None:
@@ -232,8 +262,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
-        result = tree_unflatten(batched_inputs, args_spec)
-        return result
+        if PYTREE_HAS_ISLEAF:
+            return tree_unflatten(batched_inputs, args_spec)
+        with _exclude_td_from_pytree():
+            return tree_unflatten(batched_inputs, args_spec)
 
     vmap_src._create_batched_inputs = _create_batched_inputs
 
@@ -244,9 +276,13 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         batch_size: int,
         func: Callable,
     ) -> Any:
-        flat_batched_outputs, output_spec = tree_flatten(
-            batched_outputs, is_leaf=is_tensor_collection
-        )
+        if PYTREE_HAS_ISLEAF:
+            flat_batched_outputs, output_spec = tree_flatten(
+                batched_outputs, is_leaf=is_tensor_collection
+            )
+        else:
+            with _exclude_td_from_pytree():
+                flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
 
         for out in flat_batched_outputs:
             # Change here:
@@ -291,8 +327,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
             flat_outputs.append(out)
-        result = tree_unflatten(flat_outputs, output_spec)
-        return result
+        if PYTREE_HAS_ISLEAF:
+            return tree_unflatten(flat_outputs, output_spec)
+        with _exclude_td_from_pytree():
+            return tree_unflatten(flat_outputs, output_spec)
 
     vmap_src._unwrap_batched = _unwrap_batched
 
