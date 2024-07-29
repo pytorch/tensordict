@@ -18,6 +18,19 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 TORCH_VERSION = version.parse(torch.__version__).base_version
 
 
+def test_vmap_compile():
+    # Since we monkey patch vmap we need to make sure compile is happy with it
+    def func(x, y):
+        return x + y
+
+    x = torch.randn(3, 4)
+    y = torch.randn(3)
+    funcv = torch.vmap(func, (1, None))
+    funcv(x, y)
+    funcv_c = torch.compile(funcv, fullgraph=True)
+    funcv_c(x, y)
+
+
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
