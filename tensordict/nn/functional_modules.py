@@ -17,7 +17,7 @@ import torch
 import torch.utils._pytree
 
 from tensordict._td import TensorDict
-from tensordict.base import _is_tensor_collection, is_tensor_collection, TensorDictBase
+from tensordict.base import _is_tensor_collection, is_tensor_collection
 
 from tensordict.utils import implement_for
 from torch import nn
@@ -266,7 +266,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             )
 
         # Here:
-        if isinstance(batched_outputs, (TensorDictBase, torch.Tensor)):
+        if isinstance(batched_outputs, torch.Tensor) or is_tensor_collection(batched_outputs):
             # Some weird edge case requires us to spell out the following
             # see test_out_dims_edge_case
             if isinstance(out_dims, int):
@@ -578,7 +578,7 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             except TypeError as err:
                 pattern = r".*takes \d+ positional arguments but \d+ were given|got multiple values for argument"
                 pattern = re.compile(pattern)
-                if pattern.search(str(err)) and isinstance(args[-1], TensorDictBase):
+                if pattern.search(str(err)) and is_tensor_collection(args[-1]):
                     # this is raised whenever the module is an nn.Module (not a TensorDictModuleBase)
                     raise TypeError(
                         "It seems you tried to provide the parameters as an argument to the module when the module was not stateless. "
