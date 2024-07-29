@@ -23,7 +23,7 @@ Functionalizing TensorDictModule
 In this tutorial you will learn how to use :class:`~.TensorDictModule` in conjunction
 with functorch to create functionlized modules.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-13
+.. GENERATED FROM PYTHON SOURCE LINES 9-14
 
 Before we take a look at the functional utilities in :mod:`tensordict.nn`, let us
 reintroduce one of the example modules from the :class:`~.TensorDictModule` tutorial.
@@ -31,7 +31,7 @@ reintroduce one of the example modules from the :class:`~.TensorDictModule` tuto
 We'll create a simple module that has two linear layers, which share the input and
 return separate outputs.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-31
+.. GENERATED FROM PYTHON SOURCE LINES 14-32
 
 .. code-block:: Python
 
@@ -60,12 +60,12 @@ return separate outputs.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-34
+.. GENERATED FROM PYTHON SOURCE LINES 33-35
 
 We can now create a :class:`~.TensorDictModule` that will read the input from a key
 ``"a"``, and write to the keys ``"output_1"`` and ``"output_2"``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-38
+.. GENERATED FROM PYTHON SOURCE LINES 35-39
 
 .. code-block:: Python
 
@@ -80,12 +80,12 @@ We can now create a :class:`~.TensorDictModule` that will read the input from a 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-41
+.. GENERATED FROM PYTHON SOURCE LINES 40-42
 
 Ordinarily we would use this module by simply calling it on a :class:`~.TensorDict`
 with the required input keys.
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-47
+.. GENERATED FROM PYTHON SOURCE LINES 42-48
 
 .. code-block:: Python
 
@@ -115,12 +115,12 @@ with the required input keys.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-50
+.. GENERATED FROM PYTHON SOURCE LINES 49-51
 
 However, we can also use :func:`functorch.make_functional_with_buffers` in order to
 functionalise the module.
 
-.. GENERATED FROM PYTHON SOURCE LINES 50-53
+.. GENERATED FROM PYTHON SOURCE LINES 51-54
 
 .. code-block:: Python
 
@@ -147,13 +147,13 @@ functionalise the module.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-57
+.. GENERATED FROM PYTHON SOURCE LINES 55-58
 
 This can be used with the vmap operator. For example, we use 3 replicas of the
 params and buffers and execute a vectorized map over these for a single batch
 of data:
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-62
+.. GENERATED FROM PYTHON SOURCE LINES 58-63
 
 .. code-block:: Python
 
@@ -182,13 +182,13 @@ of data:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-66
+.. GENERATED FROM PYTHON SOURCE LINES 64-67
 
 We can also use the native :func:`make_functional <tensordict.nn.make_functional>`
 function from :mod:`tensordict.nn``, which modifies the module to make it accept the
 parameters as regular inputs:
 
-.. GENERATED FROM PYTHON SOURCE LINES 66-78
+.. GENERATED FROM PYTHON SOURCE LINES 67-79
 
 .. code-block:: Python
 

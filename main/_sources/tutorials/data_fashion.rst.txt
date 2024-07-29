@@ -21,7 +21,7 @@
 Using TensorDict for datasets
 =============================
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-13
+.. GENERATED FROM PYTHON SOURCE LINES 7-12
 
 In this tutorial we demonstrate how ``TensorDict`` can be used to
 efficiently and transparently load and manage data inside a training
@@ -29,7 +29,7 @@ pipeline. The tutorial is based heavily on the `PyTorch Quickstart
 Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
 but modified to demonstrate use of ``TensorDict``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-27
+.. GENERATED FROM PYTHON SOURCE LINES 12-26
 
 .. code-block:: Python
 
@@ -60,14 +60,14 @@ but modified to demonstrate use of ``TensorDict``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-32
+.. GENERATED FROM PYTHON SOURCE LINES 27-31
 
 The ``torchvision.datasets`` module contains a number of convenient pre-prepared
 datasets. In this tutorial we'll use the relatively simple FashionMNIST dataset. Each
 image is an item of clothing, the objective is to classify the type of clothing in
 the image (e.g. "Bag", "Sneaker" etc.).
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-46
+.. GENERATED FROM PYTHON SOURCE LINES 31-45
 
 .. code-block:: Python
 
@@ -92,7 +92,7 @@ the image (e.g. "Bag", "Sneaker" etc.).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 47-53
+.. GENERATED FROM PYTHON SOURCE LINES 46-52
 
 We will create two tensordicts, one each for the training and test data. We create
 memory-mapped tensors to hold the data. This will allow us to efficiently load
@@ -101,7 +101,7 @@ individual images.
 
 First we create the :class:`~tensordict.MemoryMappedTensor` containers.
 
-.. GENERATED FROM PYTHON SOURCE LINES 53-77
+.. GENERATED FROM PYTHON SOURCE LINES 52-76
 
 .. code-block:: Python
 
@@ -136,13 +136,13 @@ First we create the :class:`~tensordict.MemoryMappedTensor` containers.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-81
+.. GENERATED FROM PYTHON SOURCE LINES 77-80
 
 Then we can iterate over the data to populate the memory-mapped tensors. This takes a
 bit of time, but performing the transforms up-front will save repeated effort during
 training later.
 
-.. GENERATED FROM PYTHON SOURCE LINES 81-88
+.. GENERATED FROM PYTHON SOURCE LINES 80-87
 
 .. code-block:: Python
 
@@ -160,7 +160,7 @@ training later.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-99
+.. GENERATED FROM PYTHON SOURCE LINES 88-98
 
 DataLoaders
 ----------------
@@ -173,7 +173,7 @@ Since ``TensorDict`` implements ``__len__`` and ``__getitem__`` (and also
 directly from it. Note that because ``TensorDict`` can already handle batched indices,
 there is no need for collation, so we pass the identity function as ``collate_fn``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-112
+.. GENERATED FROM PYTHON SOURCE LINES 98-111
 
 .. code-block:: Python
 
@@ -197,7 +197,7 @@ there is no need for collation, so we pass the identity function as ``collate_fn
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-119
+.. GENERATED FROM PYTHON SOURCE LINES 112-118
 
 Model
 -------
@@ -206,7 +206,7 @@ We use the same model from the
 `Quickstart Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-143
+.. GENERATED FROM PYTHON SOURCE LINES 118-142
 
 .. code-block:: Python
 
@@ -265,7 +265,7 @@ We use the same model from the
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-150
+.. GENERATED FROM PYTHON SOURCE LINES 143-149
 
 Optimizing the parameters
 ---------------------------------
@@ -274,7 +274,7 @@ We'll optimise the parameters of the model using stochastic gradient descent and
 cross-entropy loss.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 150-175
+.. GENERATED FROM PYTHON SOURCE LINES 149-174
 
 .. code-block:: Python
 
@@ -310,13 +310,13 @@ cross-entropy loss.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-179
+.. GENERATED FROM PYTHON SOURCE LINES 175-178
 
 The training loop for our ``TensorDict``-based DataLoader is very similar, we just
 adjust how we unpack the data to the more explicit key-based retrieval offered by
 ``TensorDict``. The ``.contiguous()`` method loads the data stored in the memmap tensor.
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-265
+.. GENERATED FROM PYTHON SOURCE LINES 178-264
 
 .. code-block:: Python
 
@@ -423,156 +423,156 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
         is_shared=False)
     Epoch 1
     -------------------------
-    loss: 2.297860 [    0/60000]
-    loss: 2.286598 [ 6400/60000]
-    loss: 2.271836 [12800/60000]
-    loss: 2.275640 [19200/60000]
-    loss: 2.236056 [25600/60000]
-    loss: 2.232284 [32000/60000]
-    loss: 2.222434 [38400/60000]
-    loss: 2.195590 [44800/60000]
-    loss: 2.195523 [51200/60000]
-    loss: 2.166938 [57600/60000]
+    loss: 2.298481 [    0/60000]
+    loss: 2.286384 [ 6400/60000]
+    loss: 2.270641 [12800/60000]
+    loss: 2.273513 [19200/60000]
+    loss: 2.246434 [25600/60000]
+    loss: 2.218970 [32000/60000]
+    loss: 2.232884 [38400/60000]
+    loss: 2.188989 [44800/60000]
+    loss: 2.187299 [51200/60000]
+    loss: 2.170113 [57600/60000]
     Test Error: 
-     Accuracy: 47.3%, Avg loss: 2.156760 
+     Accuracy: 43.9%, Avg loss: 2.151152 
 
     Epoch 2
     -------------------------
-    loss: 2.165311 [    0/60000]
-    loss: 2.148749 [ 6400/60000]
-    loss: 2.099334 [12800/60000]
-    loss: 2.121002 [19200/60000]
-    loss: 2.042794 [25600/60000]
-    loss: 2.016843 [32000/60000]
-    loss: 2.024703 [38400/60000]
-    loss: 1.955315 [44800/60000]
-    loss: 1.963887 [51200/60000]
-    loss: 1.891243 [57600/60000]
+    loss: 2.154522 [    0/60000]
+    loss: 2.148208 [ 6400/60000]
+    loss: 2.090374 [12800/60000]
+    loss: 2.120515 [19200/60000]
+    loss: 2.064525 [25600/60000]
+    loss: 2.000957 [32000/60000]
+    loss: 2.041218 [38400/60000]
+    loss: 1.945576 [44800/60000]
+    loss: 1.955701 [51200/60000]
+    loss: 1.902277 [57600/60000]
     Test Error: 
-     Accuracy: 59.0%, Avg loss: 1.885572 
+     Accuracy: 54.7%, Avg loss: 1.880004 
 
     Epoch 3
     -------------------------
-    loss: 1.916428 [    0/60000]
-    loss: 1.878564 [ 6400/60000]
-    loss: 1.773556 [12800/60000]
-    loss: 1.817069 [19200/60000]
-    loss: 1.680037 [25600/60000]
-    loss: 1.665916 [32000/60000]
-    loss: 1.663965 [38400/60000]
-    loss: 1.581081 [44800/60000]
-    loss: 1.607248 [51200/60000]
-    loss: 1.499121 [57600/60000]
+    loss: 1.906469 [    0/60000]
+    loss: 1.879199 [ 6400/60000]
+    loss: 1.758712 [12800/60000]
+    loss: 1.819135 [19200/60000]
+    loss: 1.707851 [25600/60000]
+    loss: 1.647889 [32000/60000]
+    loss: 1.693339 [38400/60000]
+    loss: 1.570692 [44800/60000]
+    loss: 1.604299 [51200/60000]
+    loss: 1.522089 [57600/60000]
     Test Error: 
-     Accuracy: 62.6%, Avg loss: 1.518297 
+     Accuracy: 60.7%, Avg loss: 1.516317 
 
     Epoch 4
     -------------------------
-    loss: 1.583377 [    0/60000]
-    loss: 1.541870 [ 6400/60000]
-    loss: 1.406879 [12800/60000]
-    loss: 1.472714 [19200/60000]
-    loss: 1.338764 [25600/60000]
-    loss: 1.362853 [32000/60000]
-    loss: 1.349136 [38400/60000]
-    loss: 1.291462 [44800/60000]
-    loss: 1.330456 [51200/60000]
-    loss: 1.224836 [57600/60000]
+    loss: 1.574450 [    0/60000]
+    loss: 1.544172 [ 6400/60000]
+    loss: 1.393721 [12800/60000]
+    loss: 1.485514 [19200/60000]
+    loss: 1.364595 [25600/60000]
+    loss: 1.343195 [32000/60000]
+    loss: 1.380249 [38400/60000]
+    loss: 1.285611 [44800/60000]
+    loss: 1.327080 [51200/60000]
+    loss: 1.243574 [57600/60000]
     Test Error: 
-     Accuracy: 63.2%, Avg loss: 1.252461 
+     Accuracy: 63.2%, Avg loss: 1.255620 
 
     Epoch 5
     -------------------------
-    loss: 1.331876 [    0/60000]
-    loss: 1.306727 [ 6400/60000]
-    loss: 1.151864 [12800/60000]
-    loss: 1.252409 [19200/60000]
-    loss: 1.118159 [25600/60000]
-    loss: 1.162562 [32000/60000]
-    loss: 1.158309 [38400/60000]
-    loss: 1.110611 [44800/60000]
-    loss: 1.157310 [51200/60000]
-    loss: 1.068040 [57600/60000]
+    loss: 1.322863 [    0/60000]
+    loss: 1.310881 [ 6400/60000]
+    loss: 1.148152 [12800/60000]
+    loss: 1.267034 [19200/60000]
+    loss: 1.137858 [25600/60000]
+    loss: 1.147220 [32000/60000]
+    loss: 1.185110 [38400/60000]
+    loss: 1.108230 [44800/60000]
+    loss: 1.154382 [51200/60000]
+    loss: 1.080073 [57600/60000]
     Test Error: 
-     Accuracy: 64.6%, Avg loss: 1.088634 
+     Accuracy: 64.7%, Avg loss: 1.091849 
 
-    TensorDict training done! time:  8.9434 s
+    TensorDict training done! time:  8.9193 s
     Epoch 1
     -------------------------
-    loss: 2.296794 [    0/60000]
-    loss: 2.285767 [ 6400/60000]
-    loss: 2.264614 [12800/60000]
-    loss: 2.259969 [19200/60000]
-    loss: 2.256223 [25600/60000]
-    loss: 2.210085 [32000/60000]
-    loss: 2.221968 [38400/60000]
-    loss: 2.182848 [44800/60000]
-    loss: 2.182043 [51200/60000]
-    loss: 2.155894 [57600/60000]
+    loss: 2.303364 [    0/60000]
+    loss: 2.283125 [ 6400/60000]
+    loss: 2.269072 [12800/60000]
+    loss: 2.270555 [19200/60000]
+    loss: 2.241114 [25600/60000]
+    loss: 2.231842 [32000/60000]
+    loss: 2.227494 [38400/60000]
+    loss: 2.197658 [44800/60000]
+    loss: 2.194181 [51200/60000]
+    loss: 2.170490 [57600/60000]
     Test Error: 
-     Accuracy: 41.6%, Avg loss: 2.146617 
+     Accuracy: 50.1%, Avg loss: 2.155989 
 
     Epoch 2
     -------------------------
-    loss: 2.152928 [    0/60000]
-    loss: 2.146791 [ 6400/60000]
-    loss: 2.085737 [12800/60000]
-    loss: 2.102606 [19200/60000]
-    loss: 2.074308 [25600/60000]
-    loss: 1.989326 [32000/60000]
-    loss: 2.022262 [38400/60000]
-    loss: 1.937308 [44800/60000]
-    loss: 1.943810 [51200/60000]
-    loss: 1.875629 [57600/60000]
+    loss: 2.167118 [    0/60000]
+    loss: 2.145734 [ 6400/60000]
+    loss: 2.099065 [12800/60000]
+    loss: 2.116552 [19200/60000]
+    loss: 2.059268 [25600/60000]
+    loss: 2.008769 [32000/60000]
+    loss: 2.024776 [38400/60000]
+    loss: 1.946690 [44800/60000]
+    loss: 1.952856 [51200/60000]
+    loss: 1.884698 [57600/60000]
     Test Error: 
-     Accuracy: 62.8%, Avg loss: 1.872037 
+     Accuracy: 55.2%, Avg loss: 1.878820 
 
     Epoch 3
     -------------------------
-    loss: 1.904327 [    0/60000]
-    loss: 1.878510 [ 6400/60000]
-    loss: 1.758048 [12800/60000]
-    loss: 1.793615 [19200/60000]
-    loss: 1.710067 [25600/60000]
-    loss: 1.636863 [32000/60000]
-    loss: 1.659341 [38400/60000]
-    loss: 1.557398 [44800/60000]
-    loss: 1.587644 [51200/60000]
-    loss: 1.481949 [57600/60000]
+    loss: 1.907931 [    0/60000]
+    loss: 1.871664 [ 6400/60000]
+    loss: 1.765845 [12800/60000]
+    loss: 1.812215 [19200/60000]
+    loss: 1.702090 [25600/60000]
+    loss: 1.648574 [32000/60000]
+    loss: 1.663120 [38400/60000]
+    loss: 1.567572 [44800/60000]
+    loss: 1.594170 [51200/60000]
+    loss: 1.494532 [57600/60000]
     Test Error: 
-     Accuracy: 62.4%, Avg loss: 1.498510 
+     Accuracy: 60.4%, Avg loss: 1.513413 
 
     Epoch 4
     -------------------------
-    loss: 1.563133 [    0/60000]
-    loss: 1.534960 [ 6400/60000]
-    loss: 1.380918 [12800/60000]
-    loss: 1.452544 [19200/60000]
-    loss: 1.350814 [25600/60000]
-    loss: 1.325189 [32000/60000]
-    loss: 1.345215 [38400/60000]
-    loss: 1.264735 [44800/60000]
-    loss: 1.307396 [51200/60000]
-    loss: 1.209930 [57600/60000]
+    loss: 1.571274 [    0/60000]
+    loss: 1.537272 [ 6400/60000]
+    loss: 1.401501 [12800/60000]
+    loss: 1.479272 [19200/60000]
+    loss: 1.363551 [25600/60000]
+    loss: 1.352550 [32000/60000]
+    loss: 1.359422 [38400/60000]
+    loss: 1.289621 [44800/60000]
+    loss: 1.322141 [51200/60000]
+    loss: 1.227864 [57600/60000]
     Test Error: 
-     Accuracy: 63.9%, Avg loss: 1.232541 
+     Accuracy: 62.8%, Avg loss: 1.254223 
 
     Epoch 5
     -------------------------
-    loss: 1.302216 [    0/60000]
-    loss: 1.294571 [ 6400/60000]
-    loss: 1.124592 [12800/60000]
-    loss: 1.235321 [19200/60000]
-    loss: 1.119719 [25600/60000]
-    loss: 1.124892 [32000/60000]
-    loss: 1.156021 [38400/60000]
-    loss: 1.086686 [44800/60000]
-    loss: 1.133708 [51200/60000]
-    loss: 1.050889 [57600/60000]
+    loss: 1.324010 [    0/60000]
+    loss: 1.306298 [ 6400/60000]
+    loss: 1.153778 [12800/60000]
+    loss: 1.262963 [19200/60000]
+    loss: 1.141620 [25600/60000]
+    loss: 1.160406 [32000/60000]
+    loss: 1.173096 [38400/60000]
+    loss: 1.114689 [44800/60000]
+    loss: 1.152105 [51200/60000]
+    loss: 1.068702 [57600/60000]
     Test Error: 
-     Accuracy: 65.1%, Avg loss: 1.069028 
+     Accuracy: 64.2%, Avg loss: 1.091429 
 
-    Training done! time:  35.2711 s
+    Training done! time:  34.4132 s
 
 
 
@@ -580,7 +580,7 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 53.484 seconds)
+   **Total running time of the script:** (0 minutes 52.785 seconds)
 
 
 .. _sphx_glr_download_tutorials_data_fashion.py:
