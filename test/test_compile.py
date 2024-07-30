@@ -630,7 +630,8 @@ class TestFunctional:
         call_compile = torch.compile(call, fullgraph=True, mode=mode)
         x = torch.randn(2, 3)
         with pytest.raises(
-            torch._dynamo.exc.Unsupported, match="UserDefinedObjectVariable|Unsupported context manager"
+            torch._dynamo.exc.Unsupported,
+            match="UserDefinedObjectVariable|Unsupported context manager",
         ):
             call_compile(x, td_zero)
         os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"

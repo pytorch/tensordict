@@ -264,6 +264,10 @@ class TensorDictBase(MutableMapping):
             is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
             string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
         except AttributeError:
+            # When using torch.compile, an exception may be raised with a tensordict object
+            #  that has no attribute (no _tensordict or no _batch_size).
+            #  To get the proper erro message and not an attribute error raised during __repr__,
+            #  we simply default to '...' when trying to print the TD content.
             string = "..."
         return f"{type(self).__name__}(\n{string})"
 
