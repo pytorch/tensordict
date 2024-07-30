@@ -256,12 +256,15 @@ class TensorDictBase(MutableMapping):
         ...
 
     def __repr__(self) -> str:
-        fields = _td_fields(self)
-        field_str = indent(f"fields={{{fields}}}", 4 * " ")
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        device_str = indent(f"device={self.device}", 4 * " ")
-        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        try:
+            fields = _td_fields(self)
+            field_str = indent(f"fields={{{fields}}}", 4 * " ")
+            batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+            device_str = indent(f"device={self.device}", 4 * " ")
+            is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        except AttributeError:
+            string = "..."
         return f"{type(self).__name__}(\n{string})"
 
     def __iter__(self) -> Generator:
