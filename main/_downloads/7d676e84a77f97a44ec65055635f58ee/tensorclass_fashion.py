@@ -49,7 +49,7 @@ test_data = datasets.FashionMNIST(
 # structure of the data you want to store is fixed and predictable.
 #
 # As well as specifying the contents, we can also encapsulate related
-# logic as custom methods when defining the class. In this case we’ll
+# logic as custom methods when defining the class. In this case we'll
 # write a ``from_dataset`` classmethod that takes a dataset as input and
 # creates a tensorclass containing the data from the dataset. We create
 # memory-mapped tensors to hold the data. This will allow us to
@@ -89,7 +89,7 @@ test_data_tc = FashionMNISTData.from_dataset(test_data, device=device)
 # DataLoaders
 # ----------------
 #
-# We’ll create DataLoaders from the ``torchvision``-provided Datasets, as
+# We'll create DataLoaders from the ``torchvision``-provided Datasets, as
 # well as from our memory-mapped TensorDicts.
 #
 # Since ``TensorDict`` implements ``__len__`` and ``__getitem__`` (and

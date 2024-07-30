@@ -214,9 +214,9 @@ the above :class:`TensorDict` is saved as follows:
    ├── a.memmap
    ├── a.meta.pt
    ├── b
-   │   ├── c.memmap
-   │   ├── c.meta.pt
-   │   └── meta.pt
+   │ ├── c.memmap
+   │ ├── c.meta.pt
+   │ └── meta.pt
    └── meta.pt
 
 

@@ -3388,12 +3388,13 @@ tensordict containing the mean value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>mean</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – If specified, the input tensor is casted to dtype before the operation is performed.
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the desired data type of returned tensor.
+If specified, the input tensor is casted to dtype before the operation is performed.
 This is useful for preventing data type overflows. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>reduce</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduciton will occur across all TensorDict values
 and a single reduced tensor will be returned.
@@ -3808,12 +3809,13 @@ tensordict containing the mean value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>mean</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – If specified, the input tensor is casted to dtype before the operation is performed.
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the desired data type of returned tensor.
+If specified, the input tensor is casted to dtype before the operation is performed.
 This is useful for preventing data type overflows. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>reduce</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduciton will occur across all TensorDict values
 and a single reduced tensor will be returned.
@@ -3835,12 +3837,13 @@ tensordict containing the sum value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>sum</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – If specified, the input tensor is casted to dtype before the operation is performed.
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the desired data type of returned tensor.
+If specified, the input tensor is casted to dtype before the operation is performed.
 This is useful for preventing data type overflows. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>reduce</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduciton will occur across all TensorDict values
 and a single reduced tensor will be returned.
@@ -4220,12 +4223,13 @@ tensordict containing the prod value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>prod</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – If specified, the input tensor is casted to dtype before the operation is performed.
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the desired data type of returned tensor.
+If specified, the input tensor is casted to dtype before the operation is performed.
 This is useful for preventing data type overflows. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>reduce</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduciton will occur across all TensorDict values
 and a single reduced tensor will be returned.
@@ -5016,7 +5020,7 @@ tensordict containing the sum value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>std</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -5079,12 +5083,13 @@ tensordict containing the sum value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>sum</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – If specified, the input tensor is casted to dtype before the operation is performed.
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.4)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the desired data type of returned tensor.
+If specified, the input tensor is casted to dtype before the operation is performed.
 This is useful for preventing data type overflows. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>reduce</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduciton will occur across all TensorDict values
 and a single reduced tensor will be returned.
@@ -5805,7 +5810,7 @@ tensordict containing the sum value of all leaves (if this can be computed).
 If integer or tuple of integers, <cite>var</cite> is called upon the dimension specified if
 and only if this dimension is compatible with the tensordict
 shape.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – </p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>

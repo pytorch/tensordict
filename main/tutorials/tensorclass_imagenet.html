@@ -445,8 +445,8 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
     <span class="n">val_data</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="torch.utils.data.Dataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">datasets</span><span class="o">.</span><span class="n">ImageFolder</span></a><span class="p">(</span><span class="n">root</span><span class="o">=</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data_dir</span></a> <span class="o">/</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">val_transform</span><span class="p">)</span>
 
     <span class="c1">##############################################################################</span>
-    <span class="c1"># We’ll also create a dataset of the raw training data that simply resizes</span>
-    <span class="c1"># the image to a common size and converts to tensor. We’ll use this to</span>
+    <span class="c1"># We&#39;ll also create a dataset of the raw training data that simply resizes</span>
+    <span class="c1"># the image to a common size and converts to tensor. We&#39;ll use this to</span>
     <span class="c1"># load the data into memory-mapped tensors. The random transformations</span>
     <span class="c1"># need to be different each time we iterate through the data, so they</span>
     <span class="c1"># cannot be pre-computed. We also do not scale the data yet so that we can set the</span>
@@ -750,7 +750,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 218.98it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 205.49it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -799,10 +799,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 714.43it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 721.14it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 202.66it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 186.85it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -826,8 +826,7 @@ ImageNetData(
     batch_size=torch.Size([64]),
     device=None,
     is_shared=False)
-
-100%|██████████| 153/153 [00:00&lt;00:00, 411.33it/s]ImageNetData(
+ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -840,14 +839,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 353.92it/s]
-One iteration over dataloader done! Rate: 1029.2564 fps, time:  0.2137s
-One iteration over tensorclass dataloader done! Rate: 1977.7880 fps, time:  0.1112s
-One iteration over val data done! Rate: 651.4227 fps, time:  0.1980s
-One iteration over tensorclass val data done! Rate: 19188.7511 fps, time:  0.0067s
+100%|██████████| 153/153 [00:00&lt;00:00, 371.26it/s]
+One iteration over dataloader done! Rate: 1059.8234 fps, time:  0.2076s
+One iteration over tensorclass dataloader done! Rate: 1909.8994 fps, time:  0.1152s
+One iteration over val data done! Rate: 629.8384 fps, time:  0.2048s
+One iteration over tensorclass val data done! Rate: 20554.8462 fps, time:  0.0063s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.588 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.557 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>
