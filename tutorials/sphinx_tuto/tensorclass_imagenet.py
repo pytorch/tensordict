@@ -19,7 +19,7 @@ Batched data loading with tensorclasses
 # storage and on-device batched transformation, we obtain a 10x speedup in data-loading
 # over regular torch + torchvision pipelines.
 #
-# We’ll use the same subset of imagenet used in `this transfer learning
+# We'll use the same subset of imagenet used in `this transfer learning
 # tutorial <https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html>`__,
 # though we also give results of our experiments running the same code on ImageNet.
 #
@@ -105,8 +105,8 @@ if __name__ == "__main__":
     # sphinx_gallery_end_ignore
 
     ##############################################################################
-    # We’ll also create a dataset of the raw training data that simply resizes
-    # the image to a common size and converts to tensor. We’ll use this to
+    # We'll also create a dataset of the raw training data that simply resizes
+    # the image to a common size and converts to tensor. We'll use this to
     # load the data into memory-mapped tensors. The random transformations
     # need to be different each time we iterate through the data, so they
     # cannot be pre-computed. We also do not scale the data yet so that we can set the

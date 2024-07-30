@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-The early bird gets the worm – which is what he deserves
+The early bird gets the worm - which is what he deserves
 ========================================================
 """
 
