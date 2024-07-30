@@ -1,0 +1,6 @@
+﻿tensordict.nn.is\_functional
+============================
+
+.. currentmodule:: tensordict.nn
+
+.. autofunction:: is_functional

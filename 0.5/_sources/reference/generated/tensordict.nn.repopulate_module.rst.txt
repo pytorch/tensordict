@@ -1,0 +1,6 @@
+﻿tensordict.nn.repopulate\_module
+================================
+
+.. currentmodule:: tensordict.nn
+
+.. autofunction:: repopulate_module
