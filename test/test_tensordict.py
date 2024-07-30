@@ -2589,6 +2589,11 @@ class TestPointwiseOps:
         assert "d" not in tdadd
         assert "b" in tdadd
 
+        td0 = TensorDict(a=1, b=1, c=1, non_tensor="a string")
+        td1 = TensorDict(b=2, c=2, d=2, non_tensor="a string")
+        td = td0.add(td1, default=torch.zeros(()))
+        assert td["non_tensor"] == "a string"
+
     def test_sub_default(self):
         # Create two tds with different key sets
         td0 = TensorDict(a=1, b=1, c=1)
