@@ -529,10 +529,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `mean` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
@@ -567,10 +567,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `mean` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
@@ -602,10 +602,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `prod` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
@@ -646,10 +646,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `sum` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
@@ -681,10 +681,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `sum` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
@@ -716,11 +716,11 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `std` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
-                Defaults to Bessel’s correction, correction=1.
+                Defaults to Bessel's correction, correction=1.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
@@ -750,11 +750,11 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `var` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
-            keepdim (bool) – whether the output tensor has dim retained or not.
+            keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
-                Defaults to Bessel’s correction, correction=1.
+                Defaults to Bessel's correction, correction=1.
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
@@ -2611,7 +2611,7 @@ class TensorDictBase(MutableMapping):
     def refine_names(self, *names) -> T:
         """Refines the dimension names of self according to names.
 
-        Refining is a special case of renaming that “lifts” unnamed dimensions.
+        Refining is a special case of renaming that "lifts" unnamed dimensions.
         A None dim can be refined to have any name; a named dim can only be
         refined to have the same name.
 
@@ -9970,7 +9970,7 @@ class TensorDictBase(MutableMapping):
         return any(v.requires_grad for v in self.values())
 
     def requires_grad_(self, requires_grad=True) -> T:
-        """Change if autograd should record operations on this tensor: sets this tensor’s requires_grad attribute in-place.
+        """Change if autograd should record operations on this tensor: sets this tensor's requires_grad attribute in-place.
 
         Returns this tensordict.
 

@@ -154,7 +154,7 @@ print(mm_tensordict["a"].contiguous())
 #    ├── a.memmap
 #    ├── a.meta.pt
 #    ├── b
-#    │   ├── c.memmap
-#    │   ├── c.meta.pt
-#    │   └── meta.pt
+#    │ ├── c.memmap
+#    │ ├── c.meta.pt
+#    │ └── meta.pt
 #    └── meta.pt
