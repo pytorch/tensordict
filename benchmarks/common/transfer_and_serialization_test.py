@@ -5,6 +5,7 @@
 import pytest
 from tensordict import TensorDict
 import torch
+import argparse
 
 _has_cuda = torch.cuda.is_available()
 def _make_big_td() -> TensorDict:
