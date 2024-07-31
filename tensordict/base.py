@@ -9898,8 +9898,8 @@ class TensorDictBase(MutableMapping):
                     result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
-        if device is not None and sub_non_blocking and not non_blocking:
-            self._sync_all()
+        if result is not None and sub_non_blocking and not non_blocking:
+            result._sync_all()
         return result
 
     def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):

@@ -2,14 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import pytest
-from tensordict import TensorDict
-import torch
 import argparse
 
+import pytest
+import torch
+from tensordict import TensorDict
+
 _has_cuda = torch.cuda.is_available()
+
+
 def _make_big_td() -> TensorDict:
     return TensorDict({str(i): torch.randn(1_000_000) for i in range(1000)})
+
 
 @pytest.mark.skipif(not _has_cuda, reason="CUDA is not available")
 @pytest.mark.parametrize("non_blocking", [True, False])
@@ -22,10 +26,16 @@ def test_to_cuda(non_blocking, pin_memory, consolidate, benchmark):
     elif not consolidate:
         td = td.consolidate(pin_memory=pin_memory)
     else:
-        benchmark(lambda: td.consolidate(pin_memory=pin_memory, num_threads=8).to("cuda", non_blocking=non_blocking))
+        benchmark(
+            lambda: td.consolidate(pin_memory=pin_memory, num_threads=8).to(
+                "cuda", non_blocking=non_blocking
+            )
+        )
         return
     if not non_blocking:
-        benchmark(lambda: td.to("cuda", non_blocking=False, non_blocking_pin=pin_memory))
+        benchmark(
+            lambda: td.to("cuda", non_blocking=False, non_blocking_pin=pin_memory)
+        )
         return
     benchmark(lambda: td.to("cuda", non_blocking_pin=pin_memory))
 
