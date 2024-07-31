@@ -17,9 +17,9 @@ def _make_big_td() -> TensorDict:
 
 @pytest.mark.skipif(not _has_cuda, reason="CUDA is not available")
 @pytest.mark.parametrize("non_blocking", [True, False])
-@pytest.mark.parametrize("pin_memory", [True, False])
+@pytest.mark.parametrize("pin_memory,num_threads", [(True, 0), (True, 16), (False, None)])
 @pytest.mark.parametrize("consolidate", [None, True, False])
-def test_to_cuda(non_blocking, pin_memory, consolidate, benchmark):
+def test_to_cuda(non_blocking, pin_memory, num_threads, consolidate, benchmark):
     td = _make_big_td()
     if consolidate is None:
         pass
@@ -27,17 +27,17 @@ def test_to_cuda(non_blocking, pin_memory, consolidate, benchmark):
         td = td.consolidate(pin_memory=pin_memory)
     else:
         benchmark(
-            lambda: td.consolidate(pin_memory=pin_memory, num_threads=8).to(
+            lambda: td.consolidate(pin_memory=pin_memory, num_threads=num_threads).to(
                 "cuda", non_blocking=non_blocking
             )
         )
         return
     if not non_blocking:
         benchmark(
-            lambda: td.to("cuda", non_blocking=False, non_blocking_pin=pin_memory)
+            lambda: td.to("cuda", non_blocking=False, non_blocking_pin=pin_memory, num_threads=num_threads)
         )
         return
-    benchmark(lambda: td.to("cuda", non_blocking_pin=pin_memory))
+    benchmark(lambda: td.to("cuda", non_blocking_pin=pin_memory, num_threads=num_threads))
 
 
 if __name__ == "__main__":
