@@ -1115,6 +1115,26 @@ class TestGeneric:
         torch.utils._pytree.tree_map(check, pytree, pytree_recon)
         assert weird_key in pytree_recon[1]
 
+    def test_from_struct_array(self):
+        x = np.array(
+            [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
+            dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
+        )
+        td = TensorDict.from_struct_array(x)
+        x_recon = td.to_struct_array()
+        assert (x_recon == x).all()
+        assert x_recon.shape == x.shape
+
+        # no shape
+        x = np.array(
+            ("Rex", 9, 81.0), dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")]
+        )
+        td = TensorDict.from_struct_array(x)
+        assert td.shape == ()
+        x_recon = td.to_struct_array()
+        assert (x_recon == x).all()
+        assert x_recon.shape == x.shape
+
     @pytest.mark.parametrize(
         "idx",
         [

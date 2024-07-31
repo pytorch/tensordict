@@ -8987,6 +8987,31 @@ class TensorDictBase(MutableMapping):
             result.auto_batch_size_()
         return result
 
+    @classmethod
+    def from_struct_array(cls, struct_array: np.ndarray) -> T:
+        if cls is TensorDictBase:
+            from tensordict._tensordict import TensorDict
+
+            cls = TensorDict
+        td = cls(
+            {name: struct_array[name] for name in struct_array.dtype.names},
+            batch_size=struct_array.shape,
+        )
+        return td
+
+    def to_struct_array(self):
+        from .utils import TORCH_TO_NUMPY_DTYPE_DICT
+
+        keys, vals = zip(*self.items())
+        vals = tuple(v if not is_non_tensor(v) else v.data for v in vals)
+        dtype = [
+            (key, TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype))
+            for key, val in zip(keys, vals)
+        ]
+        if self.ndim:
+            return np.array(list(zip(*vals)), dtype=dtype)
+        return np.array(vals, dtype=dtype)
+
     def to_h5(
         self,
         filename,
