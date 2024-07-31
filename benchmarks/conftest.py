@@ -71,3 +71,8 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
+
+def pytest_make_parametrize_id(config, val, argname):
+    if config.option.verbose >= 2:  # -vv or -vvv
+        return f"{argname}={val}"
+    return repr(val)  # the default
