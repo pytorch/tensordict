@@ -1104,6 +1104,28 @@ class TestTensorClass:
         # ensure optional fields are writable
         data.set("k", torch.zeros(3, 4, 5))
 
+    def test_select(self):
+
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        data = Data(a=1, b=1)
+        assert isinstance(data.a, torch.Tensor)
+        assert isinstance(data.b, torch.Tensor)
+        assert (data == 1).all()
+        data_select = data.select("a")
+        assert isinstance(data.a, torch.Tensor)
+        assert isinstance(data.b, torch.Tensor)
+        assert (data == 1).all()
+        assert isinstance(data_select.a, torch.Tensor)
+        assert data_select.b is None
+        assert "a" in data_select._tensordict
+        assert "b" not in data_select._tensordict
+        assert (data_select == 1).all()
+        assert "a" in data_select._tensordict
+
     def test_set_dict(self):
         @tensorclass(autocast=True)
         class MyClass:
