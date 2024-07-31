@@ -1097,6 +1097,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
                 )
             else:
                 non_tensordict = self._non_tensordict
+            non_tensordict = dict(non_tensordict)
             if copy_non_tensor:
                 # use tree_map to copy
                 non_tensordict = tree_map(lambda x: x, non_tensordict)
