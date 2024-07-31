@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**02:00.018** total execution time for 10 files **from tutorials**:
+**02:04.606** total execution time for 10 files **from tutorials**:
 
 .. container::
 
@@ -33,16 +33,16 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``tensorclass_fashion.py``)
-     - 00:56.775
+     - 00:59.743
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
-     - 00:51.556
+     - 00:53.234
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``tensordict_module.py``)
-     - 00:10.087
+     - 00:10.088
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``tensorclass_imagenet.py``)
-     - 00:01.568
+     - 00:01.507
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``tensordict_keys.py``)
      - 00:00.009
