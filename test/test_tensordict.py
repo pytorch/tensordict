@@ -1124,6 +1124,9 @@ class TestGeneric:
         x_recon = td.to_struct_array()
         assert (x_recon == x).all()
         assert x_recon.shape == x.shape
+        # Try modifying x age field and check effect on td
+        x["age"] += 1
+        assert (td["age"] == np.array([10, 4])).all()
 
         # no shape
         x = np.array(
@@ -1134,6 +1137,8 @@ class TestGeneric:
         x_recon = td.to_struct_array()
         assert (x_recon == x).all()
         assert x_recon.shape == x.shape
+        x["age"] += 1
+        assert td["age"] == np.array(10)
 
     @pytest.mark.parametrize(
         "idx",
