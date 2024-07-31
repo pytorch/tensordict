@@ -24,7 +24,10 @@ def test_to_cuda(non_blocking, pin_memory, consolidate, benchmark):
     else:
         benchmark(lambda: td.consolidate(pin_memory=pin_memory, num_threads=8).to("cuda", non_blocking=non_blocking))
         return
-    benchmark(lambda: td.to("cuda", non_blocking=non_blocking, non_blocking_pin=pin_memory))
+    if not non_blocking:
+        benchmark(lambda: td.to("cuda", non_blocking=False, non_blocking_pin=pin_memory))
+        return
+    benchmark(lambda: td.to("cuda", non_blocking_pin=pin_memory))
 
 
 if __name__ == "__main__":
