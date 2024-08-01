@@ -1012,10 +1012,10 @@ def _getattr(self, item: str) -> Any:
 
     out = getattr(_tensordict, item, NO_DEFAULT)
     if out is not NO_DEFAULT:
-        if not callable(out):
-            if is_non_tensor(out):
-                return out.data if hasattr(out, "data") else out.tolist()
+        if not callable(out) and not is_non_tensor(out):
             return out
+        if is_non_tensor(out):
+            return out.data if hasattr(out, "data") else out.tolist()
         return _wrap_method(self, item, out)
     raise AttributeError(item)
 
