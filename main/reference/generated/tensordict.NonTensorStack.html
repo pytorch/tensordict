@@ -2043,6 +2043,28 @@ recover the original types.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.from_struct_array">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_struct_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">struct_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">np.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.NonTensorStack.from_struct_array" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a structured numpy array to a TensorDict.</p>
+<p>The content of the resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy
+operation). Changing values of the structured numpy array in-place will affect the content of the TensorDict.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="s2">&quot;Rex&quot;</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mf">81.0</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;Fido&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mf">27.0</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="n">dtype</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;U10&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;age&quot;</span><span class="p">,</span> <span class="s2">&quot;i4&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;weight&quot;</span><span class="p">,</span> <span class="s2">&quot;f4&quot;</span><span class="p">)],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_struct_array</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x_recon</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_struct_array</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">x_recon</span> <span class="o">==</span> <span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">x_recon</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Try modifying x age field and check effect on td</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">]))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.NonTensorStack.fromkeys">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.12)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.12)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.fromkeys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Creates a tensordict from a list of keys and a single value.</p>
@@ -5337,6 +5359,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <dd><p>Converts a tensordict to a PyTree.</p>
 <p>If the tensordict was not created from a pytree, this method just returns <code class="docutils literal notranslate"><span class="pre">self</span></code> without modification.</p>
 <p>See <a class="reference internal" href="#tensordict.NonTensorStack.from_pytree" title="tensordict.NonTensorStack.from_pytree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pytree()</span></code></a> for more information and examples.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.to_struct_array">
+<span class="sig-name descname"><span class="pre">to_struct_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.to_struct_array" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a tensordict to a numpy structured array.</p>
+<p>In a <a class="reference internal" href="#tensordict.NonTensorStack.from_struct_array" title="tensordict.NonTensorStack.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a> - <a class="reference internal" href="#tensordict.NonTensorStack.to_struct_array" title="tensordict.NonTensorStack.to_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_struct_array()</span></code></a> loop, the content of the input and output
+arrays should match. However, <cite>to_struct_array</cite> will not keep the memory content of the original arrays.</p>
+<p>See <a class="reference internal" href="#tensordict.NonTensorStack.from_struct_array" title="tensordict.NonTensorStack.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a> for more information.</p>
 </dd></dl>
 
 <dl class="py method">
