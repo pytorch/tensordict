@@ -582,9 +582,6 @@ def _arg_to_tensordict(arg):
     #     return x
     # return torch.utils._pytree.tree_map(convert, arg)
 
-    # TODO: dynamo doesn't like callable
-    if not is_dynamo_compiling() and callable(arg):
-        return arg
     if _is_tensorclass(type(arg)):
         return arg._tensordict
     elif isinstance(arg, (tuple, list)) and all(
@@ -1012,10 +1009,10 @@ def _getattr(self, item: str) -> Any:
 
     out = getattr(_tensordict, item, NO_DEFAULT)
     if out is not NO_DEFAULT:
-        if not callable(out):
-            if is_non_tensor(out):
-                return out.data if hasattr(out, "data") else out.tolist()
+        if not callable(out) and not is_non_tensor(out):
             return out
+        if is_non_tensor(out):
+            return out.data if hasattr(out, "data") else out.tolist()
         return _wrap_method(self, item, out)
     raise AttributeError(item)
 
@@ -2297,6 +2294,15 @@ class NonTensorData:
         ...     td_load = TensorDict.load_memmap(dest_folder)
         ...     assert (td == td_load).all()
 
+    ``NonTensorData`` can store callables. If called, it will fallback on the `__call__` of `.data`:
+
+        >>> td0 = TensorDict({"a": 0, "b": 0})
+        >>> td1 = TensorDict({"a": 1, "b": 1})
+        >>> td_func = TensorDict({"a": lambda x, y: x-y, "b": lambda x, y: x+y})
+        >>> td = td0.apply(lambda x, y, func: func(x, y), td1, td_func)
+        >>> assert td["a"] == -1
+        >>> assert td["b"] == 1
+
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -2410,6 +2416,10 @@ class NonTensorData:
                 return _or(self, other)
 
             type(self).__or__ = __or__
+
+    def __call__(self, *args, **kwargs):
+        """Calling a NonTensorData falls back to a call of its data."""
+        return self.data(*args, **kwargs)
 
     def update(
         self,
