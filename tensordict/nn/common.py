@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._C import (  # @manual=//tensordict:_C
+from tensordict._C import (  # @manual=//pytorch/tensordict:_C
     _unravel_key_to_tuple,
     unravel_key_list,
 )
