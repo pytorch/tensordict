@@ -72,7 +72,7 @@ jobs:
           python3 -mpip install auditwheel
           auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
