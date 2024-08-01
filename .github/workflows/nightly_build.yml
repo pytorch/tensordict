@@ -72,7 +72,7 @@ jobs:
           python3 -mpip install auditwheel
           auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
@@ -97,7 +97,7 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -152,7 +152,7 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -213,7 +213,7 @@ jobs:
             --package_name tensordict-nightly \
             --python-tag=${{ matrix.python-tag }}
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
@@ -252,7 +252,7 @@ jobs:
         run: |
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: wheels
@@ -296,7 +296,7 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: wheels
