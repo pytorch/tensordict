@@ -31,7 +31,7 @@ import orjson as json
 import tensordict as tensordict_lib
 
 import torch
-from tensordict._C import _unravel_key_to_tuple  # @manual=//tensordict:_C
+from tensordict._C import _unravel_key_to_tuple  # @manual=//pytorch/tensordict:_C
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase

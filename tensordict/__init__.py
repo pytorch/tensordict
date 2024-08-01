@@ -27,11 +27,14 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from tensordict._pytree import *
-from tensordict._C import unravel_key, unravel_key_list  # @manual=//tensordict:_C
+from tensordict._C import (  # @manual=//pytorch/tensordict:_C
+    unravel_key,
+    unravel_key_list,
+)
 from tensordict.nn import TensorDictParams
 
 try:
-    from tensordict.version import __version__  # @manual=//tensordict:version
+    from tensordict.version import __version__  # @manual=//pytorch/tensordict:version
 except ImportError:
     __version__ = None
 
