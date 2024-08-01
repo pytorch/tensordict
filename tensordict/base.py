@@ -8357,8 +8357,10 @@ class TensorDictBase(MutableMapping):
 
     # Validation and checks
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
-        if isinstance(array, (float, int, np.ndarray, bool)):
+        if isinstance(array, (float, int, bool)):
             pass
+        elif isinstance(array, np.ndarray) and array.dtype.names is not None:
+            return TensorDictBase.from_struct_array(array, device=self.device)
         elif isinstance(array, np.bool_):
             array = array.item()
         elif isinstance(array, list):
@@ -8988,21 +8990,62 @@ class TensorDictBase(MutableMapping):
         return result
 
     @classmethod
-    def from_struct_array(cls, struct_array: np.ndarray) -> T:
+    def from_struct_array(
+        cls, struct_array: np.ndarray, device: torch.device | None = None
+    ) -> T:
+        """Converts a structured numpy array to a TensorDict.
+
+        The content of the resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy
+        operation). Changing values of the structured numpy array in-place will affect the content of the TensorDict.
+
+        Examples:
+            >>> x = np.array(
+            ...     [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
+            ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
+            ... )
+            >>> td = TensorDict.from_struct_array(x)
+            >>> x_recon = td.to_struct_array()
+            >>> assert (x_recon == x).all()
+            >>> assert x_recon.shape == x.shape
+            >>> # Try modifying x age field and check effect on td
+            >>> x["age"] += 1
+            >>> assert (td["age"] == np.array([10, 4])).all()
+
+        """
         if cls is TensorDictBase:
-            from tensordict._tensordict import TensorDict
+            from tensordict._td import TensorDict
 
             cls = TensorDict
         td = cls(
             {name: struct_array[name] for name in struct_array.dtype.names},
             batch_size=struct_array.shape,
+            device=device,
         )
         return td
 
     def to_struct_array(self):
+        """Converts a tensordict to a numpy structured array.
+
+        In a :meth:`.from_struct_array` - :meth:`.to_struct_array` loop, the content of the input and output
+        arrays should match. However, `to_struct_array` will not keep the memory content of the original arrays.
+
+        See :meth:`.from_struct_array` for more information.
+
+        """
         from .utils import TORCH_TO_NUMPY_DTYPE_DICT
 
         keys, vals = zip(*self.items())
+        _vals = []
+        for v in vals:
+            if is_tensor_collection(v):
+                if is_non_tensor(v):
+                    _vals.append(v.data)
+                    continue
+                _vals.append(v.to_struct_array())
+                continue
+            _vals.append(v)
+        vals = _vals
+        del _vals
         vals = tuple(v if not is_non_tensor(v) else v.data for v in vals)
         dtype = [
             (key, TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype))

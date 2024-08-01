@@ -1140,6 +1140,24 @@ class TestGeneric:
         x["age"] += 1
         assert td["age"] == np.array(10)
 
+        # nested
+        dtype = [
+            ("Name", "U10"),
+            ("Age", "i4"),
+            ("Grades", [("Math", "f4"), ("Science", "f4")]),
+        ]
+        # Create data for the array
+        data = [
+            ("Alice", 25, (88.5, 92.0)),
+            ("Bob", 30, (85.0, 88.0)),
+            ("Cathy", 22, (95.0, 97.0)),
+        ]
+        # Create the structured array
+        students = np.array(data, dtype=dtype)
+        td = TensorDict.from_struct_array(students)
+        assert (td["Grades", "Math"] == torch.Tensor([88.5, 85.0, 95.0])).all()
+        assert (td.to_struct_array() == students).all()
+
     @pytest.mark.parametrize(
         "idx",
         [
