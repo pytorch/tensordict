@@ -2297,6 +2297,15 @@ class NonTensorData:
         ...     td_load = TensorDict.load_memmap(dest_folder)
         ...     assert (td == td_load).all()
 
+    ``NonTensorData`` can store callables. If called, it will fallback on the `__call__` of `.data`:
+
+        >>> td0 = TensorDict({"a": 0, "b": 0})
+        >>> td1 = TensorDict({"a": 1, "b": 1})
+        >>> td_func = TensorDict({"a": lambda x, y: x-y, "b": lambda x, y: x+y})
+        >>> td = td0.apply(lambda x, y, func: func(x, y), td1, td_func)
+        >>> assert td["a"] == -1
+        >>> assert td["b"] == 1
+
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -2410,6 +2419,10 @@ class NonTensorData:
                 return _or(self, other)
 
             type(self).__or__ = __or__
+
+    def __call__(self, *args, **kwargs):
+        """Calling a NonTensorData falls back to a call of its data."""
+        return self.data(*args, **kwargs)
 
     def update(
         self,

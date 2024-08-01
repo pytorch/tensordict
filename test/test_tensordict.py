@@ -9619,6 +9619,14 @@ class TestNonTensorData:
             ("nested", "bool")
         )
 
+    def test_non_tensor_call(self):
+        td0 = TensorDict({"a": 0, "b": 0})
+        td1 = TensorDict({"a": 1, "b": 1})
+        td_func = TensorDict({"a": lambda x, y: x - y, "b": lambda x, y: x + y})
+        td = td0.apply(lambda x, y, func: func(x, y), td1, td_func)
+        assert td["a"] == -1
+        assert td["b"] == 1
+
     def test_nontensor_dict(self, non_tensor_data):
         assert (
             TensorDict.from_dict(non_tensor_data.to_dict()) == non_tensor_data
