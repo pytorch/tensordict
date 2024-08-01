@@ -1115,6 +1115,49 @@ class TestGeneric:
         torch.utils._pytree.tree_map(check, pytree, pytree_recon)
         assert weird_key in pytree_recon[1]
 
+    def test_from_struct_array(self):
+        x = np.array(
+            [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
+            dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
+        )
+        td = TensorDict.from_struct_array(x)
+        x_recon = td.to_struct_array()
+        assert (x_recon == x).all()
+        assert x_recon.shape == x.shape
+        # Try modifying x age field and check effect on td
+        x["age"] += 1
+        assert (td["age"] == np.array([10, 4])).all()
+
+        # no shape
+        x = np.array(
+            ("Rex", 9, 81.0), dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")]
+        )
+        td = TensorDict.from_struct_array(x)
+        assert td.shape == ()
+        x_recon = td.to_struct_array()
+        assert (x_recon == x).all()
+        assert x_recon.shape == x.shape
+        x["age"] += 1
+        assert td["age"] == np.array(10)
+
+        # nested
+        dtype = [
+            ("Name", "U10"),
+            ("Age", "i4"),
+            ("Grades", [("Math", "f4"), ("Science", "f4")]),
+        ]
+        # Create data for the array
+        data = [
+            ("Alice", 25, (88.5, 92.0)),
+            ("Bob", 30, (85.0, 88.0)),
+            ("Cathy", 22, (95.0, 97.0)),
+        ]
+        # Create the structured array
+        students = np.array(data, dtype=dtype)
+        td = TensorDict.from_struct_array(students)
+        assert (td["Grades", "Math"] == torch.Tensor([88.5, 85.0, 95.0])).all()
+        assert (td.to_struct_array() == students).all()
+
     @pytest.mark.parametrize(
         "idx",
         [
