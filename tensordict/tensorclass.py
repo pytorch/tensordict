@@ -582,9 +582,6 @@ def _arg_to_tensordict(arg):
     #     return x
     # return torch.utils._pytree.tree_map(convert, arg)
 
-    # TODO: dynamo doesn't like callable
-    if not is_dynamo_compiling() and callable(arg):
-        return arg
     if _is_tensorclass(type(arg)):
         return arg._tensordict
     elif isinstance(arg, (tuple, list)) and all(
