@@ -249,7 +249,6 @@ class TensorDict(TensorDictBase):
         if has_device:
             if non_blocking is None:
                 sub_non_blocking = True
-                non_blocking = False
             else:
                 sub_non_blocking = non_blocking
             device = torch.device(device)
@@ -257,7 +256,7 @@ class TensorDict(TensorDictBase):
                 # CUDA does its sync by itself
                 call_sync = False
             else:
-                call_sync = True
+                call_sync = non_blocking is None
         self._device = device
 
         self._tensordict = _StringOnlyDict()
