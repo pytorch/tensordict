@@ -133,7 +133,14 @@ CompatibleType = Union[Tensor,]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
-_DEVICE_CAST = None
+
+
+class _DEVICE_CAST:
+    val = None
+
+    def __bool__(self):
+        return bool(self.val)
+
 
 _TENSOR_COLLECTION_MEMO = {}
 
@@ -8461,9 +8468,9 @@ class TensorDictBase(MutableMapping):
                 )
         device = self.device
         if device is not None and value.device != device:
-            global _DEVICE_CAST
-            if _DEVICE_CAST is not None:
-                _DEVICE_CAST = True
+            if non_blocking and device.type != "cuda":
+                # This will fail to be captured by dynamo when 1. non_blocking=True, 2. device is other than 'cuda'
+                _DEVICE_CAST.val = True
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if is_tc is None:

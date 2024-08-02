@@ -20,11 +20,11 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
-from tensordict import base
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _DEVICE_CAST,
     _expand_to_match_shape,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -257,7 +257,6 @@ class TensorDict(TensorDictBase):
                 # CUDA does its sync by itself
                 call_sync = False
             else:
-                base._DEVICE_CAST = False
                 call_sync = non_blocking is None
         self._device = device
 
@@ -276,10 +275,10 @@ class TensorDict(TensorDictBase):
 
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
-        if call_sync:
-            if base._DEVICE_CAST:
-                self._sync_all()
-        base._DEVICE_CAST = None
+        if call_sync and _DEVICE_CAST:
+            self._sync_all()
+        if _DEVICE_CAST.val is not None:
+            _DEVICE_CAST.val = None
         if lock:
             self.lock_()
 

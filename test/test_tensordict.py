@@ -1536,14 +1536,14 @@ class TestGeneric:
             )
             assert (td == 1).all()
         for _ in range(10):
-            assert tensordict_base._DEVICE_CAST is None
+            assert tensordict_base._DEVICE_CAST.val is None
             td = TensorDict(
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
                 device="cpu",
             )
             assert (td == 1).all()
-            assert tensordict_base._DEVICE_CAST is None
+            assert tensordict_base._DEVICE_CAST.val is None
         # This is too flaky
         # with pytest.raises(AssertionError):
         #     for _ in range(10):
