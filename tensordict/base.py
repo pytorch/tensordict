@@ -3547,7 +3547,7 @@ class TensorDictBase(MutableMapping):
                 newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
                 flat_dict[newkey] = val
 
-            if non_blocking:
+            if non_blocking and device.type != "cuda":
                 # sync if needed
                 self._sync_all()
         else:
@@ -3571,7 +3571,7 @@ class TensorDictBase(MutableMapping):
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
-            if non_blocking:
+            if non_blocking and device.type != "cuda":
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
@@ -4136,7 +4136,11 @@ class TensorDictBase(MutableMapping):
         if device is not None:
             device = torch.device(device)
         out = cls._load_memmap(prefix, metadata, device=device, out=out)
-        if not non_blocking and device is not None and device != torch.device("meta"):
+        if (
+            not non_blocking
+            and device is not None
+            and device.type not in ("meta", "cuda")
+        ):
             out._sync_all()
         return out
 
@@ -9963,7 +9967,12 @@ class TensorDictBase(MutableMapping):
                     result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
-        if device is not None and sub_non_blocking and not non_blocking:
+        if (
+            device is not None
+            and sub_non_blocking
+            and not non_blocking
+            and device.type != "cuda"
+        ):
             self._sync_all()
         return result
 

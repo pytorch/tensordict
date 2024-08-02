@@ -243,19 +243,21 @@ class TensorDict(TensorDictBase):
         source = source if not kwargs else kwargs
         if names and is_dynamo_compiling():
             graph_break()
-        has_device = False
+        has_device = device is not None
         sub_non_blocking = False
-        if device is not None:
-            has_device = True
+        call_sync = False
+        if has_device:
             if non_blocking is None:
                 sub_non_blocking = True
                 non_blocking = False
             else:
                 sub_non_blocking = non_blocking
-            device = torch.device(device) if device is not None else None
-            if _has_mps:
-                # With MPS, an explicit sync is required
-                sub_non_blocking = True
+            device = torch.device(device)
+            if device.type == "cuda":
+                # CUDA does its sync by itself
+                call_sync = False
+            else:
+                call_sync = True
         self._device = device
 
         self._tensordict = _StringOnlyDict()
@@ -273,7 +275,7 @@ class TensorDict(TensorDictBase):
 
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
-        if not non_blocking and sub_non_blocking and has_device:
+        if call_sync:
             self._sync_all()
         if lock:
             self.lock_()
