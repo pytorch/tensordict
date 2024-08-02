@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.base as tensordict_base
 
 import torch
 from _utils_internal import (
@@ -1535,12 +1536,14 @@ class TestGeneric:
             )
             assert (td == 1).all()
         for _ in range(10):
+            assert tensordict_base._DEVICE_CAST is None
             td = TensorDict(
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
                 device="cpu",
             )
             assert (td == 1).all()
+            assert tensordict_base._DEVICE_CAST is None
         # This is too flaky
         # with pytest.raises(AssertionError):
         #     for _ in range(10):

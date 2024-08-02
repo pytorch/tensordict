@@ -133,6 +133,7 @@ CompatibleType = Union[Tensor,]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
+_DEVICE_CAST = None
 
 _TENSOR_COLLECTION_MEMO = {}
 
@@ -8422,6 +8423,7 @@ class TensorDictBase(MutableMapping):
     def _validate_value(
         self,
         value: CompatibleType | dict[str, CompatibleType],
+        non_blocking: bool = False,
         *,
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
@@ -8459,7 +8461,10 @@ class TensorDictBase(MutableMapping):
                 )
         device = self.device
         if device is not None and value.device != device:
-            value = value.to(device, non_blocking=True)
+            global _DEVICE_CAST
+            if _DEVICE_CAST is not None:
+                _DEVICE_CAST = True
+            value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if is_tc is None:
                 is_tc = _is_tensor_collection(cls)

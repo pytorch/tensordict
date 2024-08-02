@@ -20,6 +20,7 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
+from tensordict import base
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -256,6 +257,7 @@ class TensorDict(TensorDictBase):
                 # CUDA does its sync by itself
                 call_sync = False
             else:
+                base._DEVICE_CAST = False
                 call_sync = non_blocking is None
         self._device = device
 
@@ -275,7 +277,9 @@ class TensorDict(TensorDictBase):
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
         if call_sync:
-            self._sync_all()
+            if base._DEVICE_CAST:
+                self._sync_all()
+        base._DEVICE_CAST = None
         if lock:
             self.lock_()
 
@@ -2144,7 +2148,9 @@ class TensorDict(TensorDictBase):
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(
+                value, check_shape=True, non_blocking=non_blocking
+            )
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
@@ -2227,7 +2233,9 @@ class TensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value = self._validate_value(
+                value, check_shape=False, non_blocking=non_blocking
+            )
             validated = True
         tensor_in = self._get_str(key, NO_DEFAULT)
 
@@ -3304,7 +3312,9 @@ class _SubTensorDict(TensorDictBase):
         # so that this method can have minimal overhead from runtime checks
         parent = self._source
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value = self._validate_value(
+                value, check_shape=True, non_blocking=non_blocking
+            )
             validated = True
         if not inplace:
             if _is_tensor_collection(type(value)):
@@ -3396,7 +3406,9 @@ class _SubTensorDict(TensorDictBase):
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value = self._validate_value(
+                value, check_shape=False, non_blocking=non_blocking
+            )
             validated = True
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
             warn(
