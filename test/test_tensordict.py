@@ -14,6 +14,7 @@ import os
 import pathlib
 import platform
 import re
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -87,12 +88,14 @@ except ImportError:
     _has_h5py = False
 
 _IS_OSX = platform.system() == "Darwin"
+_IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
 HAS_NESTED_TENSOR = (
     getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
 )
 
+mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
 
 def _compare_tensors_identity(td0, td1):
     if isinstance(td0, LazyStackedTensorDict):
@@ -9566,7 +9569,7 @@ class TestMap:
         else:
             output_generator = None
             output_split = None
-        with mp.get_context("fork").Pool(2) as pool:
+        with mp.get_context(mp_ctx).Pool(2) as pool:
             output_generator = input.map(
                 self.selectfn,
                 num_workers=2,
@@ -9620,7 +9623,7 @@ class TestMap:
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
     @pytest.mark.parametrize(
-        "start_method", [None, "spawn" if torch.cuda.is_available() else "fork"]
+        "start_method", [None, mp_ctx]
     )
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         gc.collect()
