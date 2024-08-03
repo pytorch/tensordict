@@ -7194,69 +7194,75 @@ class TestMPInplace:
 
     @classmethod
     def _driver_func(cls, tensordict, tensordict_unbind):
-        procs = []
-        children = []
-        parents = []
+        try:
+            procs = []
+            children = []
+            parents = []
 
-        for i in range(2):
-            command_pipe_parent, command_pipe_child = mp.Pipe()
-            proc = mp.Process(
-                target=cls._remote_process,
-                args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
-            )
-            proc.start()
-            command_pipe_child.close()
-            parents.append(command_pipe_parent)
-            children.append(command_pipe_child)
-            procs.append(proc)
+            for i in range(2):
+                command_pipe_parent, command_pipe_child = mp.Pipe()
+                proc = mp.Process(
+                    target=cls._remote_process,
+                    args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
+                )
+                proc.start()
+                command_pipe_child.close()
+                parents.append(command_pipe_parent)
+                children.append(command_pipe_child)
+                procs.append(proc)
 
-        b = torch.ones(2, 1) * 10
-        tensordict.set_("b", b)
-        for i in range(2):
-            parents[i].send(("recv", 10))
-            is_done = parents[i].recv()
-            assert is_done == "done"
+            b = torch.ones(2, 1) * 10
+            tensordict.set_("b", b)
+            for i in range(2):
+                parents[i].send(("recv", 10))
+                is_done = parents[i].recv()
+                assert is_done == "done"
 
-        for i in range(2):
-            parents[i].send(("send", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        a = tensordict.get("a").clone()
-        assert (a[0] == 0).all()
-        assert (a[1] == 1).all()
+            for i in range(2):
+                parents[i].send(("send", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            a = tensordict.get("a").clone()
+            assert (a[0] == 0).all()
+            assert (a[1] == 1).all()
 
-        assert not tensordict.get("done").any()
-        for i in range(2):
-            parents[i].send(("set_done", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        assert tensordict.get("done").all()
+            assert not tensordict.get("done").any()
+            for i in range(2):
+                parents[i].send(("set_done", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            assert tensordict.get("done").all()
 
-        for i in range(2):
-            parents[i].send(("set_undone_", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        assert not tensordict.get("done").any()
+            for i in range(2):
+                parents[i].send(("set_undone_", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            assert not tensordict.get("done").any()
 
-        a_prev = tensordict.get("a").clone().contiguous()
-        for i in range(2):
-            parents[i].send(("update_", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        new_a = tensordict.get("a").clone().contiguous()
-        torch.testing.assert_close(a_prev - 1, new_a)
+            a_prev = tensordict.get("a").clone().contiguous()
+            for i in range(2):
+                parents[i].send(("update_", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            new_a = tensordict.get("a").clone().contiguous()
+            torch.testing.assert_close(a_prev - 1, new_a)
 
-        a_prev = tensordict.get("a").clone().contiguous()
-        for i in range(2):
-            parents[i].send(("update", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        new_a = tensordict.get("a").clone().contiguous()
-        torch.testing.assert_close(a_prev + 1, new_a)
+            a_prev = tensordict.get("a").clone().contiguous()
+            for i in range(2):
+                parents[i].send(("update", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            new_a = tensordict.get("a").clone().contiguous()
+            torch.testing.assert_close(a_prev + 1, new_a)
 
-        for i in range(2):
-            parents[i].send(("close", None))
-            procs[i].join()
+            for i in range(2):
+                parents[i].send(("close", None))
+        finally:
+            try:
+                for i in range(2):
+                    procs[i].join(timeout=1)
+            except Exception:
+                pass
 
     @pytest.mark.parametrize(
         "td_type",
