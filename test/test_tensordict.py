@@ -9280,9 +9280,7 @@ class TestTensorDictMP(TestTensorDictsBase):
             pytest.skip("h5 files should not be opened across different processes.")
         ctx = mp.get_context(mp_ctx)
         q = ctx.Queue(1)
-        p = ctx.Process(
-            target=self.worker_lock, args=(td.lock_(), q)
-        )
+        p = ctx.Process(target=self.worker_lock, args=(td.lock_(), q))
         p.start()
         try:
             assert q.get(timeout=30) == "succeeded"
@@ -9296,11 +9294,15 @@ class TestTensorDictMP(TestTensorDictsBase):
     @staticmethod
     def worker_lock(td, q):
         assert td.is_locked
+        print('passed 0')
         for val in td.values(True):
             if is_tensor_collection(val):
                 assert val.is_locked
+                print('passed 1')
                 assert val._lock_parents_weakrefs
+                print('passed 2')
         assert not td._lock_parents_weakrefs
+        print('passed 3')
         q.put("succeeded")
 
     @staticmethod
