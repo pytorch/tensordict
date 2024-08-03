@@ -69,18 +69,18 @@ RuntimeError: Cannot modify locked TensorDict. For in-place modification, consid
 Unlike other [pytrees](https://github.com/pytorch/pytorch/blob/main/torch/utils/_pytree.py), TensorDict
 carries metadata that make it easy to query the state of the container. The main metadata
 are:
-- the [``batch_size``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.batch_size)
+- the [``batch_size``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.batch_size)
 (also referred as ``shape``),
 
-- the [``device``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device),
+- the [``device``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device),
 
 - the shared status
-([``is_memmap``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_memmap) or
-[``is_shared``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_shared)),
+([``is_memmap``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_memmap) or
+[``is_shared``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_shared)),
 
-- the dimension [``names``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.names),
+- the dimension [``names``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.names),
 
-- the [``lock``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.lock_) status.
+- the [``lock``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.lock_) status.
 
 A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-value pairs:
 ```python
@@ -109,22 +109,22 @@ TensorDict device:
 >>> assert data["key 3"].device is torch.device("cuda:0")
 ```
 Once the device is set, it can be cleared with the
-[``clear_device_``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_)
+[``clear_device_``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_)
 method.
 
 ## TensorDict as a specialized dictionary
 `TensorDict` possesses all the basic features of a dictionary such as
-[``clear``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear),
-[``copy``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.copy),
-[``fromkeys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.fromkeys),
-[``get``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get),
-[``items``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items),
-[``keys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys),
-[``pop``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pop),
-[``popitem``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.popitem),
-[``setdefault``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.setdefault),
-[``update``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update) and
-[``values``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.values).
+[``clear``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear),
+[``copy``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.copy),
+[``fromkeys``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.fromkeys),
+[``get``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get),
+[``items``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items),
+[``keys``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys),
+[``pop``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pop),
+[``popitem``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.popitem),
+[``setdefault``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.setdefault),
+[``update``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update) and
+[``values``](https://pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.values).
 
 You can select some of the entries of a `TensorDict` with `TensorDict.select`, or exclude them
 with `TensorDict.exclude`:
