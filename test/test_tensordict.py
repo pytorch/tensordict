@@ -7309,9 +7309,9 @@ class TestMPInplace:
             raise NotImplementedError
         self._driver_func(
             tensordict,
-            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
+            # (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
             # tensordict,
-            # tensordict.unbind(0),
+            tensordict.unbind(0),
         )
 
 
