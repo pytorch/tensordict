@@ -14,12 +14,14 @@ import os
 import pathlib
 import platform
 import re
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.base as tensordict_base
 
 import torch
 from _utils_internal import (
@@ -86,11 +88,14 @@ except ImportError:
     _has_h5py = False
 
 _IS_OSX = platform.system() == "Darwin"
+_IS_WINDOWS = sys.platform == "win32"
 
 TD_BATCH_SIZE = 4
 HAS_NESTED_TENSOR = (
     getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
 )
+
+mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
 
 
 def _compare_tensors_identity(td0, td1):
@@ -1535,6 +1540,8 @@ class TestGeneric:
             )
             assert (td == 1).all()
         for _ in range(10):
+            assert not tensordict_base._device_recorder.marked
+            assert not tensordict_base._device_recorder._has_transfer
             td = TensorDict(
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
@@ -1581,6 +1588,95 @@ class TestGeneric:
                 device=device,
             )
             assert (td.to("cpu", non_blocking=False) == 1).all()
+
+    def test_non_blocking_single_sync(self, _path_td_sync):
+        """Tests that we sync at most once in TensorDict creation."""
+        global _SYNC_COUNTER
+        _SYNC_COUNTER = 0
+        # If everything is on cpu, there should be no sync
+        td_dict = {
+            "a": torch.randn((), device="cpu"),
+            ("b", "c"): torch.randn((), device="cpu"),
+            "d": {"e": {"f": torch.randn((), device="cpu")}},
+        }
+        TensorDict(td_dict, device="cpu")
+        assert _SYNC_COUNTER == 0
+
+        if torch.backends.mps.is_available():
+            device = "mps"
+        elif torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = None
+        if device is not None:
+            _SYNC_COUNTER = 0
+            # If everything is on device, there should be no sync
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            TensorDict(td_dict, device=device)
+            assert _SYNC_COUNTER == 0
+
+            # if sending to cuda, there should be no sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            TensorDict(td_dict, device=device)
+            if device == "cuda":
+                assert _SYNC_COUNTER == 0
+            else:
+                assert _SYNC_COUNTER == 1
+
+            # if receiving on CPU from device, there must be a sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            TensorDict(td_dict, device="cpu")
+            assert _SYNC_COUNTER == 1
+
+            # if non-blocking is True, there should be no sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            TensorDict(td_dict, device=device, non_blocking=True)
+            assert _SYNC_COUNTER == 0
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            TensorDict(td_dict, device="cpu", non_blocking=False)
+            assert _SYNC_COUNTER == 0
+
+            # if non-blocking is False, there should be no sync (not needed)
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            TensorDict(td_dict, device=device, non_blocking=False)
+            assert _SYNC_COUNTER == 0
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            TensorDict(td_dict, device="cpu", non_blocking=False)
+            assert _SYNC_COUNTER == 0
 
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
@@ -7108,7 +7204,7 @@ class TestMPInplace:
 
         for i in range(2):
             command_pipe_parent, command_pipe_child = mp.Pipe()
-            proc = mp.Process(
+            proc = mp.get_context(mp_ctx).Process(
                 target=cls._remote_process,
                 args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
             )
@@ -7118,53 +7214,62 @@ class TestMPInplace:
             children.append(command_pipe_child)
             procs.append(proc)
 
-        b = torch.ones(2, 1) * 10
-        tensordict.set_("b", b)
-        for i in range(2):
-            parents[i].send(("recv", 10))
-            is_done = parents[i].recv()
-            assert is_done == "done"
+        try:
+            b = torch.ones(2, 1) * 10
+            tensordict.set_("b", b)
+            assert (tensordict["b"] == 10).all()
+            for i in range(2):
+                parents[i].send(("recv", 10))
+                is_done = parents[i].recv()
+                assert is_done == "done"
 
-        for i in range(2):
-            parents[i].send(("send", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        a = tensordict.get("a").clone()
-        assert (a[0] == 0).all()
-        assert (a[1] == 1).all()
+            for i in range(2):
+                parents[i].send(("send", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            a = tensordict.get("a").clone()
+            assert (a[0] == 0).all()
+            assert (a[1] == 1).all()
 
-        assert not tensordict.get("done").any()
-        for i in range(2):
-            parents[i].send(("set_done", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        assert tensordict.get("done").all()
+            assert not tensordict.get("done").any()
+            for i in range(2):
+                parents[i].send(("set_done", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            assert tensordict.get("done").all()
 
-        for i in range(2):
-            parents[i].send(("set_undone_", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        assert not tensordict.get("done").any()
+            for i in range(2):
+                parents[i].send(("set_undone_", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            assert not tensordict.get("done").any()
 
-        a_prev = tensordict.get("a").clone().contiguous()
-        for i in range(2):
-            parents[i].send(("update_", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        new_a = tensordict.get("a").clone().contiguous()
-        torch.testing.assert_close(a_prev - 1, new_a)
+            a_prev = tensordict.get("a").clone().contiguous()
+            for i in range(2):
+                parents[i].send(("update_", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            new_a = tensordict.get("a").clone().contiguous()
+            torch.testing.assert_close(a_prev - 1, new_a)
 
-        a_prev = tensordict.get("a").clone().contiguous()
-        for i in range(2):
-            parents[i].send(("update", i))
-            is_done = parents[i].recv()
-            assert is_done == "done"
-        new_a = tensordict.get("a").clone().contiguous()
-        torch.testing.assert_close(a_prev + 1, new_a)
+            a_prev = tensordict.get("a").clone().contiguous()
+            for i in range(2):
+                parents[i].send(("update", i))
+                is_done = parents[i].recv()
+                assert is_done == "done"
+            new_a = tensordict.get("a").clone().contiguous()
+            torch.testing.assert_close(a_prev + 1, new_a)
 
-        for i in range(2):
-            parents[i].send(("close", None))
-            procs[i].join()
+            for i in range(2):
+                parents[i].send(("close", None))
+        finally:
+            try:
+                for i in range(2):
+                    procs[i].join(timeout=1)
+            except Exception:
+                for i in range(2):
+                    if procs[i].is_alive():
+                        procs[i].terminate()
 
     @pytest.mark.parametrize(
         "td_type",
@@ -7175,7 +7280,8 @@ class TestMPInplace:
             "stack",
         ],
     )
-    def test_mp(self, td_type):
+    @pytest.mark.parametrize("unbind_as", ["iter", "subtd", "unbind"])
+    def test_mp(self, td_type, unbind_as):
         tensordict = TensorDict(
             source={
                 "a": torch.randn(2, 2),
@@ -7187,7 +7293,7 @@ class TestMPInplace:
         if td_type == "contiguous":
             tensordict = tensordict.share_memory_()
         elif td_type == "stack":
-            tensordict = stack_td(
+            tensordict = TensorDict.lazy_stack(
                 [
                     tensordict[0].clone().share_memory_(),
                     tensordict[1].clone().share_memory_(),
@@ -7206,12 +7312,19 @@ class TestMPInplace:
             )
         else:
             raise NotImplementedError
-        self._driver_func(
-            tensordict,
-            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
-            # tensordict,
-            # tensordict.unbind(0),
-        )
+        if unbind_as == "iter":
+            tdunbind = tensordict
+        elif unbind_as == "subtd":
+            tdunbind = (
+                tensordict._get_sub_tensordict(0),
+                tensordict._get_sub_tensordict(1),
+            )
+        elif unbind_as == "unbind":
+            tdunbind = tensordict.unbind(0)
+        else:
+            raise NotImplementedError
+
+        self._driver_func(tensordict, tdunbind)
 
 
 class TestMakeTensorDict:
@@ -9165,16 +9278,18 @@ class TestTensorDictMP(TestTensorDictsBase):
             pytest.skip("cannot lock sub-tds")
         if td_name in ("td_h5",):
             pytest.skip("h5 files should not be opened across different processes.")
-        q = mp.Queue(1)
+        ctx = mp.get_context(mp_ctx)
+        q = ctx.Queue(1)
+        p = ctx.Process(target=self.worker_lock, args=(td.lock_(), q))
+        p.start()
         try:
-            p = mp.Process(target=self.worker_lock, args=(td.lock_(), q))
-            p.start()
             assert q.get(timeout=30) == "succeeded"
         finally:
             try:
-                p.join()
-            except AssertionError:
-                pass
+                p.join(timeout=1)
+            except Exception:
+                if p.is_alive():
+                    p.terminate()
 
     @staticmethod
     def worker_lock(td, q):
@@ -9193,7 +9308,7 @@ class TestTensorDictMP(TestTensorDictsBase):
 
 @pytest.fixture(scope="class")
 def _pool_fixt():
-    with mp.Pool(10) as pool:
+    with mp.get_context(mp_ctx).Pool(10) as pool:
         yield pool
 
 
@@ -9457,7 +9572,7 @@ class TestMap:
         else:
             output_generator = None
             output_split = None
-        with mp.get_context("fork").Pool(2) as pool:
+        with mp.get_context(mp_ctx).Pool(2) as pool:
             output_generator = input.map(
                 self.selectfn,
                 num_workers=2,
@@ -9510,9 +9625,7 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
-    @pytest.mark.parametrize(
-        "start_method", [None, "spawn" if torch.cuda.is_available() else "fork"]
-    )
+    @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         gc.collect()
         tmpdir = Path(tmpdir)
@@ -9902,7 +10015,9 @@ class TestNonTensorData:
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
 
-        proc = mp.Process(target=self._run_worker, args=(td, val1, update))
+        proc = mp.get_context(mp_ctx).Process(
+            target=self._run_worker, args=(td, val1, update)
+        )
         proc.start()
         proc.join()
 
@@ -10129,7 +10244,7 @@ class TestNonTensorData:
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 2] * 5
 
-        proc = mp.Process(target=self._update_stack, args=(td,))
+        proc = mp.get_context(mp_ctx).Process(target=self._update_stack, args=(td,))
         proc.start()
         proc.join()
         if share_non_tensor in (True, None):
@@ -10208,6 +10323,22 @@ def _to_float(td, td_name, tmpdir):
         assert isinstance(td_typed, type(td))
         td = td_typed
     return td
+
+
+_SYNC_COUNTER = 0
+
+
+@pytest.fixture
+def _path_td_sync():
+    def _sync_td(self):
+        global _SYNC_COUNTER
+        _SYNC_COUNTER += 1
+        super(TensorDict, self)._sync_all()
+
+    _sync_all = TensorDict._sync_all
+    TensorDict._sync_all = _sync_td
+    yield
+    TensorDict._sync_all = _sync_all
 
 
 if __name__ == "__main__":
