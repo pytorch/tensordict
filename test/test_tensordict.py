@@ -7276,7 +7276,8 @@ class TestMPInplace:
             "stack",
         ],
     )
-    def test_mp(self, td_type):
+    @pytest.mark.parametrize("unbind_as", ["iter", "subtd", "unbind"])
+    def test_mp(self, td_type, unbind_as):
         tensordict = TensorDict(
             source={
                 "a": torch.randn(2, 2),
@@ -7307,12 +7308,19 @@ class TestMPInplace:
             )
         else:
             raise NotImplementedError
-        self._driver_func(
-            tensordict,
-            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
-            # tensordict,
-            # tensordict.unbind(0),
-        )
+        if unbind_as == "iter":
+            tdunbind = tensordict
+        elif unbind_as == "subtd":
+            tdunbind = (
+                tensordict._get_sub_tensordict(0),
+                tensordict._get_sub_tensordict(1),
+            )
+        elif unbind_as == "unbind":
+            tdunbind = tensordict.unbind(0)
+        else:
+            raise NotImplementedError
+
+        self._driver_func(tensordict, tdunbind)
 
 
 class TestMakeTensorDict:
