@@ -97,6 +97,7 @@ HAS_NESTED_TENSOR = (
 
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
 
+
 def _compare_tensors_identity(td0, td1):
     if isinstance(td0, LazyStackedTensorDict):
         if not isinstance(td1, LazyStackedTensorDict):
@@ -9622,9 +9623,7 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
-    @pytest.mark.parametrize(
-        "start_method", [None, mp_ctx]
-    )
+    @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         gc.collect()
         tmpdir = Path(tmpdir)
