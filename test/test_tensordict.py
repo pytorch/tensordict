@@ -9279,17 +9279,19 @@ class TestTensorDictMP(TestTensorDictsBase):
         if td_name in ("td_h5",):
             pytest.skip("h5 files should not be opened across different processes.")
         q = mp.Queue(1)
+        ctx = mp.get_context(mp_ctx)
+        p = ctx.Process(
+            target=self.worker_lock, args=(td.lock_(), q)
+        )
+        p.start()
         try:
-            p = mp.get_context(mp_ctx).Process(
-                target=self.worker_lock, args=(td.lock_(), q)
-            )
-            p.start()
             assert q.get(timeout=30) == "succeeded"
         finally:
             try:
-                p.join()
-            except AssertionError:
-                pass
+                p.join(timeout=1)
+            except Exception:
+                if p.is_alive():
+                    p.terminate()
 
     @staticmethod
     def worker_lock(td, q):
