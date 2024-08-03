@@ -135,12 +135,32 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 
-class _DEVICE_CAST:
-    val = None
+class _RecordDeviceTransfer:
+    """A class that records the device transfers during a TensorDict initialization."""
 
-    def __bool__(self):
-        return bool(self.val)
+    def __init__(self):
+        self.marked = False
+        self._has_transfer = False
 
+    def mark(self):
+        if self.marked:
+            raise RuntimeError("Can only mark one TensorDict at a time.")
+        self.marked = True
+        self._has_transfer = False
+
+    def unmark(self):
+        self.marked = False
+        self._has_transfer = False
+
+    def record_transfer(self, device):
+        # Adds a device to all markers
+        self._has_transfer = True
+
+    def has_transfer(self):
+        return self._has_transfer
+
+
+_device_recorder = _RecordDeviceTransfer()
 
 _TENSOR_COLLECTION_MEMO = {}
 
@@ -8437,7 +8457,10 @@ class TensorDictBase(MutableMapping):
         cls = type(value)
         is_tc = None
         if issubclass(cls, dict):
-            value = self._convert_to_tensordict(value)
+            # We use non-blocking if someone's watching or if non-blocking is explicitly passed
+            value = self._convert_to_tensordict(
+                value, non_blocking=_device_recorder.marked or non_blocking
+            )
             is_tc = True
         elif not issubclass(cls, _ACCEPTED_CLASSES):
             try:
@@ -8468,9 +8491,8 @@ class TensorDictBase(MutableMapping):
                 )
         device = self.device
         if device is not None and value.device != device:
-            if non_blocking and device.type != "cuda":
-                # This will fail to be captured by dynamo when 1. non_blocking=True, 2. device is other than 'cuda'
-                _DEVICE_CAST.val = True
+            if _device_recorder.marked and device.type != "cuda":
+                _device_recorder.record_transfer(device)
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if is_tc is None:

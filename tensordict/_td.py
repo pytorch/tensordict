@@ -24,7 +24,7 @@ import torch
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
-    _DEVICE_CAST,
+    _device_recorder,
     _expand_to_match_shape,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -242,6 +242,9 @@ class TensorDict(TensorDictBase):
                 "Either a dictionary or a sequence of kwargs must be provided, not both."
             )
         source = source if not kwargs else kwargs
+
+        self._tensordict = _StringOnlyDict()
+
         if names and is_dynamo_compiling():
             graph_break()
         has_device = device is not None
@@ -253,14 +256,18 @@ class TensorDict(TensorDictBase):
             else:
                 sub_non_blocking = non_blocking
             device = torch.device(device)
+            # Auto-index the device
+            if device.type != "cpu" and device.index is None:
+                device = torch.device(device.type, index=0)
             if device.type == "cuda":
                 # CUDA does its sync by itself
                 call_sync = False
             else:
                 call_sync = non_blocking is None
+                if call_sync:
+                    _device_recorder.mark()
         self._device = device
 
-        self._tensordict = _StringOnlyDict()
         if source is None:
             source = {}
         if not isinstance(source, (TensorDictBase, dict)):
@@ -275,10 +282,11 @@ class TensorDict(TensorDictBase):
 
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
-        if call_sync and _DEVICE_CAST:
-            self._sync_all()
-        if _DEVICE_CAST.val is not None:
-            _DEVICE_CAST.val = None
+        if call_sync:
+            if _device_recorder.has_transfer():
+                self._sync_all()
+            _device_recorder.unmark()
+
         if lock:
             self.lock_()
 
@@ -1443,11 +1451,16 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
+    def _convert_to_tensordict(
+        self, dict_value: dict[str, Any], non_blocking: bool | None = None
+    ) -> T:
         return TensorDict(
             dict_value,
             batch_size=self.batch_size,
             device=self.device,
+            names=self._maybe_names(),
+            lock=self.is_locked,
+            non_blocking=non_blocking,
         )
 
     def _index_tensordict(

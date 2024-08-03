@@ -1536,14 +1536,14 @@ class TestGeneric:
             )
             assert (td == 1).all()
         for _ in range(10):
-            assert tensordict_base._DEVICE_CAST.val is None
+            assert not tensordict_base._device_recorder.marked
+            assert not tensordict_base._device_recorder._has_transfer
             td = TensorDict(
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
                 device="cpu",
             )
             assert (td == 1).all()
-            assert tensordict_base._DEVICE_CAST.val is None
         # This is too flaky
         # with pytest.raises(AssertionError):
         #     for _ in range(10):
@@ -1584,6 +1584,95 @@ class TestGeneric:
                 device=device,
             )
             assert (td.to("cpu", non_blocking=False) == 1).all()
+
+    def test_non_blocking_single_sync(self, _path_td_sync):
+        """Tests that we sync at most once in TensorDict creation."""
+        global _SYNC_COUNTER
+        _SYNC_COUNTER = 0
+        # If everything is on cpu, there should be no sync
+        td_dict = {
+            "a": torch.randn((), device="cpu"),
+            ("b", "c"): torch.randn((), device="cpu"),
+            "d": {"e": {"f": torch.randn((), device="cpu")}},
+        }
+        td = TensorDict(td_dict, device="cpu")
+        assert _SYNC_COUNTER == 0
+
+        if torch.backends.mps.is_available():
+            device = "mps"
+        elif torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = None
+        if device is not None:
+            _SYNC_COUNTER = 0
+            # If everything is on device, there should be no sync
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            td = TensorDict(td_dict, device=device)
+            assert _SYNC_COUNTER == 0
+
+            # if sending to cuda, there should be no sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            td = TensorDict(td_dict, device=device)
+            if device == "cuda":
+                assert _SYNC_COUNTER == 0
+            else:
+                assert _SYNC_COUNTER == 1
+
+            # if receiving on CPU from device, there must be a sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            td = TensorDict(td_dict, device="cpu")
+            assert _SYNC_COUNTER == 1
+
+            # if non-blocking is True, there should be no sync
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            td = TensorDict(td_dict, device=device, non_blocking=True)
+            assert _SYNC_COUNTER == 0
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            td = TensorDict(td_dict, device="cpu", non_blocking=False)
+            assert _SYNC_COUNTER == 0
+
+            # if non-blocking is False, there should be no sync (not needed)
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device="cpu"),
+                ("b", "c"): torch.randn((), device="cpu"),
+                "d": {"e": {"f": torch.randn((), device="cpu")}},
+            }
+            td = TensorDict(td_dict, device=device, non_blocking=False)
+            assert _SYNC_COUNTER == 0
+            _SYNC_COUNTER = 0
+            td_dict = {
+                "a": torch.randn((), device=device),
+                ("b", "c"): torch.randn((), device=device),
+                "d": {"e": {"f": torch.randn((), device=device)}},
+            }
+            td = TensorDict(td_dict, device="cpu", non_blocking=False)
+            assert _SYNC_COUNTER == 0
 
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
@@ -10211,6 +10300,22 @@ def _to_float(td, td_name, tmpdir):
         assert isinstance(td_typed, type(td))
         td = td_typed
     return td
+
+
+_SYNC_COUNTER = 0
+
+
+@pytest.fixture
+def _path_td_sync():
+    def _sync_td(self):
+        global _SYNC_COUNTER
+        _SYNC_COUNTER += 1
+        super(TensorDict, self)._sync_all()
+
+    _sync_all = TensorDict._sync_all
+    TensorDict._sync_all = _sync_td
+    yield
+    TensorDict._sync_all = _sync_all
 
 
 if __name__ == "__main__":
