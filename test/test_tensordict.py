@@ -9294,15 +9294,11 @@ class TestTensorDictMP(TestTensorDictsBase):
     @staticmethod
     def worker_lock(td, q):
         assert td.is_locked
-        print('passed 0')
         for val in td.values(True):
             if is_tensor_collection(val):
                 assert val.is_locked
-                print('passed 1')
                 assert val._lock_parents_weakrefs
-                print('passed 2')
         assert not td._lock_parents_weakrefs
-        print('passed 3')
         q.put("succeeded")
 
     @staticmethod
