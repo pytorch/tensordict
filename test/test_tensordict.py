@@ -7204,7 +7204,7 @@ class TestMPInplace:
 
         for i in range(2):
             command_pipe_parent, command_pipe_child = mp.Pipe()
-            proc = mp.Process(
+            proc = mp.get_context(mp_ctx).Process(
                 target=cls._remote_process,
                 args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
             )
@@ -9280,7 +9280,9 @@ class TestTensorDictMP(TestTensorDictsBase):
             pytest.skip("h5 files should not be opened across different processes.")
         q = mp.Queue(1)
         try:
-            p = mp.Process(target=self.worker_lock, args=(td.lock_(), q))
+            p = mp.get_context(mp_ctx).Process(
+                target=self.worker_lock, args=(td.lock_(), q)
+            )
             p.start()
             assert q.get(timeout=30) == "succeeded"
         finally:
@@ -10013,7 +10015,9 @@ class TestNonTensorData:
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
 
-        proc = mp.Process(target=self._run_worker, args=(td, val1, update))
+        proc = mp.get_context(mp_ctx).Process(
+            target=self._run_worker, args=(td, val1, update)
+        )
         proc.start()
         proc.join()
 
@@ -10240,7 +10244,7 @@ class TestNonTensorData:
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 2] * 5
 
-        proc = mp.Process(target=self._update_stack, args=(td,))
+        proc = mp.get_context(mp_ctx).Process(target=self._update_stack, args=(td,))
         proc.start()
         proc.join()
         if share_non_tensor in (True, None):
