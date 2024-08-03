@@ -14,6 +14,8 @@
 - [**Lazy preallocation**](#lazy-preallocation)
 - [**tensorclass**](#tensorclass)
 
+![tensordict.png](docs%2Ftensordict.png)
+
 ## Basic usage
 
 ``TensorDict`` can be used as a drop-in replacement for python ``dict``, provided that the keys
