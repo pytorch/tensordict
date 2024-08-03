@@ -1,6 +1,7 @@
 # 📖 Getting started with TensorDict
 
-- [**Prerequisite: TensorDict's Metadata**](#metadata)
+- [**Basic Usage**](#basic-usage)
+- [**Prerequisite: TensorDict's Metadata**](#tensordicts-metadata)
 - [**Specialized Dictionary**](#tensordict-as-a-specialized-dictionary)
 - [**Nesting TensorDicts**](#nesting-tensordicts)
 - [**Tensor-like features**](#tensor-like-features)
