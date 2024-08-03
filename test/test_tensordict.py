@@ -9306,7 +9306,7 @@ class TestTensorDictMP(TestTensorDictsBase):
 
 @pytest.fixture(scope="class")
 def _pool_fixt():
-    with mp.Pool(10) as pool:
+    with mp.get_context(mp_ctx).Pool(10) as pool:
         yield pool
 
 
