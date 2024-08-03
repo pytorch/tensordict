@@ -63,7 +63,7 @@ The key features are:
 ## Examples
 
 This section presents a couple of stand-out applications of the library.
-Check our [**Getting Started**](#GETTING_STARTED.md) guide for an overview of TensorDict's features!
+Check our [**Getting Started**](GETTING_STARTED.md) guide for an overview of TensorDict's features!
 
 ### Fast copy on device
 `TensorDict` optimizes transfers from/to device to make them safe and fast.
