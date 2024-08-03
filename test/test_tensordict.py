@@ -7194,25 +7194,26 @@ class TestMPInplace:
 
     @classmethod
     def _driver_func(cls, tensordict, tensordict_unbind):
+        procs = []
+        children = []
+        parents = []
+
+        for i in range(2):
+            command_pipe_parent, command_pipe_child = mp.Pipe()
+            proc = mp.Process(
+                target=cls._remote_process,
+                args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
+            )
+            proc.start()
+            command_pipe_child.close()
+            parents.append(command_pipe_parent)
+            children.append(command_pipe_child)
+            procs.append(proc)
+
         try:
-            procs = []
-            children = []
-            parents = []
-
-            for i in range(2):
-                command_pipe_parent, command_pipe_child = mp.Pipe()
-                proc = mp.Process(
-                    target=cls._remote_process,
-                    args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
-                )
-                proc.start()
-                command_pipe_child.close()
-                parents.append(command_pipe_parent)
-                children.append(command_pipe_child)
-                procs.append(proc)
-
             b = torch.ones(2, 1) * 10
             tensordict.set_("b", b)
+            assert (tensordict["b"] == 10).all()
             for i in range(2):
                 parents[i].send(("recv", 10))
                 is_done = parents[i].recv()
@@ -7262,7 +7263,9 @@ class TestMPInplace:
                 for i in range(2):
                     procs[i].join(timeout=1)
             except Exception:
-                pass
+                for i in range(2):
+                    if procs[i].is_alive():
+                        procs[i].terminate()
 
     @pytest.mark.parametrize(
         "td_type",
