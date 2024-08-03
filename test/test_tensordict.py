@@ -1595,7 +1595,7 @@ class TestGeneric:
             ("b", "c"): torch.randn((), device="cpu"),
             "d": {"e": {"f": torch.randn((), device="cpu")}},
         }
-        td = TensorDict(td_dict, device="cpu")
+        TensorDict(td_dict, device="cpu")
         assert _SYNC_COUNTER == 0
 
         if torch.backends.mps.is_available():
@@ -1612,7 +1612,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device=device),
                 "d": {"e": {"f": torch.randn((), device=device)}},
             }
-            td = TensorDict(td_dict, device=device)
+            TensorDict(td_dict, device=device)
             assert _SYNC_COUNTER == 0
 
             # if sending to cuda, there should be no sync
@@ -1622,7 +1622,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device="cpu"),
                 "d": {"e": {"f": torch.randn((), device="cpu")}},
             }
-            td = TensorDict(td_dict, device=device)
+            TensorDict(td_dict, device=device)
             if device == "cuda":
                 assert _SYNC_COUNTER == 0
             else:
@@ -1635,7 +1635,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device=device),
                 "d": {"e": {"f": torch.randn((), device=device)}},
             }
-            td = TensorDict(td_dict, device="cpu")
+            TensorDict(td_dict, device="cpu")
             assert _SYNC_COUNTER == 1
 
             # if non-blocking is True, there should be no sync
@@ -1645,7 +1645,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device="cpu"),
                 "d": {"e": {"f": torch.randn((), device="cpu")}},
             }
-            td = TensorDict(td_dict, device=device, non_blocking=True)
+            TensorDict(td_dict, device=device, non_blocking=True)
             assert _SYNC_COUNTER == 0
             _SYNC_COUNTER = 0
             td_dict = {
@@ -1653,7 +1653,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device=device),
                 "d": {"e": {"f": torch.randn((), device=device)}},
             }
-            td = TensorDict(td_dict, device="cpu", non_blocking=False)
+            TensorDict(td_dict, device="cpu", non_blocking=False)
             assert _SYNC_COUNTER == 0
 
             # if non-blocking is False, there should be no sync (not needed)
@@ -1663,7 +1663,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device="cpu"),
                 "d": {"e": {"f": torch.randn((), device="cpu")}},
             }
-            td = TensorDict(td_dict, device=device, non_blocking=False)
+            TensorDict(td_dict, device=device, non_blocking=False)
             assert _SYNC_COUNTER == 0
             _SYNC_COUNTER = 0
             td_dict = {
@@ -1671,7 +1671,7 @@ class TestGeneric:
                 ("b", "c"): torch.randn((), device=device),
                 "d": {"e": {"f": torch.randn((), device=device)}},
             }
-            td = TensorDict(td_dict, device="cpu", non_blocking=False)
+            TensorDict(td_dict, device="cpu", non_blocking=False)
             assert _SYNC_COUNTER == 0
 
     def test_pad(self):
