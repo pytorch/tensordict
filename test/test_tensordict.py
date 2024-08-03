@@ -7150,6 +7150,7 @@ class TestTensorDictsRequiresGrad:
         return self.td(device).unsqueeze(0)
 
 
+@pytest.mark.slow
 class TestMPInplace:
     @classmethod
     def _remote_process(
@@ -9191,6 +9192,7 @@ class TestLock:
         td.append(td0)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "td_name,device",
     TestTensorDictsBase.TYPES_DEVICES,
@@ -9448,6 +9450,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
@@ -9748,7 +9751,6 @@ class TestMap:
             return
 
 
-# class TestNonTensorData:
 class TestNonTensorData:
     @pytest.fixture
     def non_tensor_data(self):
@@ -9980,6 +9982,7 @@ class TestNonTensorData:
         assert td.get("val").data == val1
         assert td["val"] == val1
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("pair", PAIRS)
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize("update", ["update_", "update-inplace"])
@@ -10210,6 +10213,7 @@ class TestNonTensorData:
     def _update_stack(self, td):
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("update", ["update_at_", "slice"])
     @pytest.mark.parametrize(
         "strategy,share_non_tensor",
