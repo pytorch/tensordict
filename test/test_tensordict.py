@@ -9278,8 +9278,8 @@ class TestTensorDictMP(TestTensorDictsBase):
             pytest.skip("cannot lock sub-tds")
         if td_name in ("td_h5",):
             pytest.skip("h5 files should not be opened across different processes.")
-        q = mp.Queue(1)
         ctx = mp.get_context(mp_ctx)
+        q = ctx.Queue(1)
         p = ctx.Process(
             target=self.worker_lock, args=(td.lock_(), q)
         )
