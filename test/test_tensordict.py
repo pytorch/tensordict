@@ -7288,7 +7288,7 @@ class TestMPInplace:
         if td_type == "contiguous":
             tensordict = tensordict.share_memory_()
         elif td_type == "stack":
-            tensordict = stack_td(
+            tensordict = TensorDict.lazy_stack(
                 [
                     tensordict[0].clone().share_memory_(),
                     tensordict[1].clone().share_memory_(),
@@ -7309,9 +7309,9 @@ class TestMPInplace:
             raise NotImplementedError
         self._driver_func(
             tensordict,
-            # (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
+            (tensordict._get_sub_tensordict(0), tensordict._get_sub_tensordict(1)),
             # tensordict,
-            tensordict.unbind(0),
+            # tensordict.unbind(0),
         )
 
 
