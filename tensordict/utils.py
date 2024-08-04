@@ -1500,6 +1500,8 @@ def _get_leaf_tensordict(
             tensordict = hook(tensordict, key)
         else:
             tensordict = tensordict.get(key[0])
+            if tensordict is None:
+                raise KeyError
         key = key[1:]
     return tensordict, key[0]
 
