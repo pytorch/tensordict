@@ -335,7 +335,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                         "'distribution_map' must be provided within "
                         "distribution_kwargs whenever the distribution is of type CompositeDistribution."
                     )
-                name_map = distribution_kwargs.get("name_map", None)
+                name_map = distribution_kwargs.get("name_map")
                 if name_map is not None:
                     out_keys = list(name_map.values())
                 else:

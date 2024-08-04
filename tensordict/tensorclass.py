@@ -983,8 +983,8 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     Args:
         state (dict): State parameter to set the object
     """
-    self._tensordict = state.get("tensordict", None)
-    self._non_tensordict = state.get("non_tensordict", None)
+    self._tensordict = state.get("tensordict")
+    self._non_tensordict = state.get("non_tensordict")
 
 
 def _getattr(self, item: str) -> Any:
@@ -1392,7 +1392,7 @@ def _from_dict_instance(
     trsf_dict = {}
     for key, value in list(input_tdict.items()):
         # cur_value = getattr(self, key, None)
-        cur_value = self.get(key, None)
+        cur_value = self.get(key)
         if _is_tensor_collection(type(cur_value)):
             trsf_dict[key] = cur_value.from_dict_instance(
                 value, batch_size=[], device=device, batch_dims=None
@@ -1737,7 +1737,7 @@ def _names(self) -> torch.Size:
 def _data(self):
     # We allow data to be a field of the class too
     if "data" in self.__dataclass_fields__:
-        data = self._tensordict.get("data", None)
+        data = self._tensordict.get("data")
         if data is None:
             data = self._non_tensordict.get("data")
         return data
@@ -2936,7 +2936,7 @@ class NonTensorStack(LazyStackedTensorDict):
     def _load_memmap(
         cls, prefix: str, metadata: dict, *, out=None, **kwargs
     ) -> LazyStackedTensorDict:
-        data = metadata.get("data", None)
+        data = metadata.get("data")
         if data is not None:
             if isinstance(data, str):
                 with open(prefix / data, "rb") as file:

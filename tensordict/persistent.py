@@ -297,7 +297,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
             return out
         else:
-            out = self._nested_tensordicts.get(key, None)
+            out = self._nested_tensordicts.get(key)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,
@@ -307,7 +307,7 @@ class PersistentTensorDict(TensorDictBase):
             return out
 
     @cache  # noqa: B019
-    def get(self, key, default=NO_DEFAULT):
+    def get(self, key: NestedKey, default=None):
         array = self._get_array(key, default)
         if array is default:
             return array
@@ -350,7 +350,7 @@ class PersistentTensorDict(TensorDictBase):
                 return out.pin_memory()
             return out
         elif array is not default:
-            out = self._nested_tensordicts.get(key, None)
+            out = self._nested_tensordicts.get(key)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,
@@ -409,7 +409,7 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
         ):
-            result = self.get(item)
+            result = self.get(item, default=NO_DEFAULT)
             if is_non_tensor(result):
                 result_data = getattr(result, "data", NO_DEFAULT)
                 if result_data is NO_DEFAULT:
@@ -582,7 +582,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
-        is_array = entry_class.get("array", None)
+        is_array = entry_class.get("array")
         if is_array:
             return torch.Tensor
         elif is_array is False:
@@ -919,7 +919,7 @@ class PersistentTensorDict(TensorDictBase):
 
         """
         md = self._get_metadata(key)
-        if md.get("array", None):
+        if md.get("array"):
             array = self._get_array(key)
             array[:] = value
         else:
