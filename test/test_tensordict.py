@@ -5107,7 +5107,7 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             td.rename_key_("a", "z")
         with pytest.raises(KeyError):
-            td.get("a")
+            td["a"]
         assert "a" not in td.keys()
 
         z = td.get("z")
