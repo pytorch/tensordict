@@ -548,7 +548,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType: ...
+    def get(self, key: NestedKey, default: Any = None) -> CompatibleType: ...
 
     @_get_post_hook
     @_fallback
@@ -600,7 +600,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         memo = {}
 
         def _clone(tensor, memo=memo):
-            result = memo.get(tensor, None)
+            result = memo.get(tensor)
             if result is not None:
                 return result
 
@@ -637,7 +637,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ): ...
 
     def __hash__(self):
-        return hash((id(self), id(self.__dict__.get("_param_td", None))))
+        return hash((id(self), id(self.__dict__.get("_param_td"))))
 
     @_fallback
     def __eq__(self, other: object) -> TensorDictBase: ...

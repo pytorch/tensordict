@@ -948,7 +948,7 @@ class implement_for:
     @staticmethod
     def get_class_that_defined_method(f):
         """Returns the class of a method, if it is defined, and None otherwise."""
-        return f.__globals__.get(f.__qualname__.split(".")[0], None)
+        return f.__globals__.get(f.__qualname__.split(".")[0])
 
     @classmethod
     def get_func_name(cls, fn):
@@ -974,7 +974,7 @@ class implement_for:
 
     def module_set(self):
         """Sets the function in its module, if it exists already."""
-        prev_setter = type(self)._implementations.get(self.get_func_name(self.fn), None)
+        prev_setter = type(self)._implementations.get(self.get_func_name(self.fn))
         if prev_setter is not None:
             prev_setter.do_set = False
         type(self)._implementations[self.get_func_name(self.fn)] = self
@@ -991,7 +991,7 @@ class implement_for:
     def import_module(cls, module_name: Union[Callable, str]) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
-            module = cls._cache_modules.get(module_name, None)
+            module = cls._cache_modules.get(module_name)
             if module is None:
                 if module_name in sys.modules:
                     sys.modules[module_name] = module = import_module(module_name)
@@ -1381,16 +1381,16 @@ def _parse_to(*args, **kwargs):
         device = None
         dtype = None
         non_blocking = kwargs.get("non_blocking", False)
-        convert_to_format = kwargs.get("convert_to_format", None)
+        convert_to_format = kwargs.get("convert_to_format")
         if len(args) > 0:
             device = torch.device(args[0])
             if len(args) > 1:
                 dtype = args[1]
             else:
-                dtype = kwargs.get("dtype", None)
+                dtype = kwargs.get("dtype")
         else:
-            device = kwargs.get("device", None)
-            dtype = kwargs.get("dtype", None)
+            device = kwargs.get("device")
+            dtype = kwargs.get("dtype")
         if device is not None:
             device = torch.device(device)
 
@@ -1483,7 +1483,7 @@ def _default_hook(td: T, key: tuple[str, ...]) -> None:
     For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
 
     """
-    out = td.get(key[0], None)
+    out = td.get(key[0])
     if out is None:
         td._create_nested_str(key[0])
         out = td._get_str(key[0], None)
@@ -1954,7 +1954,7 @@ def _getitem_batch_size(batch_size, index):
 
 # Lazy classes control (legacy feature)
 _DEFAULT_LAZY_OP = False
-_LAZY_OP = os.environ.get("LAZY_LEGACY_OP", None)
+_LAZY_OP = os.environ.get("LAZY_LEGACY_OP")
 
 
 class set_lazy_legacy(_DecoratorContextManager):
@@ -2155,8 +2155,8 @@ def isin(
         >>> torch.testing.assert_close(in_reference, expected_in_reference)
     """
     # Get the data
-    reference_tensor = reference.get(key, default=None)
-    target_tensor = input.get(key, default=None)
+    reference_tensor = reference.get(key)
+    target_tensor = input.get(key)
 
     # Check key is present in both tensordict and reference_tensordict
     if not isinstance(target_tensor, torch.Tensor):
@@ -2252,7 +2252,7 @@ def remove_duplicates(
         ... )
         >>> assert (td == expected_output).all()
     """
-    tensor = input.get(key, default=None)
+    tensor = input.get(key)
 
     # Check if the key is a TensorDict
     if tensor is None:

@@ -104,7 +104,7 @@ except ImportError:  # torch 2.0
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
-# Using None is not an option since `td.get(key, default=None)` is a valid usage.
+# Using None is not an option since `td.get(key)` is a valid usage.
 class _NoDefault(enum.IntEnum):
     ZERO = 0
 
@@ -3108,7 +3108,7 @@ class TensorDictBase(MutableMapping):
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
-                dest = self.get(key, default=None)
+                dest = self.get(key)
                 if dest is None:
                     dest = self.empty()
                 dest.load_state_dict(item, assign=assign, strict=strict)
@@ -4536,19 +4536,20 @@ class TensorDictBase(MutableMapping):
                 _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
             )
 
-    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+    def get(self, key: NestedKey, default: Any = None) -> CompatibleType:
         """Gets the value stored with the input key.
 
         Args:
             key (str, tuple of str): key to be queried. If tuple of str it is
                 equivalent to chained calls of getattr.
             default: default value if the key is not found in the tensordict.
+                Defaults to ``None``.
 
         Examples:
             >>> td = TensorDict({"x": 1}, batch_size=[])
             >>> td.get("x")
             tensor(1)
-            >>> td.get("y", default=None)
+            >>> td.get("y")
             None
         """
         key = _unravel_key_to_tuple(key)
@@ -8514,7 +8515,7 @@ class TensorDictBase(MutableMapping):
     def _last_op_queue(self):
         # this is used to keep track of the last operation when using
         # the tensordict as a context manager.
-        last_op_queue = self.__dict__.get("__last_op_queue", None)
+        last_op_queue = self.__dict__.get("__last_op_queue")
         if last_op_queue is None:
             last_op_queue = collections.deque()
             self.__dict__["__last_op_queue"] = last_op_queue
@@ -9698,7 +9699,7 @@ class TensorDictBase(MutableMapping):
 
     @property
     def _lock_parents_weakrefs(self):
-        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs", None)
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
         if _lock_parents_weakrefs is None:
             self.__dict__["__lock_parents_weakrefs"] = []
             _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]

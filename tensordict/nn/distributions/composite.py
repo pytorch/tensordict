@@ -93,7 +93,7 @@ class CompositeDistribution(d.Distribution):
             else:
                 write_name = name_unravel
             name = name_unravel
-            dist_params = params.get(name, None)
+            dist_params = params.get(name)
             kwargs = extra_kwargs.get(name, {})
             if dist_params is None:
                 raise KeyError
@@ -174,7 +174,7 @@ class CompositeDistribution(d.Distribution):
                 `<sample>` is the name of the sample provided during construction.
         """
         for name, dist in self.dists.items():
-            prob = sample.get(_add_suffix(name, "_cdf"), None)
+            prob = sample.get(_add_suffix(name, "_cdf"))
             if prob is None:
                 try:
                     prob = self.cdf(sample.get(name))

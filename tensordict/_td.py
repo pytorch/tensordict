@@ -1977,7 +1977,7 @@ class TensorDict(TensorDictBase):
         input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                cur_value = self.get(key, None)
+                cur_value = self.get(key)
                 if cur_value is not None:
                     input_dict[key] = cur_value.from_dict_instance(
                         value, batch_size=[], device=device, batch_dims=None
@@ -2411,7 +2411,7 @@ class TensorDict(TensorDictBase):
 
     def _get_str(self, key, default):
         first_key = key
-        out = self._tensordict.get(first_key, None)
+        out = self._tensordict.get(first_key)
         if out is None:
             return self._default_get(first_key, default)
         return out
@@ -2572,12 +2572,12 @@ class TensorDict(TensorDictBase):
             if not isinstance(entry_metadata, dict):
                 # there can be other metadata
                 continue
-            type_value = entry_metadata.get("type", None)
+            type_value = entry_metadata.get("type")
             if type_value is not None:
                 paths.add(key)
                 continue
-            dtype = entry_metadata.get("dtype", None)
-            shape = entry_metadata.get("shape", None)
+            dtype = entry_metadata.get("dtype")
+            shape = entry_metadata.get("shape")
             if (
                 not (prefix / f"{key}.memmap").exists()
                 or dtype is None
@@ -3044,7 +3044,7 @@ class TensorDict(TensorDictBase):
                     keys_to_exclude[key[0]].append(key[1:])
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
-                val = _tensordict.get(key, None)
+                val = _tensordict.get(key)
                 if val is not None:
                     val = val._exclude(
                         *cur_keys, inplace=inplace, set_shared=set_shared
@@ -3499,7 +3499,7 @@ class _SubTensorDict(TensorDictBase):
     def get(
         self,
         key: NestedKey,
-        default: Tensor | str | None = NO_DEFAULT,
+        default: Tensor | str | None = None,
     ) -> CompatibleType:
         return self._source.get_at(key, self.idx, default=default)
 

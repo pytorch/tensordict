@@ -402,7 +402,7 @@ def _swap_state(
     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
 ) -> dict[str, torch.Tensor] | TensorDict | None:
     __dict__ = model.__dict__
-    was_stateless = __dict__.get("_is_stateless", None)
+    was_stateless = __dict__.get("_is_stateless")
     if was_stateless is None:
         raise Exception(f"{model}\nhas no stateless attribute.")
     __dict__["_is_stateless"] = is_stateless
@@ -414,7 +414,7 @@ def _swap_state(
     for key, value in tensordict.items():
         cls = type(value)
         if _is_tensor_collection(cls) or issubclass(cls, dict):
-            _old_value = old_tensordict.get(key, None)
+            _old_value = old_tensordict.get(key)
             _old_value = _swap_state(
                 __dict__["_modules"][key],
                 value,
@@ -426,11 +426,11 @@ def _swap_state(
         else:
             _old_value = None
             if return_old_tensordict:
-                _old_value = __dict__["_parameters"].get(key, None)
+                _old_value = __dict__["_parameters"].get(key)
                 if _old_value is None:
-                    _old_value = __dict__["_buffers"].get(key, None)
+                    _old_value = __dict__["_buffers"].get(key)
                 if _old_value is None:
-                    _old_value = __dict__.get(key, None)
+                    _old_value = __dict__.get(key)
                 if _old_value is None:
                     pass
                     # _old_value = torch.zeros(*value.shape, 0)
@@ -445,67 +445,6 @@ def _swap_state(
         return old_tensordict
     else:
         return TensorDict._new_unsafe(old_tensordict, [])
-
-
-# def _swap_state(
-#     model: nn.Module,
-#     tensordict: TensorDict,
-#     is_stateless: bool,
-#     return_old_tensordict: bool = False,
-#     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
-# ) -> dict[str, torch.Tensor] | TensorDict | None:
-#     __dict__ = model.__dict__
-#     was_stateless = __dict__.get("_is_stateless", None)
-#     if was_stateless is None:
-#         raise Exception(f"{model}\nhas no stateless attribute.")
-#     __dict__["_is_stateless"] = is_stateless
-#     # return_old_tensordict = return_old_tensordict and not was_stateless
-#     if old_tensordict is None:
-#         old_tensordict_dict = old_tensordict = {}
-#     else:
-#         old_tensordict_dict = {}
-#     # keys = set(tensordict.keys())
-#     children = set()
-#     # this loop ignores the memo from named children
-#     for key, child in __dict__["_modules"].items():  # model.named_children():
-#         children.add(key)
-#         value = tensordict.get(key, None)
-#         if value is None:
-#             # faster than get(key, Tensordict(...))
-#             value = {}
-#
-#         _old_value = old_tensordict.get(key, None)
-#         _old_value = _swap_state(
-#             child,
-#             value,
-#             return_old_tensordict=return_old_tensordict,
-#             old_tensordict=_old_value,
-#             is_stateless=is_stateless,
-#         )
-#         old_tensordict_dict[key] = _old_value
-#     for key in tensordict.keys():
-#         if key in children:
-#             continue
-#         value = tensordict.get(key)
-#         if return_old_tensordict:
-#             old_attr = __dict__["_parameters"].get(key, None)
-#             if old_attr is None:
-#                 old_attr = __dict__["_buffers"].get(key, None)
-#             if old_attr is None:
-#                 old_attr = __dict__.get(key, None)
-#             if old_attr is None:
-#                 old_attr = torch.zeros(*value.shape, 0)
-#             old_tensordict_dict[key] = old_attr
-#         # is_param = key in model.__dict__.get("_parameters")
-#         # if is_param:
-#         #     delattr(model, key)
-#         #     print(value)
-#         set_tensor_dict(__dict__, model, key, value)
-#     old_tensordict.update(old_tensordict_dict)
-#     if was_stateless or not return_old_tensordict:
-#         return old_tensordict
-#     else:
-#         return TensorDict(old_tensordict, [])
 
 
 def is_functional(module: nn.Module):
