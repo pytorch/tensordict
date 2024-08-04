@@ -406,17 +406,16 @@ class PersistentTensorDict(TensorDictBase):
         return idx
 
     def __getitem__(self, item):
-        if isinstance(item, str) or isinstance(item, tuple):
-            item_tup = _unravel_key_to_tuple(item)
-            if item_tup:
-                item = item_tup
-                result = self._get_tuple(item, default=NO_DEFAULT)
-                if is_non_tensor(result):
-                    result_data = getattr(result, "data", NO_DEFAULT)
-                    if result_data is NO_DEFAULT:
-                        return result.tolist()
-                    return result_data
-                return result
+        if isinstance(item, str) or (
+            isinstance(item, tuple) and _unravel_key_to_tuple(item)
+        ):
+            result = self.get(item, default=NO_DEFAULT)
+            if is_non_tensor(result):
+                result_data = getattr(result, "data", NO_DEFAULT)
+                if result_data is NO_DEFAULT:
+                    return result.tolist()
+                return result_data
+            return result
         if isinstance(item, list):
             # convert to tensor
             item = torch.tensor(item)
