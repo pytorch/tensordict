@@ -8638,6 +8638,7 @@ class TestNamedDims(TestTensorDictsBase):
         tdg = td.gather(dim=-1, index=idx)
         assert tdg.names == ["a", "b", "c", "d"]
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
     def test_h5(self, tmpdir):
         td = TensorDict(
             {"a": torch.zeros(3, 4, 1, 6)},
@@ -8647,6 +8648,7 @@ class TestNamedDims(TestTensorDictsBase):
         tdm = td.to_h5(filename=tmpdir / "file.h5")
         assert tdm.names == ["a", "b", "c", "d"]
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
     def test_h5_td(self):
         td = self.td_h5("cpu")
         td.names = list("abcd")
