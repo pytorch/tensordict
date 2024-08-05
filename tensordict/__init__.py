@@ -6,7 +6,11 @@
 import tensordict._reductions
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, TensorDict
-from tensordict.base import TensorDictBase
+from tensordict.base import (
+    get_defaults_to_none,
+    set_get_defaults_to_none,
+    TensorDictBase,
+)
 from tensordict.functional import (
     dense_stack_tds,
     make_tensordict,
@@ -37,23 +41,3 @@ try:
     from tensordict.version import __version__  # @manual=//pytorch/tensordict:version
 except ImportError:
     __version__ = None
-
-__all__ = [
-    "LazyStackedTensorDict",
-    "NestedKey",
-    "NonTensorData",
-    "NonTensorStack",
-    "PersistentTensorDict",
-    "TensorDict",
-    "TensorDictBase",
-    "assert_allclose_td",
-    "assert_close",
-    "dense_stack_tds",
-    "is_batchedtensor",
-    "is_tensor_collection",
-    "make_tensordict",
-    "merge_tensordicts",
-    "pad",
-    "pad_sequence",
-    "tensorclass",
-]

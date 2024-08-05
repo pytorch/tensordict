@@ -11,6 +11,7 @@ import os
 
 import tempfile
 import warnings
+import weakref
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Tuple, Type
@@ -45,6 +46,7 @@ from tensordict.utils import (
     _split_tensordict,
     _zip_strict,
     cache,
+    erase_cache,
     expand_right,
     IndexType,
     is_non_tensor,
@@ -297,7 +299,8 @@ class PersistentTensorDict(TensorDictBase):
                 )
             return out
         else:
-            out = self._nested_tensordicts.get(key)
+            # TODO: remove the None in v0.7
+            out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,
@@ -307,14 +310,14 @@ class PersistentTensorDict(TensorDictBase):
             return out
 
     @cache  # noqa: B019
-    def get(self, key: NestedKey, default=None):
+    def _get_str(self, key: NestedKey, default):
+        key = _unravel_key_to_tuple(key)
         array = self._get_array(key, default)
         if array is default:
             return array
         return self._process_array(key, array)
 
-    _get_str = get
-    _get_tuple = get
+    _get_tuple = _get_str
 
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
@@ -350,7 +353,8 @@ class PersistentTensorDict(TensorDictBase):
                 return out.pin_memory()
             return out
         elif array is not default:
-            out = self._nested_tensordicts.get(key)
+            # TODO: remove the None in v0.7
+            out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,
@@ -575,6 +579,43 @@ class PersistentTensorDict(TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
+        """Registers the parent tensordict that handles the lock."""
+        self._is_locked = True
+        if lock_parents_weakrefs is not None:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in self._lock_parents_weakrefs)
+            ]
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
+
+        for _td in self._nested_tensordicts.values():
+            _td._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
+
+    @erase_cache
+    def _propagate_unlock(self):
+        # if we end up here, we can clear the graph associated with this td
+        self._is_locked = False
+
+        self._is_shared = False
+        self._is_memmap = False
+
+        sub_tds = []
+        for _td in self._nested_tensordicts.values():
+            sub_tds.extend(_td._propagate_unlock())
+            sub_tds.append(_td)
+        return sub_tds
+
     def zero_(self) -> T:
         for key in self.keys():
             self.fill_(key, 0)
@@ -697,7 +738,7 @@ class PersistentTensorDict(TensorDictBase):
         dest._is_memmap = True
         for key, value in self._items_metadata():
             if not value["array"]:
-                value = self._get_str(key)
+                value = self._get_str(key, default=NO_DEFAULT)
                 dest._set_str(
                     key,
                     value._memmap_(
@@ -715,7 +756,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
                 continue
             else:
-                value = self._get_str(key)
+                value = self._get_str(key, default=NO_DEFAULT)
                 if prefix is not None:
                     metadata[key] = {
                         "dtype": str(value.dtype),
@@ -930,7 +971,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def _create_nested_str(self, key):
         self.file.create_group(key)
-        target_td = self._get_str(key)
+        target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
     def _select(
@@ -1046,20 +1087,18 @@ class PersistentTensorDict(TensorDictBase):
             elif self.is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
         # shortcut set if we're placing a tensordict
+        key = _unravel_key_to_tuple(key)
+        first_key, subkey = key[0], key[1:]
         if is_tensor_collection(value):
-            if isinstance(key, tuple):
-                key, subkey = key[0], key[1:]
-            else:
-                key, subkey = key, []
-            target_td = self._get_str(key, default=None)
+            target_td = self._get_str(first_key, default=None)
             if target_td is None:
-                self.file.create_group(key)
-                target_td = self._get_str(key)
+                self.file.create_group(first_key)
+                target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
                     f"cannot set a tensor collection in place of a non-tensor collection in {type(self).__name__}. "
-                    f"Got self.get({key})={target_td} and value={value}."
+                    f"Got self.get({first_key})={target_td} and value={value}."
                 )
             if idx is None:
                 if len(subkey):
@@ -1119,6 +1158,9 @@ class PersistentTensorDict(TensorDictBase):
                     )
                     del self.file[key]
                     self.file.create_dataset(key, data=value, **self.kwargs)
+            # If we have a nested key, let's make sure we have the corresponding TD registered
+            if subkey:
+                self._get_tuple((first_key, *subkey[:-1]), default=NO_DEFAULT)
         return self
 
     def _convert_inplace(self, inplace, key):
@@ -1158,6 +1200,7 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def _set_tuple(self, key, value, *, inplace, validated, non_blocking):
+        key = _unravel_key_to_tuple(key)
         if len(key) == 1:
             return self._set_str(
                 key[0],
@@ -1167,7 +1210,7 @@ class PersistentTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
             )
         elif key[0] in self.keys():
-            return self._get_str(key[0])._set_tuple(
+            return self._get_str(key[0], NO_DEFAULT)._set_tuple(
                 key[1:],
                 value,
                 inplace=inplace,
@@ -1359,8 +1402,8 @@ def _set_max_batch_size(source: PersistentTensorDict):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source._items_metadata())
     for key, val in tensor_data:
-        if not val.get("non_tensor") and not val.get("array"):
-            _set_max_batch_size(source.get(key))
+        if not val.get("non_tensor", None) and not val.get("array", None):
+            _set_max_batch_size(source.get(key, None))
 
     batch_size = []
     if not tensor_data:  # when source is empty

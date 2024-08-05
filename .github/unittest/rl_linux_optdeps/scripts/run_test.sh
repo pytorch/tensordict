@@ -17,6 +17,8 @@ root_dir="$(git rev-parse --show-toplevel)"
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
+# RL should work with the new API
+export TD_GET_DEFAULTS_TO_NONE='1'
 
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
 MUJOCO_GL=egl python -m pytest rl/test --instafail -v --durations 20 --ignore rl/test/test_distributed.py

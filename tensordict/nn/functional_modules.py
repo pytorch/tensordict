@@ -414,7 +414,8 @@ def _swap_state(
     for key, value in tensordict.items():
         cls = type(value)
         if _is_tensor_collection(cls) or issubclass(cls, dict):
-            _old_value = old_tensordict.get(key)
+            # TODO: v0.7: remove the None
+            _old_value = old_tensordict.get(key, None)
             _old_value = _swap_state(
                 __dict__["_modules"][key],
                 value,

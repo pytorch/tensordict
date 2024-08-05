@@ -89,6 +89,7 @@ from tensordict.utils import (
     NestedKey,
     prod,
     set_lazy_legacy,
+    strtobool,
     TensorDictFuture,
     unravel_key,
     unravel_key_list,
@@ -133,6 +134,31 @@ CompatibleType = Union[Tensor,]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
+
+if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
+    _GET_DEFAULTS_TO_NONE = strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
+else:
+    _GET_DEFAULTS_TO_NONE = None
+
+
+def set_get_defaults_to_none(set_to_none: bool = True):
+    """Sets the default of `get` to `None` and silences deprecation warnings during calls to `get` that result in a `KeyError`.
+
+    This can also be controlled via the environment variable ``TD_GET_DEFAULTS_TO_NONE``.
+
+    Args:
+        set_to_none (bool): whether the default of `get` should be `None`, or should `get` raise a `KeyError` if
+            no `default` is passed and the key is absent from the `TensorDict`.
+            Defaults to `True`.
+
+    """
+    global _GET_DEFAULTS_TO_NONE
+    _GET_DEFAULTS_TO_NONE = set_to_none
+
+
+def get_defaults_to_none(set_to_none: bool = True):
+    """Returns the status of `get` default value."""
+    return _GET_DEFAULTS_TO_NONE
 
 
 class _RecordDeviceTransfer:
@@ -3108,7 +3134,7 @@ class TensorDictBase(MutableMapping):
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
-                dest = self.get(key)
+                dest = self.get(key, None)
                 if dest is None:
                     dest = self.empty()
                 dest.load_state_dict(item, assign=assign, strict=strict)
@@ -4536,26 +4562,64 @@ class TensorDictBase(MutableMapping):
                 _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
             )
 
-    def get(self, key: NestedKey, default: Any = None) -> CompatibleType:
+    def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType:
         """Gets the value stored with the input key.
 
         Args:
             key (str, tuple of str): key to be queried. If tuple of str it is
                 equivalent to chained calls of getattr.
             default: default value if the key is not found in the tensordict.
-                Defaults to ``None``.
+                .. warning:: Currently, if a key is not present in the tensordict and no default
+                    is passed, a `KeyError` is raised. From v0.7, this behaviour will be changed
+                    and a `None` value will be returned instead. To adopt the new behaviour,
+                    set the environment variable `export TD_GET_DEFAULTS_TO_NONE='1'` or call
+                    :func`~tensordict.set_get_defaults_to_none`.
 
         Examples:
             >>> td = TensorDict({"x": 1}, batch_size=[])
             >>> td.get("x")
             tensor(1)
+            >>> set_get_defaults_to_none(False) # Current default behaviour
+            >>> td.get("y") # Raises KeyError
+            >>> set_get_defaults_to_none(True)
             >>> td.get("y")
             None
         """
         key = _unravel_key_to_tuple(key)
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        return self._get_tuple(key, default=default)
+        # Find what the default is
+        has_default = False
+        if args:
+            default = args[0]
+            if len(args) > 1 or kwargs:
+                raise TypeError("only one (keyword) argument is allowed.")
+            has_default = True
+        elif kwargs:
+            default = kwargs.pop("default")
+            if args or kwargs:
+                raise TypeError("only one (keyword) argument is allowed.")
+            has_default = True
+        elif _GET_DEFAULTS_TO_NONE:
+            default = None
+        else:
+            default = NO_DEFAULT
+        try:
+            return self._get_tuple(key, default=default)
+        except KeyError:
+            if _GET_DEFAULTS_TO_NONE is None and not has_default:
+                # We raise an exception AND a warning because we want the user to know that this exception will
+                # not be raised in the future
+                warnings.warn(
+                    "The entry you have queried with `get` is not present in the tensordict. "
+                    "Currently, this raises an exception. "
+                    "To align with `dict.get`, this behaviour will be changed in v0.7 and a `None` value will "
+                    "be returned instead (no error will be raised). "
+                    "To suppress this warning and use the new behaviour (recommended), call `tensordict.set_get_defaults_to_none(True)` or set the env variable `export TD_GET_DEFAULTS_TO_NONE='1'`. "
+                    "To suppress this warning and keep the old behaviour, call `tensordict.set_get_defaults_to_none(False)` or set the env variable `export TD_GET_DEFAULTS_TO_NONE='0'`.",
+                    category=DeprecationWarning,
+                )
+            raise
 
     @abc.abstractmethod
     def _get_str(self, key, default): ...

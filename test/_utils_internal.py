@@ -286,9 +286,11 @@ class TestTensorDictsBase:
     ):
         file = tempfile.NamedTemporaryFile()
         filename = file.name
+        nested_td = self.nested_td(device)
         td_h5 = PersistentTensorDict.from_dict(
-            self.nested_td(device), filename=filename, device=device
+            nested_td, filename=filename, device=device
         )
+        assert td_h5.batch_size == nested_td.batch_size
         return td_h5
 
     if _has_h5py:

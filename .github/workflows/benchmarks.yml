@@ -35,6 +35,7 @@ jobs:
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
+          export TD_GET_DEFAULTS_TO_NONE=1
           python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
@@ -116,6 +117,7 @@ jobs:
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
+          export TD_GET_DEFAULTS_TO_NONE=1
           python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1

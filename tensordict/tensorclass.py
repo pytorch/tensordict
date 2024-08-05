@@ -154,7 +154,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "_fast_apply",
     "_get_sub_tensordict",
     "_multithread_apply_flat",
-    "_multithread_rebuild",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
@@ -1737,7 +1736,8 @@ def _names(self) -> torch.Size:
 def _data(self):
     # We allow data to be a field of the class too
     if "data" in self.__dataclass_fields__:
-        data = self._tensordict.get("data")
+        # TODO: remove the None in v0.7
+        data = self._tensordict.get("data", None)
         if data is None:
             data = self._non_tensordict.get("data")
         return data
