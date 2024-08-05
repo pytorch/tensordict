@@ -16,6 +16,7 @@ import platform
 import re
 import sys
 import uuid
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,9 +34,11 @@ from _utils_internal import (
 )
 
 from tensordict import (
+    get_defaults_to_none,
     LazyStackedTensorDict,
     make_tensordict,
     PersistentTensorDict,
+    set_get_defaults_to_none,
     TensorDict,
 )
 from tensordict._lazy import _CustomOpTensorDict
@@ -3084,7 +3087,8 @@ class TestTensorDicts(TestTensorDictsBase):
         td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
         if inplace:
             for key in td.keys(True, True):
-                td_c_val = td_c.get(key)
+                # TODO: remove default None in v0.7
+                td_c_val = td_c.get(key, None)
                 if td_c_val is not None:
                     assert (td_c[key] == td[key]).all()
                 else:
@@ -3093,7 +3097,8 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_1[key] == td[key]).all()
         else:
             for key in td.keys(True, True):
-                td_c_val = td_c.get(key)
+                # TODO: remove default None in v0.7
+                td_c_val = td_c.get(key, None)
                 if td_c_val is not None:
                     assert (td_c[key] == td_1[key]).all()
                 else:
@@ -3295,7 +3300,7 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 assert a is not b
 
-        if td_name != "td_params":
+        if td_name not in ("td_params", "td_h5"):
             assert len(td._cache)
         td.unlock_()
         assert td._cache is None
@@ -4220,6 +4225,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="Cannot lock"):
                 td.lock_()
             return
+        assert not td.is_locked
         td.lock_()
         some = td.get("some")
         assert some.is_locked
@@ -5610,7 +5616,8 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._cache.get("sorted_keys") is not None
+            # TODO: remove default None in v0.7
+            assert td._cache.get("sorted_keys", None) is not None
             td.unlock_()
             assert td._cache is None
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
@@ -5621,7 +5628,8 @@ class TestTensorDicts(TestTensorDictsBase):
             assert target._cache is None
             td.lock_()
             _ = td.sorted_keys
-            assert target._cache.get("sorted_keys") is not None
+            # TODO: remove default None in v0.7
+            assert target._cache.get("sorted_keys", None) is not None
             td.unlock_()
             assert target._cache is None
 
@@ -8538,6 +8546,173 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+
+class TestErrors:
+    def test_error_get(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            if get_defaults_to_none():
+                assert td.get("c") is None
+                assert td.get(("b", "d")) is None
+            elif get_defaults_to_none() is None:
+                with pytest.raises(KeyError), pytest.warns(DeprecationWarning):
+                    td.get("c")
+                with pytest.raises(KeyError), pytest.warns(DeprecationWarning):
+                    td.get(("b", "d"))
+            else:
+                with pytest.raises(KeyError), warnings.catch_warnings():
+                    td.get("c")
+                with pytest.raises(KeyError), warnings.catch_warnings():
+                    td.get(("b", "d"))
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
+
+    def test_getitem(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td["c"]
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td["b", "d"]
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
+
+    def test_rename(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            tdclone = td.clone()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.rename_key_("c", "d")
+            assert (td == tdclone).all()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.rename_key_(("b", "d"), "c")
+            assert (td == tdclone).all()
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
+
+    def test_del(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            tdclone = td.clone()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.del_("c")
+            assert (td == tdclone).all()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.del_(("b", "d"))
+            assert (td == tdclone).all()
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
+
+    def test_select(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            tdclone = td.clone()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.select("c")
+            assert (td == tdclone).all()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.select(("b", "d"))
+            assert (td == tdclone).all()
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
+
+    def test_split_keys(self):
+        td = TensorDict({"a": 0, "b": {"c": 1}})
+
+        def run_assertions():
+            tdclone = td.clone()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.split_keys(["c"])
+            assert (td == tdclone).all()
+            with pytest.raises(KeyError), warnings.catch_warnings():
+                td.split_keys([("b", "d")])
+            assert (td == tdclone).all()
+
+        set_back = get_defaults_to_none()
+        try:
+            run_assertions()
+            set_get_defaults_to_none(False)
+            assert not get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(True)
+            assert get_defaults_to_none()
+            run_assertions()
+            set_get_defaults_to_none(None)
+            assert get_defaults_to_none() is None
+            run_assertions()
+        finally:
+            set_get_defaults_to_none(set_back)
 
 
 class TestNamedDims(TestTensorDictsBase):

@@ -1977,7 +1977,8 @@ class TensorDict(TensorDictBase):
         input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                cur_value = self.get(key)
+                # TODO: v0.7: remove the None
+                cur_value = self.get(key, None)
                 if cur_value is not None:
                     input_dict[key] = cur_value.from_dict_instance(
                         value, batch_size=[], device=device, batch_dims=None
@@ -3497,13 +3498,6 @@ class _SubTensorDict(TensorDictBase):
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
-
-    def get(
-        self,
-        key: NestedKey,
-        default: Tensor | str | None = None,
-    ) -> CompatibleType:
-        return self._source.get_at(key, self.idx, default=default)
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
