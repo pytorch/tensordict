@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="MemoryMappedTensor" href="tensordict.MemoryMappedTensor.html" />
+    <link rel="next" title="get_defaults_to_none" href="tensordict.get_defaults_to_none.html" />
     <link rel="prev" title="PersistentTensorDict" href="tensordict.PersistentTensorDict.html" />
   <!-- Google Analytics -->
   
@@ -2344,8 +2344,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><em>str</em></a><em>, </em><em>tuple of str</em>) – key to be queried. If tuple of str it is
 equivalent to chained calls of getattr.</p></li>
-<li><p><strong>default</strong> – default value if the key is not found in the tensordict.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>default</strong> – <p>default value if the key is not found in the tensordict.
+.. warning:: Currently, if a key is not present in the tensordict and no default</p>
+<blockquote>
+<div><p>is passed, a <cite>KeyError</cite> is raised. From v0.7, this behaviour will be changed
+and a <cite>None</cite> value will be returned instead. To adopt the new behaviour,
+set the environment variable <cite>export TD_GET_DEFAULTS_TO_NONE=’1’</cite> or call
+:func`~tensordict.set_get_defaults_to_none`.</p>
+</div></blockquote>
+</p></li>
 </ul>
 </dd>
 </dl>
@@ -2353,6 +2360,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span>
 <span class="go">tensor(1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_get_defaults_to_none</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span> <span class="c1"># Current default behaviour</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)</span> <span class="c1"># Raises KeyError</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_get_defaults_to_none</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)</span>
 <span class="go">None</span>
 </pre></div>
@@ -6775,7 +6785,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.MemoryMappedTensor.html" class="btn btn-neutral float-right" title="MemoryMappedTensor" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.get_defaults_to_none.html" class="btn btn-neutral float-right" title="get_defaults_to_none" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="tensordict.PersistentTensorDict.html" class="btn btn-neutral" title="PersistentTensorDict" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

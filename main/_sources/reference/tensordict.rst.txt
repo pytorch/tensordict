@@ -17,6 +17,8 @@ regular pytorch tensors.
     LazyStackedTensorDict
     PersistentTensorDict
     TensorDictParams
+    get_defaults_to_none
+
 
 TensorDict as a context manager
 -------------------------------
