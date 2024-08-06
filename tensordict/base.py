@@ -6973,9 +6973,10 @@ class TensorDictBase(MutableMapping):
                 )
             finally:
                 try:
+                    pool.close()
+                    pool.join(timeout=60)
+                except TimeoutError:
                     pool.terminate()
-                finally:
-                    pool.join()
         else:
             yield from self._map(
                 fn=fn,
