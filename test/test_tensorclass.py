@@ -47,6 +47,9 @@ from tensordict import (
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from torch import Tensor
 
+# Capture all warnings
+pytestmark = pytest.mark.filterwarnings("error")
+
 
 def _make_data(shape):
     return MyData(

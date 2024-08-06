@@ -128,10 +128,11 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "is_shared",
     "items",
     "keys",
-    # "ndim",
     "ndimension",
     "numel",
+    "size",
     "values",
+    # "ndim",
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
@@ -252,6 +253,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "new_zeros",
     "norm",
     "permute",
+    "pin_memory",
     "pow",
     "pow_",
     "prod",
@@ -1104,12 +1106,13 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
     return wrapped_func
 
 
-def _wrap_method(self, attr, func):
-    warnings.warn(
-        f"The method {func} wasn't explicitly implemented for tensorclass. "
-        f"This fallback will be deprecated in future releases because it is inefficient "
-        f"and non-compilable. Please raise an issue in tensordict repo to support this method!"
-    )
+def _wrap_method(self, attr, func, nowarn=False):
+    if not nowarn:
+        warnings.warn(
+            f"The method {func} wasn't explicitly implemented for tensorclass. "
+            f"This fallback will be deprecated in future releases because it is inefficient "
+            f"and non-compilable. Please raise an issue in tensordict repo to support this method!"
+        )
 
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
@@ -2666,14 +2669,17 @@ class NonTensorData:
 
     def _fast_apply(self, *args, **kwargs):
         kwargs["filter_empty"] = False
-        return _wrap_method(self, "_fast_apply", self._tensordict._fast_apply)(
-            *args, **kwargs
-        )
+        return _wrap_method(
+            self, "_fast_apply", self._tensordict._fast_apply, nowarn=True
+        )(*args, **kwargs)
 
     def _multithread_rebuild(self, *args, **kwargs):
         kwargs["filter_empty"] = False
         return _wrap_method(
-            self, "_multithread_rebuild", self._tensordict._multithread_rebuild
+            self,
+            "_multithread_rebuild",
+            self._tensordict._multithread_rebuild,
+            nowarn=True,
         )(*args, **kwargs)
 
     def tolist(self):

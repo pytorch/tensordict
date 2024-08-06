@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import copy
 import pickle
 import unittest
@@ -35,7 +36,6 @@ from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
     Delta,
     NormalParamExtractor,
-    NormalParamWrapper,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
@@ -66,6 +66,13 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+
+
+# Capture all warnings
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings("ignore:enable_nested_tensor is True"),
+]
 
 
 class TestInteractionType:
@@ -310,7 +317,9 @@ class TestTDModule:
 
         in_keys = ["in"]
         net = TensorDictModule(
-            module=NormalParamWrapper(net), in_keys=in_keys, out_keys=out_keys
+            module=nn.Sequential(net, NormalParamExtractor()),
+            in_keys=in_keys,
+            out_keys=out_keys,
         )
 
         kwargs = {"distribution_class": Normal}
@@ -329,7 +338,12 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(interaction_type):
-            tensordict_module(td)
+            with (
+                pytest.warns(UserWarning, match="deterministic_sample")
+                if interaction_type in (InteractionType.DETERMINISTIC, None)
+                else contextlib.nullcontext()
+            ):
+                tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -368,7 +382,12 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(interaction_type):
-            tensordict_module(td)
+            with (
+                pytest.warns(UserWarning, match="deterministic_sample")
+                if interaction_type in (None, InteractionType.DETERMINISTIC)
+                else contextlib.nullcontext()
+            ):
+                tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -428,7 +447,12 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(interaction_type):
-            tensordict_module(td)
+            with (
+                pytest.warns(UserWarning, match="deterministic_sample")
+                if interaction_type in (None, InteractionType.DETERMINISTIC)
+                else contextlib.nullcontext()
+            ):
+                tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -533,9 +557,10 @@ class TestTDModule:
             module=net, in_keys=["in"], out_keys=["out"]
         )
 
-        tensordict_module, params, buffers = make_functional_functorch(
-            tensordict_module
-        )
+        with pytest.warns(FutureWarning, match="integrated functorch"):
+            tensordict_module, params, buffers = make_functional_functorch(
+                tensordict_module
+            )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(params, buffers, td)
@@ -550,7 +575,9 @@ class TestTDModule:
         param_multiplier = 2
 
         tdnet = TensorDictModule(
-            module=NormalParamWrapper(nn.Linear(3, 4 * param_multiplier)),
+            module=nn.Sequential(
+                nn.Linear(3, 4 * param_multiplier), NormalParamExtractor()
+            ),
             in_keys=["in"],
             out_keys=["loc", "scale"],
         )
@@ -564,7 +591,8 @@ class TestTDModule:
         params = make_functional(tensordict_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tensordict_module(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -595,7 +623,8 @@ class TestTDModule:
         params = make_functional(tensordict_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tensordict_module(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -625,7 +654,9 @@ class TestTDModule:
         param_multiplier = 2
 
         tdnet = TensorDictModule(
-            module=NormalParamWrapper(nn.BatchNorm1d(32 * param_multiplier)),
+            module=nn.Sequential(
+                nn.BatchNorm1d(32 * param_multiplier), NormalParamExtractor()
+            ),
             in_keys=["in"],
             out_keys=["loc", "scale"],
         )
@@ -639,7 +670,8 @@ class TestTDModule:
         params = make_functional(tdmodule)
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
@@ -668,7 +700,8 @@ class TestTDModule:
         params = make_functional(tdmodule)
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
@@ -707,7 +740,7 @@ class TestTDModule:
         torch.manual_seed(0)
         param_multiplier = 2
 
-        net = NormalParamWrapper(nn.Linear(3, 4 * param_multiplier))
+        net = nn.Sequential(nn.Linear(3, 4 * param_multiplier), NormalParamExtractor())
 
         tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
 
@@ -722,7 +755,8 @@ class TestTDModule:
         # vmap = True
         params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -730,7 +764,8 @@ class TestTDModule:
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
         assert td_out is not td_repeat
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -771,7 +806,8 @@ class TestTDModule:
         # vmap = True
         params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -779,7 +815,8 @@ class TestTDModule:
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
         assert td_out is not td_repeat
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1056,7 +1093,7 @@ class TestTDSequence:
             net1 = nn.Linear(3, 4)
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         kwargs = {"distribution_class": Normal}
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
@@ -1091,7 +1128,8 @@ class TestTDSequence:
         assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1147,7 +1185,8 @@ class TestTDSequence:
         assert tdmodule[3] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1215,7 +1254,8 @@ class TestTDSequence:
         tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["out"])
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
-        ftdmodule, params, buffers = make_functional_functorch(tdmodule)
+        with pytest.warns(FutureWarning):
+            ftdmodule, params, buffers = make_functional_functorch(tdmodule)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         ftdmodule(params, buffers, td)
@@ -1232,7 +1272,7 @@ class TestTDSequence:
         net1 = nn.Linear(3, 4)
         dummy_net = nn.Linear(4, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
         dummy_tdmodule = TensorDictModule(
@@ -1276,7 +1316,8 @@ class TestTDSequence:
         assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1340,7 +1381,8 @@ class TestTDSequence:
         assert tdmodule[3] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1405,7 +1447,7 @@ class TestTDSequence:
         net2 = nn.Sequential(
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
         dummy_tdmodule = TensorDictModule(
@@ -1450,7 +1492,8 @@ class TestTDSequence:
         assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
 
         dist = tdmodule.get_dist(td, params=params)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
@@ -1518,7 +1561,8 @@ class TestTDSequence:
         assert tdmodule[3] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
-        tdmodule(td, params=params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            tdmodule(td, params=params)
 
         dist = tdmodule.get_dist(td, params=params)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
@@ -1590,7 +1634,7 @@ class TestTDSequence:
         net1 = nn.Linear(3, 4)
 
         net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         kwargs = {"distribution_class": Normal}
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
@@ -1612,7 +1656,8 @@ class TestTDSequence:
         # vmap = True
         params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1620,7 +1665,8 @@ class TestTDSequence:
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
         assert td_out is not td_repeat
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1655,7 +1701,8 @@ class TestTDSequence:
         # vmap = True
         params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1663,7 +1710,8 @@ class TestTDSequence:
         # vmap = (0, 0)
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
         assert td_out is not td_repeat
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
@@ -1765,11 +1813,11 @@ class TestTDSequence:
         net1 = nn.Linear(3, 4)
 
         net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
         net2 = TensorDictModule(net2, in_keys=["b"], out_keys=["loc", "scale"])
 
         net3 = nn.Linear(4, 4 * param_multiplier)
-        net3 = NormalParamWrapper(net3)
+        net3 = nn.Sequential(net3, NormalParamExtractor())
         net3 = TensorDictModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
         kwargs = {"distribution_class": Normal}
@@ -1804,10 +1852,11 @@ class TestTDSequence:
                 ],
                 0,
             )
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
+            with pytest.warns(UserWarning, match="deterministic_sample"):
+                if functional:
+                    tdmodule(td, params=params)
+                else:
+                    tdmodule(td)
             assert "loc" in td.keys()
             assert "scale" in td.keys()
             assert "out" in td.keys()
@@ -1818,10 +1867,11 @@ class TestTDSequence:
             assert "b" in td[0].keys()
         else:
             td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
+            with pytest.warns(UserWarning, match="deterministic_sample"):
+                if functional:
+                    tdmodule(td, params=params)
+                else:
+                    tdmodule(td)
             assert "loc" in td.keys()
             assert "scale" in td.keys()
             assert "out" in td.keys()
@@ -1882,10 +1932,11 @@ class TestTDSequence:
                 ],
                 0,
             )
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
+            with pytest.warns(UserWarning, match="deterministic_sample"):
+                if functional:
+                    tdmodule(td, params=params)
+                else:
+                    tdmodule(td)
             assert "loc" in td.keys()
             assert "scale" in td.keys()
             assert "out" in td.keys()
@@ -1896,10 +1947,11 @@ class TestTDSequence:
             assert "b" in td[0].keys()
         else:
             td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
+            with pytest.warns(UserWarning, match="deterministic_sample"):
+                if functional:
+                    tdmodule(td, params=params)
+                else:
+                    tdmodule(td)
             assert "loc" in td.keys()
             assert "scale" in td.keys()
             assert "out" in td.keys()
@@ -1996,7 +2048,8 @@ def test_input():
         TensorDictModule(module, in_keys=[("_", "")], out_keys=[("_", "")])
         TensorDictModule(module, in_keys=[("_", "")], out_keys=[("a", "a")])
         TensorDictModule(module, in_keys=[""], out_keys=["_"])
-        TensorDictModule(module, in_keys=["_"], out_keys=[""])
+        with pytest.warns(UserWarning, match='key "_"'):
+            TensorDictModule(module, in_keys=["_"], out_keys=[""])
 
     # this should raise
     for wrong_model in (MyModule, int, [123], 1, torch.randn(2)):
@@ -2213,19 +2266,29 @@ class TestMakeFunctionalVmap:
         params = params.clone()
         params.zero_()
         td = self.td
-        if not keyword:
-            if not stateless and module_type == "nnModule":
-                with pytest.raises(TypeError, match="It seems you tried to provide"):
-                    if extra_kwargs:
-                        _ = module(td, params, extra=None)
-                    else:
-                        _ = module(td, params)
-                return
-            tdout = module(td, params)
-            assert (tdout == self.td_zero).all()
-        else:
-            tdout = module(td, params=params)
-            assert (tdout == self.td_zero).all(), tdout
+        with (
+            pytest.warns(
+                UserWarning,
+                match="You are passing a tensordict/tensorclass instance to a module",
+            )
+            if module_type in ("nnModule",)
+            else contextlib.nullcontext()
+        ):
+            if not keyword:
+                if not stateless and module_type == "nnModule":
+                    with pytest.raises(
+                        TypeError, match="It seems you tried to provide"
+                    ):
+                        if extra_kwargs:
+                            _ = module(td, params, extra=None)
+                        else:
+                            _ = module(td, params)
+                    return
+                tdout = module(td, params)
+                assert (tdout == self.td_zero).all()
+            else:
+                tdout = module(td, params=params)
+                assert (tdout == self.td_zero).all(), tdout
 
     @pytest.mark.parametrize("module_type", ["TDMBase", "nnModule", "TDM"])
     @pytest.mark.parametrize("stateless", [True, False])
@@ -2237,21 +2300,31 @@ class TestMakeFunctionalVmap:
         params = params.expand(5).to_tensordict().lock_()
         params.zero_()
         td = self.td.expand(5, 3).to_tensordict()
-        if not keyword:
-            if not stateless and module_type == "nnModule":
-                with pytest.raises(TypeError, match="It seems you tried to provide"):
-                    if extra_kwargs:
-                        _ = vmap(module)(td, params, extra=None)
-                    else:
-                        _ = vmap(module)(td, params)
-                return
-            tdout = vmap(module)(td, params)
-            assert (tdout == self.td_zero).all()
-        else:
-            # this isn't supposed to work: keyword arguments are not expanded with vmap
-            with pytest.raises(Exception):
-                tdout = vmap(module)(td, params=params)
-                assert (tdout == self.td_zero).all(), tdout
+        with (
+            pytest.warns(
+                UserWarning,
+                match="You are passing a tensordict/tensorclass instance to a module",
+            )
+            if module_type in ("nnModule",)
+            else contextlib.nullcontext()
+        ):
+            if not keyword:
+                if not stateless and module_type == "nnModule":
+                    with pytest.raises(
+                        TypeError, match="It seems you tried to provide"
+                    ):
+                        if extra_kwargs:
+                            _ = vmap(module)(td, params, extra=None)
+                        else:
+                            _ = vmap(module)(td, params)
+                    return
+                tdout = vmap(module)(td, params)
+                assert (tdout == self.td_zero).all()
+            else:
+                # this isn't supposed to work: keyword arguments are not expanded with vmap
+                with pytest.raises(Exception):
+                    tdout = vmap(module)(td, params=params)
+                    assert (tdout == self.td_zero).all(), tdout
 
 
 class TestSkipExisting:
@@ -2762,26 +2835,27 @@ def test_nested_keys_probabilistic_normal(log_prob_key):
         return_log_prob=True,
         log_prob_key=log_prob_key,
     )
-    td_out = module(loc_module(scale_module(td)))
-    assert td_out["data", "action"].shape == (3, 4, 1)
-    if log_prob_key:
-        assert td_out[log_prob_key].shape == (3, 4, 1)
-    else:
-        assert td_out["sample_log_prob"].shape == (3, 4, 1)
+    with pytest.warns(UserWarning, match="deterministic_sample"):
+        td_out = module(loc_module(scale_module(td)))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4, 1)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
-    module = ProbabilisticTensorDictModule(
-        in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
-        out_keys=[("data", "action")],
-        distribution_class=Normal,
-        return_log_prob=True,
-        log_prob_key=log_prob_key,
-    )
-    td_out = module(loc_module(scale_module(td)))
-    assert td_out["data", "action"].shape == (3, 4, 1)
-    if log_prob_key:
-        assert td_out[log_prob_key].shape == (3, 4, 1)
-    else:
-        assert td_out["sample_log_prob"].shape == (3, 4, 1)
+        module = ProbabilisticTensorDictModule(
+            in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+            out_keys=[("data", "action")],
+            distribution_class=Normal,
+            return_log_prob=True,
+            log_prob_key=log_prob_key,
+        )
+        td_out = module(loc_module(scale_module(td)))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4, 1)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
 
 class TestEnsembleModule:

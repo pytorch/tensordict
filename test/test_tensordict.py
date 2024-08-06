@@ -98,6 +98,23 @@ HAS_NESTED_TENSOR = (
     getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
 )
 
+# Capture all warnings
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:There is a performance drop because we have not yet implemented the batching rule"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:A destination should be provided when cloning a PersistentTensorDict"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:Replacing an array with another one is inefficient"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:Indexing an h5py.Dataset object with a boolean mask that needs broadcasting does not work directly"
+    ),
+]
+
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
 
 
@@ -279,33 +296,38 @@ class TestGeneric:
                 (2, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
             )
         else:
-            layout = torch.jagged
-            a = torch.nested.nested_tensor(
-                [torch.zeros((1,), device=device), torch.zeros((2,), device=device)],
-                layout=layout,
-            )
-            c = torch.nested.nested_tensor(
-                [
-                    torch.ones(
-                        (1,),
-                        device=device,
-                        dtype=torch.float16 if hetdtype else torch.float32,
-                    ),
-                    torch.ones(
-                        (2,),
-                        device=device,
-                        dtype=torch.float16 if hetdtype else torch.float32,
-                    ),
-                ],
-                layout=layout,
-            )
-            g0 = torch.full(
-                (1, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
-            )
-            g1 = torch.full(
-                (2, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
-            )
-            g = torch.nested.nested_tensor([g0, g1], layout=layout)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                layout = torch.jagged
+                a = torch.nested.nested_tensor(
+                    [
+                        torch.zeros((1,), device=device),
+                        torch.zeros((2,), device=device),
+                    ],
+                    layout=layout,
+                )
+                c = torch.nested.nested_tensor(
+                    [
+                        torch.ones(
+                            (1,),
+                            device=device,
+                            dtype=torch.float16 if hetdtype else torch.float32,
+                        ),
+                        torch.ones(
+                            (2,),
+                            device=device,
+                            dtype=torch.float16 if hetdtype else torch.float32,
+                        ),
+                    ],
+                    layout=layout,
+                )
+                g0 = torch.full(
+                    (1, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
+                )
+                g1 = torch.full(
+                    (2, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
+                )
+                g = torch.nested.nested_tensor([g0, g1], layout=layout)
 
         td = TensorDict(
             {
@@ -533,7 +555,7 @@ class TestGeneric:
             [3, 4],
         )
         td1 = td + 1
-        td1.apply(lambda x: x.sum().backward(retain_graph=True))
+        td1.apply(lambda x: x.sum().backward(retain_graph=True), filter_empty=True)
         assert not td.grad.is_locked
         assert td.grad is not td.grad
         assert not td.data.is_locked
@@ -935,6 +957,7 @@ class TestGeneric:
             nhead=2,
             num_encoder_layers=3,
             dim_feedforward=12,
+            batch_first=True,
         )
         td = TensorDict.from_module(net, as_module=params, filter_empty=False)
         # check that we have empty tensordicts, reflecting modules without params
@@ -956,6 +979,7 @@ class TestGeneric:
             nhead=2,
             num_encoder_layers=3,
             dim_feedforward=12,
+            batch_first=True,
         )
 
         def adder(module, *args, **kwargs):
@@ -1008,9 +1032,17 @@ class TestGeneric:
             def get_leaf(leaf):
                 leaves.append(leaf)
 
-            params.apply(get_leaf)
+            params.apply(get_leaf, filter_empty=True)
             assert all(param.grad is not None for param in leaves)
-            assert all(param.grad is None for param in params.values(True, True))
+            with (
+                pytest.warns(
+                    UserWarning,
+                    match="The .grad attribute of a Tensor that is not a leaf Tensor is being accessed.",
+                )
+                if lazy_stack
+                else contextlib.nullcontext()
+            ):
+                assert all(param.grad is None for param in params.values(True, True))
         else:
             for p in modules[0].parameters():
                 assert p.grad is None
@@ -1285,7 +1317,11 @@ class TestGeneric:
 
     def test_load_device(self, tmpdir):
         t = nn.Transformer(
-            d_model=64, nhead=4, num_encoder_layers=3, dim_feedforward=128
+            d_model=64,
+            nhead=4,
+            num_encoder_layers=3,
+            dim_feedforward=128,
+            batch_first=True,
         )
 
         state_dict = TensorDict.from_module(t)
@@ -1321,7 +1357,7 @@ class TestGeneric:
             def assert_fake(tensor):
                 assert isinstance(tensor, FakeTensor)
 
-            fake_state_dict.apply(assert_fake)
+            fake_state_dict.apply(assert_fake, filter_empty=True)
 
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
@@ -1432,10 +1468,14 @@ class TestGeneric:
 
         if HAS_NESTED_TENSOR:
             # test update
-            td.make_memmap_from_tensor(
-                ("e", "f"),
-                torch.nested.nested_tensor([torch.zeros((1, 2)), torch.zeros((1, 3))]),
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                td.make_memmap_from_tensor(
+                    ("e", "f"),
+                    torch.nested.nested_tensor(
+                        [torch.zeros((1, 2)), torch.zeros((1, 3))]
+                    ),
+                )
             td_load.memmap_refresh_()
             assert td_load["e", "f"].is_nested
 
@@ -2554,12 +2594,14 @@ class TestGeneric:
             nhead=2,
             num_encoder_layers=3,
             dim_feedforward=12,
+            batch_first=True,
         )
         net1 = nn.Transformer(
             d_model=16,
             nhead=2,
             num_encoder_layers=3,
             dim_feedforward=12,
+            batch_first=True,
         )
 
         def hook(
@@ -2594,14 +2636,16 @@ class TestGeneric:
 
     @pytest.mark.parametrize("mask_key", [None, "mask"])
     def test_to_padded_tensor(self, mask_key):
-        td = TensorDict(
-            {
-                "nested": torch.nested.nested_tensor(
-                    [torch.ones(3, 4, 5), torch.ones(3, 6, 5)]
-                )
-            },
-            batch_size=[2, 3, -1],
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            td = TensorDict(
+                {
+                    "nested": torch.nested.nested_tensor(
+                        [torch.ones(3, 4, 5), torch.ones(3, 6, 5)]
+                    )
+                },
+                batch_size=[2, 3, -1],
+            )
         assert td.shape == torch.Size([2, 3, -1])
         td_padded = td.to_padded_tensor(padding=0, mask_key=mask_key)
         assert td_padded.shape == torch.Size([2, 3, 6])
@@ -4686,7 +4730,9 @@ class TestTensorDicts(TestTensorDictsBase):
         if dim in (0, -5):
             # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
             # it is the proper way to get that entry
-            td_stack.get_nestedtensor(key)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                td_stack.get_nestedtensor(key)
         else:
             # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
             with pytest.raises(
@@ -4744,18 +4790,19 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name in ("td_params",):
             td = td.data
-        tdn = td.new_tensor(torch.zeros(0, device="cpu"))
-        assert tdn.device == torch.device("cpu")
-        assert tdn.shape == (0,)
-        tdn = td.new_tensor(torch.zeros(2, device="cpu"))
-        assert tdn.device == torch.device("cpu")
-        assert tdn.shape == (2,)
-        tdn = td.new_tensor(td[0] * 0)
-        assert tdn.device == td.device
-        assert (tdn == 0).all()
-        assert tdn.shape == td.shape[1:]
-        if td._has_non_tensor:
-            assert tdn._has_non_tensor
+        with pytest.warns(UserWarning, match="To copy construct from a tensor"):
+            tdn = td.new_tensor(torch.zeros(0, device="cpu"))
+            assert tdn.device == torch.device("cpu")
+            assert tdn.shape == (0,)
+            tdn = td.new_tensor(torch.zeros(2, device="cpu"))
+            assert tdn.device == torch.device("cpu")
+            assert tdn.shape == (2,)
+            tdn = td.new_tensor(td[0] * 0)
+            assert tdn.device == td.device
+            assert (tdn == 0).all()
+            assert tdn.shape == td.shape[1:]
+            if td._has_non_tensor:
+                assert tdn._has_non_tensor
 
     def test_new_zeros(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -9605,7 +9652,14 @@ class TestFCD(TestTensorDictsBase):
         modules = [
             lambda: nn.Linear(3, 4),
             lambda: nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4)),
-            lambda: nn.Transformer(16, 4, 2, 2, 8),
+            lambda: nn.Transformer(
+                16,
+                4,
+                2,
+                2,
+                8,
+                batch_first=True,
+            ),
             lambda: nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv2d(4, 4, 3)),
         ]
         inputs = [
