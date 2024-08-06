@@ -71,6 +71,9 @@ except ImportError as err:
 # Capture all warnings
 pytestmark = [
     pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:You are using `torch.load` with `weights_only=False`"
+    ),
     pytest.mark.filterwarnings("ignore:enable_nested_tensor is True"),
 ]
 

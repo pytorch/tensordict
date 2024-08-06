@@ -48,7 +48,15 @@ from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from torch import Tensor
 
 # Capture all warnings
-pytestmark = pytest.mark.filterwarnings("error")
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:type_hints are none, cannot perform auto-casting"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:You are using `torch.load` with `weights_only=False`"
+    ),
+]
 
 
 def _make_data(shape):
