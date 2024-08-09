@@ -71,6 +71,7 @@ Basics
    tutorials/tensordict_keys
    tutorials/tensordict_preallocation
    tutorials/tensordict_memory
+   tutorials/streamed_tensordict
 
 tensordict.nn
 -------------
