@@ -98,6 +98,23 @@ README Tutos
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_streamed_tensordict_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_streamed_tensordict.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Building tensordicts from streams</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to manipulate the shape of a TensorDict and its contents.">
 
 .. only:: html
@@ -196,6 +213,7 @@ README Tutos
    /tutorials/tensordict_preallocation
    /tutorials/tensordict_module_functional
    /tutorials/tensordict_keys
+   /tutorials/streamed_tensordict
    /tutorials/tensordict_shapes
    /tutorials/tensorclass_fashion
    /tutorials/data_fashion

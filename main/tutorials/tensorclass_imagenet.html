@@ -252,6 +252,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
@@ -750,7 +751,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 238.86it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 227.90it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -799,10 +800,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 765.64it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 735.24it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 199.61it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 195.39it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -839,14 +840,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 373.34it/s]
-One iteration over dataloader done! Rate: 1047.9817 fps, time:  0.2099s
-One iteration over tensorclass dataloader done! Rate: 1805.0781 fps, time:  0.1219s
-One iteration over val data done! Rate: 698.7708 fps, time:  0.1846s
-One iteration over tensorclass val data done! Rate: 20313.3059 fps, time:  0.0064s
+100%|██████████| 153/153 [00:00&lt;00:00, 354.75it/s]
+One iteration over dataloader done! Rate: 1014.8618 fps, time:  0.2168s
+One iteration over tensorclass dataloader done! Rate: 1640.3456 fps, time:  0.1341s
+One iteration over val data done! Rate: 721.8264 fps, time:  0.1787s
+One iteration over tensorclass val data done! Rate: 20441.4680 fps, time:  0.0063s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.523 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.558 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>

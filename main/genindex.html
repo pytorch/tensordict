@@ -249,6 +249,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
@@ -1423,6 +1424,20 @@
 </li>
       <li><a href="reference/generated/tensordict.dense_stack_tds.html#tensordict.dense_stack_tds">dense_stack_tds (class in tensordict)</a>
 </li>
+      <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.densify">densify() (tensordict.LazyStackedTensorDict method)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.densify">(tensordict.NonTensorStack method)</a>
+</li>
+        <li><a href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.densify">(tensordict.PersistentTensorDict method)</a>
+</li>
+        <li><a href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.densify">(tensordict.TensorDict method)</a>
+</li>
+        <li><a href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.densify">(tensordict.TensorDictBase method)</a>
+</li>
+        <li><a href="reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.densify">(tensordict.TensorDictParams method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.depth">depth (tensordict.LazyStackedTensorDict property)</a>
 
       <ul>
@@ -1491,14 +1506,14 @@
         <li><a href="reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.device">(tensordict.TensorDictParams property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.diag">diag() (tensordict.MemoryMappedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.diag_embed">diag_embed() (tensordict.MemoryMappedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.diagflat">diagflat() (tensordict.MemoryMappedTensor method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.diagonal">diagonal() (tensordict.MemoryMappedTensor method)</a>
 </li>
       <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.diagonal_scatter">diagonal_scatter() (tensordict.MemoryMappedTensor method)</a>

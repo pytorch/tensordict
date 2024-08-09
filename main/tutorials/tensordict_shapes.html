@@ -252,6 +252,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
@@ -679,19 +680,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[3, 0, 3, 3],
-        [3, 2, 3, 1],
-        [0, 0, 3, 3]])
+ tensor([[0, 3, 3, 2],
+        [0, 3, 1, 2],
+        [2, 2, 1, 0]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.0224, 0.4689, 0.8513, 0.0410],
-        [0.9575, 0.4582, 0.2766, 0.6572],
-        [0.9307, 0.6705, 0.9729, 0.3958]])
+ tensor([[0.3509, 0.6263, 0.2410, 0.3358],
+        [0.6261, 0.2497, 0.3331, 0.1661],
+        [0.5408, 0.4942, 0.9550, 0.8833]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.0410, 0.0224, 0.0410, 0.0410],
-        [0.6572, 0.2766, 0.6572, 0.4582],
-        [0.9307, 0.9307, 0.3958, 0.3958]])
+ tensor([[0.3509, 0.3358, 0.3358, 0.2410],
+        [0.6261, 0.1661, 0.2497, 0.3331],
+        [0.9550, 0.9550, 0.4942, 0.5408]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.007 seconds)</p>
