@@ -193,6 +193,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "cosh_",
     "cpu",
     "cuda",
+    "densify",
     "div",
     "div_",
     "empty",
