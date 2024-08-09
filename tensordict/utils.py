@@ -13,6 +13,7 @@ import logging
 
 import math
 import os
+import re
 
 import sys
 import time
@@ -2553,3 +2554,41 @@ def _pin_mem(q_in, q_out):
             q_out.put(err)
             return
         q_out.put((key, val))
+
+
+def parse_tensor_dict_string(s: str):
+    """Parse a TensorDict repr to a TensorDict."""
+    from tensordict import TensorDict
+
+    # Regular expression patterns
+    field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
+    nested_field_pattern = r"(\w+): TensorDict\("
+    # Find all fields in the string
+    fields = {}
+    for match in re.finditer(field_pattern, s):
+        name, _, shape, device, dtype, is_shared = match.groups()
+        shape = [int(x) for x in shape.split(", ")]
+        fields[name] = torch.zeros(
+            tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
+        )
+    # Find nested TensorDicts
+    for match in re.finditer(nested_field_pattern, s):
+        name = match.group(1)
+        start_idx = match.end()
+        depth = 1
+        for i in range(start_idx, len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+            if depth == 0:
+                end_idx = i
+                break
+        content = s[start_idx:end_idx]
+        nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
+        fields[name] = nested_fields
+    # TODO: parse batch size and device
+    batch_size = torch.Size([16])
+    device = torch.device("cpu")
+    tensor_dict = TensorDict(fields, batch_size=batch_size, device=device)
+    return tensor_dict
