@@ -3210,12 +3210,12 @@ class TensorDictBase(MutableMapping):
         share_non_tensor,
     ) -> T: ...
 
-    def densify(self, layout: torch.layout = torch.jagged):
+    def densify(self, layout: torch.layout = torch.strided):
         """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested).
 
         Keyword Args:
             layout (torch.layout): the layout of the nested tensors, if any. Defaults to
-                :class:`~torch.jagged`.
+                :class:`~torch.strided`.
 
         """
         any_set = False
