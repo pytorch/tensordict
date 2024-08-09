@@ -1379,12 +1379,21 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def densify(self):
         """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested)."""
-        out = TensorDict(batch_size=self.batch_size, device=self.device, names=self.names)
+        out = TensorDict(
+            batch_size=self.batch_size, device=self.device, names=self.names
+        )
         for key in self._iterate_over_keys():
-            list_of_entries = [td._get_str(key, default=None) for td in self.tensordicts]
-            is_tensor = all(isinstance(item, torch.Tensor) or item is None for item in list_of_entries)
+            list_of_entries = [
+                td._get_str(key, default=None) for td in self.tensordicts
+            ]
+            is_tensor = all(
+                isinstance(item, torch.Tensor) or item is None
+                for item in list_of_entries
+            )
             if is_tensor:
-                shapes = [tensor.shape for tensor in list_of_entries if tensor is not None]
+                shapes = [
+                    tensor.shape for tensor in list_of_entries if tensor is not None
+                ]
                 if len(set(shapes)) == 1:
                     # TODO: account for None here
                     tensor = torch.stack(list_of_entries, self.stack_dim)
@@ -2723,23 +2732,25 @@ class LazyStackedTensorDict(TensorDictBase):
                 "Expected new value to be TensorDictBase instance but got "
                 f"{type(tensordict)} instead."
             )
+        if self.tensordicts:
+            batch_size = self.tensordicts[0].batch_size
+            device = self.tensordicts[0].device
 
-        batch_size = self.tensordicts[0].batch_size
-        device = self.tensordicts[0].device
+            _batch_size = tensordict.batch_size
+            _device = tensordict.device
 
-        _batch_size = tensordict.batch_size
-        _device = tensordict.device
-
-        if device != _device:
-            raise ValueError(
-                f"Devices differ: stack has device={device}, new value has "
-                f"device={_device}."
-            )
-        if _batch_size != batch_size:
-            raise ValueError(
-                f"Batch sizes in tensordicts differs: stack has "
-                f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
-            )
+            if device != _device:
+                raise ValueError(
+                    f"Devices differ: stack has device={device}, new value has "
+                    f"device={_device}."
+                )
+            if _batch_size != batch_size:
+                raise ValueError(
+                    f"Batch sizes in tensordicts differs: stack has "
+                    f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
+                )
+        else:
+            batch_size = tensordict.batch_size
 
         self.tensordicts.insert(index, tensordict)
 
@@ -2772,6 +2783,8 @@ class LazyStackedTensorDict(TensorDictBase):
             if not td.is_locked:
                 return False
         else:
+            if not self.tensordicts:
+                return False
             # In this case, all tensordicts were locked before the lazy stack
             # was created and they were not locked through the lazy stack.
             # This means we cannot cache the value because this lazy stack
