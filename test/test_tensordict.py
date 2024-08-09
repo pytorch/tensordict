@@ -118,7 +118,7 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings(
         "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
-    )
+    ),
 ]
 
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
