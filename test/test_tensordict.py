@@ -116,6 +116,9 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:The PyTorch API of nested tensors is in prototype"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
+    )
 ]
 
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
