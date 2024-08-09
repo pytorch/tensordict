@@ -1377,12 +1377,18 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    def densify(self):
-        """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested)."""
-        out = TensorDict(
+    def densify(self, *, layout: torch.layout = torch.jagged):
+        """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested).
+
+        Keyword Args:
+            layout (torch.layout): the layout of the nested tensors, if any. Defaults to
+                :class:`~torch.jagged`.
+
+        """
+        result = TensorDict._new_unsafe(
             batch_size=self.batch_size, device=self.device, names=self.names
         )
-        for key in self._iterate_over_keys():
+        for key in self._exclusive_keys():
             list_of_entries = [
                 td._get_str(key, default=None) for td in self.tensordicts
             ]
@@ -1391,21 +1397,42 @@ class LazyStackedTensorDict(TensorDictBase):
                 for item in list_of_entries
             )
             if is_tensor:
-                shapes = [
-                    tensor.shape for tensor in list_of_entries if tensor is not None
-                ]
-                if len(set(shapes)) == 1:
-                    # TODO: account for None here
+                shapes = {
+                    tensor.shape if tensor is not None else None
+                    for tensor in list_of_entries
+                }
+                if None in shapes:
+                    # There must be at least one non-None value
+                    a_shape = None
+                    while a_shape is None:
+                        a_shape = shapes.pop()
+                    if not a_shape:
+                        raise RuntimeError(
+                            f"Cannot densify a tensordict with values with empty shape and exclusive keys: got shape {a_shape}."
+                        )
+                    none_shape = a_shape[:-1] + (0,)
+                    for tensor in list_of_entries:
+                        if tensor is not None:
+                            a_tensor = tensor.new_zeros(none_shape)
+                            break
+                    list_of_entries = [
+                        tensor if tensor is not None else a_tensor
+                        for tensor in list_of_entries
+                    ]
+                    shapes.update({a_shape, none_shape})
+                if len(shapes) == 1:
                     tensor = torch.stack(list_of_entries, self.stack_dim)
                 else:
                     if self.stack_dim == 0:
-                        tensor = torch.nested.nested_tensor(list_of_entries)
+                        tensor = torch.nested.nested_tensor(
+                            list_of_entries, layout=layout
+                        )
                     else:
                         raise NotImplementedError
             else:
-                tensor = self._get_str(key).densify()
-            out._set_str(key, tensor, validated=True, inplace=False)
-        return out
+                tensor = self._get_str(key).densify(layout=layout)
+            result._set_str(key, tensor, validated=True, inplace=False)
+        return result
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
@@ -2859,6 +2886,9 @@ class LazyStackedTensorDict(TensorDictBase):
             ]
         )
         return f"{type(self).__name__}(\n{string})"
+
+    def _exclusive_keys(self):
+        return {key for td in self.tensordicts for key in td.keys()}
 
     def _repr_exclusive_fields(self):
         keys = set(self.keys())

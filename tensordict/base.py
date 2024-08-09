@@ -3210,6 +3210,29 @@ class TensorDictBase(MutableMapping):
         share_non_tensor,
     ) -> T: ...
 
+    def densify(self, layout: torch.layout = torch.jagged):
+        """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested).
+
+        Keyword Args:
+            layout (torch.layout): the layout of the nested tensors, if any. Defaults to
+                :class:`~torch.jagged`.
+
+        """
+        any_set = False
+        out_dict = {}
+        for key, val in self.items():
+            if is_tensor_collection(val):
+                val_dense = val.densify(layout=layout)
+                any_set = any_set | (val_dense is not val)
+                val = val_dense
+            out_dict[key] = val
+        if any_set:
+            result = self.empty()
+            for key, val in out_dict.items():
+                result._set_str(key, val, validated=True, inplace=False)
+            return result
+        return self
+
     @property
     def saved_path(self):
         """Returns the path where a memmap saved TensorDict is being stored.
