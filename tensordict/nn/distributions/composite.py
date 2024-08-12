@@ -32,6 +32,8 @@ class CompositeDistribution(d.Distribution):
             will be used.
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
+        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+            Defaults to `'sample_log_prob'`.
 
     .. note:: In this distribution class, the batch-size of the input tensordict containing the params
         (``params``) is indicative of the batch_shape of the distribution. For instance,
@@ -71,6 +73,7 @@ class CompositeDistribution(d.Distribution):
         *,
         name_map: dict | None = None,
         extra_kwargs=None,
+        log_prob_key: NestedKey = "sample_log_prob",
     ):
         self._batch_shape = params.shape
         if extra_kwargs is None:
@@ -101,6 +104,7 @@ class CompositeDistribution(d.Distribution):
             dist = dist_class(**dist_params, **kwargs)
             dists[write_name] = dist
         self.dists = dists
+        self.log_prob_key = log_prob_key
 
     def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
@@ -152,7 +156,7 @@ class CompositeDistribution(d.Distribution):
             while lp.ndim > sample.ndim:
                 lp = lp.sum(-1)
             slp = slp + lp
-        d["sample_log_prob"] = slp
+        d[self.log_prob_key] = slp
         sample.update(d)
         return sample
 
