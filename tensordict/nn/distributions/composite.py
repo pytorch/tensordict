@@ -32,7 +32,7 @@ class CompositeDistribution(d.Distribution):
             will be used.
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
-        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+        log_prob_key (NestedKey, optional): key where to write the log_prob.
             Defaults to `'sample_log_prob'`.
 
     .. note:: In this distribution class, the batch-size of the input tensordict containing the params
