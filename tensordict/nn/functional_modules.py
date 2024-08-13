@@ -262,10 +262,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
-        if PYTREE_HAS_ISLEAF:
-            return tree_unflatten(batched_inputs, args_spec)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(batched_inputs, args_spec)
+        return tree_unflatten(batched_inputs, args_spec)
 
     vmap_src._create_batched_inputs = _create_batched_inputs
 
@@ -327,10 +324,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
             flat_outputs.append(out)
-        if PYTREE_HAS_ISLEAF:
-            return tree_unflatten(flat_outputs, output_spec)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(flat_outputs, output_spec)
+        return tree_unflatten(flat_outputs, output_spec)
 
     vmap_src._unwrap_batched = _unwrap_batched
 
