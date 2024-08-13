@@ -514,7 +514,7 @@ class TensorDict(TensorDictBase):
             inplace = bool(inplace)
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if type(module).__setattr__ is __base__setattr__:
+        if type(module).__setattr__ is __base__setattr__ and not is_dynamo:
             __dict__ = module.__dict__
             _parameters = __dict__["_parameters"]
             _buffers = __dict__["_buffers"]
@@ -4253,6 +4253,7 @@ def _set_tensor_dict(  # noqa: F811
         out = _buffers.pop(name, None)
         was_buffer = out is not None
     if out is None:
+        # dynamo doesn't like pop...
         out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out
