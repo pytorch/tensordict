@@ -1567,11 +1567,14 @@ def assert_close(
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
-        default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
-        msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
+        local_msg = f"key {key} does not match, got mse = {mse:4.4f}"
+        new_msg = ",\t".join([local_msg, msg]) if len(msg) else local_msg
         torch.testing.assert_close(
-            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
+            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
         )
+        local_msg = f"key {key} matches"
+        msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
+
     return True
 
 
