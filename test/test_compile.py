@@ -723,6 +723,37 @@ class TestFunctional:
         else:
             assert (td_zero == 0).all()
 
+    # in-place modif raises an error even if fullgraph=False
+    def test_vmap_functional(self, mode):
+        module = torch.nn.Sequential(
+            torch.nn.Linear(3, 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(4, 5),
+        )
+
+        td = TensorDict.from_module(module)
+        td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
+
+        def call(x, td):
+            params = td.to_module(module, return_swap=True)
+            result = module(x)
+            params.to_module(module, return_swap=True, swap_dest=td)
+            return result
+
+        vmap_call = torch.vmap(call, (None, 0))
+        call_compile = torch.compile(vmap_call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+
+        assert (vmap_call(x, td_zero) == 0).all()
+        assert (TensorDict.from_module(module) == td).all()
+        assert (td_zero == 0).all()
+
+        call_compile(x, td_zero)
+        assert (TensorDict.from_module(module) == td).all()
+        assert (call_compile(x, td_zero) == 0).all()
+        assert (TensorDict.from_module(module) == td).all()
+        assert (td_zero == 0).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

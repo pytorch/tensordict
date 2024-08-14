@@ -1303,6 +1303,49 @@ class LazyStackedTensorDict(TensorDictBase):
             result.lock_()
         return result
 
+    @cache  # noqa: B019
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+        if self.hook_out is not None:
+            # this is the hacked version. We just need to remove the hook_out and
+            # reset a proper batch size
+            result = LazyStackedTensorDict(
+                *self.tensordicts,
+                stack_dim=out_dim,
+            )
+            # return self._cache_remove_batch_dim(vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim)
+        else:
+            # we must call _remove_batch_dim on all tensordicts
+            # batch_size: size of the batch when we unhide it.
+            # out_dim: dimension where the output will be found
+            new_batch_size = list(self.batch_size)
+            new_batch_size.insert(out_dim, batch_size)
+            new_names = list(self.names)
+            new_names.insert(out_dim, None)
+            # rebuild the lazy stack
+            # the stack dim is the same if the out_dim is past it, but it
+            # must be incremented by one otherwise.
+            # In the first case, the out_dim must be decremented by one
+            if out_dim > self.stack_dim:
+                stack_dim = self.stack_dim
+                out_dim = out_dim - 1
+            else:
+                stack_dim = self.stack_dim + 1
+            result = LazyStackedTensorDict(
+                *[
+                    td._maybe_remove_batch_dim(
+                        funcname,
+                        vmap_level=vmap_level,
+                        batch_size=batch_size,
+                        out_dim=out_dim,
+                    )
+                    for td in self.tensordicts
+                ],
+                stack_dim=stack_dim,
+            )
+        if self.is_locked:
+            result.lock_()
+        return result
+
     def get_nestedtensor(
         self,
         key: NestedKey,
@@ -3724,6 +3767,7 @@ class _CustomOpTensorDict(TensorDictBase):
     _multithread_rebuild = TensorDict._multithread_rebuild
 
     _remove_batch_dim = TensorDict._remove_batch_dim
+    _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand

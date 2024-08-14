@@ -82,10 +82,12 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch import Tensor
+from torch import nn, Tensor
 from torch._dynamo import graph_break
+from torch._functorch.vmap import _maybe_remove_batch_dim
 from torch.jit._shape_functions import infer_size_impl
 from torch.nn.parameter import UninitializedTensorMixin
+from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
 try:
@@ -447,7 +449,7 @@ class TensorDict(TensorDictBase):
 
     def _to_module(
         self,
-        module,
+        module: nn.Module,
         *,
         inplace: bool | None = None,
         return_swap: bool = True,
@@ -455,8 +457,10 @@ class TensorDict(TensorDictBase):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
+        is_dynamo: bool | None = None,
     ):
-        is_dynamo = is_dynamo_compiling()
+        if is_dynamo is None:
+            is_dynamo = torch.compiler.is_dynamo_compiling()
         if is_dynamo:
             _check_inbuild()
 
@@ -500,8 +504,8 @@ class TensorDict(TensorDictBase):
                 )
 
             def convert_type(x, y):
-                if isinstance(y, torch.nn.Parameter):
-                    return torch.nn.Parameter(x)
+                if isinstance(y, nn.Parameter):
+                    return nn.Parameter(x)
                 if isinstance(y, Buffer):
                     return Buffer(x)
                 return x
@@ -514,7 +518,8 @@ class TensorDict(TensorDictBase):
             inplace = bool(inplace)
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if type(module).__setattr__ is __base__setattr__:
+        if not is_dynamo and type(module).__setattr__ is __base__setattr__:
+            # if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
             _parameters = __dict__["_parameters"]
             _buffers = __dict__["_buffers"]
@@ -539,12 +544,8 @@ class TensorDict(TensorDictBase):
                         inplace,
                     )
                 else:
-                    if return_swap:
-                        local_out = getattr(module, key)
                     if not inplace:
-                        # use specialized __setattr__ if needed
-                        delattr(module, key)
-                        setattr(module, key, value)
+                        local_out = swap_tensor(module, key, value)
                     else:
                         new_val = local_out
                         if return_swap:
@@ -568,6 +569,7 @@ class TensorDict(TensorDictBase):
                         memo=memo,
                         use_state_dict=use_state_dict,
                         non_blocking=non_blocking,
+                        is_dynamo=is_dynamo,
                     )
 
             if return_swap:
@@ -1432,8 +1434,12 @@ class TensorDict(TensorDictBase):
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
-        new_names = list(self.names)
-        new_names.insert(out_dim, None)
+        names = self._maybe_names()
+        if names:
+            new_names = list(names)
+            new_names.insert(out_dim, None)
+        else:
+            new_names = None
         out = TensorDict(
             {
                 key: (
@@ -1442,6 +1448,38 @@ class TensorDict(TensorDictBase):
                     )
                     if is_tensor_collection(value)
                     else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
+                )
+                for key, value in self.items()
+            },
+            batch_size=new_batch_size,
+            names=new_names,
+            lock=self.is_locked,
+        )
+        return out
+
+    @cache  # noqa: B019
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        names = self._maybe_names()
+        if names:
+            new_names = list(names)
+            new_names.insert(out_dim, None)
+        else:
+            new_names = None
+        out = TensorDict(
+            {
+                key: (
+                    value._maybe_remove_batch_dim(
+                        funcname=funcname,
+                        vmap_level=vmap_level,
+                        batch_size=batch_size,
+                        out_dim=out_dim,
+                    )
+                    if is_tensor_collection(value)
+                    else _maybe_remove_batch_dim(
+                        funcname, value, vmap_level, batch_size, out_dim
+                    )
                 )
                 for key, value in self.items()
             },
@@ -4064,6 +4102,9 @@ class _SubTensorDict(TensorDictBase):
     def _remove_batch_dim(self, *args, **kwargs):
         raise NotImplementedError
 
+    def _maybe_remove_batch_dim(self, *args, **kwargs):
+        raise NotImplementedError
+
 
 ###########################
 # Keys utils
@@ -4253,6 +4294,7 @@ def _set_tensor_dict(  # noqa: F811
         out = _buffers.pop(name, None)
         was_buffer = out is not None
     if out is None:
+        # dynamo doesn't like pop...
         out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out

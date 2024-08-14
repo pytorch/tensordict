@@ -8476,6 +8476,10 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
 
+    @abc.abstractmethod
+    @cache  # noqa: B019
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
+
     # Validation and checks
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
         if isinstance(array, (float, int, bool)):

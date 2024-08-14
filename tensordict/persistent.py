@@ -1335,9 +1335,9 @@ class PersistentTensorDict(TensorDictBase):
     def _add_batch_dim(self, *, in_dim, vmap_level):
         raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
 
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-        # not accessible
-        ...
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
+
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(
