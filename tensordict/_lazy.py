@@ -3767,6 +3767,7 @@ class _CustomOpTensorDict(TensorDictBase):
     _multithread_rebuild = TensorDict._multithread_rebuild
 
     _remove_batch_dim = TensorDict._remove_batch_dim
+    _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand
