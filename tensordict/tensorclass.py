@@ -154,6 +154,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
     "_get_sub_tensordict",
+    "_maybe_remove_batch_dim",
     "_multithread_apply_flat",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized

@@ -710,6 +710,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _remove_batch_dim(self, *args, **kwargs): ...
 
     @_fallback
+    def _maybe_remove_batch_dim(self, *args, **kwargs): ...
+
+    @_fallback
     def _has_names(self, *args, **kwargs): ...
 
     @_unlock_and_set
