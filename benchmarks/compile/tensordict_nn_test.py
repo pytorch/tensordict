@@ -401,14 +401,9 @@ def test_vmap_func_call_runtime_and_backward(mode, plain_decorator, benchmark):
         call_vmap(*args).mean().backward()
 
     x = torch.randn(2, 2, 16)
-    if functional:
-        call_with_backward(x, td)
-        call_with_backward(x, td)
-        benchmark(call_with_backward, x, td)
-    else:
-        call_with_backward(x)
-        call_with_backward(x)
-        benchmark(call_with_backward, x)
+    call_with_backward(x, td)
+    call_with_backward(x, td)
+    benchmark(call_with_backward, x, td)
 
 
 if __name__ == "__main__":
