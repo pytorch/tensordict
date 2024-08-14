@@ -329,6 +329,88 @@ def test_func_call_runtime_and_backward(mode, functional, plain_decorator, bench
         benchmark(call_with_backward, x)
 
 
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+def test_vmap_func_call_cm_runtime(mode, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
+    # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
+    td = TensorDict.from_module(module)
+    td = TensorDictParams(td.data.expand(10).clone().zero_())
+
+    def call(x, td):
+        # with needs registering
+        with td.to_module(module):
+            return module(x)
+
+    call_vmap = torch.vmap(call, (None, 0))
+    if mode == "compile":
+        call_vmap = torch.compile(call_vmap)
+    elif mode == "compile-overhead":
+        call_vmap = torch.compile(call_vmap, mode="reduce-overhead")
+
+    x = torch.randn(2, 2, 16)
+    call_vmap(x, td)
+    call_vmap(x, td)
+    benchmark(call_vmap, x, td)
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
+@pytest.mark.parametrize("plain_decorator", [None, False, True])
+def test_vmap_func_call_runtime_and_backward(mode, plain_decorator, benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
+    # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
+    td = TensorDict.from_module(module)
+    td = TensorDictParams(td.data.expand(10).clone().zero_())
+    if not plain_decorator:
+
+        def call(x, td):
+            if torch.cuda.is_available():
+                torch.compiler.cudagraph_mark_step_begin()
+            # with needs registering
+            params = td.to_module(module, return_swap=True)
+            result = module(x)
+            params.to_module(module, return_swap=False)
+            return result
+
+    else:
+
+        def call(x, td):
+            if torch.cuda.is_available():
+                torch.compiler.cudagraph_mark_step_begin()
+            # with needs registering
+            with td.to_module(module):
+                return module(x)
+
+    call_vmap = torch.vmap(call, (None, 0))
+    if mode == "compile":
+        call_vmap = torch.compile(call_vmap)
+    elif mode == "compile-overhead":
+        call_vmap = torch.compile(call_vmap, mode="reduce-overhead")
+
+    if mode == "compile":
+        call_vmap = torch.compile(call_vmap, fullgraph=not plain_decorator)
+    elif mode == "compile-overhead":
+        call_vmap = torch.compile(
+            call_vmap, fullgraph=not plain_decorator, mode="reduce-overhead"
+        )
+
+    def call_with_backward(*args):
+        call_vmap(*args).mean().backward()
+
+    x = torch.randn(2, 2, 16)
+    if functional:
+        call_with_backward(x, td)
+        call_with_backward(x, td)
+        benchmark(call_with_backward, x, td)
+    else:
+        call_with_backward(x)
+        call_with_backward(x)
+        benchmark(call_with_backward, x)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
