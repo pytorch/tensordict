@@ -51,7 +51,6 @@ from tensordict._contextlib import _DecoratorContextManager
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
-    _ParameterMeta,
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
@@ -1820,7 +1819,15 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
-class Buffer(Tensor, metaclass=_ParameterMeta):
+class _BufferMeta(torch._C._TensorMeta):
+    def __instancecheck__(self, instance):
+        return super().__instancecheck__(instance) or (
+            isinstance(instance, torch.Tensor)
+            and getattr(instance, "_is_buffer", False)
+        )
+
+
+class Buffer(Tensor, metaclass=_BufferMeta):
     r"""A kind of Tensor that is to be considered a module buffer.
 
     Args:
@@ -1858,13 +1865,41 @@ class Buffer(Tensor, metaclass=_ParameterMeta):
         return "Buffer containing:\n" + super(Buffer, self).__repr__()
 
     def __reduce_ex__(self, proto):
+        state = torch._utils._get_obj_state(self)
+
         # See Note [Don't serialize hooks]
+        hooks = OrderedDict()
+        if not state:
+            return (_rebuild_buffer, (self.data, self.requires_grad, hooks))
+
         return (
-            torch._utils._rebuild_parameter,
-            (self.data, self.requires_grad, OrderedDict()),
+            _rebuild_buffer_with_state,
+            (self.data, self.requires_grad, hooks, state),
         )
 
     __torch_function__ = _disabled_torch_function_impl
+
+
+def _rebuild_buffer(data, requires_grad, backward_hooks):
+    buffer = Buffer(data, requires_grad)
+    # NB: This line exists only for backwards compatibility; the
+    # general expectation is that backward_hooks is an empty
+    # OrderedDict.  See Note [Don't serialize hooks]
+    buffer._backward_hooks = backward_hooks
+
+    return buffer
+
+
+def _rebuild_buffer_with_state(data, requires_grad, backward_hooks, state):
+    buffer = Buffer(data, requires_grad)
+    # NB: This line exists only for backwards compatibility; the
+    # general expectation is that backward_hooks is an empty
+    # OrderedDict.  See Note [Don't serialize hooks]
+    buffer._backward_hooks = backward_hooks
+
+    # Restore state on Parameter like python attr.
+    buffer = torch._utils._set_obj_state(buffer, state)
+    return buffer
 
 
 def _getitem_batch_size(batch_size, index):
