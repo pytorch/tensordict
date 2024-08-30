@@ -623,25 +623,12 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.clone())
         td_zero.zero_()
 
-        def call(x, td):
-            with td.to_module(module):
-                return module(x)
-
-        call_compile = torch.compile(call, fullgraph=True, mode=mode)
-        x = torch.randn(2, 3)
-        with pytest.raises(
-            torch._dynamo.exc.Unsupported,
-            match="UserDefinedObjectVariable|Unsupported context manager",
-        ):
-            call_compile(x, td_zero)
         os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"
         try:
 
             def call(x, td):
-                params = td.to_module(module, return_swap=True)
-                result = module(x)
-                params.to_module(module, return_swap=True, swap_dest=td)
-                return result
+                with td.to_module(module):
+                    return module(x)
 
             call_compile = torch.compile(call, fullgraph=True, mode=mode)
             x = torch.randn(2, 3)
@@ -683,14 +670,8 @@ class TestFunctional:
         td_zero.zero_()
 
         def call(x, td):
-            # TOFIX: `with` needs registering
-            # with td.to_module(module):
-            #     return module(x)
-
-            params = td.to_module(module, return_swap=True)
-            result = module(x)
-            params.to_module(module, return_swap=True, swap_dest=td)
-            return result
+            with td.to_module(module):
+                return module(x)
 
         call_compile = torch.compile(call, fullgraph=True, mode=mode)
         x = torch.randn(2, 3)
