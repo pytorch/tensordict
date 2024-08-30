@@ -33,6 +33,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
+    BufferLegacy,
     erase_cache,
     IndexType,
     lock_blocked,
@@ -115,9 +116,14 @@ def _maybe_make_param_or_buffer(tensor):
         and not isinstance(tensor, nn.Parameter)
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
-        # convert all non-parameters to buffers
-        # dataptr = tensor.data.data_ptr()
-        tensor = Buffer(tensor)
+        if tensor.grad_fn is None:
+            # convert all non-parameters to buffers
+            # dataptr = tensor.data.data_ptr()
+            tensor = Buffer(tensor)
+        else:
+            # We want to keep the grad_fn of tensors, e.g. param.expand(10) should point to the original param
+            tensor = BufferLegacy(tensor)
+
         # assert tensor.data.data_ptr() == dataptr
     return tensor
 
@@ -1206,7 +1212,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 buffer.data = buffer_applied
                 out_buffer = buffer
             else:
-                out_buffer = Buffer(buffer_applied, buffer.requires_grad)
+                out_buffer = Buffer(buffer_applied)
                 self._buffers[key] = out_buffer
 
             if buffer.grad is not None:
