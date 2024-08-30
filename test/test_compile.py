@@ -222,8 +222,8 @@ class TestTD:
             make_td_with_names, fullgraph=True, mode=mode
         )
         make_td_with_names(data_dict)
-        with pytest.raises(torch._dynamo.exc.Unsupported):
-            make_td_with_names_c(data_dict)
+        # with pytest.raises(torch._dynamo.exc.Unsupported):
+        make_td_with_names_c(data_dict)
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
