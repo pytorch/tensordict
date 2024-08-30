@@ -612,7 +612,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     tensor.data.clone(), requires_grad=tensor.requires_grad
                 )
             else:
-                result = Buffer(tensor.data.clone(), requires_grad=tensor.requires_grad)
+                result = Buffer(tensor.data.clone())
             memo[tensor] = result
             return result
 
