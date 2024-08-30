@@ -28,7 +28,7 @@ __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
 _SKIP_EXISTING = False
 
-from tensordict._contextlib import _DecoratorContextManager
+from torch.utils._contextlib import _DecoratorContextManager
 
 
 def inv_softplus(bias: float | torch.Tensor) -> float | torch.Tensor:
@@ -386,7 +386,10 @@ def _rebuild_buffer(data, requires_grad, backward_hooks):
 
 
 # For backward compatibility in imports
-from tensordict.utils import Buffer  # noqa
+try:
+    from torch.nn.parameter import Buffer  # noqa
+except ImportError:
+    from tensordict.utils import Buffer  # noqa
 
 
 def _auto_make_functional():

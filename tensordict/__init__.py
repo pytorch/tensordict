@@ -29,12 +29,10 @@ from tensordict.utils import (
     lazy_legacy,
     NestedKey,
     set_lazy_legacy,
-)
-from tensordict._pytree import *
-from tensordict._C import (  # @manual=//pytorch/tensordict:_C
     unravel_key,
     unravel_key_list,
 )
+from tensordict._pytree import *
 from tensordict.nn import TensorDictParams
 
 try:

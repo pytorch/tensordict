@@ -33,7 +33,6 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
-    Buffer,
     erase_cache,
     IndexType,
     lock_blocked,
@@ -51,6 +50,11 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 def _apply_leaves(data, fn):
@@ -329,7 +333,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self._reset_params()
         self._is_locked = False
         self._locked_tensordicts = []
-        self.__last_op_queue = None
         self._get_post_hook = []
 
     def register_get_post_hook(self, hook):
