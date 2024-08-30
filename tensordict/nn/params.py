@@ -329,7 +329,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self._reset_params()
         self._is_locked = False
         self._locked_tensordicts = []
-        self.__last_op_queue = None
         self._get_post_hook = []
 
     def register_get_post_hook(self, hook):
