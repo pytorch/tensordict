@@ -33,7 +33,6 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
-    Buffer,
     erase_cache,
     IndexType,
     lock_blocked,
@@ -51,6 +50,11 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 def _apply_leaves(data, fn):

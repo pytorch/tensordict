@@ -46,7 +46,6 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     unravel_key_list as unravel_key_list_cpp,
     unravel_keys as unravel_keys_cpp,
 )
-from tensordict._contextlib import _DecoratorContextManager
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
@@ -56,6 +55,7 @@ from torch.nn.parameter import (
     UninitializedParameter,
     UninitializedTensorMixin,
 )
+from torch.utils._contextlib import _DecoratorContextManager
 from torch.utils.data._utils.worker import _generate_state
 
 try:

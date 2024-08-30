@@ -68,7 +68,6 @@ from tensordict.utils import (
     _sub_index,
     _unravel_key_to_tuple,
     _zip_strict,
-    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -102,6 +101,11 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 _register_tensor_class(ftdim.Tensor)
 
@@ -247,8 +251,8 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
 
-        if names and is_dynamo_compiling():
-            graph_break()
+        # if names and is_dynamo_compiling():
+        #     graph_break()
         has_device = device is not None
         sub_non_blocking = False
         call_sync = False
@@ -2971,7 +2975,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            names=copy(self._td_dim_names) if self._has_names() else None,
+            names=self._maybe_names(),
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour

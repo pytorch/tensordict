@@ -72,7 +72,6 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
-    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -102,6 +101,12 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
