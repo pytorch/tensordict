@@ -18,7 +18,11 @@ import warnings
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
-from torch.compiler import is_dynamo_compiling
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:  # torch 2.0
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
