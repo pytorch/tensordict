@@ -1080,7 +1080,7 @@ class TestGeneric:
         y = torch.vmap(exec_module, (0, None))(params, x)
         y.sum().backward()
         for k, p in modules[0].named_parameters():
-            assert p.grad is None if k.startswith("1") else p.grad is not None
+            assert p.grad is None if k.startswith("1") else p.grad is not None, k
         assert all(
             param.grad is not None
             for param in params.values(True, True)
