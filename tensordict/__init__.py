@@ -5,6 +5,7 @@
 
 import tensordict._reductions
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict._td import is_tensor_collection, TensorDict
 from tensordict.base import (
     get_defaults_to_none,
@@ -27,7 +28,6 @@ from tensordict.utils import (
     is_batchedtensor,
     is_tensorclass,
     lazy_legacy,
-    NestedKey,
     set_lazy_legacy,
     unravel_key,
     unravel_key_list,

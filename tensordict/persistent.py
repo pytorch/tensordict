@@ -409,7 +409,7 @@ class PersistentTensorDict(TensorDictBase):
             return np.asarray(idx)
         return idx
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: IndexType) -> Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
         ):
@@ -427,7 +427,7 @@ class PersistentTensorDict(TensorDictBase):
 
     __getitems__ = __getitem__
 
-    def __setitem__(self, index, value):
+    def __setitem__(self, index: IndexType, value: Any):
         index_unravel = _unravel_key_to_tuple(index)
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)

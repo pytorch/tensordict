@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import abc
 import collections
 import concurrent.futures
 import functools
@@ -46,6 +45,7 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     unravel_key_list as unravel_key_list_cpp,
     unravel_keys as unravel_keys_cpp,
 )
+from tensordict._nestedkey import NestedKey
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
@@ -148,29 +148,6 @@ _DTYPE2STRDTYPE = {dtype: str_dtype for str_dtype, dtype in _STRDTYPE2DTYPE.item
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
-
-
-class _NestedKeyMeta(abc.ABCMeta):
-    def __instancecheck__(self, instance):
-        return isinstance(instance, str) or (
-            isinstance(instance, tuple)
-            and len(instance)
-            and all(isinstance(subkey, NestedKey) for subkey in instance)
-        )
-
-
-class NestedKey(metaclass=_NestedKeyMeta):
-    """An abstract class for nested keys.
-
-    Nested keys are the generic key type accepted by TensorDict.
-
-    A nested key is either a string or a non-empty tuple of NestedKeys instances.
-
-    The NestedKey class supports instance checks.
-
-    """
-
-    pass
 
 
 _KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
@@ -832,7 +809,7 @@ class timeit:
 
 
 def int_generator(seed):
-    """A pseudo-random chaing generator.
+    """A pseudo-random chain generator.
 
     To be used to produce deterministic integer sequences
 
@@ -1179,7 +1156,7 @@ class _StringKeys(KeysView):
     def __init__(self, keys):
         self.keys = keys
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.keys.__getitem__(key)
 
     def __iter__(self):
