@@ -148,7 +148,7 @@ class CompositeDistribution(d.Distribution):
         )
 
     def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
-        """Writes a ``<sample>_log_prob entry`` for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
+        """Writes a ``<sample>_log_prob`` entry for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
         slp = 0.0
         d = {}
         for name, dist in self.dists.items():
@@ -159,6 +159,24 @@ class CompositeDistribution(d.Distribution):
         d[self.log_prob_key] = slp
         sample.update(d)
         return sample
+
+    def entropy(self, samples_mc=1) -> TensorDictBase:
+        """Writes a ``<sample>_entropy`` entry for each sample in the input tensordict, along with a ``"entropy"`` entry with the summed entropies."""
+        se = 0.0
+        d = {}
+        for name, dist in self.dists.items():
+            try:
+                e = dist.entropy()
+            except NotImplementedError:
+                x = dist.rsample((samples_mc,))
+                e = -dist.log_prob(x).mean(0)
+            d[_add_suffix(name, "_entropy")] = e = dist.entropy()
+            se = se + e
+        d["entropy"] = se
+        return TensorDict(
+            d,
+            self.batch_shape,
+        )
 
     def cdf(self, sample: TensorDictBase) -> TensorDictBase:
         cdfs = {

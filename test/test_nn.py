@@ -3312,6 +3312,29 @@ class TestCompositeDist:
         assert sample.get("cont_log_prob").requires_grad
         assert sample.get(("nested", "disc_log_prob")).requires_grad
 
+    def test_entropy(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        sample = dist.entropy()
+        import ipdb
+
+        ipdb.set_trace()
+        assert sample.shape == params.shape
+        sample = dist.sample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+
     def test_cdf(self):
         params = TensorDict(
             {
