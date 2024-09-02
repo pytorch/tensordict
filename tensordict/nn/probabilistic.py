@@ -12,17 +12,18 @@ from textwrap import indent
 from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
 
-from tensordict._contextlib import _DecoratorContextManager
 from tensordict.nn import CompositeDistribution
 
 from tensordict.nn.common import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
 
-from tensordict.nn.utils import set_skip_existing
+from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D, Tensor
+
+from torch.utils._contextlib import _DecoratorContextManager
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
@@ -420,7 +421,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         return self.log_prob_key
 
     @dispatch(auto_batch_size=False)
-    @set_skip_existing(None)
+    @_set_skip_existing_None()
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -469,9 +470,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             interaction_type = self.default_interaction_type
 
         if interaction_type is InteractionType.DETERMINISTIC:
-            try:
+            if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
-            except AttributeError:
+            else:
                 try:
                     support = dist.support
                     fallback = (
@@ -520,13 +521,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            try:
-                return dist.mean
-            except (AttributeError, NotImplementedError):
-                if dist.has_rsample:
-                    return dist.rsample((self.n_empirical_estimate,)).mean(0)
-                else:
-                    return dist.sample((self.n_empirical_estimate,)).mean(0)
+            if hasattr(dist, "mean"):
+                try:
+                    return dist.mean
+                except NotImplementedError:
+                    pass
+            if dist.has_rsample:
+                return dist.rsample((self.n_empirical_estimate,)).mean(0)
+            else:
+                return dist.sample((self.n_empirical_estimate,)).mean(0)
 
         elif interaction_type is InteractionType.RANDOM:
             if dist.has_rsample:
@@ -644,7 +647,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return dest_module.get_dist(tensordict)
 
     @dispatch(auto_batch_size=False)
-    @set_skip_existing(None)
+    @_set_skip_existing_None()
     def forward(
         self,
         tensordict: TensorDictBase,

@@ -17,7 +17,7 @@ import os
 import sys
 import time
 import warnings
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from collections.abc import KeysView
 from copy import copy
 from functools import wraps
@@ -46,16 +46,15 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     unravel_key_list as unravel_key_list_cpp,
     unravel_keys as unravel_keys_cpp,
 )
-from tensordict._contextlib import _DecoratorContextManager
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
-    _ParameterMeta,
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
 )
+from torch.utils._contextlib import _DecoratorContextManager
 from torch.utils.data._utils.worker import _generate_state
 
 try:
@@ -1820,51 +1819,54 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
-class Buffer(Tensor, metaclass=_ParameterMeta):
-    r"""A kind of Tensor that is to be considered a module buffer.
+if hasattr(torch.nn, "Buffer"):
+    _parent_buffer_cls = torch.nn.Buffer
 
-    Args:
-        data (Tensor): buffer tensor.
-        requires_grad (bool, optional): if the buffer requires gradient. See
-            :ref:`locally-disable-grad-doc` for more details. Default: `False`
-    """
+    class Buffer:  # noqa: D101
+        ...
 
-    def __new__(cls, data=None, requires_grad=False):
+    class _BufferMeta: ...
+
+else:
+
+    class _BufferMeta(torch._C._TensorMeta):
+        # Make `isinstance(t, Buffer)` return True for custom tensor instances that have the _is_buffer flag.
+        def __instancecheck__(self, instance):
+            if self is Buffer:
+                if isinstance(instance, torch.Tensor) and getattr(
+                    instance, "_is_buffer", False
+                ):
+                    return True
+            return super().__instancecheck__(instance)
+
+    class Buffer(torch.Tensor, metaclass=_BufferMeta):
+        """A replicate of torch.nn.Buffer if not available (prior to torch v2.5)."""
+
+        def __new__(cls, data=None, *, persistent=True):
+            if data is None:
+                data = torch.empty(0)
+
+            t = data.detach().requires_grad_(data.requires_grad)
+            t.persistent = persistent
+            t._is_buffer = True
+            return t
+
+        __torch_function__ = _disabled_torch_function_impl
+
+    _parent_buffer_cls = Buffer
+
+
+class BufferLegacy(_parent_buffer_cls):
+    """A buffer subclass that keeps the grad fn history."""
+
+    def __new__(cls, data=None, *, persistent=True):
         if data is None:
             data = torch.empty(0)
 
-        if type(data) is torch.Tensor or type(data) is Buffer:
-            return data.as_subclass(cls)
-
-        # Path for custom tensors: set a flag on the instance to indicate parameter-ness.
-        if requires_grad:
-            t = data.detach().requires_grad_(requires_grad)
-        else:
-            t = data
+        t = data
+        t.persistent = persistent
         t._is_buffer = True
         return t
-
-    def __deepcopy__(self, memo):
-        if id(self) in memo:
-            return memo[id(self)]
-        else:
-            result = type(self)(
-                self.data.clone(memory_format=torch.preserve_format), self.requires_grad
-            )
-            memo[id(self)] = result
-            return result
-
-    def __repr__(self):
-        return "Buffer containing:\n" + super(Buffer, self).__repr__()
-
-    def __reduce_ex__(self, proto):
-        # See Note [Don't serialize hooks]
-        return (
-            torch._utils._rebuild_parameter,
-            (self.data, self.requires_grad, OrderedDict()),
-        )
-
-    __torch_function__ = _disabled_torch_function_impl
 
 
 def _getitem_batch_size(batch_size, index):
