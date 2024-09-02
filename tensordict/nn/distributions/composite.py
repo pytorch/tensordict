@@ -34,6 +34,8 @@ class CompositeDistribution(d.Distribution):
             extra keyword arguments for the distributions to be built.
         log_prob_key (NestedKey, optional): key where to write the log_prob.
             Defaults to `'sample_log_prob'`.
+        entropy_key (NestedKey, optional): key where to write the entropy.
+            Defaults to `'entropy'`.
 
     .. note:: In this distribution class, the batch-size of the input tensordict containing the params
         (``params``) is indicative of the batch_shape of the distribution. For instance,
@@ -74,6 +76,7 @@ class CompositeDistribution(d.Distribution):
         name_map: dict | None = None,
         extra_kwargs=None,
         log_prob_key: NestedKey = "sample_log_prob",
+        entropy_key: NestedKey = "entropy",
     ):
         self._batch_shape = params.shape
         if extra_kwargs is None:
@@ -105,6 +108,7 @@ class CompositeDistribution(d.Distribution):
             dists[write_name] = dist
         self.dists = dists
         self.log_prob_key = log_prob_key
+        self.entropy_key = entropy_key
 
     def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
@@ -174,7 +178,7 @@ class CompositeDistribution(d.Distribution):
             while e.ndim > len(self.batch_shape):
                 e = e.sum(-1)
             se = se + e
-        d["entropy"] = se
+        d[self.entropy_key] = se
         return TensorDict(
             d,
             self.batch_shape,
