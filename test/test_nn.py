@@ -3315,8 +3315,11 @@ class TestCompositeDist:
     def test_entropy(self):
         params = TensorDict(
             {
-                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
-                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
             },
             [3],
         )
@@ -3328,12 +3331,9 @@ class TestCompositeDist:
             },
         )
         sample = dist.entropy()
-        import ipdb
-
-        ipdb.set_trace()
         assert sample.shape == params.shape
-        sample = dist.sample((4,))
-        assert sample.shape == torch.Size((4,) + params.shape)
+        assert sample.get("cont_entropy").requires_grad
+        assert sample.get(("nested", "disc_entropy")).requires_grad
 
     def test_cdf(self):
         params = TensorDict(

@@ -170,7 +170,9 @@ class CompositeDistribution(d.Distribution):
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
-            d[_add_suffix(name, "_entropy")] = e = dist.entropy()
+            d[_add_suffix(name, "_entropy")] = e
+            while e.ndim > len(self.batch_shape):
+                e = e.sum(-1)
             se = se + e
         d["entropy"] = se
         return TensorDict(
