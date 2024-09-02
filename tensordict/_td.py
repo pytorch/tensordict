@@ -52,6 +52,7 @@ from tensordict.utils import (
     _get_shape_from_args,
     _getitem_batch_size,
     _index_preserve_data_ptr,
+    _infer_size_impl,
     _is_shared,
     _is_tensorclass,
     _KEY_ERROR,
@@ -84,7 +85,6 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch._dynamo import graph_break
 from torch._functorch.vmap import _maybe_remove_batch_dim
-from torch.jit._shape_functions import infer_size_impl
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
@@ -1762,7 +1762,7 @@ class TensorDict(TensorDictBase):
     ) -> T:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
-            shape = infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.numel())
         if torch.Size(shape) == self.shape:
             return self
         batch_dims = self.batch_dims
@@ -1783,7 +1783,7 @@ class TensorDict(TensorDictBase):
     ) -> T:
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
-            shape = infer_size_impl(shape, self.numel())
+            shape = _infer_size_impl(shape, self.numel())
             shape = torch.Size(shape)
         if torch.Size(shape) == self.shape:
             return self
@@ -2045,9 +2045,26 @@ class TensorDict(TensorDictBase):
 
     @staticmethod
     def _parse_batch_size(
-        source: T | dict,
+        source: T | dict | None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
     ) -> torch.Size:
+        ERR = "batch size was not specified when creating the TensorDict instance and it could not be retrieved from source."
+
+        if is_dynamo_compiling():
+            if isinstance(batch_size, torch.Size):
+                return batch_size
+            elif isinstance(batch_size, tuple):
+                return torch.Size(batch_size)
+            elif isinstance(batch_size, list):
+                return torch.Size(tuple(batch_size))
+            if batch_size is None:
+                return torch.Size([])
+            elif isinstance(batch_size, Number):
+                return torch.Size([batch_size])
+            elif isinstance(source, TensorDictBase):
+                return source.batch_size
+            raise ValueError()
+
         try:
             return torch.Size(batch_size)
         except Exception:
@@ -2057,10 +2074,7 @@ class TensorDict(TensorDictBase):
                 return torch.Size([batch_size])
             elif isinstance(source, TensorDictBase):
                 return source.batch_size
-            raise ValueError(
-                "batch size was not specified when creating the TensorDict "
-                "instance and it could not be retrieved from source."
-            )
+            raise ValueError(ERR)
 
     @property
     def batch_dims(self) -> int:
