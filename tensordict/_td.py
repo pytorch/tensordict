@@ -464,7 +464,7 @@ class TensorDict(TensorDictBase):
         is_dynamo: bool | None = None,
     ):
         if is_dynamo is None:
-            is_dynamo = torch.compiler.is_dynamo_compiling()
+            is_dynamo = is_dynamo_compiling()
         if is_dynamo:
             _check_inbuild()
 
