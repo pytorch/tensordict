@@ -20,7 +20,7 @@ from typing import Any, Callable, overload
 import numpy as np
 import torch
 
-from tensordict.utils import _shape, implement_for, NESTED_TENSOR_ERR
+from tensordict.utils import _shape, implement_for, IndexType, NESTED_TENSOR_ERR
 
 from torch.multiprocessing.reductions import ForkingPickler
 
@@ -864,7 +864,7 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError("Could not find handler or filename.")
 
     @implement_for("torch", "2.0", None)
-    def __getitem__(self, item):
+    def __getitem__(self, item: IndexType) -> torch.Tensor:
         try:
             out = super().__getitem__(item)
         except ValueError as err:
@@ -879,7 +879,7 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     @implement_for("torch", None, "2.0")
-    def __getitem__(self, item):  # noqa: F811
+    def __getitem__(self, item: IndexType) -> torch.Tensor:  # noqa: F811
         try:
             out = super().__getitem__(item)
         except ValueError as err:

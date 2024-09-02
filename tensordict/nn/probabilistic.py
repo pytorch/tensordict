@@ -12,15 +12,17 @@ from textwrap import indent
 from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
 
+from tensordict._nestedkey import NestedKey
+
 from tensordict.nn import CompositeDistribution
 
-from tensordict.nn.common import dispatch, TensorDictModule, TensorDictModuleBase
+from tensordict.nn.common import dispatch, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import _zip_strict
 from torch import distributions as D, Tensor
 
 from torch.utils._contextlib import _DecoratorContextManager
@@ -563,7 +565,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     def __init__(
         self,
-        *modules: TensorDictModule | ProbabilisticTensorDictModule,
+        *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
     ) -> None:
         if len(modules) == 0:

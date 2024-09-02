@@ -20,6 +20,7 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
+from tensordict._nestedkey import NestedKey
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -77,7 +78,6 @@ from tensordict.utils import (
     is_tensorclass,
     KeyedJaggedTensor,
     lock_blocked,
-    NestedKey,
     unravel_key,
     unravel_key_list,
 )
@@ -827,7 +827,7 @@ class TensorDict(TensorDictBase):
     def __setitem__(
         self,
         index: IndexType,
-        value: T | dict | numbers.Number | CompatibleType,
+        value: Any,
     ) -> None:
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):

@@ -9,6 +9,8 @@ import logging
 from copy import deepcopy
 from typing import Any, Iterable
 
+from tensordict._nestedkey import NestedKey
+
 from tensordict.nn.common import (
     dispatch,
     TensorDictModule,
@@ -17,7 +19,7 @@ from tensordict.nn.common import (
 )
 from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import NestedKey, unravel_key_list
+from tensordict.utils import unravel_key_list
 from torch import nn
 
 _has_functorch = False
@@ -157,7 +159,7 @@ class TensorDictSequential(TensorDictModule):
 
     def __init__(
         self,
-        *modules: TensorDictModule,
+        *modules: TensorDictModuleBase,
         partial_tolerant: bool = False,
     ) -> None:
         modules = self._convert_modules(modules)
@@ -203,7 +205,7 @@ class TensorDictSequential(TensorDictModule):
         return in_keys, out_keys
 
     @staticmethod
-    def _find_functional_module(module: TensorDictModule) -> nn.Module:
+    def _find_functional_module(module: TensorDictModuleBase) -> nn.Module:
         if not _has_functorch:
             raise ImportError(FUNCTORCH_ERROR)
         fmodule = module
@@ -413,7 +415,7 @@ class TensorDictSequential(TensorDictModule):
 
     def _run_module(
         self,
-        module: TensorDictModule,
+        module: TensorDictModuleBase,
         tensordict: TensorDictBase,
         **kwargs: Any,
     ) -> Any:
@@ -452,13 +454,13 @@ class TensorDictSequential(TensorDictModule):
     def __len__(self) -> int:
         return len(self.module)
 
-    def __getitem__(self, index: int | slice) -> TensorDictModule:
+    def __getitem__(self, index: int | slice) -> TensorDictModuleBase:
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
             return type(self)(*self.module.__getitem__(index))
 
-    def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
+    def __setitem__(self, index: int, tensordict_module: TensorDictModuleBase) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
     def __delitem__(self, index: int | slice) -> None:

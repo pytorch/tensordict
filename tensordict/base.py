@@ -12,7 +12,6 @@ import contextlib
 import enum
 import gc
 import importlib
-import numbers
 import os.path
 import queue
 import uuid
@@ -48,6 +47,7 @@ import orjson as json
 import torch
 
 from tensordict._contextlib import LAST_OP_MAPS
+from tensordict._nestedkey import NestedKey
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
@@ -85,7 +85,6 @@ from tensordict.utils import (
     is_non_tensor,
     lazy_legacy,
     lock_blocked,
-    NestedKey,
     prod,
     set_lazy_legacy,
     strtobool,
@@ -357,7 +356,7 @@ class TensorDictBase(MutableMapping):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
-    def __getitem__(self, index: IndexType) -> T | torch.Tensor:
+    def __getitem__(self, index: IndexType) -> Any:
         """Indexes all tensors according to the provided index.
 
         The index can be a (nested) key or any valid shape index given the
@@ -433,7 +432,7 @@ class TensorDictBase(MutableMapping):
     def __setitem__(
         self,
         index: IndexType,
-        value: T | dict | numbers.Number | CompatibleType,
+        value: Any,
     ) -> None: ...
 
     def __delitem__(self, key: NestedKey) -> T:

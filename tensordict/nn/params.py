@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import functools
 import inspect
-import numbers
 import re
 import weakref
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -17,6 +16,7 @@ from typing import Any, Callable, Dict, Iterator, List, OrderedDict, Sequence, T
 import torch
 
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
@@ -37,7 +37,6 @@ from tensordict.utils import (
     erase_cache,
     IndexType,
     lock_blocked,
-    NestedKey,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
@@ -412,7 +411,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __setitem__(
         self,
         index: IndexType,
-        value: TensorDictBase | dict | numbers.Number | CompatibleType,
+        value: Any,
     ) -> None: ...
 
     @lock_blocked
@@ -561,7 +560,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def __getitem__(self, index: IndexType) -> TensorDictBase: ...
+    def __getitem__(self, index: IndexType) -> Any: ...
 
     __getitems__ = __getitem__
 

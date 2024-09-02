@@ -1333,7 +1333,7 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
 
     """
 
-    def __init__(self, td_module: TensorDictModule) -> None:
+    def __init__(self, td_module: TensorDictModuleBase) -> None:
         super().__init__()
         self.td_module = td_module
         if len(self.td_module._forward_hooks):

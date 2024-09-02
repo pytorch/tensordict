@@ -33,6 +33,7 @@ import tensordict as tensordict_lib
 import torch
 from tensordict._C import _unravel_key_to_tuple  # @manual=//pytorch/tensordict:_C
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
@@ -52,7 +53,6 @@ from tensordict.utils import (
     IndexType,
     is_tensorclass,
     KeyDependentDefaultDict,
-    NestedKey,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
@@ -3074,7 +3074,7 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return self
 
-    def __setitem__(self, index, value):
+    def __setitem__(self, index: IndexType, value: Any):
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):
             global _BREAK_ON_MEMMAP

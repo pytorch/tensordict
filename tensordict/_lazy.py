@@ -2076,7 +2076,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return any(item is td for td in self.tensordicts)
         return super().__contains__(item)
 
-    def __getitem__(self, index: IndexType) -> T:
+    def __getitem__(self, index: IndexType) -> Any:
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
             if index_key:
