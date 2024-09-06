@@ -31,7 +31,6 @@ import orjson as json
 import tensordict as tensordict_lib
 
 import torch
-from tensordict._C import _unravel_key_to_tuple  # @manual=//pytorch/tensordict:_C
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
@@ -43,11 +42,12 @@ from tensordict.base import (
     _register_tensor_class,
     CompatibleType,
 )
-from tensordict.utils import (
+from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
     _td_fields,
+    _unravel_key_to_tuple,
     _zip_strict,
     DeviceType,
     IndexType,
@@ -1093,6 +1093,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
 
         if result is td:
             return self
+
         def deliver_result(result):
             if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
                 if not is_dynamo_compiling():
@@ -1107,6 +1108,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
                     non_tensordict = tree_map(lambda x: x, non_tensordict)
                 return self._from_tensordict(result, non_tensordict)
             return result
+
         if isinstance(result, tuple):
             return tuple(deliver_result(r) for r in result)
         return deliver_result(result)
