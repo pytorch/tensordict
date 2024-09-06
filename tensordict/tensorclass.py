@@ -224,6 +224,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "lerp_",
     "lgamma",
     "lgamma_",
+    "load_memmap_",
     "lock_",
     "log",
     "log10",
