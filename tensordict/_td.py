@@ -306,6 +306,7 @@ class TensorDict(TensorDictBase):
         non_blocking: bool = None,
         lock: bool = False,
         nested: bool = True,
+        **kwargs,
     ) -> TensorDict:
         if is_dynamo_compiling():
             return TensorDict(
@@ -315,7 +316,10 @@ class TensorDict(TensorDictBase):
                 names=names,
                 non_blocking=non_blocking,
                 lock=lock,
+                **kwargs,
             )
+        if kwargs and not source:
+            source = kwargs
         self = cls.__new__(cls)
         sub_non_blocking = False
         if device is not None:
