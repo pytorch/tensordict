@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._C import (  # @manual=//pytorch/tensordict:_C
+from tensordict.utils import (
     _unravel_key_to_tuple,
     unravel_key_list,
 )
@@ -1078,6 +1078,7 @@ class TensorDictModule(TensorDictModuleBase):
         module: Callable,
         in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
         out_keys: NestedKey | List[NestedKey],
+        inplace: bool=True,
     ) -> None:
         super().__init__()
 
