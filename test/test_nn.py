@@ -3335,7 +3335,7 @@ class TestCompositeDist:
         sample = dist.log_prob_composite(sample, include_sum=True)
         assert sample.get("cont_log_prob").requires_grad
         assert sample.get(("nested", "disc_log_prob")).requires_grad
-        assert "log_prob" in sample.keys()
+        assert "sample_log_prob" in sample.keys()
 
     def test_entropy(self):
         params = TensorDict(
