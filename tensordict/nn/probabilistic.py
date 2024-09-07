@@ -408,8 +408,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         """Writes the log-probability of the distribution sample."""
         dist = self.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
-            tensordict = dist.log_prob(tensordict)
-            return tensordict.get("sample_log_prob")
+            return dist.log_prob(tensordict)
         else:
             return dist.log_prob(tensordict.get(self.out_keys[0]))
 

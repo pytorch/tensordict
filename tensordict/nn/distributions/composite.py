@@ -151,7 +151,19 @@ class CompositeDistribution(d.Distribution):
             shape + self.batch_shape,
         )
 
-    def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor:
+        """Computes and returns the summed log-prob."""
+        slp = 0.0
+        for name, dist in self.dists.items():
+            lp = dist.log_prob(sample.get(name))
+            while lp.ndim > sample.ndim:
+                lp = lp.sum(-1)
+            slp = slp + lp
+        return slp
+
+    def log_prob_composite(
+        self, sample: TensorDictBase, include_sum=True
+    ) -> TensorDictBase:
         """Writes a ``<sample>_log_prob`` entry for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
         slp = 0.0
         d = {}
@@ -160,11 +172,26 @@ class CompositeDistribution(d.Distribution):
             while lp.ndim > sample.ndim:
                 lp = lp.sum(-1)
             slp = slp + lp
-        d[self.log_prob_key] = slp
+        if include_sum:
+            d[self.log_prob_key] = slp
         sample.update(d)
         return sample
 
-    def entropy(self, samples_mc=1) -> TensorDictBase:
+    def entropy(self, samples_mc=1) -> torch.Tensor:
+        """Computes and returns the summed entropies."""
+        se = 0.0
+        for _, dist in self.dists.items():
+            try:
+                e = dist.entropy()
+            except NotImplementedError:
+                x = dist.rsample((samples_mc,))
+                e = -dist.log_prob(x).mean(0)
+            while e.ndim > len(self.batch_shape):
+                e = e.sum(-1)
+            se = se + e
+        return se
+
+    def entropy_composite(self, samples_mc=1, include_sum=True) -> TensorDictBase:
         """Writes a ``<sample>_entropy`` entry for each sample in the input tensordict, along with a ``"entropy"`` entry with the summed entropies."""
         se = 0.0
         d = {}
@@ -178,7 +205,8 @@ class CompositeDistribution(d.Distribution):
             while e.ndim > len(self.batch_shape):
                 e = e.sum(-1)
             se = se + e
-        d[self.entropy_key] = se
+        if include_sum:
+            d[self.entropy_key] = se
         return TensorDict(
             d,
             self.batch_shape,

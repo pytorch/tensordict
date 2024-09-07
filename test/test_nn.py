@@ -3308,9 +3308,34 @@ class TestCompositeDist:
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
         sample = dist.rsample((4,))
-        sample = dist.log_prob(sample)
+        lp = dist.log_prob(sample)
+        assert isinstance(lp, torch.Tensor)
+        assert lp.requires_grad
+
+    def test_log_prob_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        sample = dist.rsample((4,))
+        sample = dist.log_prob_composite(sample, include_sum=True)
         assert sample.get("cont_log_prob").requires_grad
         assert sample.get(("nested", "disc_log_prob")).requires_grad
+        assert "log_prob" in sample.keys()
 
     def test_entropy(self):
         params = TensorDict(
@@ -3330,10 +3355,34 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.Categorical,
             },
         )
-        sample = dist.entropy()
+        ent = dist.entropy()
+        assert ent.shape == params.shape
+        assert isinstance(ent, torch.Tensor)
+        assert ent.requires_grad
+
+    def test_entropy_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        sample = dist.entropy_composite(include_sum=True)
         assert sample.shape == params.shape
         assert sample.get("cont_entropy").requires_grad
         assert sample.get(("nested", "disc_entropy")).requires_grad
+        assert "entropy" in sample.keys()
 
     def test_cdf(self):
         params = TensorDict(
