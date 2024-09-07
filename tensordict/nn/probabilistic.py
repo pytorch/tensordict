@@ -438,7 +438,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             if isinstance(out_tensors, TensorDictBase):
                 tensordict_out.update(out_tensors)
                 if self.return_log_prob:
-                    tensordict_out = dist.log_prob(tensordict_out)
+                    log_prob = dist.log_prob(tensordict_out)
+                    tensordict_out.set(self.log_prob_key, log_prob)
             else:
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)
