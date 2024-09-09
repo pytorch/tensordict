@@ -12,7 +12,6 @@ import contextlib
 import enum
 import gc
 import importlib
-import numbers
 import os.path
 import queue
 import uuid
@@ -47,13 +46,14 @@ import numpy as np
 import orjson as json
 import torch
 
+from tensordict._contextlib import LAST_OP_MAPS
+from tensordict._nestedkey import NestedKey
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
-    _get_shape_from_args,
     _is_non_tensor,
     _is_number,
     _is_tensorclass,
@@ -72,7 +72,6 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
-    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -86,7 +85,6 @@ from tensordict.utils import (
     is_non_tensor,
     lazy_legacy,
     lock_blocked,
-    NestedKey,
     prod,
     set_lazy_legacy,
     strtobool,
@@ -102,6 +100,12 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -352,7 +356,7 @@ class TensorDictBase(MutableMapping):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
-    def __getitem__(self, index: IndexType) -> T | torch.Tensor:
+    def __getitem__(self, index: IndexType) -> Any:
         """Indexes all tensors according to the provided index.
 
         The index can be a (nested) key or any valid shape index given the
@@ -428,7 +432,7 @@ class TensorDictBase(MutableMapping):
     def __setitem__(
         self,
         index: IndexType,
-        value: T | dict | numbers.Number | CompatibleType,
+        value: Any,
     ) -> None: ...
 
     def __delitem__(self, key: NestedKey) -> T:
@@ -436,7 +440,7 @@ class TensorDictBase(MutableMapping):
 
     def __getstate__(self):
         result = dict(self.__dict__)
-        for key in ("_last_op", "_cache", "__last_op_queue", "__lock_parents_weakrefs"):
+        for key in ("_last_op", "_cache", "__lock_parents_weakrefs"):
             result.pop(key, None)
         return result
 
@@ -444,7 +448,6 @@ class TensorDictBase(MutableMapping):
         for key, value in state.items():
             setattr(self, key, value)
         self._cache = None
-        self.__last_op_queue = None
         self._last_op = None
         if self._is_locked:
             # this can cause avoidable overhead, as we will be locking the leaves
@@ -8476,6 +8479,10 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
 
+    @abc.abstractmethod
+    @cache  # noqa: B019
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
+
     # Validation and checks
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
         if isinstance(array, (float, int, bool)):
@@ -8598,18 +8605,9 @@ class TensorDictBase(MutableMapping):
                 self.names = value.names[: self.batch_dims]
         return value
 
-    # Context manager functionality
-    @property
-    def _last_op_queue(self):
-        # this is used to keep track of the last operation when using
-        # the tensordict as a context manager.
-        last_op_queue = self.__dict__.get("__last_op_queue")
-        if last_op_queue is None:
-            last_op_queue = collections.deque()
-            self.__dict__["__last_op_queue"] = last_op_queue
-        return last_op_queue
-
     def __enter__(self):
+        if not hasattr(self, "_last_op_queue"):
+            self._last_op_queue = collections.deque()
         self._last_op_queue.append(self._last_op)
         return self
 
@@ -8623,117 +8621,9 @@ class TensorDictBase(MutableMapping):
             last_op, (args, kwargs, out) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
             #  added or deleted
-            if last_op == type(self).lock_.__name__:
-                return self.unlock_()
-            elif last_op == type(self).unlock_.__name__:
-                return self.lock_()
-            elif last_op == type(self).transpose.__name__:
-                dim0, dim1 = args
-                if not out.is_locked:
-                    return out.update(self.transpose(dim0, dim1), inplace=False)
-                else:
-                    return out.update_(self.transpose(dim0, dim1))
-            elif last_op == type(self).flatten_keys.__name__:
-                sep = args[0] if args else "."
-                if not out.is_locked:
-                    return out.update(self.unflatten_keys(sep), inplace=False)
-                else:
-                    return out.update_(self.unflatten_keys(sep))
-            elif last_op == type(self).unflatten_keys.__name__:
-                sep = args[0] if args else "."
-                if not out.is_locked:
-                    return out.update(self.flatten_keys(sep), inplace=False)
-                else:
-                    return out.update_(self.flatten_keys(sep))
-            elif last_op == type(self).flatten.__name__:
-                if len(args) == 2:
-                    dim0, dim1 = args
-                elif len(args) == 1:
-                    dim0 = args[0]
-                    dim1 = kwargs.get("end_dim", -1)
-                else:
-                    dim0 = kwargs.get("start_dim", 0)
-                    dim1 = kwargs.get("end_dim", -1)
-                if dim1 < 0:
-                    dim1 = out.ndim + dim1
-                if dim0 < 0:
-                    dim0 = out.ndim + dim0
-
-                if not out.is_locked:
-                    return out.update(
-                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=False
-                    )
-                else:
-                    return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
-
-            elif last_op == type(self).unflatten.__name__:
-                if args:
-                    dim0 = args[0]
-                    if len(args) > 1:
-                        unflattened_size = args[1]
-                    else:
-                        unflattened_size = kwargs.get("unflattened_size")
-                else:
-                    dim0 = kwargs.get("dim")
-                    unflattened_size = kwargs.get("unflattened_size")
-                if dim0 < 0:
-                    dim0 = out.ndim + dim0
-                dim1 = dim0 + len(unflattened_size) - 1
-                if not out.is_locked:
-                    unflattened = self.flatten(dim0, dim1)
-                    return out.update(unflattened, inplace=False)
-                else:
-                    unflattened = self.flatten(dim0, dim1)
-                    return out.update_(unflattened)
-
-            elif last_op == type(self).permute.__name__:
-                dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
-                dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
-                # inverse map
-                inv_dims_list = np.argsort(dims_list)
-                if not out.is_locked:
-                    return out.update(self.permute(inv_dims_list), inplace=False)
-                else:
-                    return out.update_(self.permute(inv_dims_list))
-            elif last_op == type(self).view.__name__:
-                if not out.is_locked:
-                    return out.update(self.view(out.shape), inplace=False)
-                else:
-                    return out.update_(self.view(out.shape))
-            elif last_op == type(self).unsqueeze.__name__:
-                if args:
-                    (dim,) = args
-                elif kwargs:
-                    dim = kwargs["dim"]
-                else:
-                    raise RuntimeError(
-                        "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
-                    )
-                if not out.is_locked:
-                    return out.update(self.squeeze(dim), inplace=False)
-                else:
-                    return out.update_(self.squeeze(dim))
-            elif last_op == type(self).squeeze.__name__:
-                if args:
-                    (dim,) = args
-                elif kwargs:
-                    dim = kwargs["dim"]
-                else:
-                    raise RuntimeError(
-                        "Cannot use td.squeeze() as a decorator if the dimension is implicit."
-                    )
-                if not out.is_locked:
-                    return out.update(self.unsqueeze(dim), inplace=False)
-                else:
-                    return out.update_(self.unsqueeze(dim))
-            elif last_op == type(self).to_module.__name__:
-                if is_tensor_collection(out):
-                    with out.unlock_():
-                        return self.to_module(*args, **kwargs, swap_dest=out)
-                else:
-                    raise RuntimeError(
-                        "to_module cannot be used as a decorator when return_swap=False."
-                    )
+            _inv_caller = LAST_OP_MAPS.get(last_op)
+            if _inv_caller is not None:
+                return _inv_caller(self, args, kwargs, out)
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
         return self
