@@ -6,7 +6,7 @@
 import tensordict._reductions
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
-from tensordict._td import is_tensor_collection, TensorDict
+from tensordict._td import from_module, from_modules, is_tensor_collection, TensorDict
 from tensordict.base import (
     get_defaults_to_none,
     set_get_defaults_to_none,
