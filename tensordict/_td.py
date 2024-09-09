@@ -4539,7 +4539,7 @@ def from_module(
             device=None,
             is_shared=False)
     """
-    return TensorDict.from_modules(
+    return TensorDict.from_module(
         module=module, as_module=as_module, lock=lock, use_state_dict=use_state_dict
     )
 
