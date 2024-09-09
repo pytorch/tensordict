@@ -4656,6 +4656,7 @@ def from_modules(
         expand_identical=expand_identical,
         lock=lock,
         use_state_dict=use_state_dict,
+        as_module=as_module,
     )
 
 
