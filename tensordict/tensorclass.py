@@ -31,8 +31,8 @@ import orjson as json
 import tensordict as tensordict_lib
 
 import torch
-from tensordict._C import _unravel_key_to_tuple  # @manual=//pytorch/tensordict:_C
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
@@ -42,17 +42,17 @@ from tensordict.base import (
     _register_tensor_class,
     CompatibleType,
 )
-from tensordict.utils import (
+from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
     _td_fields,
+    _unravel_key_to_tuple,
     _zip_strict,
     DeviceType,
     IndexType,
     is_tensorclass,
     KeyDependentDefaultDict,
-    NestedKey,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
@@ -154,6 +154,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
     "_get_sub_tensordict",
+    "_maybe_remove_batch_dim",
     "_multithread_apply_flat",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
@@ -180,6 +181,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "auto_batch_size_",
     "ceil",
     "ceil_",
+    "chunk",
     "clamp_max",
     "clamp_max_",
     "clamp_min",
@@ -222,6 +224,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "lerp_",
     "lgamma",
     "lgamma_",
+    "load_memmap_",
     "lock_",
     "log",
     "log10",
@@ -276,6 +279,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "sin_",
     "sinh",
     "sinh_",
+    "split",
     "sqrt",
     "sqrt_",
     "squeeze",
@@ -1090,19 +1094,25 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
 
         if result is td:
             return self
-        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
-            if not is_dynamo_compiling():
-                non_tensordict = super(type(self), self).__getattribute__(
-                    "_non_tensordict"
-                )
-            else:
-                non_tensordict = self._non_tensordict
-            non_tensordict = dict(non_tensordict)
-            if copy_non_tensor:
-                # use tree_map to copy
-                non_tensordict = tree_map(lambda x: x, non_tensordict)
-            return self._from_tensordict(result, non_tensordict)
-        return result
+
+        def deliver_result(result):
+            if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
+                if not is_dynamo_compiling():
+                    non_tensordict = super(type(self), self).__getattribute__(
+                        "_non_tensordict"
+                    )
+                else:
+                    non_tensordict = self._non_tensordict
+                non_tensordict = dict(non_tensordict)
+                if copy_non_tensor:
+                    # use tree_map to copy
+                    non_tensordict = tree_map(lambda x: x, non_tensordict)
+                return self._from_tensordict(result, non_tensordict)
+            return result
+
+        if isinstance(result, tuple):
+            return tuple(deliver_result(r) for r in result)
+        return deliver_result(result)
 
     return wrapped_func
 
@@ -1195,7 +1205,6 @@ def _update_(
     self._tensordict.update_(
         input_dict_or_td,
         clone=clone,
-        inplace=inplace,
         keys_to_update=keys_to_update,
         non_blocking=non_blocking,
     )
@@ -3073,7 +3082,7 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return self
 
-    def __setitem__(self, index, value):
+    def __setitem__(self, index: IndexType, value: Any):
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):
             global _BREAK_ON_MEMMAP

@@ -13,10 +13,6 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._C import (  # @manual=//pytorch/tensordict:_C
-    _unravel_key_to_tuple,
-    unravel_key_list,
-)
 
 from tensordict._td import is_tensor_collection, TensorDictBase
 from tensordict.functional import make_tensordict
@@ -32,7 +28,13 @@ from tensordict.nn.utils import (
     _dispatch_td_nn_modules,
     _set_skip_existing_None,
 )
-from tensordict.utils import _zip_strict, implement_for, NestedKey
+from tensordict.utils import (
+    _unravel_key_to_tuple,
+    _zip_strict,
+    implement_for,
+    NestedKey,
+    unravel_key_list,
+)
 from torch import nn, Tensor
 
 try:
@@ -1078,6 +1080,7 @@ class TensorDictModule(TensorDictModuleBase):
         module: Callable,
         in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
         out_keys: NestedKey | List[NestedKey],
+        inplace: bool = True,
     ) -> None:
         super().__init__()
 
@@ -1333,7 +1336,7 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
 
     """
 
-    def __init__(self, td_module: TensorDictModule) -> None:
+    def __init__(self, td_module: TensorDictModuleBase) -> None:
         super().__init__()
         self.td_module = td_module
         if len(self.td_module._forward_hooks):

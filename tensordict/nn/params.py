@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import functools
 import inspect
-import numbers
 import re
 import weakref
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -17,6 +16,7 @@ from typing import Any, Callable, Dict, Iterator, List, OrderedDict, Sequence, T
 import torch
 
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
@@ -33,11 +33,11 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
-    Buffer,
+    BufferLegacy,
     erase_cache,
     IndexType,
+    is_batchedtensor,
     lock_blocked,
-    NestedKey,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
@@ -51,6 +51,11 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 def _apply_leaves(data, fn):
@@ -108,12 +113,17 @@ def _maybe_make_param(tensor):
 def _maybe_make_param_or_buffer(tensor):
     if (
         isinstance(tensor, (Tensor, ftdim.Tensor))
-        and not isinstance(tensor, nn.Parameter)
+        and not isinstance(tensor, (nn.Parameter, Buffer))
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
-        # convert all non-parameters to buffers
-        # dataptr = tensor.data.data_ptr()
-        tensor = Buffer(tensor)
+        if not tensor.requires_grad and not is_batchedtensor(tensor):
+            # convert all non-parameters to buffers
+            # dataptr = tensor.data.data_ptr()
+            tensor = Buffer(tensor)
+        else:
+            # We want to keep the grad_fn of tensors, e.g. param.expand(10) should point to the original param
+            tensor = BufferLegacy(tensor)
+
         # assert tensor.data.data_ptr() == dataptr
     return tensor
 
@@ -329,7 +339,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self._reset_params()
         self._is_locked = False
         self._locked_tensordicts = []
-        self.__last_op_queue = None
         self._get_post_hook = []
 
     def register_get_post_hook(self, hook):
@@ -403,7 +412,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __setitem__(
         self,
         index: IndexType,
-        value: TensorDictBase | dict | numbers.Number | CompatibleType,
+        value: Any,
     ) -> None: ...
 
     @lock_blocked
@@ -552,7 +561,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def __getitem__(self, index: IndexType) -> TensorDictBase: ...
+    def __getitem__(self, index: IndexType) -> Any: ...
 
     __getitems__ = __getitem__
 
@@ -609,7 +618,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     tensor.data.clone(), requires_grad=tensor.requires_grad
                 )
             else:
-                result = Buffer(tensor.data.clone(), requires_grad=tensor.requires_grad)
+                result = Buffer(tensor.data.clone())
             memo[tensor] = result
             return result
 
@@ -708,6 +717,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_fallback
     def _remove_batch_dim(self, *args, **kwargs): ...
+
+    @_fallback
+    def _maybe_remove_batch_dim(self, *args, **kwargs): ...
 
     @_fallback
     def _has_names(self, *args, **kwargs): ...
@@ -1204,7 +1216,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 buffer.data = buffer_applied
                 out_buffer = buffer
             else:
-                out_buffer = Buffer(buffer_applied, buffer.requires_grad)
+                out_buffer = Buffer(buffer_applied)
                 self._buffers[key] = out_buffer
 
             if buffer.grad is not None:

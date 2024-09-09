@@ -222,8 +222,8 @@ class TestTD:
             make_td_with_names, fullgraph=True, mode=mode
         )
         make_td_with_names(data_dict)
-        with pytest.raises(torch._dynamo.exc.Unsupported):
-            make_td_with_names_c(data_dict)
+        # with pytest.raises(torch._dynamo.exc.Unsupported):
+        make_td_with_names_c(data_dict)
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(), reason="cuda required to test device casting"
@@ -623,25 +623,12 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.clone())
         td_zero.zero_()
 
-        def call(x, td):
-            with td.to_module(module):
-                return module(x)
-
-        call_compile = torch.compile(call, fullgraph=True, mode=mode)
-        x = torch.randn(2, 3)
-        with pytest.raises(
-            torch._dynamo.exc.Unsupported,
-            match="UserDefinedObjectVariable|Unsupported context manager",
-        ):
-            call_compile(x, td_zero)
         os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"
         try:
 
             def call(x, td):
-                params = td.to_module(module, return_swap=True)
-                result = module(x)
-                params.to_module(module, return_swap=True, swap_dest=td)
-                return result
+                with td.to_module(module):
+                    return module(x)
 
             call_compile = torch.compile(call, fullgraph=True, mode=mode)
             x = torch.randn(2, 3)
@@ -657,6 +644,7 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
+    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -683,14 +671,8 @@ class TestFunctional:
         td_zero.zero_()
 
         def call(x, td):
-            # TOFIX: `with` needs registering
-            # with td.to_module(module):
-            #     return module(x)
-
-            params = td.to_module(module, return_swap=True)
-            result = module(x)
-            params.to_module(module, return_swap=True, swap_dest=td)
-            return result
+            with td.to_module(module):
+                return module(x)
 
         call_compile = torch.compile(call, fullgraph=True, mode=mode)
         x = torch.randn(2, 3)
@@ -722,6 +704,37 @@ class TestFunctional:
             assert td_zero["3", "param"] == 4
         else:
             assert (td_zero == 0).all()
+
+    # in-place modif raises an error even if fullgraph=False
+    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
+    def test_vmap_functional(self, mode):
+        module = torch.nn.Sequential(
+            torch.nn.Linear(3, 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(4, 5),
+        )
+
+        td = TensorDict.from_module(module)
+        td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
+
+        def call(x, td):
+            with td.to_module(module):
+                result = module(x)
+            return result
+
+        vmap_call = torch.vmap(call, (None, 0))
+        call_compile = torch.compile(vmap_call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+
+        assert (vmap_call(x, td_zero) == 0).all()
+        assert (TensorDict.from_module(module) == td).all()
+        assert (td_zero == 0).all()
+
+        call_compile(x, td_zero)
+        assert (TensorDict.from_module(module) == td).all()
+        assert (call_compile(x, td_zero) == 0).all()
+        assert (TensorDict.from_module(module) == td).all()
+        assert (td_zero == 0).all()
 
 
 if __name__ == "__main__":
