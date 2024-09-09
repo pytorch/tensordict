@@ -162,7 +162,7 @@ def _main(argv):
     pytorch_package_dep = _get_pytorch_version(is_nightly, local_build)
     logging.info("-- PyTorch dependency:", pytorch_package_dep)
 
-    long_description = (ROOT_DIR / "README.md").read_text()
+    long_description = (ROOT_DIR / "README.md").read_text(encoding="utf8")
     sys.argv = [sys.argv[0], *unknown]
 
     setup(

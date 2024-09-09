@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import abc
 import collections
 import concurrent.futures
 import functools
@@ -18,7 +17,7 @@ import re
 import sys
 import time
 import warnings
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from collections.abc import KeysView
 from copy import copy
 from functools import wraps
@@ -47,16 +46,16 @@ from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     unravel_key_list as unravel_key_list_cpp,
     unravel_keys as unravel_keys_cpp,
 )
-from tensordict._contextlib import _DecoratorContextManager
+from tensordict._nestedkey import NestedKey
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
-    _ParameterMeta,
     UninitializedBuffer,
     UninitializedParameter,
     UninitializedTensorMixin,
 )
+from torch.utils._contextlib import _DecoratorContextManager
 from torch.utils.data._utils.worker import _generate_state
 
 try:
@@ -150,29 +149,6 @@ _DTYPE2STRDTYPE = {dtype: str_dtype for str_dtype, dtype in _STRDTYPE2DTYPE.item
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
-
-
-class _NestedKeyMeta(abc.ABCMeta):
-    def __instancecheck__(self, instance):
-        return isinstance(instance, str) or (
-            isinstance(instance, tuple)
-            and len(instance)
-            and all(isinstance(subkey, NestedKey) for subkey in instance)
-        )
-
-
-class NestedKey(metaclass=_NestedKeyMeta):
-    """An abstract class for nested keys.
-
-    Nested keys are the generic key type accepted by TensorDict.
-
-    A nested key is either a string or a non-empty tuple of NestedKeys instances.
-
-    The NestedKey class supports instance checks.
-
-    """
-
-    pass
 
 
 _KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
@@ -834,7 +810,7 @@ class timeit:
 
 
 def int_generator(seed):
-    """A pseudo-random chaing generator.
+    """A pseudo-random chain generator.
 
     To be used to produce deterministic integer sequences
 
@@ -1181,7 +1157,7 @@ class _StringKeys(KeysView):
     def __init__(self, keys):
         self.keys = keys
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.keys.__getitem__(key)
 
     def __iter__(self):
@@ -1568,11 +1544,14 @@ def assert_close(
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
-        default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
-        msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
+        local_msg = f"key {key} does not match, got mse = {mse:4.4f}"
+        new_msg = ",\t".join([local_msg, msg]) if len(msg) else local_msg
         torch.testing.assert_close(
-            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
+            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
         )
+        local_msg = f"key {key} matches"
+        msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
+
     return True
 
 
@@ -1818,51 +1797,54 @@ def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     return size
 
 
-class Buffer(Tensor, metaclass=_ParameterMeta):
-    r"""A kind of Tensor that is to be considered a module buffer.
+if hasattr(torch.nn, "Buffer"):
+    _parent_buffer_cls = torch.nn.Buffer
 
-    Args:
-        data (Tensor): buffer tensor.
-        requires_grad (bool, optional): if the buffer requires gradient. See
-            :ref:`locally-disable-grad-doc` for more details. Default: `False`
-    """
+    class Buffer:  # noqa: D101
+        ...
 
-    def __new__(cls, data=None, requires_grad=False):
+    class _BufferMeta: ...
+
+else:
+
+    class _BufferMeta(torch._C._TensorMeta):
+        # Make `isinstance(t, Buffer)` return True for custom tensor instances that have the _is_buffer flag.
+        def __instancecheck__(self, instance):
+            if self is Buffer:
+                if isinstance(instance, torch.Tensor) and getattr(
+                    instance, "_is_buffer", False
+                ):
+                    return True
+            return super().__instancecheck__(instance)
+
+    class Buffer(torch.Tensor, metaclass=_BufferMeta):
+        """A replicate of torch.nn.Buffer if not available (prior to torch v2.5)."""
+
+        def __new__(cls, data=None, *, persistent=True):
+            if data is None:
+                data = torch.empty(0)
+
+            t = data.detach().requires_grad_(data.requires_grad)
+            t.persistent = persistent
+            t._is_buffer = True
+            return t
+
+        __torch_function__ = _disabled_torch_function_impl
+
+    _parent_buffer_cls = Buffer
+
+
+class BufferLegacy(_parent_buffer_cls):
+    """A buffer subclass that keeps the grad fn history."""
+
+    def __new__(cls, data=None, *, persistent=True):
         if data is None:
             data = torch.empty(0)
 
-        if type(data) is torch.Tensor or type(data) is Buffer:
-            return data.as_subclass(cls)
-
-        # Path for custom tensors: set a flag on the instance to indicate parameter-ness.
-        if requires_grad:
-            t = data.detach().requires_grad_(requires_grad)
-        else:
-            t = data
+        t = data
+        t.persistent = persistent
         t._is_buffer = True
         return t
-
-    def __deepcopy__(self, memo):
-        if id(self) in memo:
-            return memo[id(self)]
-        else:
-            result = type(self)(
-                self.data.clone(memory_format=torch.preserve_format), self.requires_grad
-            )
-            memo[id(self)] = result
-            return result
-
-    def __repr__(self):
-        return "Buffer containing:\n" + super(Buffer, self).__repr__()
-
-    def __reduce_ex__(self, proto):
-        # See Note [Don't serialize hooks]
-        return (
-            torch._utils._rebuild_parameter,
-            (self.data, self.requires_grad, OrderedDict()),
-        )
-
-    __torch_function__ = _disabled_torch_function_impl
 
 
 def _getitem_batch_size(batch_size, index):
@@ -2516,7 +2498,8 @@ def _lock_warn():
         "only be done if users make sure that the code runs in eager mode. "
         "torch.compile doesn't support weakrefs which are used to reference root tensordicts "
         "to sub-tensordict and prevent unlocking a node when the graph is locked. "
-        "Such operation will fail in eager mode but won't be captured by torch.compile."
+        "Such operation will fail in eager mode but won't be captured by torch.compile.",
+        category=UserWarning,
     )
 
 
@@ -2556,22 +2539,77 @@ def _pin_mem(q_in, q_out):
         q_out.put((key, val))
 
 
+def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
+    # A local copy of  torch.jit._shape_functions.infer_size_impl which is skipped by torch.compile
+    newsize = 1
+    infer_dim: int | None = None
+    for dim in range(len(shape)):
+        if shape[dim] == -1:
+            if infer_dim is not None:
+                raise AssertionError("only one dimension can be inferred")
+            infer_dim = dim
+        elif shape[dim] >= 0:
+            newsize *= shape[dim]
+        else:
+            raise AssertionError("invalid shape dimensions")
+    if not (
+        numel == newsize
+        or (infer_dim is not None and newsize > 0 and numel % newsize == 0)
+    ):
+        raise AssertionError("invalid shape")
+    out = _copy(shape)
+    if infer_dim is not None:
+        out[infer_dim] = numel // newsize
+    return out
+
+
 def parse_tensor_dict_string(s: str):
-    """Parse a TensorDict repr to a TensorDict."""
+    """Parse a TensorDict repr to a TensorDict.
+
+    .. note:: This functions is intended to be used for debugging, to reproduce a tensordict
+      given its printed version, and should not be used in real applications.
+
+    """
     from tensordict import TensorDict
 
     # Regular expression patterns
     field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
     nested_field_pattern = r"(\w+): TensorDict\("
-    # Find all fields in the string
+    batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
+    device_pattern = r"device=(\w+)(?=,|$)"
+
+    # Find all nested TensorDicts first
+    nested_dict_ranges = []
+    for match in re.finditer(nested_field_pattern, s):
+        start_idx = match.start()
+        depth = 1
+        for i in range(start_idx + len(match.group(0)), len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+            if depth == 0:
+                end_idx = i
+                break
+        nested_dict_ranges.append((start_idx, end_idx))
+
+    # Find all fields in the string that are not part of a nested TensorDict
     fields = {}
     for match in re.finditer(field_pattern, s):
         name, _, shape, device, dtype, is_shared = match.groups()
-        shape = [int(x) for x in shape.split(", ")]
+        field_start = match.start()
+        field_end = match.end()
+        if any(
+            field_start >= start and field_end <= end
+            for start, end in nested_dict_ranges
+        ):
+            continue  # skip if this field is inside a nested TensorDict
+        shape = [int(x) for x in shape.split(", ")] if shape else []
         fields[name] = torch.zeros(
             tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
         )
-    # Find nested TensorDicts
+
+    # Now find nested TensorDicts and add them to the fields
     for match in re.finditer(nested_field_pattern, s):
         name = match.group(1)
         start_idx = match.end()
@@ -2587,8 +2625,26 @@ def parse_tensor_dict_string(s: str):
         content = s[start_idx:end_idx]
         nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
         fields[name] = nested_fields
-    # TODO: parse batch size and device
-    batch_size = torch.Size([16])
-    device = torch.device("cpu")
-    tensor_dict = TensorDict(fields, batch_size=batch_size, device=device)
+
+    # Parse batch size
+    batch_size_matches = re.findall(batch_size_pattern, s)
+    if batch_size_matches:
+        batch_size_match = batch_size_matches[-1]  # Take the last match
+        if batch_size_match[1]:
+            batch_size = [int(x) for x in batch_size_match[1].split(", ")]
+        else:
+            batch_size = []
+    else:
+        raise ValueError("Batch size not found in the string")
+    # Parse device
+    device_matches = re.findall(device_pattern, s)
+    if device_matches:
+        device = device_matches[-1]  # Take the last match
+        if device == "None":
+            device = None
+        else:
+            device = torch.device(device)
+    else:
+        raise ValueError("Device not found in the string")
+    tensor_dict = TensorDict(fields, batch_size=torch.Size(batch_size), device=device)
     return tensor_dict

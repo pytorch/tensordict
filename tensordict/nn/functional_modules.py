@@ -112,37 +112,19 @@ def set_tensor_dict(  # noqa: F811
 
 
 _RESET_OLD_TENSORDICT = True
-try:
-    import torch._functorch.vmap as vmap_src  # @manual=fbcode//caffe2:torch
-    from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
-        _add_batch_dim,
-        _broadcast_to_and_flatten,
-        _get_name,
-        _remove_batch_dim,
-        _validate_and_get_batch_size,
-        Tensor,
-        tree_flatten,
-        tree_unflatten,
-    )
+import torch._functorch.vmap as vmap_src  # @manual=fbcode//caffe2:torch
+from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
+    _add_batch_dim,
+    _broadcast_to_and_flatten,
+    _get_name,
+    _maybe_remove_batch_dim,
+    _validate_and_get_batch_size,
+    Tensor,
+    tree_flatten,
+    tree_unflatten,
+)
 
-    _has_functorch = True
-except ImportError:
-    try:
-        from functorch._src.vmap import (  # @manual=fbcode//caffe2/functorch:functorch_src
-            _add_batch_dim,
-            _broadcast_to_and_flatten,
-            _get_name,
-            _remove_batch_dim,
-            _validate_and_get_batch_size,
-            Tensor,
-            tree_flatten,
-            tree_unflatten,
-        )
-
-        _has_functorch = True
-        import functorch._src.vmap as vmap_src  # @manual=fbcode//caffe2/functorch:functorch_src
-    except ImportError:
-        _has_functorch = False
+_has_functorch = True
 
 
 class _exclude_td_from_pytree:
@@ -210,7 +192,7 @@ an integer dimension or None."""
                 )
             if (
                 isinstance(in_dim, int)
-                and not isinstance(arg, (Tensor,))
+                and not isinstance(arg, Tensor)
                 and not is_tensor_collection(arg)
             ):
                 raise ValueError(
@@ -262,10 +244,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
-        if PYTREE_HAS_ISLEAF:
-            return tree_unflatten(batched_inputs, args_spec)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(batched_inputs, args_spec)
+        return tree_unflatten(batched_inputs, args_spec)
 
     vmap_src._create_batched_inputs = _create_batched_inputs
 
@@ -301,7 +280,6 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 f"has structure {output_spec}."
             )
 
-        # Here:
         if isinstance(batched_outputs, torch.Tensor) or is_tensor_collection(
             batched_outputs
         ):
@@ -311,7 +289,8 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 flat_out_dims = [out_dims]
             elif isinstance(out_dims, tuple) and len(out_dims) == 1:
                 flat_out_dims = out_dims
-                out_dims = out_dims[0]
+            elif out_dims is None:
+                flat_out_dims = [out_dims]
             else:
                 incompatible_error()
         else:
@@ -321,16 +300,18 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         flat_outputs = []
         for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims):
             if not is_tensor_collection(batched_output):
-                out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
+                out = _maybe_remove_batch_dim(
+                    _get_name(func), batched_output, vmap_level, batch_size, out_dim
+                )
             else:
-                out = batched_output._remove_batch_dim(
-                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                out = batched_output._maybe_remove_batch_dim(
+                    _get_name(func),
+                    vmap_level=vmap_level,
+                    batch_size=batch_size,
+                    out_dim=out_dim,
                 )
             flat_outputs.append(out)
-        if PYTREE_HAS_ISLEAF:
-            return tree_unflatten(flat_outputs, output_spec)
-        with _exclude_td_from_pytree():
-            return tree_unflatten(flat_outputs, output_spec)
+        return tree_unflatten(flat_outputs, output_spec)
 
     vmap_src._unwrap_batched = _unwrap_batched
 

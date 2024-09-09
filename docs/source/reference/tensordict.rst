@@ -19,6 +19,35 @@ regular pytorch tensors.
     TensorDictParams
     get_defaults_to_none
 
+Constructors and handlers
+-------------------------
+
+The library offers a few method to interact with other data structures such as numpy structured arrays, namedtuples or
+h5 files. The library also exposes dedicated functions to manipulate tensordicts such as ``save``, ``load``, ``stack``
+or ``cat``.
+
+.. autosummary::
+    :toctree: generated/
+    :template: td_template.rst
+
+    cat
+    from_consolidated
+    from_dict
+    from_h5
+    from_module
+    from_modules
+    from_namedtuple
+    from_pytree
+    from_struct_array
+    fromkeys
+    is_batchedtensor
+    lazy_stack
+    load
+    load_memmap
+    maybe_dense_stack
+    memmap
+    save
+    stack
 
 TensorDict as a context manager
 -------------------------------
@@ -100,3 +129,4 @@ Utils
     dense_stack_tds
     set_lazy_legacy
     lazy_legacy
+    parse_tensor_dict_string
