@@ -2497,7 +2497,8 @@ def _lock_warn():
         "only be done if users make sure that the code runs in eager mode. "
         "torch.compile doesn't support weakrefs which are used to reference root tensordicts "
         "to sub-tensordict and prevent unlocking a node when the graph is locked. "
-        "Such operation will fail in eager mode but won't be captured by torch.compile."
+        "Such operation will fail in eager mode but won't be captured by torch.compile.",
+        category=UserWarning,
     )
 
 

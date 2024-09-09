@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 
-from tensordict._C import (  # noqa
+from tensordict.utils import (  # noqa
     _unravel_key_to_tuple,
     unravel_key,
     unravel_key_list,
