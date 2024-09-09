@@ -275,7 +275,7 @@ def _cat(
             f"={dim} and batch_size={batch_size}"
         )
     batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
-    batch_size = torch.Size(batch_size)
+    batch_size = TensorDict._parse_batch_size(None, batch_size)
 
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts, strict=True)
