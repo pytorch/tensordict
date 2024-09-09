@@ -644,6 +644,7 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
+    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -705,6 +706,7 @@ class TestFunctional:
             assert (td_zero == 0).all()
 
     # in-place modif raises an error even if fullgraph=False
+    @pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
     def test_vmap_functional(self, mode):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
@@ -716,9 +718,8 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            params = td.to_module(module, return_swap=True)
-            result = module(x)
-            params.to_module(module, return_swap=True, swap_dest=td)
+            with td.to_module(module):
+                result = module(x)
             return result
 
         vmap_call = torch.vmap(call, (None, 0))
