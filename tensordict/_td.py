@@ -4657,3 +4657,432 @@ def from_modules(
         lock=lock,
         use_state_dict=use_state_dict,
     )
+
+
+def from_dict(input_dict, batch_size=None, device=None, batch_dims=None, names=None):
+    """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
+
+    If ``batch_size`` is not specified, returns the maximum batch size possible.
+
+    This function works on nested dictionaries too, or can be used to determine the
+    batch-size of a nested tensordict.
+
+    Args:
+        input_dict (dictionary, optional): a dictionary to use as a data source
+            (nested keys compatible).
+        batch_size (iterable of int, optional): a batch size for the tensordict.
+        device (torch.device or compatible type, optional): a device for the TensorDict.
+        batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
+            to be considered for ``batch_size``). Exclusinve with ``batch_size``.
+            Note that this is the __maximum__ number of batch dims of the tensordict,
+            a smaller number is tolerated.
+        names (list of str, optional): the dimension names of the tensordict.
+
+    Examples:
+        >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
+        >>> print(from_dict(input_dict))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> # nested dict: the nested TensorDict can have a different batch-size
+        >>> # as long as its leading dims match.
+        >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
+        >>> print(from_dict(input_dict))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> # we can also use this to work out the batch sie of a tensordict
+        >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
+        >>> print(
+        from_dict(input_td))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+
+    """
+    return TensorDict.from_dict(
+        input_dict,
+        batch_size=batch_size,
+        device=device,
+        batch_dims=batch_dims,
+        names=names,
+    )
+
+
+def from_namedtuple(named_tuple, *, auto_batch_size: bool = False):
+    """Converts a namedtuple to a TensorDict recursively.
+
+    Keyword Args:
+        auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
+            Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict import TensorDict, from_namedtuple
+        >>> import torch
+        >>> data = TensorDict({
+        ...     "a_tensor": torch.zeros((3)),
+        ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
+        >>> nt = data.to_namedtuple()
+        >>> print(nt)
+        GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+        >>> from_namedtuple(nt, auto_batch_size=True)
+        TensorDict(
+            fields={
+                a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                nested: TensorDict(
+                    fields={
+                        a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),
+                        a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+
+    """
+    return TensorDict.from_namedtuple(named_tuple, auto_batch_size=auto_batch_size)
+
+
+def from_struct_array(struct_array: np.ndarray, device: torch.device | None = None):
+    """Converts a structured numpy array to a TensorDict.
+
+    The content of the resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy
+    operation). Changing values of the structured numpy array in-place will affect the content of the TensorDict.
+
+    Examples:
+        >>> x = np.array(
+        ...     [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
+        ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
+        ... )
+        >>> td = from_struct_array(x)
+        >>> x_recon = td.to_struct_array()
+        >>> assert (x_recon == x).all()
+        >>> assert x_recon.shape == x.shape
+        >>> # Try modifying x age field and check effect on td
+        >>> x["age"] += 1
+        >>> assert (td["age"] == np.array([10, 4])).all()
+
+    """
+    return TensorDict.from_struct_array(struct_array, device=device)
+
+
+def from_pytree(
+    pytree,
+    *,
+    batch_size: torch.Size | None = None,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+):
+    """Converts a pytree to a TensorDict instance.
+
+    This method is designed to keep the pytree nested structure as much as possible.
+
+    Additional non-tensor keys are added to keep track of each level's identity, providing
+    a built-in pytree-to-tensordict bijective transform API.
+
+    Accepted classes currently include lists, tuples, named tuples and dict.
+
+    .. note:: for dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
+        instances.
+
+    .. note:: Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+        NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+        recover the original types.
+
+    Examples:
+        >>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
+        >>> class WeirdLookingClass:
+        ...     pass
+        ...
+        >>> weird_key = WeirdLookingClass()
+        >>> # Make a pytree with tuple, lists, dict and namedtuple
+        >>> pytree = (
+        ...     [torch.randint(10, (3,)), torch.zeros(2)],
+        ...     {
+        ...         "tensor": torch.randn(
+        ...             2,
+        ...         ),
+        ...         "td": TensorDict({"one": 1}),
+        ...         weird_key: torch.randint(10, (2,)),
+        ...         "list": [1, 2, 3],
+        ...     },
+        ...     {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+        ... )
+        >>> # Build a TensorDict from that pytree
+        >>> td = from_pytree(pytree)
+        >>> # Recover the pytree
+        >>> pytree_recon = td.to_pytree()
+        >>> # Check that the leaves match
+        >>> def check(v1, v2):
+        >>>     assert (v1 == v2).all()
+        >>>
+        >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+        >>> assert weird_key in pytree_recon[1]
+
+    """
+    return TensorDict.from_pytree(
+        pytree,
+        batch_size=batch_size,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+    )
+
+
+def from_h5(
+    filename,
+    mode="r",
+):
+    """Creates a PersistentTensorDict from a h5 file.
+
+    This function will automatically determine the batch-size for each nested
+    tensordict.
+
+    Args:
+        filename (str): the path to the h5 file.
+        mode (str, optional): reading mode. Defaults to ``"r"``.
+    """
+    return TensorDict.from_h5(filename, mode="r")
+
+
+def stack(input, dim=0, *, out=None):
+    """Stacks tensordicts into a single tensordict along the given dimension.
+
+    This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
+
+    """
+    return TensorDict.stack(input, dim=dim, out=out)
+
+
+def lazy_stack(input, dim=0, *, out=None):
+    """Creates a lazy stack of tensordicts.
+
+    See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
+    """
+    return TensorDict.lazy_stack(input, dim=dim, out=out)
+
+
+def cat(input, dim=0, *, out=None):
+    """Concatenates tensordicts into a single tensordict along the given dimension.
+
+    This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
+
+    """
+    return TensorDict.cat(input, dim=dim, out=out)
+
+
+def maybe_dense_stack(input, dim=0, *, out=None, **kwargs):
+    """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
+
+    See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
+    """
+    return TensorDict.maybe_dense_stack(input, dim=dim, out=out, **kwargs)
+
+
+def fromkeys(keys: List[NestedKey], value: Any = 0):
+    """Creates a tensordict from a list of keys and a single value.
+
+    Args:
+        keys (list of NestedKey): An iterable specifying the keys of the new dictionary.
+        value (compatible type, optional): The value for all keys. Defaults to ``0``.
+    """
+    return TensorDict.fromkeys(keys=keys, value=value)
+
+
+def from_consolidated(filename):
+    """Reconstructs a tensordict from a consolidated file."""
+    return TensorDict.from_consolidated(filename)
+
+
+def load(
+    prefix: str | Path,
+    device: torch.device | None = None,
+    non_blocking: bool = False,
+    *,
+    out: TensorDictBase | None = None,
+):
+    """Loads a tensordict from disk.
+
+    This class method is a proxy to :meth:`~.load_memmap`.
+    """
+    return load_memmap(
+        prefix=prefix, device=device, non_blocking=is_non_tensor, out=out
+    )
+
+
+def load_memmap(
+    prefix: str | Path,
+    device: torch.device | None = None,
+    non_blocking: bool = False,
+    *,
+    out: TensorDictBase | None = None,
+) -> T:
+    """Loads a memory-mapped tensordict from disk.
+
+    Args:
+        prefix (str or Path to folder): the path to the folder where the
+            saved tensordict should be fetched.
+        device (torch.device or equivalent, optional): if provided, the
+            data will be asynchronously cast to that device.
+            Supports `"meta"` device, in which case the data isn't loaded
+            but a set of empty "meta" tensors are created. This is
+            useful to get a sense of the total model size and structure
+            without actually opening any file.
+        non_blocking (bool, optional): if ``True``, synchronize won't be
+            called after loading tensors on device. Defaults to ``False``.
+        out (TensorDictBase, optional): optional tensordict where the data
+            should be written.
+
+    Examples:
+        >>> from tensordict import TensorDict, load_memmap
+        >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
+        >>> td.memmap("./saved_td")
+        >>> td_load = TensorDict.load_memmap("./saved_td")
+        >>> assert (td == td_load).all()
+
+    This method also allows loading nested tensordicts.
+
+        >>> nested = TensorDict.load_memmap("./saved_td/nested")
+        >>> assert nested["e"] == 0
+
+    A tensordict can also be loaded on "meta" device or, alternatively,
+    as a fake tensor:
+        >>> import tempfile
+        >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     td.save(path)
+        ...     td_load = load_memmap(path, device="meta")
+        ...     print("meta:", td_load)
+        ...     from torch._subclasses import FakeTensorMode
+        ...     with FakeTensorMode():
+        ...         td_load = load_memmap(path)
+        ...         print("fake:", td_load)
+        meta: TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=meta,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=meta,
+            is_shared=False)
+        fake: TensorDict(
+            fields={
+                a: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+
+    """
+    return TensorDict.load_memmap(
+        prefix=prefix, device=device, non_blocking=is_non_tensor, out=out
+    )
+
+
+def save(
+    data: TensorDictBase,
+    prefix: str | None = None,
+    copy_existing: bool = False,
+    *,
+    num_threads: int = 0,
+    return_early: bool = False,
+    share_non_tensor: bool = False,
+):
+    """Saves the tensordict to disk.
+
+    This function is a proxy to :meth:`~.memmap`.
+    """
+    return data.memmap(
+        prefix=prefix,
+        copy_existing=copy_existing,
+        num_threads=num_threads,
+        return_early=return_early,
+        share_non_tensor=share_non_tensor,
+    )
+
+
+def memmap(
+    data: TensorDictBase,
+    prefix: str | None = None,
+    copy_existing: bool = False,
+    *,
+    num_threads: int = 0,
+    return_early: bool = False,
+    share_non_tensor: bool = False,
+):
+    """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
+
+    Args:
+        data (TensorDictBase): a data structure to save.
+        prefix (str): directory prefix where the memory-mapped tensors will
+            be stored. The directory tree structure will mimic the tensordict's.
+        copy_existing (bool): If False (default), an exception will be raised if an
+            entry in the tensordict is already a tensor stored on disk
+            with an associated file, but is not saved in the correct
+            location according to prefix.
+            If ``True``, any existing Tensor will be copied to the new location.
+
+    Keyword Args:
+        num_threads (int, optional): the number of threads used to write the memmap
+            tensors. Defaults to `0`.
+        return_early (bool, optional): if ``True`` and ``num_threads>0``,
+            the method will return a future of the tensordict.
+        share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+            shared between the processes and writing operation (such as inplace update
+            or set) on any of the workers within a single node will update the value
+            on all other workers. If the number of non-tensor leaves is high (e.g.,
+            sharing large stacks of non-tensor data) this may result in OOM or similar
+            errors. Defaults to ``False``.
+
+    The TensorDict is then locked, meaning that any writing operations that
+    isn't in-place will throw an exception (eg, rename, set or remove an
+    entry).
+    Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
+    because cross-process identity is not guaranteed anymore.
+
+    Returns:
+        A new tensordict with the tensors stored on disk if ``return_early=False``,
+        otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
+
+    Note:
+        Serialising in this fashion might be slow with deeply nested tensordicts, so
+        it is not recommended to call this method inside a training loop.
+    """
+    return data.memmap(
+        prefix=prefix,
+        copy_existing=copy_existing,
+        num_threads=num_threads,
+        return_early=return_early,
+        share_non_tensor=share_non_tensor,
+    )
