@@ -129,3 +129,4 @@ Utils
     dense_stack_tds
     set_lazy_legacy
     lazy_legacy
+    parse_tensor_dict_string

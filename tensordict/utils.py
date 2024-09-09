@@ -12,6 +12,7 @@ import logging
 
 import math
 import os
+import re
 
 import sys
 import time
@@ -2560,3 +2561,90 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
     return out
+
+
+def parse_tensor_dict_string(s: str):
+    """Parse a TensorDict repr to a TensorDict.
+
+    .. note:: This functions is intended to be used for debugging, to reproduce a tensordict
+      given its printed version, and should not be used in real applications.
+
+    """
+    from tensordict import TensorDict
+
+    # Regular expression patterns
+    field_pattern = r"(\w+): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+), dtype=torch.(\w+), is_shared=(\w+)\)"
+    nested_field_pattern = r"(\w+): TensorDict\("
+    batch_size_pattern = r"batch_size=torch.Size\((\[(.*?)\])\)"
+    device_pattern = r"device=(\w+)(?=,|$)"
+
+    # Find all nested TensorDicts first
+    nested_dict_ranges = []
+    for match in re.finditer(nested_field_pattern, s):
+        start_idx = match.start()
+        depth = 1
+        for i in range(start_idx + len(match.group(0)), len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+            if depth == 0:
+                end_idx = i
+                break
+        nested_dict_ranges.append((start_idx, end_idx))
+
+    # Find all fields in the string that are not part of a nested TensorDict
+    fields = {}
+    for match in re.finditer(field_pattern, s):
+        name, _, shape, device, dtype, is_shared = match.groups()
+        field_start = match.start()
+        field_end = match.end()
+        if any(
+            field_start >= start and field_end <= end
+            for start, end in nested_dict_ranges
+        ):
+            continue  # skip if this field is inside a nested TensorDict
+        shape = [int(x) for x in shape.split(", ")] if shape else []
+        fields[name] = torch.zeros(
+            tuple(shape), device=torch.device(device), dtype=getattr(torch, dtype)
+        )
+
+    # Now find nested TensorDicts and add them to the fields
+    for match in re.finditer(nested_field_pattern, s):
+        name = match.group(1)
+        start_idx = match.end()
+        depth = 1
+        for i in range(start_idx, len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+            if depth == 0:
+                end_idx = i
+                break
+        content = s[start_idx:end_idx]
+        nested_fields = parse_tensor_dict_string(f"TensorDict({content})")
+        fields[name] = nested_fields
+
+    # Parse batch size
+    batch_size_matches = re.findall(batch_size_pattern, s)
+    if batch_size_matches:
+        batch_size_match = batch_size_matches[-1]  # Take the last match
+        if batch_size_match[1]:
+            batch_size = [int(x) for x in batch_size_match[1].split(", ")]
+        else:
+            batch_size = []
+    else:
+        raise ValueError("Batch size not found in the string")
+    # Parse device
+    device_matches = re.findall(device_pattern, s)
+    if device_matches:
+        device = device_matches[-1]  # Take the last match
+        if device == "None":
+            device = None
+        else:
+            device = torch.device(device)
+    else:
+        raise ValueError("Device not found in the string")
+    tensor_dict = TensorDict(fields, batch_size=torch.Size(batch_size), device=device)
+    return tensor_dict
