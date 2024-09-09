@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable
 
 from tensordict._td import _unravel_key_to_tuple
 
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _zip_strict, NestedKey
 from torch import fx, nn
@@ -57,7 +57,7 @@ class TDGraphModule(nn.Module):
             return getattr(self._gm, name)
 
 
-def symbolic_trace(td_module: TensorDictModule) -> TDGraphModule:
+def symbolic_trace(td_module: TensorDictModuleBase) -> TDGraphModule:
     """A symbolic tracer for TensorDictModule."""
     if isinstance(td_module, TensorDictSequential):
         return _trace_tensordictsequential(td_module)
@@ -89,7 +89,7 @@ def _parse_input_nodes(
         env[node.name] = new_node
 
 
-def _trace_tensordictmodule(td_module: TensorDictModule) -> TDGraphModule:
+def _trace_tensordictmodule(td_module: TensorDictModuleBase) -> TDGraphModule:
     # this graph manipulation is based heavily on example in the PyTorch docs
     # https://pytorch.org/docs/stable/fx.html#proxy-retracing
 

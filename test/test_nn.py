@@ -44,10 +44,10 @@ from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
     _set_auto_make_functional,
     _set_dispatch_td_nn_modules,
-    Buffer,
     set_skip_existing,
     skip_existing,
 )
+
 from torch import distributions, nn
 from torch.distributions import Normal
 from torch.utils._pytree import tree_map
@@ -66,6 +66,10 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+try:
+    from torch.nn.parameter import Buffer
+except ImportError:
+    from tensordict.utils import Buffer
 
 
 # Capture all warnings

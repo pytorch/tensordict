@@ -113,6 +113,12 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:Indexing an h5py.Dataset object with a boolean mask that needs broadcasting does not work directly"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:The PyTorch API of nested tensors is in prototype"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
+    ),
 ]
 
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
@@ -1074,7 +1080,7 @@ class TestGeneric:
         y = torch.vmap(exec_module, (0, None))(params, x)
         y.sum().backward()
         for k, p in modules[0].named_parameters():
-            assert p.grad is None if k.startswith("1") else p.grad is not None
+            assert p.grad is None if k.startswith("1") else p.grad is not None, k
         assert all(
             param.grad is not None
             for param in params.values(True, True)
@@ -7793,6 +7799,34 @@ class TestLazyStackedTensorDict:
         td = LazyStackedTensorDict(stack_dim=1, batch_size=[1, 2], device="cpu")
         assert td.device == torch.device("cpu")
         assert td.shape == torch.Size([1, 0, 2])
+
+    def test_densify(self):
+        td0 = TensorDict(
+            a=torch.zeros((1,)),
+            b=torch.zeros((2,)),
+            d=TensorDict(e=torch.zeros(())),
+        )
+        td1 = TensorDict(
+            b=torch.ones((1,)), c=torch.ones((2,)), d=TensorDict(e=torch.ones(()))
+        )
+        td = LazyStackedTensorDict(td0, td1, stack_dim=0)
+        td_jagged = td.densify(layout=torch.jagged)
+        assert (td_jagged.exclude("c").unbind(0)[0] == 0).all()
+        assert (td_jagged.exclude("a").unbind(0)[1] == 1).all()
+        assert not td_jagged["d", "e"].is_nested
+        td_strided = td.densify(layout=torch.strided)
+        assert (td_strided.exclude("c")[0] == 0).all()
+        assert (td_strided.exclude("a")[1] == 1).all()
+        assert not td_strided["d", "e"].is_nested
+        td_nest = TensorDict(td=td, batch_size=[2])
+        td_nest_jagged = td_nest.densify(layout=torch.jagged)
+        assert (td_nest_jagged.exclude(("td", "c")).unbind(0)[0] == 0).all()
+        assert (td_nest_jagged.exclude(("td", "a")).unbind(0)[1] == 1).all()
+        assert not td_nest_jagged["td", "d", "e"].is_nested
+        td_nest_strided = td_nest.densify(layout=torch.strided)
+        assert (td_nest_strided.exclude(("td", "c"))[0] == 0).all()
+        assert (td_nest_strided.exclude(("td", "a"))[1] == 1).all()
+        assert not td_nest_strided["td", "d", "e"].is_nested
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
