@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey, unravel_key, unravel_keys
@@ -33,6 +35,9 @@ class CompositeDistribution(d.Distribution):
             will be used.
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
+        aggregate_probabilities (bool): if True, the log_prob and entropy methods will
+            sum the probabilities and entropies of the individual distributions and return a single tensor.
+            Defaults to False.
         log_prob_key (NestedKey, optional): key where to write the log_prob.
             Defaults to `'sample_log_prob'`.
         entropy_key (NestedKey, optional): key where to write the entropy.
@@ -76,6 +81,7 @@ class CompositeDistribution(d.Distribution):
         *,
         name_map: dict | None = None,
         extra_kwargs=None,
+        aggregate_probabilities=None,
         log_prob_key: NestedKey = "sample_log_prob",
         entropy_key: NestedKey = "entropy",
     ):
@@ -110,6 +116,15 @@ class CompositeDistribution(d.Distribution):
         self.dists = dists
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
+
+        if aggregate_probabilities is None:
+            warnings.warn(
+                "The default value of `aggregate_probabilities` will change from `False` to `True` in v0.7. "
+                "Please pass this value explicitly to avoid this warning.",
+                FutureWarning,
+            )
+            aggregate_probabilities = False
+        self.aggregate_probabilities = aggregate_probabilities
 
     def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
@@ -154,6 +169,8 @@ class CompositeDistribution(d.Distribution):
 
     def log_prob(self, sample: TensorDictBase) -> torch.Tensor:
         """Computes and returns the summed log-prob."""
+        if not self.aggregate_probabilities:
+            return self.log_prob_composite(sample, include_sum=True)
         slp = 0.0
         for name, dist in self.dists.items():
             lp = dist.log_prob(sample.get(name))
@@ -180,6 +197,8 @@ class CompositeDistribution(d.Distribution):
 
     def entropy(self, samples_mc=1) -> torch.Tensor:
         """Computes and returns the summed entropies."""
+        if not self.aggregate_probabilities:
+            return self.entropy_composite(samples_mc, include_sum=True)
         se = 0.0
         for _, dist in self.dists.items():
             try:
