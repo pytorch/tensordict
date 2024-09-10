@@ -3300,7 +3300,7 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with self.assertWarns(FutureWarning):
+        with pytest.warns(FutureWarning):
             dist = CompositeDistribution(
                 params,
                 distribution_map={
@@ -3335,7 +3335,7 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with self.assertWarns(FutureWarning):
+        with pytest.warns(FutureWarning):
             dist = CompositeDistribution(
                 params,
                 distribution_map={
@@ -3371,7 +3371,7 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with self.assertWarns(FutureWarning):
+        with pytest.warns(FutureWarning):
             dist = CompositeDistribution(
                 params,
                 distribution_map={
@@ -3405,7 +3405,7 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with self.assertWarns(FutureWarning):
+        with pytest.warns(FutureWarning):
             dist = CompositeDistribution(
                 params,
                 distribution_map={
