@@ -10023,7 +10023,9 @@ class TensorDictBase(MutableMapping):
             if not is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
-            torch.mps.synchronize()
+            mps = getattr(torch, "mps", None)
+            if mps is not None:
+                mps.synchronize()
 
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
