@@ -76,7 +76,7 @@ try:
     from typing import dataclass_transform
 except ImportError:
 
-    def dataclass_transform(*args):
+    def dataclass_transform(args):
         """No-op.
 
         Placeholder for dataclass_transform (python<3.11).
