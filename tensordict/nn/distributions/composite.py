@@ -34,9 +34,9 @@ class CompositeDistribution(d.Distribution):
             will be used.
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
-        aggregate_probabilities (bool): if True, the log_prob and entropy methods will
+        aggregate_probabilities (bool): if ``True``, the :meth:`~.log_prob` and :meth:`~.entropy` methods will
             sum the probabilities and entropies of the individual distributions and return a single tensor.
-            Defaults to False.
+            Defaults to ``False``.
         log_prob_key (NestedKey, optional): key where to write the log_prob.
             Defaults to `'sample_log_prob'`.
         entropy_key (NestedKey, optional): key where to write the entropy.
