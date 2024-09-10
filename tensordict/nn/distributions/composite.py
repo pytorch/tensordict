@@ -18,7 +18,6 @@ class CompositeDistribution(d.Distribution):
     Groups distributions together with the TensorDict interface. Methods
     (``log_prob_composite``, ``entropy_composite``, ``cdf``, ``icdf``, ``rsample``, ``sample`` etc.)
     will return a tensordict, possibly modified in-place if the input was a tensordict.
-    Methods (``log_prob``, ``entropy``) will return a tensor, just like any other torch distribution.
 
     Args:
         params (TensorDictBase): a nested key-tensor map where the root entries
