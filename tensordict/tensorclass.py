@@ -27,7 +27,6 @@ from textwrap import indent
 from typing import (
     Any,
     Callable,
-    dataclass_transform,
     get_type_hints,
     List,
     overload,
@@ -72,6 +71,18 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+try:
+    from typing import dataclass_transform
+except ImportError:
+
+    def dataclass_transform(*args):
+        """No-op.
+
+        Placeholder for dataclass_transform (python<3.11).
+        """
+        return args
+
 
 T = TypeVar("T", bound=TensorDictBase)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
@@ -360,8 +371,12 @@ class _tensorclass_dec:
 def tensorclass(autocast: bool = False) -> _tensorclass_dec: ...
 
 
+@overload
+def tensorclass(cls: T) -> T: ...
+
+
 @dataclass_transform()
-def tensorclass(cls: T) -> T:
+def tensorclass(*args, **kwargs):
     """A decorator to create :obj:`tensorclass` classes.
 
     ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
@@ -439,7 +454,7 @@ def tensorclass(cls: T) -> T:
 
 
     """
-    return _tensorclass_dec(cls)
+    return _tensorclass_dec(*args, **kwargs)
 
 
 @dataclass_transform()
