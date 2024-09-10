@@ -3299,6 +3299,16 @@ class TestCompositeDist:
             },
             [3],
         )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        with self.assertWarns(FutureWarning):
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+                },
+                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            )
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3306,6 +3316,7 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            aggregate_probabilities=True,
         )
         sample = dist.rsample((4,))
         lp = dist.log_prob(sample)
@@ -3323,6 +3334,16 @@ class TestCompositeDist:
             },
             [3],
         )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        with self.assertWarns(FutureWarning):
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+                },
+                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            )
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3330,6 +3351,7 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            aggregate_probabilities=False,
         )
         sample = dist.rsample((4,))
         sample = dist.log_prob_composite(sample, include_sum=True)
@@ -3348,12 +3370,23 @@ class TestCompositeDist:
             },
             [3],
         )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        with self.assertWarns(FutureWarning):
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+                aggregate_probabilities=True,
+            )
         dist = CompositeDistribution(
             params,
             distribution_map={
                 "cont": distributions.Normal,
                 ("nested", "disc"): distributions.Categorical,
             },
+            aggregate_probabilities=True,
         )
         ent = dist.entropy()
         assert ent.shape == params.shape
@@ -3371,14 +3404,24 @@ class TestCompositeDist:
             },
             [3],
         )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        with self.assertWarns(FutureWarning):
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+            )
         dist = CompositeDistribution(
             params,
             distribution_map={
                 "cont": distributions.Normal,
                 ("nested", "disc"): distributions.Categorical,
             },
+            aggregate_probabilities=False,
         )
-        sample = dist.entropy_composite(include_sum=True)
+        sample = dist.entropy()
         assert sample.shape == params.shape
         assert sample.get("cont_entropy").requires_grad
         assert sample.get(("nested", "disc_entropy")).requires_grad
