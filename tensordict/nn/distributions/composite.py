@@ -166,8 +166,15 @@ class CompositeDistribution(d.Distribution):
             shape + self.batch_shape,
         )
 
-    def log_prob(self, sample: TensorDictBase) -> torch.Tensor:
-        """Computes and returns the summed log-prob."""
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:
+        """Computes and returns the summed log-prob.
+
+        If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
+        the summed log-probabilities. If ``self.aggregate_probabilities`` is ``False``, this method will
+        call the `:meth:`~.log_prob_composite` method and return a tensordict with the log-probabilities
+        of each sample in the input tensordict along with a ``sample_log_prob`` entry with the summed
+        log-prob. In both cases, the output shape will be the shape of the input tensordict.
+        """
         if not self.aggregate_probabilities:
             return self.log_prob_composite(sample, include_sum=True)
         slp = 0.0
@@ -181,7 +188,10 @@ class CompositeDistribution(d.Distribution):
     def log_prob_composite(
         self, sample: TensorDictBase, include_sum=True
     ) -> TensorDictBase:
-        """Writes a ``<sample>_log_prob`` entry for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
+        """Writes a ``<sample>_log_prob`` entry for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob.
+
+        This method is called by the :meth:`~.log_prob` method when ``self.aggregate_probabilities`` is ``False``.
+        """
         slp = 0.0
         d = {}
         for name, dist in self.dists.items():
@@ -194,8 +204,15 @@ class CompositeDistribution(d.Distribution):
         sample.update(d)
         return sample
 
-    def entropy(self, samples_mc=1) -> torch.Tensor:
-        """Computes and returns the summed entropies."""
+    def entropy(self, samples_mc=1) -> torch.Tensor | TensorDictBase:
+        """Computes and returns the summed entropies.
+
+        If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
+        the summed entropies. If ``self.aggregate_probabilities`` is ``False``, this method will call
+        the `:meth:`~.entropy_composite` method and return a tensordict with the entropies of each sample
+        in the input tensordict along with an ``entropy`` entry with the summed entropy. In both cases,
+        the output shape will match the shape of the distribution sample, without a batch dimension.
+        """
         if not self.aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=True)
         se = 0.0
@@ -211,7 +228,10 @@ class CompositeDistribution(d.Distribution):
         return se
 
     def entropy_composite(self, samples_mc=1, include_sum=True) -> TensorDictBase:
-        """Writes a ``<sample>_entropy`` entry for each sample in the input tensordict, along with a ``"entropy"`` entry with the summed entropies."""
+        """Writes a ``<sample>_entropy`` entry for each sample in the input tensordict, along with a ``"entropy"`` entry with the summed entropies.
+
+        This method is called by the :meth:`~.entropy` method when ``self.aggregate_probabilities`` is ``False``.
+        """
         se = 0.0
         d = {}
         for name, dist in self.dists.items():
