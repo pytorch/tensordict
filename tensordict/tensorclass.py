@@ -349,26 +349,31 @@ def is_non_tensor(obj):
 
 
 class _tensorclass_dec:
-    def __new__(cls, autocast: bool = False):
+    def __new__(cls, autocast: bool = False, frozen: bool = False):
         if not isinstance(autocast, bool):
             clz = autocast
             self = super().__new__(cls)
-            self.__init__(autocast=False)
+            self.__init__(autocast=False, frozen=False)
             return self.__call__(clz)
         return super().__new__(cls)
 
-    def __init__(self, autocast: bool):
+    def __init__(self, autocast: bool = False, frozen: bool = False):
         self.autocast = autocast
+        self.frozen = frozen
 
     @dataclass_transform()
     def __call__(self, cls):
-        clz = _tensorclass(cls)
+        clz = _tensorclass(cls, frozen=self.frozen)
         clz.autocast = self.autocast
         return clz
 
 
 @overload
-def tensorclass(autocast: bool = False) -> _tensorclass_dec: ...
+def tensorclass(autocast: bool = False, frozen: bool = False) -> _tensorclass_dec: ...
+
+
+@overload
+def tensorclass(cls: T) -> T: ...
 
 
 @overload
@@ -387,6 +392,9 @@ def tensorclass(*args, **kwargs):
     Args:
         autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
             Defaults to ``False``.
+        frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
+            provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
+            the class constructor. Defaults to ``False``.
 
     tensorclass can be used with or without arguments:
     Examples:
@@ -458,7 +466,7 @@ def tensorclass(*args, **kwargs):
 
 
 @dataclass_transform()
-def _tensorclass(cls: T) -> T:
+def _tensorclass(cls: T, *, frozen) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -494,7 +502,7 @@ def _tensorclass(cls: T) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
-    cls = dataclass(cls)
+    cls = dataclass(cls, frozen=frozen)
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
 
     for attr in expected_keys:
@@ -509,7 +517,7 @@ def _tensorclass(cls: T) -> T:
             delattr(cls, field.name)
 
     _get_type_hints(cls)
-    cls.__init__ = _init_wrapper(cls.__init__)
+    cls.__init__ = _init_wrapper(cls.__init__, frozen)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -672,7 +680,7 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
-def _init_wrapper(__init__: Callable) -> Callable:
+def _init_wrapper(__init__: Callable, frozen) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
@@ -685,8 +693,11 @@ def _init_wrapper(__init__: Callable) -> Callable:
         batch_size: Sequence[int] | torch.Size | int = None,
         device: DeviceType | None = None,
         names: List[str] | None = None,
+        lock: bool | None = None,
         **kwargs,
     ):
+        if lock is None:
+            lock = frozen
 
         if not is_dynamo_compiling():
             # zip not supported by dynamo
@@ -741,6 +752,13 @@ def _init_wrapper(__init__: Callable) -> Callable:
             for key, value in kwargs.items()
         }
         __init__(self, **kwargs)
+        if frozen:
+            local_setattr = _setattr_wrapper(self.__setattr__, self.__expected_keys__)
+            for key, val in kwargs.items():
+                local_setattr(self, key, val)
+                del self.__dict__[key]
+        if lock:
+            self._tensordict.lock_()
 
     new_params = [
         inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
