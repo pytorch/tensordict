@@ -3378,7 +3378,6 @@ class TestCompositeDist:
                     "cont": distributions.Normal,
                     ("nested", "disc"): distributions.Categorical,
                 },
-                aggregate_probabilities=True,
             )
         dist = CompositeDistribution(
             params,
