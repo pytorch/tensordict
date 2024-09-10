@@ -24,7 +24,17 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    dataclass_transform,
+    get_type_hints,
+    List,
+    overload,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 import numpy as np
 import orjson as json
@@ -327,13 +337,59 @@ def is_non_tensor(obj):
     return isinstance(obj, (NonTensorData, NonTensorStack))
 
 
-class tensorclass:
+class _tensorclass_dec:
+    def __new__(cls, autocast: bool = False):
+        if not isinstance(autocast, bool):
+            clz = autocast
+            self = super().__new__(cls)
+            self.__init__(autocast=False)
+            return self.__call__(clz)
+        return super().__new__(cls)
+
+    def __init__(self, autocast: bool):
+        self.autocast = autocast
+
+    @dataclass_transform()
+    def __call__(self, cls):
+        clz = _tensorclass(cls)
+        clz.autocast = self.autocast
+        return clz
+
+
+@overload
+def tensorclass(autocast: bool = False) -> _tensorclass_dec: ...
+
+
+@dataclass_transform()
+def tensorclass(cls: T) -> T:
     """A decorator to create :obj:`tensorclass` classes.
 
-    :obj:`tensorclass` classes are specialized :obj:`dataclass` instances that
+    ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
     can execute some pre-defined tensor operations out of the box, such as
     indexing, item assignment, reshaping, casting to device or storage and many
     others.
+
+    Args:
+        autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
+            Defaults to ``False``.
+
+    tensorclass can be used with or without arguments:
+    Examples:
+        >>> @tensorclass
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        1
+        >>> @tensorclass(autocast=False)
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        1
+        >>> @tensorclass(autocast=True)
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        torch.tensor(1)
 
     Examples:
         >>> from tensordict import tensorclass
@@ -383,24 +439,10 @@ class tensorclass:
 
 
     """
-
-    def __new__(cls, autocast: bool = False):
-        if not isinstance(autocast, bool):
-            clz = autocast
-            self = super().__new__(cls)
-            self.__init__(autocast=False)
-            return self.__call__(clz)
-        return super().__new__(cls)
-
-    def __init__(self, autocast: bool):
-        self.autocast = autocast
-
-    def __call__(self, cls):
-        clz = _tensorclass(cls)
-        clz.autocast = self.autocast
-        return clz
+    return _tensorclass_dec(cls)
 
 
+@dataclass_transform()
 def _tensorclass(cls: T) -> T:
     def __torch_function__(
         cls,
