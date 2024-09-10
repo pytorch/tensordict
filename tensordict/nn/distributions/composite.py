@@ -80,7 +80,7 @@ class CompositeDistribution(d.Distribution):
         *,
         name_map: dict | None = None,
         extra_kwargs=None,
-        aggregate_probabilities=None,
+        aggregate_probabilities: bool | None = None,
         log_prob_key: NestedKey = "sample_log_prob",
         entropy_key: NestedKey = "entropy",
     ):
