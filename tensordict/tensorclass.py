@@ -76,12 +76,12 @@ try:
     from typing import dataclass_transform
 except ImportError:
 
-    def dataclass_transform(args):
+    def dataclass_transform(*args, **kwargs):
         """No-op.
 
         Placeholder for dataclass_transform (python<3.11).
         """
-        return args
+        return lambda cls: cls
 
 
 T = TypeVar("T", bound=TensorDictBase)
