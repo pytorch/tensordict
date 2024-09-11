@@ -3699,6 +3699,13 @@ class TestToModule:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 @pytest.mark.parametrize("compiled", [True, False])
 class TestCudaGraphs:
+    @pytest.fixture(scope="class")
+    def _set_cuda_device(self):
+        device = torch.get_default_device()
+        torch.set_default_device("cuda:0")
+        yield
+        torch.set_default_device(device)
+
     def test_cudagraphs_random(self, compiled):
         def func(x):
             return x + torch.randn_like(x)
