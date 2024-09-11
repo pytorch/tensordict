@@ -3702,9 +3702,12 @@ class TestCudaGraphs:
     def test_cudagraphs_random(self, compiled):
         def func(x):
             return x + torch.randn_like(x)
+
         if compiled:
             func = torch.compile(func)
+
         func = CudaGraphCompiledModule(func)
+
         x = torch.randn(10)
         for _ in range(10):
             func(x)

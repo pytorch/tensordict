@@ -68,4 +68,4 @@ class CudaGraphCompiledModule:
         else:
             tree_map(lambda x, y: x.copy_(y), (self._args, self._kwargs), (args, kwargs))
             self.graph.replay()
-            return tree_map(lambda x, y: x.clone() if x is not None else x, self._out)
+            return tree_map(lambda x: x.clone() if x is not None else x, self._out)
