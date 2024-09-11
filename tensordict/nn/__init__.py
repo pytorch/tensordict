@@ -42,3 +42,4 @@ from tensordict.nn.utils import (
     set_skip_existing,
     skip_existing,
 )
+from .cudagraphs import CudaGraphCompiledModule

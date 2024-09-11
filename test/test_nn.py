@@ -29,7 +29,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModuleBase,
     TensorDictParams,
-    TensorDictSequential,
+    TensorDictSequential, CudaGraphCompiledModule,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import (
@@ -3695,6 +3695,26 @@ class TestToModule:
         assert len(list(linear.parameters())) == 2
         assert (TensorDict.from_module(linear) == params).all()
 
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.parametrize("compiled", [True, False])
+class TestCudaGraphs:
+    def test_cudagraphs_random(self, compiled):
+        def func(x):
+            return x + torch.randn_like(x)
+        if compiled:
+            func = torch.compile(func)
+        func = CudaGraphCompiledModule(func)
+        x = torch.randn(10)
+        for _ in range(10):
+            func(x)
+        y0 = func(x)
+        y1 = func(x)
+        with pytest.raises(AssertionError):
+            torch.testing.assert_close(y0, y1)
+
+    def test_backprop(self):
+        ...
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
