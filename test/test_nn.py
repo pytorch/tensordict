@@ -3699,7 +3699,7 @@ class TestToModule:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 @pytest.mark.parametrize("compiled", [True, False])
 class TestCudaGraphs:
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
         device = torch.get_default_device()
         torch.set_default_device("cuda:0")
