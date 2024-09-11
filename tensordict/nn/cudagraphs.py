@@ -52,7 +52,7 @@ class CudaGraphCompiledModule:
             self.graph.replay()
             return self._out.clone() if self._out is not None else None
 
-    def _call_tdmodule(self, *args, **kwargs):
+    def _call_regular(self, *args, **kwargs):
         if self.counter < self.warmup:
             out = self.compiled_module(*args, **kwargs)
             self.counter += 1
