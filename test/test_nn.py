@@ -3713,7 +3713,7 @@ class TestCudaGraphs:
         with pytest.raises(AssertionError):
             torch.testing.assert_close(y0, y1)
 
-    def test_backprop(self):
+    def test_backprop(self, compiled):
         ...
 
 if __name__ == "__main__":
