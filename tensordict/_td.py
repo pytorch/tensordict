@@ -892,13 +892,7 @@ class TensorDict(TensorDictBase):
                 else:
                     if subtd is None:
                         subtd = self._get_sub_tensordict(index)
-                    subtd._set_str(
-                        value_key,
-                        item,
-                        inplace=True,
-                        non_blocking=False,
-                        validated=True,
-                    )
+                    subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
             for key in self.keys():
                 self.set_at_(key, value, index)
