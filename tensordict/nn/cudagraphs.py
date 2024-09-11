@@ -26,12 +26,13 @@ class CudaGraphCompiledModule:
         else:
             self.out_keys = out_keys
         self._is_tensordict_module = self.in_keys is not None and self.out_keys is not None
-        if self._is_tensordict_module:
-            self.__call__ = self._call_tdmodule
-        else:
-            self.__call__ = self._call_regular
 
-    def __call__(self, *args, **kwargs): ...
+    @property
+    def __call__(self):
+        if self._is_tensordict_module:
+            return self._call_tdmodule
+        else:
+            return self._call_regular
 
     @dispatch(auto_batch_size=False)
     def _call_tdmodule(self, tensordict, *args, **kwargs):
