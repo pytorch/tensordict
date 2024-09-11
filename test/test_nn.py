@@ -3709,9 +3709,9 @@ class TestCudaGraphs:
         for _ in range(10):
             func(x)
         y0 = func(x)
-        y1 = func(x)
+        y1 = func(x+1)
         with pytest.raises(AssertionError):
-            torch.testing.assert_close(y0, y1)
+            torch.testing.assert_close(y0, y1+1)
 
     def test_backprop(self, compiled):
         ...
