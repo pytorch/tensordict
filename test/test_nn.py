@@ -3711,6 +3711,8 @@ class TestCudaGraphs:
         x = torch.randn(10)
         for _ in range(10):
             func(x)
+        assert isinstance(func(torch.zeros(10)), torch.Tensor)
+        assert (func(torch.zeros(10)) != 0).any()
         y0 = func(x)
         y1 = func(x+1)
         with pytest.raises(AssertionError):
