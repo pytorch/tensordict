@@ -180,7 +180,9 @@ class CompositeDistribution(d.Distribution):
         slp = 0.0
         for name, dist in self.dists.items():
             lp = dist.log_prob(sample.get(name))
-            slp = slp + lp.flatten(sample.ndim, -1).sum(-1)
+            while lp.ndim > sample.ndim:
+                lp = lp.sum(-1)
+            slp = slp + lp
         return slp
 
     def log_prob_composite(
@@ -194,7 +196,9 @@ class CompositeDistribution(d.Distribution):
         d = {}
         for name, dist in self.dists.items():
             d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
-            slp = slp + lp.flatten(sample.ndim, -1).sum(-1)
+            while lp.ndim > sample.ndim:
+                lp = lp.sum(-1)
+            slp = slp + lp
         if include_sum:
             d[self.log_prob_key] = slp
         sample.update(d)
@@ -218,7 +222,10 @@ class CompositeDistribution(d.Distribution):
             except NotImplementedError:
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
-            se = se + e.flatten(len(self.batch_shape), -1).sum(-1)
+            e = e.flatten(len(self.batch_shape), -1).sum(-1)
+            while e.ndim > len(self.batch_shape):
+                e = e.sum(-1)
+            se = se + e
         return se
 
     def entropy_composite(self, samples_mc=1, include_sum=True) -> TensorDictBase:
@@ -235,7 +242,9 @@ class CompositeDistribution(d.Distribution):
                 x = dist.rsample((samples_mc,))
                 e = -dist.log_prob(x).mean(0)
             d[_add_suffix(name, "_entropy")] = e
-            se = se + e.flatten(len(self.batch_shape), -1).sum(-1)
+            while e.ndim > len(self.batch_shape):
+                e = e.sum(-1)
+            se = se + e
         if include_sum:
             d[self.entropy_key] = se
         return TensorDict(
