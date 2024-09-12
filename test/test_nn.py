@@ -3299,6 +3299,7 @@ class TestCompositeDist:
             },
             [3],
         )
+        # Capture the warning for upcoming changes in aggregate_probabilities
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3307,10 +3308,131 @@ class TestCompositeDist:
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
+
         sample = dist.rsample((4,))
-        sample = dist.log_prob(sample)
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            lp = dist.log_prob(sample)
+
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            aggregate_probabilities=True,
+        )
+
+        sample = dist.rsample((4,))
+        lp = dist.log_prob(sample)
+        assert isinstance(lp, torch.Tensor)
+        assert lp.requires_grad
+
+    def test_log_prob_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+            aggregate_probabilities=False,
+        )
+        sample = dist.rsample((4,))
+        sample = dist.log_prob_composite(sample, include_sum=True)
         assert sample.get("cont_log_prob").requires_grad
         assert sample.get(("nested", "disc_log_prob")).requires_grad
+        assert "sample_log_prob" in sample.keys()
+
+    def test_entropy(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+            aggregate_probabilities=True,
+        )
+        ent = dist.entropy()
+        assert ent.shape == params.shape == dist._batch_shape
+        assert isinstance(ent, torch.Tensor)
+        assert ent.requires_grad
+
+    def test_entropy_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        # Capture the warning for upcoming changes in aggregate_probabilities
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+            aggregate_probabilities=False,
+        )
+        sample = dist.entropy()
+        assert sample.shape == params.shape == dist._batch_shape
+        assert sample.get("cont_entropy").requires_grad
+        assert sample.get(("nested", "disc_entropy")).requires_grad
+        assert "entropy" in sample.keys()
 
     def test_cdf(self):
         params = TensorDict(
