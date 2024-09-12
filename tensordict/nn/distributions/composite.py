@@ -36,6 +36,10 @@ class CompositeDistribution(d.Distribution):
             extra keyword arguments for the distributions to be built.
         aggregate_probabilities (bool): if ``True``, the :meth:`~.log_prob` and :meth:`~.entropy` methods will
             sum the probabilities and entropies of the individual distributions and return a single tensor.
+            If ``False``, the single log-probabilities will be registered in the input tensordict (for :meth:`~.log_prob`)
+            or retuned as leaves of the output tensordict (for :meth:`~.entropy`).
+            This parameter can be overridden at runtime by passing the ``aggregate_probabilities`` argument to
+            ``log_prob`` and ``entropy``.
             Defaults to ``False``.
         log_prob_key (NestedKey, optional): key where to write the log_prob.
             Defaults to `'sample_log_prob'`.
@@ -175,8 +179,17 @@ class CompositeDistribution(d.Distribution):
             shape + self.batch_shape,
         )
 
-    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:
+    def log_prob(
+        self, sample: TensorDictBase, *, aggregate_probabilities: bool | None = None
+    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Computes and returns the summed log-prob.
+
+        Args:
+            sample (TensorDictBase): the sample to compute the log probability.
+
+        Keyword Args:
+            aggregate_probabilities (bool, optional): if provided, overrides the default ``aggregate_probabilities``
+                from the class.
 
         If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
         the summed log-probabilities. If ``self.aggregate_probabilities`` is ``False``, this method will
@@ -184,7 +197,9 @@ class CompositeDistribution(d.Distribution):
         of each sample in the input tensordict along with a ``sample_log_prob`` entry with the summed
         log-prob. In both cases, the output shape will be the shape of the input tensordict.
         """
-        if not self.aggregate_probabilities:
+        if aggregate_probabilities is None:
+            aggregate_probabilities = self.aggregate_probabilities
+        if not aggregate_probabilities:
             return self.log_prob_composite(sample, include_sum=True)
         slp = 0.0
         for name, dist in self.dists.items():
@@ -213,8 +228,18 @@ class CompositeDistribution(d.Distribution):
         sample.update(d)
         return sample
 
-    def entropy(self, samples_mc=1) -> torch.Tensor | TensorDictBase:
+    def entropy(
+        self, samples_mc: int = 1, *, aggregate_probabilities: bool | None = None
+    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Computes and returns the summed entropies.
+
+        Args:
+            samples_mc (int): the number samples to draw if the entropy does not have a closed form formula.
+                Defaults to ``1``.
+
+        Keyword Args:
+            aggregate_probabilities (bool, optional): if provided, overrides the default ``aggregate_probabilities``
+                from the class.
 
         If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
         the summed entropies. If ``self.aggregate_probabilities`` is ``False``, this method will call
@@ -222,7 +247,9 @@ class CompositeDistribution(d.Distribution):
         in the input tensordict along with an ``entropy`` entry with the summed entropy. In both cases,
         the output shape will match the shape of the distribution ``batch_shape``.
         """
-        if not self.aggregate_probabilities:
+        if aggregate_probabilities is None:
+            aggregate_probabilities = self.aggregate_probabilities
+        if not aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=True)
         se = 0.0
         for _, dist in self.dists.items():

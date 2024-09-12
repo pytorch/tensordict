@@ -3300,15 +3300,19 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with pytest.warns(FutureWarning):
-            dist = CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-                },
-                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-            )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+
+        sample = dist.rsample((4,))
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            lp = dist.log_prob(sample)
+
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3336,15 +3340,16 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with pytest.warns(FutureWarning):
-            dist = CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-                },
-                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-            )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3372,14 +3377,15 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with pytest.warns(FutureWarning):
-            dist = CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.Categorical,
-                },
-            )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3405,14 +3411,15 @@ class TestCompositeDist:
             [3],
         )
         # Capture the warning for upcoming changes in aggregate_probabilities
-        with pytest.warns(FutureWarning):
-            dist = CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.Categorical,
-                },
-            )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3601,8 +3608,7 @@ class TestCompositeDist:
             assert "cont_log_prob" in sample.keys()
             assert ("nested", "cont_log_prob") in sample.keys(True)
         sample_clone = sample.clone()
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            lp = module.log_prob(sample_clone)
+        lp = module.log_prob(sample_clone)
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
