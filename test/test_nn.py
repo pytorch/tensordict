@@ -3601,7 +3601,8 @@ class TestCompositeDist:
             assert "cont_log_prob" in sample.keys()
             assert ("nested", "cont_log_prob") in sample.keys(True)
         sample_clone = sample.clone()
-        lp = module.log_prob(sample_clone)
+        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
+            lp = module.log_prob(sample_clone)
         if return_log_prob:
             torch.testing.assert_close(
                 lp,

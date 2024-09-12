@@ -116,14 +116,23 @@ class CompositeDistribution(d.Distribution):
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
 
+        self.aggregate_probabilities = aggregate_probabilities
+
+    @property
+    def aggregate_probabilities(self):
+        aggregate_probabilities = self._aggregate_probabilities
         if aggregate_probabilities is None:
             warnings.warn(
                 "The default value of `aggregate_probabilities` will change from `False` to `True` in v0.7. "
                 "Please pass this value explicitly to avoid this warning.",
                 FutureWarning,
             )
-            aggregate_probabilities = False
-        self.aggregate_probabilities = aggregate_probabilities
+            aggregate_probabilities = self._aggregate_probabilities = False
+        return aggregate_probabilities
+
+    @aggregate_probabilities.setter
+    def aggregate_probabilities(self, value):
+        self._aggregate_probabilities = value
 
     def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
