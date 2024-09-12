@@ -211,7 +211,7 @@ class CompositeDistribution(d.Distribution):
         the summed entropies. If ``self.aggregate_probabilities`` is ``False``, this method will call
         the `:meth:`~.entropy_composite` method and return a tensordict with the entropies of each sample
         in the input tensordict along with an ``entropy`` entry with the summed entropy. In both cases,
-        the output shape will match the shape of the distribution batch_shape.
+        the output shape will match the shape of the distribution ``batch_shape``.
         """
         if not self.aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=True)
