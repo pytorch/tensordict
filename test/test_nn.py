@@ -3318,6 +3318,7 @@ class TestCompositeDist:
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
             aggregate_probabilities=True,
         )
+
         sample = dist.rsample((4,))
         lp = dist.log_prob(sample)
         assert isinstance(lp, torch.Tensor)
@@ -3388,7 +3389,7 @@ class TestCompositeDist:
             aggregate_probabilities=True,
         )
         ent = dist.entropy()
-        assert ent.shape == params.shape
+        assert ent.shape == params.shape == dist._batch_shape
         assert isinstance(ent, torch.Tensor)
         assert ent.requires_grad
 
@@ -3421,7 +3422,7 @@ class TestCompositeDist:
             aggregate_probabilities=False,
         )
         sample = dist.entropy()
-        assert sample.shape == params.shape
+        assert sample.shape == params.shape == dist._batch_shape
         assert sample.get("cont_entropy").requires_grad
         assert sample.get(("nested", "disc_entropy")).requires_grad
         assert "entropy" in sample.keys()
