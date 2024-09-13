@@ -19,8 +19,10 @@ from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
     tensorclass,
-    TensorDict, PYTREE_REGISTERED_TDS, PYTREE_REGISTERED_LAZY_TDS,
+    TensorDict,
 )
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
@@ -41,7 +43,11 @@ from tensordict.nn.distributions import (
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
-from tensordict.nn.functional_modules import is_functional, make_functional, _exclude_td_from_pytree
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    is_functional,
+    make_functional,
+)
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
     _set_auto_make_functional,
@@ -52,7 +58,7 @@ from tensordict.nn.utils import (
 
 from torch import distributions, nn
 from torch.distributions import Normal
-from torch.utils._pytree import tree_map, SUPPORTED_NODES
+from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 try:
     import functorch  # noqa
