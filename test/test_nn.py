@@ -3801,7 +3801,6 @@ class TestCudaGraphs:
         for i in range(10):
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
-            print(i)
             assert td["y"] == td["x"] + 1, i
 
         tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
@@ -3821,7 +3820,6 @@ class TestCudaGraphs:
             tdmodule(td, tensordict_out=tdout)
             assert tdout is not td
             assert "x" not in tdout
-            print(tdout)
             assert tdout["y"] == td["x"] + 1
 
         tdmodule = lambda td: td.set("y", td.get("x") + 1)
@@ -3833,7 +3831,6 @@ class TestCudaGraphs:
             assert tdmodule._out_matches_in
             if i >= tdmodule._warmup:
                 assert tdmodule._selected_keys == ["y"]
-            print(i, tdmodule._warmup)
             assert td["y"] == td["x"] + 1
 
         tdmodule = lambda td: td.set("y", td.get("x") + 1)

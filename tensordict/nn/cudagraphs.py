@@ -64,6 +64,21 @@ class CudaGraphModule:
           at any point, the module will silently execute the code with the string used during the capture of the cudagraph.
           The only supported keyword argument is `tensordict_out` in case the input is a tensordict.
 
+        - The input should not be differntiable. If you need to use `nn.Parameters` (or differentiable tensors in general),
+          just write a function that uses them as global values rather than passing them as input:
+
+            >>> x = nn.Parameter(torch.randn(()))
+            >>> optim = Adam([x], lr=1)
+            >>> def func(): # right
+            ...     optim.zero_grad()
+            ...     (x+1).backward()
+            ...     optim.step()
+            >>> def func(x): # wrong
+            ...     optim.zero_grad()
+            ...     (x+1).backward()
+            ...     optim.step()
+
+
     .. warning:: ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
 
@@ -133,15 +148,18 @@ class CudaGraphModule:
             if out_keys is None and self.in_keys is not None:
                 out_keys = []
             self.out_keys = out_keys
-        self._is_tensordict_module = (
-            self.in_keys is not None
-        )
+        self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
 
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
-            def _call(tensordict: TensorDictBase, *args, tensordict_out: TensorDictBase | None=None, **kwargs: Any) -> Any:
+            def _call(
+                tensordict: TensorDictBase,
+                *args,
+                tensordict_out: TensorDictBase | None = None,
+                **kwargs: Any,
+            ) -> Any:
                 if self.counter < self._warmup:
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = tensordict_out
@@ -152,12 +170,14 @@ class CudaGraphModule:
                     return out
                 elif self.counter == self._warmup:
                     if tensordict.device is None:
+
                         def check_device(x):
                             if isinstance(x, torch.Tensor):
                                 if x.device.type != "cuda":
                                     raise ValueError(
                                         f"All tensors must be stored on CUDA. Got {x.device.type}."
                                     )
+
                         tensordict.apply(check_device, filter_empty=True)
                     elif tensordict.device.type != "cuda":
                         raise ValueError(
@@ -196,17 +216,20 @@ class CudaGraphModule:
                             self._selected_keys = []
 
                             def check_tensor_id(name, t0, t1):
-                                print('checking', name, t0, t1)
                                 if t0 is not t1:
-                                    print('adding')
                                     self._selected_keys.append(name)
-                            self._out.named_apply(check_tensor_id, tensordict, default=None, filter_empty=True)
+
+                            self._out.named_apply(
+                                check_tensor_id,
+                                tensordict,
+                                default=None,
+                                filter_empty=True,
+                            )
                         return tensordict.update(
                             self._out, keys_to_update=self._selected_keys
                         )
                     if tensordict_out is not None:
                         return tensordict_out.update(out, clone=True)
-                    print('else')
                     return out.clone() if self._out is not None else None
                 else:
                     self._tensordict.update_(tensordict)
@@ -241,20 +264,20 @@ class CudaGraphModule:
                     self._args, self._kwargs = tree_map(
                         check_device_and_clone, (args, kwargs)
                     )
-                    print('record')
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
                     self.graph.replay()
                     self._out = out
                     self.counter += 1
-                    return tree_map(lambda x: x.clone(), out) if out is not None else out
+                    return (
+                        tree_map(lambda x: x.clone(), out) if out is not None else out
+                    )
                 else:
                     tree_map(
                         lambda x, y: x.copy_(y),
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
-                    print('replay')
                     self.graph.replay()
                     return tree_map(
                         lambda x: x.clone() if x is not None else x, self._out
