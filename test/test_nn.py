@@ -20,7 +20,7 @@ from tensordict import (
     NonTensorData,
     NonTensorStack,
     tensorclass,
-    TensorDict,
+    TensorDict, PYTREE_REGISTERED_TDS, PYTREE_REGISTERED_LAZY_TDS,
 )
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
@@ -41,7 +41,7 @@ from tensordict.nn.distributions import (
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
-from tensordict.nn.functional_modules import is_functional, make_functional
+from tensordict.nn.functional_modules import is_functional, make_functional, _exclude_td_from_pytree
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
     _set_auto_make_functional,
@@ -52,7 +52,7 @@ from tensordict.nn.utils import (
 
 from torch import distributions, nn
 from torch.distributions import Normal
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_map, SUPPORTED_NODES
 
 try:
     import functorch  # noqa
@@ -3705,9 +3705,17 @@ class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
         device = torch.get_default_device()
+        do_unset = False
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
+            if tdtype in SUPPORTED_NODES:
+                do_unset = True
+                _exclude_td_from_pytree().set()
+                break
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
+        if do_unset:
+            _exclude_td_from_pytree().unset()
         torch.set_default_device(device)
 
     def test_cudagraphs_random(self, compiled):

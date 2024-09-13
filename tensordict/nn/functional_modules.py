@@ -143,6 +143,9 @@ class _exclude_td_from_pytree:
     def set(self):
         self.__enter__()
 
+    def unset(self):
+        self.__exit__(None, None. None)
+
 
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
