@@ -23,13 +23,14 @@ from tensordict import (
 )
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
+    CudaGraphModule,
     dispatch,
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModuleBase,
     TensorDictParams,
-    TensorDictSequential, CudaGraphCompiledModule,
+    TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import (
@@ -3696,13 +3697,14 @@ class TestToModule:
         assert (TensorDict.from_module(linear) == params).all()
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+# @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 @pytest.mark.parametrize("compiled", [True, False])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
         device = torch.get_default_device()
-        torch.set_default_device("cuda:0")
+        if torch.cuda.is_available():
+            torch.set_default_device("cuda:0")
         yield
         torch.set_default_device(device)
 
@@ -3713,7 +3715,12 @@ class TestCudaGraphs:
         if compiled:
             func = torch.compile(func)
 
-        func = CudaGraphCompiledModule(func)
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            func = CudaGraphModule(func)
 
         x = torch.randn(10)
         for _ in range(10):
@@ -3721,12 +3728,76 @@ class TestCudaGraphs:
         assert isinstance(func(torch.zeros(10)), torch.Tensor)
         assert (func(torch.zeros(10)) != 0).any()
         y0 = func(x)
-        y1 = func(x+1)
+        y1 = func(x + 1)
         with pytest.raises(AssertionError):
-            torch.testing.assert_close(y0, y1+1)
+            torch.testing.assert_close(y0, y1 + 1)
+
+    @staticmethod
+    def _make_cudagraph(func, compiled, *args, **kwargs):
+        if compiled:
+            func = torch.compile(func)
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            func = CudaGraphModule(func)
+        return func
 
     def test_backprop(self, compiled):
-        ...
+        x = torch.nn.Parameter(torch.ones(3))
+        y = torch.nn.Parameter(torch.ones(3))
+        optimizer = torch.optim.SGD([x, y], lr=1)
+
+        def func(x, y):
+            z = x + y
+            z.sum().backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+        func = self._make_cudagraph(func, compiled)
+
+        for i in range(1, 11):
+            func(x, y)
+
+            assert (x == 1 - i).all(), i
+            assert (y == 1 - i).all(), i
+            assert x.grad is None
+            assert y.grad is None
+
+    def test_tdmodule(self, compiled):
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(10):
+            td = TensorDict(x=torch.randn(()))
+            tdmodule(td)
+            assert td["y"] == td["x"] + 1
+
+        tdmodule = lambda td: td.set("y", td.get("x") + 1)
+        tdmodule = self._make_cudagraph(tdmodule, compiled, in_keys=[], out_keys=[])
+        for _ in range(10):
+            td = TensorDict(x=torch.randn(()))
+            tdmodule(td)
+            assert td["y"] == td["x"] + 1
+
+        tdmodule = lambda td: td.set("y", td.get("x") + 1)
+        tdmodule = self._make_cudagraph(
+            tdmodule, compiled, in_keys=["x"], out_keys=["y"]
+        )
+        for _ in range(10):
+            td = TensorDict(x=torch.randn(()))
+            tdmodule(td)
+            assert td["y"] == td["x"] + 1
+
+        tdmodule = lambda td: td.copy().set("y", td.get("x") + 1)
+        tdmodule = self._make_cudagraph(tdmodule, compiled, in_keys=[], out_keys=[])
+        for _ in range(10):
+            td = TensorDict(x=torch.randn(()))
+            tdout = tdmodule(td)
+            assert tdout is not td
+            assert "y" not in td
+            assert tdout["y"] == td["x"] + 1
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
