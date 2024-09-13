@@ -3715,13 +3715,14 @@ class TestCudaGraphs:
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             if tdtype in SUPPORTED_NODES:
                 do_unset = True
-                _exclude_td_from_pytree().set()
+                excluder = _exclude_td_from_pytree()
+                excluder.set()
                 break
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
         if do_unset:
-            _exclude_td_from_pytree().unset()
+            excluder.unset()
         torch.set_default_device(device)
 
     def test_cudagraphs_random(self, compiled):
