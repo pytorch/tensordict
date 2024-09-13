@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import re
 import types
 import warnings
@@ -21,7 +22,7 @@ from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 from tensordict._td import TensorDict
 from tensordict.base import _is_tensor_collection, is_tensor_collection
 
-from tensordict.utils import implement_for
+from tensordict.utils import implement_for, strtobool
 from torch import nn
 from torch.utils._pytree import SUPPORTED_NODES
 
@@ -138,6 +139,9 @@ class _exclude_td_from_pytree:
     def __exit__(self, exc_type, exc_val, exc_tb):
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
+
+    def set(self):
+        self.__enter__()
 
 
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
@@ -605,3 +609,7 @@ def repopulate_module(model: nn.Module, tensordict: TensorDict) -> nn.Module:
     """Repopulates a module with its parameters, presented as a nested TensorDict."""
     _swap_state(model, tensordict, is_stateless=False)
     return model
+
+
+if strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
+    _exclude_td_from_pytree().set()

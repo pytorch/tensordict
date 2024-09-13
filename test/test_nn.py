@@ -3699,7 +3699,7 @@ class TestToModule:
         assert (TensorDict.from_module(linear) == params).all()
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
+@pytest.mark.skipif(TORCH_VERSION <= "2.4.1", reason="requires torch>=2.5")
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -3853,6 +3853,15 @@ class TestCudaGraphs:
             assert tdout is not td
             assert "y" not in td
             assert tdout["y"] == td["x"] + 1
+
+    def test_td_input_non_tdmodule(self, compiled):
+        func = lambda x: x + 1
+        func = self._make_cudagraph(func, compiled)
+        for i in range(10):
+            td = TensorDict(a=1)
+            func(td)
+            if i == 5:
+                assert not func._is_tensordict_module
 
 
 if __name__ == "__main__":

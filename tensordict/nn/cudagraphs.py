@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import functools
+import os
 import warnings
 
 from textwrap import indent
@@ -15,8 +16,15 @@ import torch
 from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import dispatch
+from tensordict.nn.functional_modules import (
+    _exclude_td_from_pytree,
+    PYTREE_REGISTERED_LAZY_TDS,
+    PYTREE_REGISTERED_TDS,
+)
+from tensordict.utils import strtobool
 from torch import Tensor
-from torch.utils._pytree import tree_map
+
+from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 
 class CudaGraphModule:
@@ -150,6 +158,15 @@ class CudaGraphModule:
             self.out_keys = out_keys
         self._is_tensordict_module = self.in_keys is not None
         self._out_matches_in = None
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
+            if tdtype in SUPPORTED_NODES:
+                if not strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
+                    warnings.warn(
+                        f"Tensordict is registered in PyTree. This is incompatible with {self.__class__.__name__}. "
+                        f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_module._exclude_td_from_pytree().set() "
+                        f"or set the environment variable `EXCLUDE_TD_FROM_PYTREE=1`."
+                    )
+                _exclude_td_from_pytree().set()
 
         if self._is_tensordict_module:
 
@@ -171,26 +188,13 @@ class CudaGraphModule:
                 elif self.counter == self._warmup:
                     if tensordict.device is None:
 
-                        def check_device(x):
-                            if isinstance(x, torch.Tensor):
-                                if x.device.type != "cuda":
-                                    raise ValueError(
-                                        f"All tensors must be stored on CUDA. Got {x.device.type}."
-                                    )
-
-                        tensordict.apply(check_device, filter_empty=True)
+                        tensordict.apply(self._check_device, filter_empty=True)
                     elif tensordict.device.type != "cuda":
                         raise ValueError(
                             "The input tensordict device must be of the 'cuda' type."
                         )
 
-                    def check_non_tensor(arg):
-                        if isinstance(arg, torch.Tensor):
-                            raise ValueError(
-                                "All tensors must be passed in the tensordict, not as arg or kwarg."
-                            )
-
-                    tree_map(check_non_tensor, (args, kwargs))
+                    tree_map(self._check_non_tensor, (args, kwargs))
 
                     self.graph = torch.cuda.CUDAGraph()
                     self._tensordict = tensordict.copy()
@@ -253,11 +257,16 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
 
                     def check_device_and_clone(x):
-                        if isinstance(x, torch.Tensor):
-                            if x.device.type != "cuda":
+                        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+                            if x.device is None:
+                                # Check device of leaves of tensordict
+                                x.apply(self._check_device, filter_empty=True)
+
+                            elif x.device.type != "cuda":
                                 raise ValueError(
                                     f"All tensors must be stored on CUDA. Got {x.device.type}."
                                 )
+
                             return x.clone()
                         return x
 
@@ -285,6 +294,21 @@ class CudaGraphModule:
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
+
+    @staticmethod
+    def _check_device(x):
+        if isinstance(x, torch.Tensor):
+            if x.device.type != "cuda":
+                raise ValueError(
+                    f"All tensors must be stored on CUDA. Got {x.device.type}."
+                )
+
+    @staticmethod
+    def _check_non_tensor(arg):
+        if isinstance(arg, torch.Tensor):
+            raise ValueError(
+                "All tensors must be passed in the tensordict, not as arg or kwarg."
+            )
 
     def __call__(self, *args, **kwargs):
         return self._call_func(*args, **kwargs)
