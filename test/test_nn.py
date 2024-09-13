@@ -73,6 +73,7 @@ try:
 except ImportError:
     from tensordict.utils import Buffer
 
+TORCH_VERSION = torch.__version__
 
 # Capture all warnings
 pytestmark = [
@@ -3698,7 +3699,7 @@ class TestToModule:
         assert (TensorDict.from_module(linear) == params).all()
 
 
-# @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -3829,7 +3830,7 @@ class TestCudaGraphs:
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
             assert tdmodule._out_matches_in
-            if i >= tdmodule._warmup:
+            if i >= tdmodule._warmup and torch.cuda.is_available():
                 assert tdmodule._selected_keys == ["y"]
             assert td["y"] == td["x"] + 1
 
