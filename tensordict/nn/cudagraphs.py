@@ -3,7 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
-from typing import Callable, List
+from functools import wraps
+
+from textwrap import indent
+from typing import Any, Callable, List
 
 import torch
 
@@ -16,6 +19,8 @@ from torch.utils._pytree import tree_map
 
 class CudaGraphModule:
     """A cudagraph wrapper for PyTorch callables.
+
+    ``CudaGraphModule`` is a wrapper class that provides a user-friendly interface to CUDA graphs for PyTorch callables.
 
     This class provides a user-friendly interface to cudagraphs, allowing for a fast, CPU-overhead free execution of
     operations on GPU.
@@ -51,6 +56,11 @@ class CudaGraphModule:
             ...     loss_val.backward()
             ...     optim.step()
             ...     return loss_val.detach()
+
+        - Args and kwargs that are tensors or tensordict may change (provided that device and shape match), but non-tensor
+          args and kwargs should not change. For instance, if the function receives a string input and the input is changed
+          at any point, the module will silently execute the code with the string used during the capture of the cudagraph.
+          The only supported keyword argument is `tensordict_out` in case the input is a tensordict.
 
     .. warning:: ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
@@ -128,12 +138,12 @@ class CudaGraphModule:
     @property
     def __call__(self):
         if self._is_tensordict_module:
-            return self._call_tdmodule
+            return wraps(self.module)(self._call_tdmodule)
         else:
-            return self._call_regular
+            return wraps(self.module)(self._call_regular)
 
     @dispatch(auto_batch_size=False)
-    def _call_tdmodule(self, tensordict: TensorDictBase, *args, **kwargs):
+    def _call_tdmodule(self, tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
         if self.counter < self._warmup:
             out = self.module(tensordict, *args, **kwargs)
             self.counter += self._has_cuda
@@ -184,7 +194,7 @@ class CudaGraphModule:
                 return tensordict.update(self._out, keys_to_updte=self._selected_keys)
             return self._out.clone() if self._out is not None else None
 
-    def _call_regular(self, *args, **kwargs):
+    def _call_regular(self, *args: torch.Tensor, **kwargs: torch.Tensor):
         if self.counter < self._warmup:
             out = self.module(*args, **kwargs)
             self.counter += self._has_cuda
@@ -213,3 +223,10 @@ class CudaGraphModule:
             )
             self.graph.replay()
             return tree_map(lambda x: x.clone() if x is not None else x, self._out)
+
+    def __repr__(self):
+        module = indent(f"module={self.module}", 4 * " ")
+        warmup = warmup = {self._warmup}
+        in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
+        out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
+        return f"{self.__class__.__name__}(\n{module}, \n{warmup}, \n{in_keys}, \n{out_keys}\n)"

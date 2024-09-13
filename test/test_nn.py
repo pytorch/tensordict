@@ -3773,6 +3773,16 @@ class TestCudaGraphs:
             tdmodule(td)
             assert td["y"] == td["x"] + 1
 
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(10):
+            td = TensorDict(x=torch.randn(()))
+            tdout = TensorDict()
+            tdmodule(td, tensordict_out=tdout)
+            assert tdout is not td
+            assert "x" not in tdout
+            assert tdout["y"] == td["x"] + 1
+
         tdmodule = lambda td: td.set("y", td.get("x") + 1)
         tdmodule = self._make_cudagraph(tdmodule, compiled, in_keys=[], out_keys=[])
         for _ in range(10):
