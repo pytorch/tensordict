@@ -10,10 +10,10 @@ import pickle
 import unittest
 import warnings
 import weakref
+from typing import Callable
 
 import pytest
 import torch
-
 from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
@@ -3733,7 +3733,9 @@ class TestCudaGraphs:
             torch.testing.assert_close(y0, y1 + 1)
 
     @staticmethod
-    def _make_cudagraph(func, compiled, *args, **kwargs):
+    def _make_cudagraph(
+        func: Callable, compiled: bool, *args, **kwargs
+    ) -> CudaGraphModule:
         if compiled:
             func = torch.compile(func)
         with (
@@ -3772,6 +3774,13 @@ class TestCudaGraphs:
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
             assert td["y"] == td["x"] + 1
+
+        tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        tdmodule = self._make_cudagraph(tdmodule, compiled)
+        for _ in range(10):
+            x = torch.randn(())
+            y = tdmodule(x=x)
+            assert y == x + 1
 
         tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
         tdmodule = self._make_cudagraph(tdmodule, compiled)

@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import warnings
-from functools import wraps
 
 from textwrap import indent
 from typing import Any, Callable, List
@@ -138,93 +138,109 @@ class CudaGraphModule:
         )
 
     @property
-    def __call__(self):
+    def __call__(self) -> Callable[[Any], Any]:
+        _call_func = getattr(self, "_call_func", None)
+        if _call_func is not None:
+            return _call_func
+
         if self._is_tensordict_module:
-            return wraps(self.module)(self._call_tdmodule)
+
+            @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
+            def _call_tdmodule(tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
+                if self.counter < self._warmup:
+                    out = self.module(tensordict, *args, **kwargs)
+                    self.counter += self._has_cuda
+                    return out
+                elif self.counter == self._warmup:
+                    if tensordict.device.type != "cuda":
+                        raise ValueError(
+                            "The input tensordict device must be of the 'cuda' type."
+                        )
+
+                    def check_non_tensor(arg):
+                        if isinstance(arg, torch.Tensor):
+                            raise ValueError(
+                                "All tensors must be passed in the tensordict, not as arg or kwarg."
+                            )
+
+                    tree_map(check_non_tensor, (args, kwargs))
+
+                    self.graph = torch.cuda.CUDAGraph()
+                    self._tensordict = tensordict.copy()
+                    with torch.cuda.graph(self.graph):
+                        out = self.module(self._tensordict, *args, **kwargs)
+                    if not is_tensor_collection(out) and out is not None:
+                        raise RuntimeError(
+                            "The output of the function must be a tensordict, a tensorclass or None. Got "
+                            f"type(out)={type(out)}."
+                        )
+                    self._out_matches_in = out is tensordict
+                    if self._out_matches_in:
+                        if self.out_keys:
+                            self._selected_keys = self.out_keys
+                        else:
+                            # Gather keys that have changed during execution
+                            self._selected_keys = []
+
+                            def check_tensor_id(name, t0, t1):
+                                if t0 is not t1:
+                                    self._selected_keys.append(name)
+
+                            out.apply(check_tensor_id, self._tensordict, default=None)
+                    self._out = out
+                    self.counter += 1
+                    return out.clone()
+                else:
+                    self._tensordict.update_(tensordict)
+                    self.graph.replay()
+                    if self._out_matches_in:
+                        return tensordict.update(
+                            self._out, keys_to_updte=self._selected_keys
+                        )
+                    return self._out.clone() if self._out is not None else None
+
+            _call_func = functools.wraps(self.module)(_call_tdmodule)
         else:
-            return wraps(self.module)(self._call_regular)
 
-    @dispatch(auto_batch_size=False)
-    def _call_tdmodule(self, tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
-        if self.counter < self._warmup:
-            out = self.module(tensordict, *args, **kwargs)
-            self.counter += self._has_cuda
-            return out
-        elif self.counter == self._warmup:
-            if tensordict.device.type != "cuda":
-                raise ValueError(
-                    "The input tensordict device must be of the 'cuda' type."
-                )
+            def _call_regular(*args: torch.Tensor, **kwargs: torch.Tensor):
+                if self.counter < self._warmup:
+                    out = self.module(*args, **kwargs)
+                    self.counter += self._has_cuda
+                    return out
+                elif self.counter == self._warmup:
+                    self.graph = torch.cuda.CUDAGraph()
 
-            def check_non_tensor(arg):
-                if isinstance(arg, torch.Tensor):
-                    raise ValueError(
-                        "All tensors must be passed in the tensordict, not as arg or kwarg."
+                    def check_device_and_clone(x):
+                        if isinstance(x, torch.Tensor):
+                            if x.device.type != "cuda":
+                                raise ValueError(
+                                    f"All tensors must be stored on CUDA. Got {x.device.type}."
+                                )
+                            return x.clone()
+                        return x
+
+                    self._args, self._kwargs = tree_map(
+                        check_device_and_clone, (args, kwargs)
+                    )
+                    with torch.cuda.graph(self.graph):
+                        out = self.module(*self._args, **self._kwargs)
+                    self._out = out
+                    self.counter += 1
+                    return out.clone()
+                else:
+                    tree_map(
+                        lambda x, y: x.copy_(y),
+                        (self._args, self._kwargs),
+                        (args, kwargs),
+                    )
+                    self.graph.replay()
+                    return tree_map(
+                        lambda x: x.clone() if x is not None else x, self._out
                     )
 
-            tree_map(check_non_tensor, (args, kwargs))
-
-            self.graph = torch.cuda.CUDAGraph()
-            self._tensordict = tensordict.copy()
-            with torch.cuda.graph(self.graph):
-                out = self.module(self._tensordict, *args, **kwargs)
-            if not is_tensor_collection(out) and out is not None:
-                raise RuntimeError(
-                    "The output of the function must be a tensordict, a tensorclass or None. Got "
-                    f"type(out)={type(out)}."
-                )
-            self._out_matches_in = out is tensordict
-            if self._out_matches_in:
-                if self.out_keys:
-                    self._selected_keys = self.out_keys
-                else:
-                    # Gather keys that have changed during execution
-                    self._selected_keys = []
-
-                    def check_tensor_id(name, t0, t1):
-                        if t0 is not t1:
-                            self._selected_keys.append(name)
-
-                    out.apply(check_tensor_id, self._tensordict, default=None)
-            self._out = out
-            self.counter += 1
-            return out.clone()
-        else:
-            self._tensordict.update_(tensordict)
-            self.graph.replay()
-            if self._out_matches_in:
-                return tensordict.update(self._out, keys_to_updte=self._selected_keys)
-            return self._out.clone() if self._out is not None else None
-
-    def _call_regular(self, *args: torch.Tensor, **kwargs: torch.Tensor):
-        if self.counter < self._warmup:
-            out = self.module(*args, **kwargs)
-            self.counter += self._has_cuda
-            return out
-        elif self.counter == self._warmup:
-            self.graph = torch.cuda.CUDAGraph()
-
-            def check_device_and_clone(x):
-                if isinstance(x, torch.Tensor):
-                    if x.device.type != "cuda":
-                        raise ValueError(
-                            f"All tensors must be stored on CUDA. Got {x.device.type}."
-                        )
-                    return x.clone()
-                return x
-
-            self._args, self._kwargs = tree_map(check_device_and_clone, (args, kwargs))
-            with torch.cuda.graph(self.graph):
-                out = self.module(*self._args, **self._kwargs)
-            self._out = out
-            self.counter += 1
-            return out.clone()
-        else:
-            tree_map(
-                lambda x, y: x.copy_(y), (self._args, self._kwargs), (args, kwargs)
-            )
-            self.graph.replay()
-            return tree_map(lambda x: x.clone() if x is not None else x, self._out)
+            _call_func = functools.wraps(self.module)(_call_regular)
+        self._call_func = _call_func
+        return _call_func
 
     def __repr__(self):
         module = indent(f"module={self.module}", 4 * " ")
