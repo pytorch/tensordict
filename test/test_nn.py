@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import copy
+import inspect
 import pickle
 import unittest
 import warnings
@@ -3746,12 +3747,36 @@ class TestCudaGraphs:
             func = CudaGraphModule(func)
         return func
 
+    @staticmethod
+    def check_types(func, *args, **kwargs):
+        signature = inspect.signature(func)
+        bound_args = signature.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+        for param_name, param in signature.parameters.items():
+            arg_value = bound_args.arguments[param_name]
+            if param.annotation != param.empty:
+                if not isinstance(arg_value, param.annotation):
+                    raise TypeError(
+                        f"Argument '{param_name}' should be of type {param.annotation}, but is of type {type(arg_value)}"
+                    )
+
+    def test_signature(self, compiled):
+        if compiled:
+            pytest.skip()
+
+        def func(x: torch.Tensor):
+            return x + torch.randn_like(x)
+
+        with pytest.raises(TypeError):
+            self.check_types(func, "a string")
+        self.check_types(func, torch.ones(()))
+
     def test_backprop(self, compiled):
         x = torch.nn.Parameter(torch.ones(3))
         y = torch.nn.Parameter(torch.ones(3))
         optimizer = torch.optim.SGD([x, y], lr=1)
 
-        def func(x, y):
+        def func(x: torch.Tensor, y: torch.Tensor):
             z = x + y
             z.sum().backward()
             optimizer.step()

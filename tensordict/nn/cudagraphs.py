@@ -137,16 +137,10 @@ class CudaGraphModule:
             self.in_keys is not None and self.out_keys is not None
         )
 
-    @property
-    def __call__(self) -> Callable[[Any], Any]:
-        _call_func = getattr(self, "_call_func", None)
-        if _call_func is not None:
-            return _call_func
-
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
-            def _call_tdmodule(tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
+            def _call(tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
                 if self.counter < self._warmup:
                     out = self.module(tensordict, *args, **kwargs)
                     self.counter += self._has_cuda
@@ -199,10 +193,9 @@ class CudaGraphModule:
                         )
                     return self._out.clone() if self._out is not None else None
 
-            _call_func = functools.wraps(self.module)(_call_tdmodule)
         else:
 
-            def _call_regular(*args: torch.Tensor, **kwargs: torch.Tensor):
+            def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter < self._warmup:
                     out = self.module(*args, **kwargs)
                     self.counter += self._has_cuda
@@ -238,9 +231,11 @@ class CudaGraphModule:
                         lambda x: x.clone() if x is not None else x, self._out
                     )
 
-            _call_func = functools.wraps(self.module)(_call_regular)
+        _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
-        return _call_func
+
+    def __call__(self, *args, **kwargs):
+        return self._call_func(*args, **kwargs)
 
     def __repr__(self):
         module = indent(f"module={self.module}", 4 * " ")
