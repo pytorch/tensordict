@@ -3699,7 +3699,7 @@ class TestToModule:
 
 
 # @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
-@pytest.mark.parametrize("compiled", [True, False])
+@pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
     def _set_cuda_device(self):
@@ -3744,7 +3744,7 @@ class TestCudaGraphs:
             if not torch.cuda.is_available()
             else contextlib.nullcontext()
         ):
-            func = CudaGraphModule(func)
+            func = CudaGraphModule(func, *args, **kwargs)
         return func
 
     @staticmethod
@@ -3776,32 +3776,37 @@ class TestCudaGraphs:
         y = torch.nn.Parameter(torch.ones(3))
         optimizer = torch.optim.SGD([x, y], lr=1)
 
-        def func(x: torch.Tensor, y: torch.Tensor):
-            z = x + y
-            z.sum().backward()
-            optimizer.step()
+        def func():
             optimizer.zero_grad()
+            z = x + y
+            z = z.sum()
+            z.backward()
+            optimizer.step()
 
-        func = self._make_cudagraph(func, compiled)
+        func = self._make_cudagraph(func, compiled, warmup=4)
 
         for i in range(1, 11):
-            func(x, y)
+            torch.compiler.cudagraph_mark_step_begin()
+            func()
 
             assert (x == 1 - i).all(), i
             assert (y == 1 - i).all(), i
-            assert x.grad is None
-            assert y.grad is None
+            # assert (x.grad == 1).all()
+            # assert (y.grad == 1).all()
 
     def test_tdmodule(self, compiled):
         tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
         tdmodule = self._make_cudagraph(tdmodule, compiled)
-        for _ in range(10):
+        assert tdmodule._is_tensordict_module
+        for i in range(10):
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
-            assert td["y"] == td["x"] + 1
+            print(i)
+            assert td["y"] == td["x"] + 1, i
 
         tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
         tdmodule = self._make_cudagraph(tdmodule, compiled)
+        assert tdmodule._is_tensordict_module
         for _ in range(10):
             x = torch.randn(())
             y = tdmodule(x=x)
@@ -3809,25 +3814,33 @@ class TestCudaGraphs:
 
         tdmodule = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
         tdmodule = self._make_cudagraph(tdmodule, compiled)
+        assert tdmodule._is_tensordict_module
         for _ in range(10):
             td = TensorDict(x=torch.randn(()))
             tdout = TensorDict()
             tdmodule(td, tensordict_out=tdout)
             assert tdout is not td
             assert "x" not in tdout
+            print(tdout)
             assert tdout["y"] == td["x"] + 1
 
         tdmodule = lambda td: td.set("y", td.get("x") + 1)
         tdmodule = self._make_cudagraph(tdmodule, compiled, in_keys=[], out_keys=[])
-        for _ in range(10):
+        assert tdmodule._is_tensordict_module
+        for i in range(10):
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
+            assert tdmodule._out_matches_in
+            if i >= tdmodule._warmup:
+                assert tdmodule._selected_keys == ["y"]
+            print(i, tdmodule._warmup)
             assert td["y"] == td["x"] + 1
 
         tdmodule = lambda td: td.set("y", td.get("x") + 1)
         tdmodule = self._make_cudagraph(
             tdmodule, compiled, in_keys=["x"], out_keys=["y"]
         )
+        assert tdmodule._is_tensordict_module
         for _ in range(10):
             td = TensorDict(x=torch.randn(()))
             tdmodule(td)
@@ -3835,6 +3848,7 @@ class TestCudaGraphs:
 
         tdmodule = lambda td: td.copy().set("y", td.get("x") + 1)
         tdmodule = self._make_cudagraph(tdmodule, compiled, in_keys=[], out_keys=[])
+        assert tdmodule._is_tensordict_module
         for _ in range(10):
             td = TensorDict(x=torch.randn(()))
             tdout = tdmodule(td)

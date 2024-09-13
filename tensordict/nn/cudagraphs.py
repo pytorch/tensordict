@@ -134,15 +134,20 @@ class CudaGraphModule:
                 out_keys = []
             self.out_keys = out_keys
         self._is_tensordict_module = (
-            self.in_keys is not None and self.out_keys is not None
+            self.in_keys is not None
         )
+        self._out_matches_in = None
 
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
-            def _call(tensordict: TensorDictBase, *args, **kwargs: Any) -> Any:
+            def _call(tensordict: TensorDictBase, *args, tensordict_out: TensorDictBase | None=None, **kwargs: Any) -> Any:
                 if self.counter < self._warmup:
+                    if tensordict_out is not None:
+                        kwargs["tensordict_out"] = tensordict_out
                     out = self.module(tensordict, *args, **kwargs)
+                    if self._out_matches_in is None:
+                        self._out_matches_in = out is tensordict
                     self.counter += self._has_cuda
                     return out
                 elif self.counter == self._warmup:
@@ -170,14 +175,20 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     self._tensordict = tensordict.copy()
                     with torch.cuda.graph(self.graph):
+                        if tensordict_out is not None:
+                            kwargs["tensordict_out"] = tensordict_out
                         out = self.module(self._tensordict, *args, **kwargs)
+                    self.graph.replay()
+
                     if not is_tensor_collection(out) and out is not None:
                         raise RuntimeError(
                             "The output of the function must be a tensordict, a tensorclass or None. Got "
                             f"type(out)={type(out)}."
                         )
-                    self._out_matches_in = out is tensordict
+                    self._out = out
+                    self.counter += 1
                     if self._out_matches_in:
+                        # We need to know what keys to update in out
                         if self.out_keys:
                             self._selected_keys = self.out_keys
                         else:
@@ -185,20 +196,27 @@ class CudaGraphModule:
                             self._selected_keys = []
 
                             def check_tensor_id(name, t0, t1):
+                                print('checking', name, t0, t1)
                                 if t0 is not t1:
+                                    print('adding')
                                     self._selected_keys.append(name)
-
-                            out.named_apply(check_tensor_id, self._tensordict, default=None, filter_empty=True)
-                    self._out = out
-                    self.counter += 1
-                    return out.clone()
+                            self._out.named_apply(check_tensor_id, tensordict, default=None, filter_empty=True)
+                        return tensordict.update(
+                            self._out, keys_to_update=self._selected_keys
+                        )
+                    if tensordict_out is not None:
+                        return tensordict_out.update(out, clone=True)
+                    print('else')
+                    return out.clone() if self._out is not None else None
                 else:
                     self._tensordict.update_(tensordict)
                     self.graph.replay()
                     if self._out_matches_in:
                         return tensordict.update(
-                            self._out, keys_to_updte=self._selected_keys
+                            self._out, keys_to_update=self._selected_keys
                         )
+                    if tensordict_out is not None:
+                        return tensordict_out.update(self._out, clone=True)
                     return self._out.clone() if self._out is not None else None
 
         else:
@@ -223,17 +241,20 @@ class CudaGraphModule:
                     self._args, self._kwargs = tree_map(
                         check_device_and_clone, (args, kwargs)
                     )
+                    print('record')
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
+                    self.graph.replay()
                     self._out = out
                     self.counter += 1
-                    return out.clone()
+                    return tree_map(lambda x: x.clone(), out) if out is not None else out
                 else:
                     tree_map(
                         lambda x, y: x.copy_(y),
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
+                    print('replay')
                     self.graph.replay()
                     return tree_map(
                         lambda x: x.clone() if x is not None else x, self._out
