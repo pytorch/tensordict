@@ -146,7 +146,15 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 elif self.counter == self._warmup:
-                    if tensordict.device.type != "cuda":
+                    if tensordict.device is None:
+                        def check_device(x):
+                            if isinstance(x, torch.Tensor):
+                                if x.device.type != "cuda":
+                                    raise ValueError(
+                                        f"All tensors must be stored on CUDA. Got {x.device.type}."
+                                    )
+                        tensordict.apply(check_device, filter_empty=True)
+                    elif tensordict.device.type != "cuda":
                         raise ValueError(
                             "The input tensordict device must be of the 'cuda' type."
                         )
@@ -180,7 +188,7 @@ class CudaGraphModule:
                                 if t0 is not t1:
                                     self._selected_keys.append(name)
 
-                            out.apply(check_tensor_id, self._tensordict, default=None)
+                            out.named_apply(check_tensor_id, self._tensordict, default=None, filter_empty=True)
                     self._out = out
                     self.counter += 1
                     return out.clone()
