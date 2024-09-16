@@ -5,7 +5,10 @@
 import argparse
 import contextlib
 import os
+from pathlib import Path
 from typing import Any
+
+import onnxruntime
 
 import pytest
 
@@ -14,6 +17,7 @@ from packaging import version
 
 from tensordict import assert_close, tensorclass, TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torch.utils._pytree import tree_map
 
 TORCH_VERSION = version.parse(torch.__version__).base_version
 
@@ -31,7 +35,7 @@ def test_vmap_compile():
     funcv_c(x, y)
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -318,7 +322,7 @@ class MyClass:
     c: Any = None
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -557,7 +561,7 @@ class TestTC:
         assert (tc_op == tc_op_c).all()
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -781,22 +785,71 @@ class TestExport:
 
 
 class TestONNXExport:
-    def test_onnx_export_module(self):
+    def test_onnx_export_module(self, tmpdir):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
         x = torch.randn(3)
         y = torch.randn(3)
-        torch.onnx.dynamo_export(tdm, x=x, y=y)
-        # assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
+        torch_input = {"x": x, "y": y}
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
 
-    def test_onnx_export_seq(self):
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+
+        path = Path(tmpdir) / "file.onnx"
+        onnx_program.save(str(path))
+        ort_session = onnxruntime.InferenceSession(
+            path, providers=["CPUExecutionProvider"]
+        )
+
+        def to_numpy(tensor):
+            return (
+                tensor.detach().cpu().numpy()
+                if tensor.requires_grad
+                else tensor.cpu().numpy()
+            )
+
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
+
+        onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
+        torch.testing.assert_close(
+            torch.as_tensor(onnxruntime_outputs[0]), tdm(x=x, y=y)
+        )
+
+    def test_onnx_export_seq(self, tmpdir):
         tdm = Seq(
             Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
             Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
         )
         x = torch.randn(3)
         y = torch.randn(3)
+        torch_input = {"x": x, "y": y}
         torch.onnx.dynamo_export(tdm, x=x, y=y)
-        # torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
+
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+
+        path = Path(tmpdir) / "file.onnx"
+        onnx_program.save(str(path))
+        ort_session = onnxruntime.InferenceSession(
+            path, providers=["CPUExecutionProvider"]
+        )
+
+        def to_numpy(tensor):
+            return (
+                tensor.detach().cpu().numpy()
+                if tensor.requires_grad
+                else tensor.cpu().numpy()
+            )
+
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
+
+        onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
+        torch.testing.assert_close(
+            tree_map(torch.as_tensor, onnxruntime_outputs), tdm(x=x, y=y)
+        )
 
 
 if __name__ == "__main__":
