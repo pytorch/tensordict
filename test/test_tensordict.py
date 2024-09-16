@@ -2260,7 +2260,7 @@ class TestGeneric:
         for v1, v2 in zip(
             td.values(True, True, sort=True), tdflat.values(True, True, sort=True)
         ):
-            assert v1==v2
+            assert v1 == v2
         for (k1, v1), (k2, v2) in zip(
             td.items(True, True, sort=True), tdflat.items(True, True, sort=True)
         ):
@@ -2268,7 +2268,7 @@ class TestGeneric:
                 assert k1 == k2
             else:
                 assert ".".join(k1) == k2
-            assert v1==v2
+            assert v1 == v2
 
     def test_split_keys(self):
         td = TensorDict(
