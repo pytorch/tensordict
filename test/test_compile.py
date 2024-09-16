@@ -784,6 +784,7 @@ class TestExport:
         torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
 
 
+@pytest.mark.slow
 class TestONNXExport:
     def test_onnx_export_module(self, tmpdir):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
