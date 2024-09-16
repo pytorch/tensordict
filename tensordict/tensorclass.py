@@ -953,6 +953,7 @@ def _memmap_(
     like=False,
     memmaped: bool = False,
     share_non_tensor: bool = False,
+    existsok: bool = True,
 ):
     _non_tensordict = dict(self._non_tensordict)
     cls = type(self)
@@ -997,6 +998,7 @@ def _memmap_(
             like=like,
             copy_existing=copy_existing,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         if new_futures:
             futures += new_futures
@@ -2816,6 +2818,7 @@ class NonTensorData:
         like=False,
         memmaped: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ):
         # For efficiency, we can avoid doing this saving
         #  if the data is already there.
@@ -2842,6 +2845,7 @@ class NonTensorData:
             like=like,
             memmaped=memmaped,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -2967,6 +2971,7 @@ class NonTensorStack(LazyStackedTensorDict):
         like=False,
         memmaped: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
 
         memmaped_leaves = memmaped
@@ -3013,6 +3018,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     # no memmapping should be executed
                     memmaped=memmaped_leaves,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
             )
         if not inplace:
