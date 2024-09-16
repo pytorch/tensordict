@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from enum import auto, Enum
+from enum import auto, IntEnum
 from textwrap import indent
 from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
@@ -30,7 +30,7 @@ from torch.utils._contextlib import _DecoratorContextManager
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
-class InteractionType(Enum):
+class InteractionType(IntEnum):
     """A list of possible interaction types with a distribution.
 
     MODE, MEDIAN and MEAN point to the property / attribute with the same name.
@@ -408,8 +408,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         """Writes the log-probability of the distribution sample."""
         dist = self.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
-            tensordict = dist.log_prob(tensordict)
-            return tensordict.get("sample_log_prob")
+            td = dist.log_prob(tensordict, aggregate_probabilities=False)
+            return td.get(dist.log_prob_key)
         else:
             return dist.log_prob(tensordict.get(self.out_keys[0]))
 
@@ -439,7 +439,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             if isinstance(out_tensors, TensorDictBase):
                 tensordict_out.update(out_tensors)
                 if self.return_log_prob:
-                    tensordict_out = dist.log_prob(tensordict_out)
+                    kwargs = {}
+                    if isinstance(dist, CompositeDistribution):
+                        kwargs = {"aggregate_probabilities": False}
+                    log_prob = dist.log_prob(tensordict_out, **kwargs)
+                    if log_prob is not tensordict_out:
+                        # Composite dists return the tensordict_out directly when aggrgate_prob is False
+                        tensordict_out.set(self.log_prob_key, log_prob)
+                    else:
+                        tensordict_out.rename_key_(dist.log_prob_key, self.log_prob_key)
             else:
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)

@@ -272,29 +272,34 @@ class TensorDict(TensorDictBase):
                 call_sync = non_blocking is None
                 if call_sync:
                     _device_recorder.mark()
-        self._device = device
+        try:
+            self._device = device
 
-        if source is None:
-            source = {}
-        if not isinstance(source, (TensorDictBase, dict)):
-            raise ValueError(
-                "A TensorDict source is expected to be a TensorDictBase "
-                f"sub-type or a dictionary, found type(source)={type(source)}."
-            )
-        self._batch_size = self._parse_batch_size(source, batch_size)
-        # TODO: this breaks when stacking tensorclasses with dynamo
-        if not is_dynamo_compiling():
-            self.names = names
+            if source is None:
+                source = {}
+            if not isinstance(source, (TensorDictBase, dict)):
+                raise ValueError(
+                    "A TensorDict source is expected to be a TensorDictBase "
+                    f"sub-type or a dictionary, found type(source)={type(source)}."
+                )
+            self._batch_size = self._parse_batch_size(source, batch_size)
+            # TODO: this breaks when stacking tensorclasses with dynamo
+            if not is_dynamo_compiling():
+                self.names = names
 
-        for key, value in source.items():
-            self.set(key, value, non_blocking=sub_non_blocking)
-        if call_sync:
-            if _device_recorder.has_transfer():
-                self._sync_all()
-            _device_recorder.unmark()
+            for key, value in source.items():
+                self.set(key, value, non_blocking=sub_non_blocking)
+            if call_sync:
+                if _device_recorder.has_transfer():
+                    self._sync_all()
+                _device_recorder.unmark()
+                call_sync = False
 
-        if lock:
-            self.lock_()
+            if lock:
+                self.lock_()
+        finally:
+            if call_sync:
+                _device_recorder.unmark()
 
     @classmethod
     def _new_unsafe(
@@ -860,7 +865,11 @@ class TensorDict(TensorDictBase):
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = self.from_dict_instance(value, batch_size=indexed_bs)
+                value = self.from_dict_instance(
+                    value, batch_size=indexed_bs, device=self.device
+                )
+            elif value.device != self.device:
+                value = value.to(self.device)
                 # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
                 if value.shape == indexed_bs[-len(value.shape) :]:
@@ -883,7 +892,7 @@ class TensorDict(TensorDictBase):
             for value_key, item in value.items():
                 if value_key in keys:
                     self._set_at_str(
-                        value_key, item, index, validated=False, non_blocking=False
+                        value_key, item, index, validated=True, non_blocking=False
                     )
                 else:
                     if subtd is None:
@@ -2524,6 +2533,7 @@ class TensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
 
         if prefix is not None:
@@ -2558,6 +2568,7 @@ class TensorDict(TensorDictBase):
                     inplace=inplace,
                     like=like,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if prefix is not None:
                     _update_metadata(
@@ -2574,6 +2585,7 @@ class TensorDict(TensorDictBase):
                         copy_existing=copy_existing,
                         prefix=prefix,
                         like=like,
+                        existsok=existsok,
                     )
                 else:
                     futures.append(
@@ -2585,6 +2597,7 @@ class TensorDict(TensorDictBase):
                             copy_existing=copy_existing,
                             prefix=prefix,
                             like=like,
+                            existsok=existsok,
                         )
                     )
                 if prefix is not None:
@@ -2836,7 +2849,12 @@ class TensorDict(TensorDictBase):
         return memmap_tensor
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        existsok: bool = True,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -2865,6 +2883,7 @@ class TensorDict(TensorDictBase):
                 copy_existing=True,
                 prefix=last_node._memmap_prefix,
                 like=not copy_data,
+                existsok=existsok,
             )
             _update_metadata(
                 metadata=metadata,
@@ -3127,17 +3146,29 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
+    # @cache
     def keys(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only and is_leaf is None:
-            return _StringKeys(self._tensordict.keys())
+            if not sort:
+                return _StringKeys(self._tensordict.keys())
+            else:
+                return sorted(
+                    _StringKeys(self._tensordict.keys()),
+                    key=lambda x: ".".join(x) if isinstance(x, tuple) else x,
+                )
         else:
             return self._nested_keys(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
+                sort=sort,
             )
 
     @cache  # noqa: B019
@@ -3146,12 +3177,15 @@ class TensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _TensorDictKeysView:
         return _TensorDictKeysView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            sort=sort,
         )
 
     # some custom methods for efficiency
@@ -3160,65 +3194,44 @@ class TensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
-            return self._tensordict.items()
-        elif include_nested and leaves_only:
+            if not sort:
+                return self._tensordict.items()
+            return sorted(self._tensordict.items(), key=lambda x: x[0])
+        elif include_nested and leaves_only and not sort:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
             result = []
-            if is_dynamo_compiling():
 
-                def fast_iter():
-                    for key, val in self._tensordict.items():
-                        if not is_leaf(type(val)):
-                            for _key, _val in val.items(
-                                include_nested=include_nested,
-                                leaves_only=leaves_only,
-                                is_leaf=is_leaf,
-                            ):
-                                result.append(
-                                    (
-                                        (
-                                            key,
-                                            *(
-                                                (_key,)
-                                                if isinstance(_key, str)
-                                                else _key
-                                            ),
-                                        ),
-                                        _val,
-                                    )
-                                )
-                        else:
-                            result.append((key, val))
-                    return result
-
-            else:
-                # dynamo doesn't like generators
-                def fast_iter():
-                    for key, val in self._tensordict.items():
-                        if not is_leaf(type(val)):
-                            yield from (
-                                (
-                                    (
-                                        key,
-                                        *((_key,) if isinstance(_key, str) else _key),
-                                    ),
-                                    _val,
-                                )
-                                for _key, _val in val.items(
-                                    include_nested=include_nested,
-                                    leaves_only=leaves_only,
-                                    is_leaf=is_leaf,
-                                )
-                            )
-                        else:
-                            yield (key, val)
+            def fast_iter():
+                for key, val in self._tensordict.items():
+                    # We could easily make this faster, here we're iterating twice over the keys,
+                    #  but we could iterate just once.
+                    #  Ideally we should make a "dirty" list of items then call unravel_key on all of them.
+                    if not is_leaf(type(val)):
+                        for _key, _val in val.items(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        ):
+                            if isinstance(_key, str):
+                                _key = (key, _key)
+                            else:
+                                _key = (key, *_key)
+                            result.append((_key, _val))
+                    else:
+                        result.append((key, val))
+                return result
 
             return fast_iter()
         else:
             return super().items(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
+                sort=sort,
             )
 
     def values(
@@ -3226,15 +3239,23 @@ class TensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
-            return self._tensordict.values()
+            if not sort:
+                return self._tensordict.values()
+            else:
+                return list(zip(*sorted(self._tensordict.items(), key=lambda x: x[0])))[
+                    1
+                ]
         else:
             return TensorDictBase.values(
                 self,
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
+                sort=sort,
             )
 
 
@@ -3523,9 +3544,14 @@ class _SubTensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _TensorDictKeysView:
         return self._source.keys(
-            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+            sort=sort,
         )
 
     def entry_class(self, key: NestedKey) -> type:
@@ -3894,6 +3920,7 @@ class _SubTensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
         if prefix is not None:
 
@@ -3924,6 +3951,7 @@ class _SubTensorDict(TensorDictBase):
             inplace=inplace,
             like=like,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         if not inplace:
             result = _SubTensorDict(_source, idx=self.idx)
@@ -4160,6 +4188,7 @@ class _TensorDictKeysView:
         include_nested: bool,
         leaves_only: bool,
         is_leaf: Callable[[Type], bool] = None,
+        sort: bool = False,
     ) -> None:
         self.tensordict = tensordict
         self.include_nested = include_nested
@@ -4167,22 +4196,32 @@ class _TensorDictKeysView:
         if is_leaf is None:
             is_leaf = _default_is_leaf
         self.is_leaf = is_leaf
+        self.sort = sort
 
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        if not self.include_nested:
-            if self.leaves_only:
-                for key in self._keys():
-                    target_class = self.tensordict.entry_class(key)
-                    if _is_tensor_collection(target_class):
-                        continue
-                    yield key
+        def _iter():
+            if not self.include_nested:
+                if self.leaves_only:
+                    for key in self._keys():
+                        target_class = self.tensordict.entry_class(key)
+                        if _is_tensor_collection(target_class):
+                            continue
+                        yield key
+                else:
+                    yield from self._keys()
             else:
-                yield from self._keys()
-        else:
-            yield from (
-                key if len(key) > 1 else key[0]
-                for key in self._iter_helper(self.tensordict)
+                yield from (
+                    key if len(key) > 1 else key[0]
+                    for key in self._iter_helper(self.tensordict)
+                )
+
+        if self.sort:
+            yield from sorted(
+                _iter(),
+                key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
             )
+        else:
+            yield from _iter()
 
     def _iter_helper(
         self, tensordict: T, prefix: str | None = None
@@ -4392,7 +4431,7 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
 
 
 # user did specify location and memmap is in wrong place, so we copy
-def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
+def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok):
     filename = None if prefix is None else str(prefix / f"{key}.memmap")
     if value.is_nested:
         shape = value._nested_tensor_size()
@@ -4404,7 +4443,7 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
                 shape,
                 filename=shape_filename,
                 copy_existing=copy_existing,
-                existsok=True,
+                existsok=existsok,
                 copy_data=True,
             )
     else:
@@ -4413,9 +4452,9 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
         value.data if value.requires_grad else value,
         filename=filename,
         copy_existing=copy_existing,
-        existsok=True,
         copy_data=not like,
         shape=shape,
+        existsok=existsok,
     )
     dest._tensordict[key] = memmap_tensor
     return memmap_tensor
