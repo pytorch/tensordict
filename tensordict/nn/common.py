@@ -240,15 +240,22 @@ class dispatch:
         self.auto_batch_size = auto_batch_size
 
     def __call__(self, func: Callable) -> Callable:
+
+        is_method = inspect.ismethod(func) or (
+            inspect.isfunction(func)
+            and func.__code__.co_argcount > 0
+            and func.__code__.co_varnames[0] == "self"
+        )
         # sanity check
         for i, key in enumerate(inspect.signature(func).parameters):
-            if i == 0:
+            if (is_method or (key == "self")) and (i == 0):
+                is_method = True
                 # skip self
                 continue
             if key != "tensordict":
                 raise RuntimeError(
                     "the first argument of the wrapped function must be "
-                    "named 'tensordict'."
+                    f"named 'tensordict'. Got {key} instead."
                 )
             break
         # if the env variable was used, we can skip the wrapper altogether
@@ -256,12 +263,21 @@ class dispatch:
             return func
 
         @functools.wraps(func)
-        def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if is_method:
+                _self = args[0]
+                args = args[1:]
+            else:
+                _self = None
             if not _dispatch_td_nn_modules():
                 return func(_self, *args, **kwargs)
 
             source = self.source
             if isinstance(source, str):
+                if _self is None:
+                    raise RuntimeError(
+                        "The in keys must be passed to dispatch when func is not a method but a function."
+                    )
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
@@ -271,6 +287,10 @@ class dispatch:
                 tensordict_values = {}
                 dest = self.dest
                 if isinstance(dest, str):
+                    if _self is None:
+                        raise RuntimeError(
+                            "The in keys must be passed to dispatch when func is not a method but a function."
+                        )
                     dest = getattr(_self, dest)
                 for key in source:
                     expected_key = self.separator.join(_unravel_key_to_tuple(key))
@@ -293,10 +313,16 @@ class dispatch:
                     tensordict_values,
                     batch_size=torch.Size([]) if not self.auto_batch_size else None,
                 )
-                out = func(_self, tensordict, *args, **kwargs)
+                if _self is not None:
+                    out = func(_self, tensordict, *args, **kwargs)
+                else:
+                    out = func(tensordict, *args, **kwargs)
+
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
-            return func(_self, tensordict, *args, **kwargs)
+            if _self is not None:
+                return func(_self, tensordict, *args, **kwargs)
+            return func(tensordict, *args, **kwargs)
 
         return self._update_func_signature(func, wrapper)
 
