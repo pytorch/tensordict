@@ -106,7 +106,7 @@ def get_flat_tc():
 
 
 # Tests runtime of a simple arithmetic op over a highly nested tensordict
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_add_one_nested(mode, dict_type, benchmark):
@@ -128,7 +128,7 @@ def test_compile_add_one_nested(mode, dict_type, benchmark):
 
 
 # Tests the speed of copying a nested tensordict
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_nested(mode, dict_type, benchmark):
@@ -150,7 +150,7 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 
 
 # Tests runtime of a simple arithmetic op over a flat tensordict
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_one_flat(mode, dict_type, benchmark):
@@ -177,7 +177,7 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
     benchmark(func, td)
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_self_flat(mode, dict_type, benchmark):
@@ -207,7 +207,7 @@ def test_compile_add_self_flat(mode, dict_type, benchmark):
 
 
 # Tests the speed of copying a flat tensordict
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_flat(mode, dict_type, benchmark):
@@ -235,7 +235,7 @@ def test_compile_copy_flat(mode, dict_type, benchmark):
 
 
 # Tests the speed of assigning entries to an empty tensordict
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_assign_and_add(mode, dict_type, benchmark):
@@ -264,7 +264,7 @@ def test_compile_assign_and_add(mode, dict_type, benchmark):
 # Tests the speed of assigning entries to a lazy stacked tensordict
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.skipif(
     torch.cuda.is_available(), reason="max recursion depth error with cuda"
 )
@@ -285,7 +285,7 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 
 
 # Tests indexing speed
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 @pytest.mark.parametrize("index_type", ["tensor", "slice", "int"])

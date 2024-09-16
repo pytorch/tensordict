@@ -24,7 +24,16 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    get_type_hints,
+    List,
+    overload,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 import numpy as np
 import orjson as json
@@ -62,6 +71,18 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+try:
+    from typing import dataclass_transform
+except ImportError:
+
+    def dataclass_transform(*args, **kwargs):
+        """No-op.
+
+        Placeholder for dataclass_transform (python<3.11).
+        """
+        return lambda cls: cls
+
 
 T = TypeVar("T", bound=TensorDictBase)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
@@ -327,13 +348,71 @@ def is_non_tensor(obj):
     return isinstance(obj, (NonTensorData, NonTensorStack))
 
 
-class tensorclass:
+class _tensorclass_dec:
+    def __new__(cls, autocast: bool = False, frozen: bool = False):
+        if not isinstance(autocast, bool):
+            clz = autocast
+            self = super().__new__(cls)
+            self.__init__(autocast=False, frozen=False)
+            return self.__call__(clz)
+        return super().__new__(cls)
+
+    def __init__(self, autocast: bool = False, frozen: bool = False):
+        self.autocast = autocast
+        self.frozen = frozen
+
+    @dataclass_transform()
+    def __call__(self, cls):
+        clz = _tensorclass(cls, frozen=self.frozen)
+        clz.autocast = self.autocast
+        return clz
+
+
+@overload
+def tensorclass(autocast: bool = False, frozen: bool = False) -> _tensorclass_dec: ...
+
+
+@overload
+def tensorclass(cls: T) -> T: ...
+
+
+@overload
+def tensorclass(cls: T) -> T: ...
+
+
+@dataclass_transform()
+def tensorclass(*args, **kwargs):
     """A decorator to create :obj:`tensorclass` classes.
 
-    :obj:`tensorclass` classes are specialized :obj:`dataclass` instances that
+    ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
     can execute some pre-defined tensor operations out of the box, such as
     indexing, item assignment, reshaping, casting to device or storage and many
     others.
+
+    Args:
+        autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
+            Defaults to ``False``.
+        frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
+            provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
+            the class constructor. Defaults to ``False``.
+
+    tensorclass can be used with or without arguments:
+    Examples:
+        >>> @tensorclass
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        1
+        >>> @tensorclass(autocast=False)
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        1
+        >>> @tensorclass(autocast=True)
+        ... class X:
+        ...     y: torch.Tensor
+        >>> X(1).y
+        torch.tensor(1)
 
     Examples:
         >>> from tensordict import tensorclass
@@ -383,25 +462,11 @@ class tensorclass:
 
 
     """
-
-    def __new__(cls, autocast: bool = False):
-        if not isinstance(autocast, bool):
-            clz = autocast
-            self = super().__new__(cls)
-            self.__init__(autocast=False)
-            return self.__call__(clz)
-        return super().__new__(cls)
-
-    def __init__(self, autocast: bool):
-        self.autocast = autocast
-
-    def __call__(self, cls):
-        clz = _tensorclass(cls)
-        clz.autocast = self.autocast
-        return clz
+    return _tensorclass_dec(*args, **kwargs)
 
 
-def _tensorclass(cls: T) -> T:
+@dataclass_transform()
+def _tensorclass(cls: T, *, frozen) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -437,7 +502,7 @@ def _tensorclass(cls: T) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
-    cls = dataclass(cls)
+    cls = dataclass(cls, frozen=frozen)
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
 
     for attr in expected_keys:
@@ -452,7 +517,7 @@ def _tensorclass(cls: T) -> T:
             delattr(cls, field.name)
 
     _get_type_hints(cls)
-    cls.__init__ = _init_wrapper(cls.__init__)
+    cls.__init__ = _init_wrapper(cls.__init__, frozen)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -615,7 +680,7 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
-def _init_wrapper(__init__: Callable) -> Callable:
+def _init_wrapper(__init__: Callable, frozen) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
@@ -628,8 +693,11 @@ def _init_wrapper(__init__: Callable) -> Callable:
         batch_size: Sequence[int] | torch.Size | int = None,
         device: DeviceType | None = None,
         names: List[str] | None = None,
+        lock: bool | None = None,
         **kwargs,
     ):
+        if lock is None:
+            lock = frozen
 
         if not is_dynamo_compiling():
             # zip not supported by dynamo
@@ -684,6 +752,13 @@ def _init_wrapper(__init__: Callable) -> Callable:
             for key, value in kwargs.items()
         }
         __init__(self, **kwargs)
+        if frozen:
+            local_setattr = _setattr_wrapper(self.__setattr__, self.__expected_keys__)
+            for key, val in kwargs.items():
+                local_setattr(self, key, val)
+                del self.__dict__[key]
+        if lock:
+            self._tensordict.lock_()
 
     new_params = [
         inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
@@ -878,6 +953,7 @@ def _memmap_(
     like=False,
     memmaped: bool = False,
     share_non_tensor: bool = False,
+    existsok: bool = True,
 ):
     _non_tensordict = dict(self._non_tensordict)
     cls = type(self)
@@ -922,6 +998,7 @@ def _memmap_(
             like=like,
             copy_existing=copy_existing,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         if new_futures:
             futures += new_futures
@@ -2741,6 +2818,7 @@ class NonTensorData:
         like=False,
         memmaped: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ):
         # For efficiency, we can avoid doing this saving
         #  if the data is already there.
@@ -2767,6 +2845,7 @@ class NonTensorData:
             like=like,
             memmaped=memmaped,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -2892,6 +2971,7 @@ class NonTensorStack(LazyStackedTensorDict):
         like=False,
         memmaped: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
 
         memmaped_leaves = memmaped
@@ -2938,6 +3018,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     # no memmapping should be executed
                     memmaped=memmaped_leaves,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
             )
         if not inplace:
