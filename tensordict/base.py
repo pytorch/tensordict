@@ -3211,6 +3211,7 @@ class TensorDictBase(MutableMapping):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T: ...
 
     def densify(self, layout: torch.layout = torch.strided):
@@ -3743,6 +3744,7 @@ class TensorDictBase(MutableMapping):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -3767,6 +3769,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -3799,6 +3803,7 @@ class TensorDictBase(MutableMapping):
                     inplace=True,
                     like=False,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -3813,6 +3818,7 @@ class TensorDictBase(MutableMapping):
             executor=None,
             like=False,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     @abc.abstractmethod
@@ -3935,6 +3941,7 @@ class TensorDictBase(MutableMapping):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -3958,6 +3965,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -3992,6 +4001,7 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=False,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -4007,6 +4017,7 @@ class TensorDictBase(MutableMapping):
             like=False,
             futures=None,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     def memmap_like(
@@ -4014,6 +4025,7 @@ class TensorDictBase(MutableMapping):
         prefix: str | None = None,
         copy_existing: bool = False,
         *,
+        existsok: bool = True,
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
@@ -4040,6 +4052,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -4089,6 +4103,7 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=True,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -4106,6 +4121,7 @@ class TensorDictBase(MutableMapping):
             executor=None,
             futures=None,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     @classmethod

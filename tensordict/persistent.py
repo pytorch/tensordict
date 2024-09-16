@@ -701,6 +701,7 @@ class PersistentTensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
@@ -749,6 +750,7 @@ class PersistentTensorDict(TensorDictBase):
                         futures=futures,
                         inplace=inplace,
                         share_non_tensor=share_non_tensor,
+                        existsok=existsok,
                     ),
                     inplace=False,
                     validated=True,
@@ -776,7 +778,7 @@ class PersistentTensorDict(TensorDictBase):
                         ),
                         copy_data=not like,
                         copy_existing=copy_existing,
-                        existsok=True,
+                        existsok=existsok,
                     )
                     tensordict._set_str(
                         key,
