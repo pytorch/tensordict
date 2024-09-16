@@ -390,12 +390,7 @@ class TensorDictBase(MutableMapping):
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
-                result = self._get_tuple(idx_unravel, NO_DEFAULT)
-                if is_non_tensor(result):
-                    result_data = getattr(result, "data", NO_DEFAULT)
-                    if result_data is NO_DEFAULT:
-                        return result.tolist()
-                    return result_data
+                result = self._get_tuple_maybe_non_tensor(idx_unravel, NO_DEFAULT)
                 return result
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
@@ -4653,6 +4648,15 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _get_tuple(self, key, default): ...
 
+    def _get_tuple_maybe_non_tensor(self, key, default):
+        result = self._get_tuple(key, default)
+        if is_non_tensor(result):
+            result_data = getattr(result, "data", NO_DEFAULT)
+            if result_data is NO_DEFAULT:
+                return result.tolist()
+            return result_data
+        return result
+
     def get_at(
         self, key: NestedKey, index: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
@@ -8484,25 +8488,33 @@ class TensorDictBase(MutableMapping):
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
 
     # Validation and checks
-    def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
+    def _convert_to_tensor(
+        self, array: Any
+    ) -> Tensor | "NonTensorData" | TensorDictBase:  # noqa: F821
+        # We are sure that array is not a dict or anything in _ACCEPTED_CLASSES
+        castable = None
         if isinstance(array, (float, int, bool)):
+            castable = True
             pass
         elif isinstance(array, np.ndarray) and array.dtype.names is not None:
             return TensorDictBase.from_struct_array(array, device=self.device)
         elif isinstance(array, np.bool_):
+            castable = True
             array = array.item()
         elif isinstance(array, list):
             array = np.asarray(array)
+            castable = array.dtype.kind in ("i", "f")
         elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
-        try:
+            castable = array.dtype.kind in ("i", "f")
+        if castable:
             return torch.as_tensor(array, device=self.device)
-        except Exception:
+        else:
             from tensordict.tensorclass import NonTensorData
 
             return NonTensorData(
-                array,
+                data=array,
                 batch_size=self.batch_size,
                 device=self.device,
                 names=self._maybe_names(),
@@ -8559,6 +8571,7 @@ class TensorDictBase(MutableMapping):
             )
             is_tc = True
         elif not issubclass(cls, _ACCEPTED_CLASSES):
+            # If cls is not a tensor
             try:
                 value = self._convert_to_tensor(value)
             except ValueError as err:
