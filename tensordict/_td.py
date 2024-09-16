@@ -2530,6 +2530,7 @@ class TensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
 
         if prefix is not None:
@@ -2564,6 +2565,7 @@ class TensorDict(TensorDictBase):
                     inplace=inplace,
                     like=like,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if prefix is not None:
                     _update_metadata(
@@ -2580,6 +2582,7 @@ class TensorDict(TensorDictBase):
                         copy_existing=copy_existing,
                         prefix=prefix,
                         like=like,
+                        existsok=existsok,
                     )
                 else:
                     futures.append(
@@ -2591,6 +2594,7 @@ class TensorDict(TensorDictBase):
                             copy_existing=copy_existing,
                             prefix=prefix,
                             like=like,
+                            existsok=existsok,
                         )
                     )
                 if prefix is not None:
@@ -2842,7 +2846,12 @@ class TensorDict(TensorDictBase):
         return memmap_tensor
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        existsok: bool = True,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -2871,6 +2880,7 @@ class TensorDict(TensorDictBase):
                 copy_existing=True,
                 prefix=last_node._memmap_prefix,
                 like=not copy_data,
+                existsok=existsok,
             )
             _update_metadata(
                 metadata=metadata,
@@ -3901,6 +3911,7 @@ class _SubTensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
         if prefix is not None:
 
@@ -3931,6 +3942,7 @@ class _SubTensorDict(TensorDictBase):
             inplace=inplace,
             like=like,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         if not inplace:
             result = _SubTensorDict(_source, idx=self.idx)
@@ -4399,7 +4411,7 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
 
 
 # user did specify location and memmap is in wrong place, so we copy
-def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
+def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok):
     filename = None if prefix is None else str(prefix / f"{key}.memmap")
     if value.is_nested:
         shape = value._nested_tensor_size()
@@ -4411,7 +4423,7 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
                 shape,
                 filename=shape_filename,
                 copy_existing=copy_existing,
-                existsok=True,
+                existsok=existsok,
                 copy_data=True,
             )
     else:
@@ -4420,9 +4432,9 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
         value.data if value.requires_grad else value,
         filename=filename,
         copy_existing=copy_existing,
-        existsok=True,
         copy_data=not like,
         shape=shape,
+        existsok=existsok,
     )
     dest._tensordict[key] = memmap_tensor
     return memmap_tensor

@@ -2458,6 +2458,7 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace=True,
         like=False,
         share_non_tensor,
+        existsok,
     ) -> T:
         if prefix is not None:
             prefix = Path(prefix)
@@ -2489,6 +2490,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     inplace=inplace,
                     like=like,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
             )
         if not inplace:
@@ -3526,6 +3528,7 @@ class _CustomOpTensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -3558,6 +3561,7 @@ class _CustomOpTensorDict(TensorDictBase):
             inplace=inplace,
             like=like,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         )
         if not inplace:
             dest = type(self)(
