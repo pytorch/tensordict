@@ -994,6 +994,37 @@ class TestTDModule:
         out = module(TensorDict({"a": torch.randn(3)}, []))
         assert (out["b"] == out["a"]).all()
 
+    def test_tdmodule_inplace(self):
+        tdm = TensorDictModule(
+            lambda x: (x, x), in_keys=["x"], out_keys=["y", "z"], inplace=False
+        )
+        td = TensorDict(x=[0], batch_size=[1], device="cpu")
+        td_out = tdm(td)
+        assert td_out is not td
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == ()
+        assert td_out.device is None
+
+        tdm = TensorDictModule(
+            lambda x: (x, x), in_keys=["x"], out_keys=["y", "z"], inplace="empty"
+        )
+        td = TensorDict(x=[0], batch_size=[1], device="cpu")
+        td_out = tdm(td)
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == (1,)
+        assert td_out.device == torch.device("cpu")
+
+        td_out = tdm(td, tensordict_out=TensorDict())
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == ()
+        assert td_out.device is None
+
 
 class TestTDSequence:
     @pytest.mark.parametrize("args", [True, False])
