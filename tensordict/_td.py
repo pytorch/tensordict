@@ -2323,18 +2323,16 @@ class TensorDict(TensorDictBase):
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
             dest = tensor_in
-            is_diff = dest[idx].tolist() != value.tolist()
-            if is_diff:
-                dest_val = dest.maybe_to_stack()
-                dest_val[idx] = value
-                if dest_val is not dest:
-                    self._set_str(
-                        key,
-                        dest_val,
-                        validated=True,
-                        inplace=False,
-                        ignore_lock=True,
-                    )
+            dest_val = dest.maybe_to_stack()
+            dest_val[idx] = value
+            if dest_val is not dest:
+                self._set_str(
+                    key,
+                    dest_val,
+                    validated=True,
+                    inplace=False,
+                    ignore_lock=True,
+                )
             return
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
