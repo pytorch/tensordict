@@ -994,6 +994,37 @@ class TestTDModule:
         out = module(TensorDict({"a": torch.randn(3)}, []))
         assert (out["b"] == out["a"]).all()
 
+    def test_tdmodule_inplace(self):
+        tdm = TensorDictModule(
+            lambda x: (x, x), in_keys=["x"], out_keys=["y", "z"], inplace=False
+        )
+        td = TensorDict(x=[0], batch_size=[1], device="cpu")
+        td_out = tdm(td)
+        assert td_out is not td
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == ()
+        assert td_out.device is None
+
+        tdm = TensorDictModule(
+            lambda x: (x, x), in_keys=["x"], out_keys=["y", "z"], inplace="empty"
+        )
+        td = TensorDict(x=[0], batch_size=[1], device="cpu")
+        td_out = tdm(td)
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == (1,)
+        assert td_out.device == torch.device("cpu")
+
+        td_out = tdm(td, tensordict_out=TensorDict())
+        assert "x" not in td_out
+        assert "y" in td_out
+        assert "z" in td_out
+        assert td_out.batch_size == ()
+        assert td_out.device is None
+
 
 class TestTDSequence:
     @pytest.mark.parametrize("args", [True, False])
@@ -1042,6 +1073,22 @@ class TestTDSequence:
         seq = TensorDictSequential(module1, module2, module3)
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert set(seq.out_keys) == set(unravel_key_list(("foo1", "key1", "key2")))
+
+    def test_key_exclusion(self):
+        module1 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        module3 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["foo1", "key3"], out_keys=["key2"]
+        )
+        seq = TensorDictSequential(
+            module1, module2, module3, selected_out_keys=["key2"]
+        )
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert seq.out_keys == ["key2"]
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
