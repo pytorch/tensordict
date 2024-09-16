@@ -559,6 +559,52 @@ class TestTensorClass:
         assert (full_like_tc.y.X == 9).all()
         assert full_like_tc.z == data.z == z
 
+    def test_frozen(self):
+
+        @tensorclass(frozen=True, autocast=True)
+        class X:
+            y: torch.Tensor
+
+        x = X(y=1)
+        assert isinstance(x.y, torch.Tensor)
+        _ = {x: 0}
+        assert x.is_locked
+        with pytest.raises(RuntimeError, match="locked"):
+            x.y = 0
+
+        @tensorclass(frozen=False, autocast=True)
+        class X:
+            y: torch.Tensor
+
+        x = X(y=1)
+        assert isinstance(x.y, torch.Tensor)
+        with pytest.raises(TypeError, match="unhashable"):
+            _ = {x: 0}
+        assert not x.is_locked
+        x.y = 0
+
+        @tensorclass(frozen=True, autocast=False)
+        class X:
+            y: torch.Tensor
+
+        x = X(y="a string!")
+        assert isinstance(x.y, str)
+        _ = {x: 0}
+        assert x.is_locked
+        with pytest.raises(RuntimeError, match="locked"):
+            x.y = 0
+
+        @tensorclass(frozen=False, autocast=False)
+        class X:
+            y: torch.Tensor
+
+        x = X(y="a string!")
+        assert isinstance(x.y, str)
+        with pytest.raises(TypeError, match="unhashable"):
+            _ = {x: 0}
+        assert not x.is_locked
+        x.y = 0
+
     @pytest.mark.parametrize("from_torch", [True, False])
     def test_gather(self, from_torch):
         @tensorclass

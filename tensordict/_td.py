@@ -272,29 +272,34 @@ class TensorDict(TensorDictBase):
                 call_sync = non_blocking is None
                 if call_sync:
                     _device_recorder.mark()
-        self._device = device
+        try:
+            self._device = device
 
-        if source is None:
-            source = {}
-        if not isinstance(source, (TensorDictBase, dict)):
-            raise ValueError(
-                "A TensorDict source is expected to be a TensorDictBase "
-                f"sub-type or a dictionary, found type(source)={type(source)}."
-            )
-        self._batch_size = self._parse_batch_size(source, batch_size)
-        # TODO: this breaks when stacking tensorclasses with dynamo
-        if not is_dynamo_compiling():
-            self.names = names
+            if source is None:
+                source = {}
+            if not isinstance(source, (TensorDictBase, dict)):
+                raise ValueError(
+                    "A TensorDict source is expected to be a TensorDictBase "
+                    f"sub-type or a dictionary, found type(source)={type(source)}."
+                )
+            self._batch_size = self._parse_batch_size(source, batch_size)
+            # TODO: this breaks when stacking tensorclasses with dynamo
+            if not is_dynamo_compiling():
+                self.names = names
 
-        for key, value in source.items():
-            self.set(key, value, non_blocking=sub_non_blocking)
-        if call_sync:
-            if _device_recorder.has_transfer():
-                self._sync_all()
-            _device_recorder.unmark()
+            for key, value in source.items():
+                self.set(key, value, non_blocking=sub_non_blocking)
+            if call_sync:
+                if _device_recorder.has_transfer():
+                    self._sync_all()
+                _device_recorder.unmark()
+                call_sync = False
 
-        if lock:
-            self.lock_()
+            if lock:
+                self.lock_()
+        finally:
+            if call_sync:
+                _device_recorder.unmark()
 
     @classmethod
     def _new_unsafe(
@@ -860,7 +865,11 @@ class TensorDict(TensorDictBase):
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = self.from_dict_instance(value, batch_size=indexed_bs)
+                value = self.from_dict_instance(
+                    value, batch_size=indexed_bs, device=self.device
+                )
+            elif value.device != self.device:
+                value = value.to(self.device)
                 # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
                 if value.shape == indexed_bs[-len(value.shape) :]:
@@ -883,7 +892,7 @@ class TensorDict(TensorDictBase):
             for value_key, item in value.items():
                 if value_key in keys:
                     self._set_at_str(
-                        value_key, item, index, validated=False, non_blocking=False
+                        value_key, item, index, validated=True, non_blocking=False
                     )
                 else:
                     if subtd is None:
@@ -3129,6 +3138,7 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
+    # @cache
     def keys(
         self,
         include_nested: bool = False,
@@ -4196,9 +4206,13 @@ class _TensorDictKeysView:
                 )
 
         if self.sort:
-            yield from sorted(_iter(), key=lambda key: ".".join(key) if isinstance(key, tuple) else key)
+            yield from sorted(
+                _iter(),
+                key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
+            )
         else:
             yield from _iter()
+
     def _iter_helper(
         self, tensordict: T, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:

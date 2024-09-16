@@ -5202,8 +5202,11 @@ class TensorDictBase(MutableMapping):
                     yield k, self._get_str(k, NO_DEFAULT)
 
         if sort:
-            yield from sorted(_items(),
-                key=lambda item: item[0] if isinstance(item[0], str) else ".".join(item[0]),
+            yield from sorted(
+                _items(),
+                key=lambda item: (
+                    item[0] if isinstance(item[0], str) else ".".join(item[0])
+                ),
             )
         else:
             yield from _items()
@@ -5282,9 +5285,7 @@ class TensorDictBase(MutableMapping):
         if not sort or not include_nested:
             yield from _values()
         else:
-            for _, value in self.items(
-                include_nested, leaves_only, is_leaf, sort=sort
-            ):
+            for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
 
     @cache  # noqa: B019
@@ -10071,7 +10072,9 @@ class TensorDictBase(MutableMapping):
             if not is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
-            torch.mps.synchronize()
+            mps = getattr(torch, "mps", None)
+            if mps is not None:
+                mps.synchronize()
 
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):

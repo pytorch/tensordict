@@ -16,6 +16,7 @@ from tensordict.utils import (
     _make_cache_key,
     convert_ellipsis_to_idx,
     isin,
+    parse_tensor_dict_string,
     remove_duplicates,
 )
 
@@ -325,6 +326,33 @@ def test_remove_duplicates_2dims(dim, device):
                 device=device,
             )
         assert (output_tensordict == expected_output).all()
+
+
+def test_parse_tensor_dict_string():
+    td = TensorDict(a=0)
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
+    td = TensorDict(a=[0], batch_size=[1])
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
+    td = TensorDict(a=[[0] * 2], batch_size=[1, 2])
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
+    td = TensorDict(
+        a=[[0] * 2], b=TensorDict(c=[[1] * 2], batch_size=[1, 2]), batch_size=[1]
+    )
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
+
+    td = TensorDict(
+        a=[[0] * 2],
+        b=TensorDict(c=[[1] * 2], batch_size=[1, 2]),
+        batch_size=[1],
+        device="cpu",
+    )
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
+    td = TensorDict(
+        a=[[0] * 2],
+        b=TensorDict(c=[[1] * 2], batch_size=[1, 2], device="cpu"),
+        batch_size=[1],
+    )
+    assert str(td) == str(parse_tensor_dict_string(str(td)))
 
 
 if __name__ == "__main__":

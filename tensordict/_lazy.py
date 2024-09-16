@@ -3406,9 +3406,14 @@ class _CustomOpTensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _TensorDictKeysView:
         return self._source.keys(
-            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+            sort=sort,
         )
 
     def _select(
