@@ -19,6 +19,6 @@ dependencies:
     - coverage
     - h5py
     - orjson
-    - onnx
-    - onnxscript
-    - onnxruntime
+#    - onnx
+#    - onnxscript
+#    - onnxruntime
