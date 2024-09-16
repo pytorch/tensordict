@@ -80,7 +80,7 @@ tensordict.nn
    :maxdepth: 1
 
    tutorials/tensordict_module
-   tutorials/tensordict_module_functional
+   tutorials/export
 
 Dataloading
 -----------
