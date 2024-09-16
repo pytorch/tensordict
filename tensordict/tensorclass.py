@@ -135,6 +135,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_get_names_idx",  # no wrap output
     "_get_str",
     "_get_tuple",
+    "_get_tuple_maybe_non_tensor",
     "_has_names",
     "_items_list",
     "_maybe_names",
