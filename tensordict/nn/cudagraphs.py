@@ -69,11 +69,6 @@ class CudaGraphModule:
             ...     optim.step()
             ...     return loss_val.detach()
 
-        - Args and kwargs that are tensors or tensordict may change (provided that device and shape match), but non-tensor
-          args and kwargs should not change. For instance, if the function receives a string input and the input is changed
-          at any point, the module will silently execute the code with the string used during the capture of the cudagraph.
-          The only supported keyword argument is `tensordict_out` in case the input is a tensordict.
-
         - The input should not be differntiable. If you need to use `nn.Parameters` (or differentiable tensors in general),
           just write a function that uses them as global values rather than passing them as input:
 
@@ -88,6 +83,14 @@ class CudaGraphModule:
             ...     (x+1).backward()
             ...     optim.step()
 
+        - Args and kwargs that are tensors or tensordict may change (provided that device and shape match), but non-tensor
+          args and kwargs should not change. For instance, if the function receives a string input and the input is changed
+          at any point, the module will silently execute the code with the string used during the capture of the cudagraph.
+          The only supported keyword argument is `tensordict_out` in case the input is a tensordict.
+
+        - If the module is a :class:`~tensordict.nn.TensorDictModuleBase` instance and the output id matches the input
+          id, then this identity will be preserved during a call to ``CudaGraphModule``. In all other cases, the output
+          will be cloned, irrespective of whether its elements match or do not match one of the inputs.
 
     .. warning:: ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
