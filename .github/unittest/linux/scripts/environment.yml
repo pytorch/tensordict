@@ -21,3 +21,4 @@ dependencies:
     - orjson
     - onnx
     - onnxscript
+    - onnxruntime
