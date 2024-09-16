@@ -8566,7 +8566,7 @@ class TensorDictBase(MutableMapping):
         elif isinstance(array, np.bool_):
             castable = True
             array = array.item()
-        elif isinstance(array, list):
+        elif isinstance(array, (list, tuple)):
             array = np.asarray(array)
             castable = array.dtype.kind in ("i", "f")
         elif hasattr(array, "numpy"):
