@@ -2239,6 +2239,37 @@ class TestGeneric:
             td0 = td0.squeeze(0)
             assert_shared(td0)
 
+    def test_sorted_keys(self):
+        td = TensorDict(
+            {
+                "a": {"b": 0, "c": 1},
+                "d": 2,
+                "e": {"f": 3, "g": {"h": 4, "i": 5}, "j": 6},
+            }
+        )
+        tdflat = td.flatten_keys()
+        tdflat["d"] = tdflat.pop("d")
+        tdflat["a.b"] = tdflat.pop("a.b")
+        for key1, key2 in zip(
+            td.keys(True, True, sort=True), tdflat.keys(True, True, sort=True)
+        ):
+            if isinstance(key1, str):
+                assert key1 == key2
+            else:
+                assert ".".join(key1) == key2
+        for v1, v2 in zip(
+            td.values(True, True, sort=True), tdflat.values(True, True, sort=True)
+        ):
+            assert v1 == v2
+        for (k1, v1), (k2, v2) in zip(
+            td.items(True, True, sort=True), tdflat.items(True, True, sort=True)
+        ):
+            if isinstance(k1, str):
+                assert k1 == k2
+            else:
+                assert ".".join(k1) == k2
+            assert v1 == v2
+
     def test_split_keys(self):
         td = TensorDict(
             {
