@@ -605,6 +605,30 @@ class TestNN:
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
+    def test_dispatch_nontensor(self, mode):
+
+        # Non tensor
+        x = torch.randn(3)
+        y = None
+        mod = Seq(
+            Mod(lambda x, y: x[y, :], in_keys=["x", "y"], out_keys=["_z"]),
+            Mod(lambda x, z: z * x, in_keys=["x", "_z"], out_keys=["out"]),
+        )
+        assert mod(x=x, y=y)[-1].shape == torch.Size((1, 3))
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
+        torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
+
+    def test_dispatch_tensor(self, mode):
+        x = torch.randn(3)
+        y = torch.randn(3)
+        mod = Seq(
+            Mod(lambda x, y: x + y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda x, z: z * x, in_keys=["x", "z"], out_keys=["out"]),
+        )
+        mod(x=x, y=y)
+        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
+        torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
+
 
 @pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -735,6 +759,44 @@ class TestFunctional:
         assert (call_compile(x, td_zero) == 0).all()
         assert (TensorDict.from_module(module) == td).all()
         assert (td_zero == 0).all()
+
+
+class TestExport:
+    def test_export_module(self):
+        tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
+        x = torch.randn(3)
+        y = torch.randn(3)
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
+
+    def test_export_seq(self):
+        tdm = Seq(
+            Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
+        )
+        x = torch.randn(3)
+        y = torch.randn(3)
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
+
+
+class TestONNXExport:
+    def test_onnx_export_module(self):
+        tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
+        x = torch.randn(3)
+        y = torch.randn(3)
+        torch.onnx.dynamo_export(tdm, x=x, y=y)
+        # assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
+
+    def test_onnx_export_seq(self):
+        tdm = Seq(
+            Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
+        )
+        x = torch.randn(3)
+        y = torch.randn(3)
+        torch.onnx.dynamo_export(tdm, x=x, y=y)
+        # torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
 
 
 if __name__ == "__main__":
