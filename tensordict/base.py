@@ -3211,6 +3211,7 @@ class TensorDictBase(MutableMapping):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T: ...
 
     def densify(self, layout: torch.layout = torch.strided):
@@ -3743,6 +3744,7 @@ class TensorDictBase(MutableMapping):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -3767,6 +3769,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -3799,6 +3803,7 @@ class TensorDictBase(MutableMapping):
                     inplace=True,
                     like=False,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -3813,6 +3818,7 @@ class TensorDictBase(MutableMapping):
             executor=None,
             like=False,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     @abc.abstractmethod
@@ -3935,6 +3941,7 @@ class TensorDictBase(MutableMapping):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        existsok: bool = True,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -3958,6 +3965,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -3992,6 +4001,7 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=False,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -4007,6 +4017,7 @@ class TensorDictBase(MutableMapping):
             like=False,
             futures=None,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     def memmap_like(
@@ -4014,6 +4025,7 @@ class TensorDictBase(MutableMapping):
         prefix: str | None = None,
         copy_existing: bool = False,
         *,
+        existsok: bool = True,
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
@@ -4040,6 +4052,8 @@ class TensorDictBase(MutableMapping):
                 on all other workers. If the number of non-tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
+                exists in the same path. Defaults to ``True``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -4089,6 +4103,7 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=True,
                     share_non_tensor=share_non_tensor,
+                    existsok=existsok,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -4106,6 +4121,7 @@ class TensorDictBase(MutableMapping):
             executor=None,
             futures=None,
             share_non_tensor=share_non_tensor,
+            existsok=existsok,
         ).lock_()
 
     @classmethod
@@ -5135,8 +5151,13 @@ class TensorDictBase(MutableMapping):
         return self.get(key)
 
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False, is_leaf=None
-    ) -> Iterator[tuple[str, CompatibleType]]:
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf=None,
+        *,
+        sort: bool = False,
+    ) -> Iterator[tuple[str, CompatibleType]]:  # noqa: D417
         """Returns a generator of key-value pairs for the tensordict.
 
         Args:
@@ -5147,46 +5168,64 @@ class TensorDictBase(MutableMapping):
             is_leaf: an optional callable that indicates if a class is to be considered a
                 leaf or not.
 
+        Keyword Args:
+            sort (bool, optional): whether the keys should be sorted. For nested keys,
+                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
+                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
+                significant overhead when dealing with large tensordicts.
+                Defaults to ``False``.
+
         """
         if is_leaf is None:
             is_leaf = _default_is_leaf
 
-        # check the conditions once only
-        if include_nested and leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if not is_leaf(type(val)):
-                    yield from (
-                        (_unravel_key_to_tuple((k, _key)), _val)
-                        for _key, _val in val.items(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
+        def _items():
+            if include_nested and leaves_only:
+                # check the conditions once only
+                for k in self.keys():
+                    val = self._get_str(k, NO_DEFAULT)
+                    if not is_leaf(type(val)):
+                        yield from (
+                            (_unravel_key_to_tuple((k, _key)), _val)
+                            for _key, _val in val.items(
+                                include_nested=include_nested,
+                                leaves_only=leaves_only,
+                                is_leaf=is_leaf,
+                            )
                         )
-                    )
-                else:
+                    else:
+                        yield k, val
+            elif include_nested:
+                for k in self.keys():
+                    val = self._get_str(k, NO_DEFAULT)
                     yield k, val
-        elif include_nested:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                yield k, val
-                if not is_leaf(type(val)):
-                    yield from (
-                        (_unravel_key_to_tuple((k, _key)), _val)
-                        for _key, _val in val.items(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
+                    if not is_leaf(type(val)):
+                        yield from (
+                            (_unravel_key_to_tuple((k, _key)), _val)
+                            for _key, _val in val.items(
+                                include_nested=include_nested,
+                                leaves_only=leaves_only,
+                                is_leaf=is_leaf,
+                            )
                         )
-                    )
-        elif leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if is_leaf(type(val)):
-                    yield k, val
+            elif leaves_only:
+                for k in self.keys():
+                    val = self._get_str(k, NO_DEFAULT)
+                    if is_leaf(type(val)):
+                        yield k, val
+            else:
+                for k in self.keys():
+                    yield k, self._get_str(k, NO_DEFAULT)
+
+        if sort:
+            yield from sorted(
+                _items(),
+                key=lambda item: (
+                    item[0] if isinstance(item[0], str) else ".".join(item[0])
+                ),
+            )
         else:
-            for k in self.keys():
-                yield k, self._get_str(k, NO_DEFAULT)
+            yield from _items()
 
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
@@ -5203,7 +5242,9 @@ class TensorDictBase(MutableMapping):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf=None,
-    ) -> Iterator[CompatibleType]:
+        *,
+        sort: bool = False,
+    ) -> Iterator[CompatibleType]:  # noqa: D417
         """Returns a generator representing the values for the tensordict.
 
         Args:
@@ -5214,39 +5255,54 @@ class TensorDictBase(MutableMapping):
             is_leaf: an optional callable that indicates if a class is to be considered a
                 leaf or not.
 
+        Keyword Args:
+            sort (bool, optional): whether the keys should be sorted. For nested keys,
+                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
+                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
+                significant overhead when dealing with large tensordicts.
+                Defaults to ``False``.
+
         """
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        # check the conditions once only
-        if include_nested and leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if not is_leaf(type(val)):
-                    yield from val.values(
-                        include_nested=include_nested,
-                        leaves_only=leaves_only,
-                        is_leaf=is_leaf,
-                    )
-                else:
+
+        def _values():
+            # check the conditions once only
+            if include_nested and leaves_only:
+                for k in self.keys():
+                    val = self._get_str(k, NO_DEFAULT)
+                    if not is_leaf(type(val)):
+                        yield from val.values(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+                    else:
+                        yield val
+            elif include_nested:
+                for k in self.keys():
+                    val = self._get_str(k, NO_DEFAULT)
                     yield val
-        elif include_nested:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                yield val
-                if not is_leaf(type(val)):
-                    yield from val.values(
-                        include_nested=include_nested,
-                        leaves_only=leaves_only,
-                        is_leaf=is_leaf,
-                    )
-        elif leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if is_leaf(type(val)):
-                    yield val
+                    if not is_leaf(type(val)):
+                        yield from val.values(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+            elif leaves_only:
+                for k in self.keys(sort=sort):
+                    val = self._get_str(k, NO_DEFAULT)
+                    if is_leaf(type(val)):
+                        yield val
+            else:
+                for k in self.keys(sort=sort):
+                    yield self._get_str(k, NO_DEFAULT)
+
+        if not sort or not include_nested:
+            yield from _values()
         else:
-            for k in self.keys():
-                yield self._get_str(k, NO_DEFAULT)
+            for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
+                yield value
 
     @cache  # noqa: B019
     def _values_list(
@@ -5344,7 +5400,9 @@ class TensorDictBase(MutableMapping):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-        is_leaf: Callable[[Type], bool] = None,
+        is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ):
         """Returns a generator of tensordict keys.
 
@@ -5355,6 +5413,13 @@ class TensorDictBase(MutableMapping):
                 returned. Defaults to ``False``.
             is_leaf: an optional callable that indicates if a class is to be considered a
                 leaf or not.
+
+        Keyword Args:
+            sort (bool, optional): whether the keys shoulbe sorted. For nested keys,
+                the keys are sorted according to their joined name (ie, ``("a", "key")`` will
+                be counted as ``"a.key"`` for sorting). Be mindful that sorting may incur
+                significant overhead when dealing with large tensordicts.
+                Defaults to ``False``.
 
         Examples:
             >>> from tensordict import TensorDict
