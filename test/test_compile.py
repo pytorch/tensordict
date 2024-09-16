@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import importlib.util
 import os
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch.utils._pytree import tree_map
 
 TORCH_VERSION = version.parse(torch.__version__).base_version
+
+_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
 
 def test_vmap_compile():
@@ -765,6 +768,7 @@ class TestFunctional:
 
 class TestExport:
     def test_export_module(self):
+        torch._dynamo.reset_code_caches()
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
         x = torch.randn(3)
         y = torch.randn(3)
@@ -772,6 +776,7 @@ class TestExport:
         assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
 
     def test_export_seq(self):
+        torch._dynamo.reset_code_caches()
         tdm = Seq(
             Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
             Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
@@ -782,7 +787,7 @@ class TestExport:
         torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
 
 
-@pytest.mark.slow
+@pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
 class TestONNXExport:
     def test_onnx_export_module(self, tmpdir):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
