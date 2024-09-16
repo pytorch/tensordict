@@ -8,8 +8,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import onnxruntime
-
 import pytest
 
 import torch
@@ -797,6 +795,8 @@ class TestONNXExport:
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
+        import onnxruntime
+
         ort_session = onnxruntime.InferenceSession(
             path, providers=["CPUExecutionProvider"]
         )
@@ -832,6 +832,8 @@ class TestONNXExport:
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
+        import onnxruntime
+
         ort_session = onnxruntime.InferenceSession(
             path, providers=["CPUExecutionProvider"]
         )
