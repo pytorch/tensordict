@@ -134,12 +134,12 @@ class MemoryMappedTensor(torch.Tensor):
         cls,
         input,
         *,
-        filename=None,
-        existsok=False,
-        copy_existing=False,
-        copy_data=True,
-        shape=None,
-    ):
+        filename: Path | str = None,
+        existsok: bool = False,
+        copy_existing: bool = False,
+        copy_data: bool = True,
+        shape: torch.Size | None = None,
+    ):  # noqa: D417
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
         If the tensor is already a MemoryMappedTensor the original tensor is
@@ -149,6 +149,8 @@ class MemoryMappedTensor(torch.Tensor):
         Args:
             input (torch.Tensor): the tensor which content must be copied onto
                 the MemoryMappedTensor.
+
+        Keyword Args:
             filename (path to a file): the path to the file where the tensor
                 should be stored. If none is provided, a file handler is used
                 instead.
@@ -280,12 +282,12 @@ class MemoryMappedTensor(torch.Tensor):
         cls,
         storage,
         *,
-        shape=None,
-        dtype=None,
-        device=None,
-        index=None,
-        filename=None,
-        handler=None,
+        shape: torch.Size | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        index: IndexType | None = None,
+        filename: Path | str = None,
+        handler: _handler = None,
     ):
         if getattr(storage, "filename", None) is not None:
             if filename is None:

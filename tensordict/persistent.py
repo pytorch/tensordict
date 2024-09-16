@@ -471,6 +471,8 @@ class PersistentTensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _PersistentTDKeysView:
         if is_leaf not in (None, _default_is_leaf, _is_leaf_nontensor):
             raise ValueError(
@@ -481,6 +483,7 @@ class PersistentTensorDict(TensorDictBase):
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            sort=sort,
         )
 
     def _items_metadata(self, include_nested=False, leaves_only=False):
@@ -701,6 +704,7 @@ class PersistentTensorDict(TensorDictBase):
         inplace,
         like,
         share_non_tensor,
+        existsok,
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
@@ -749,6 +753,7 @@ class PersistentTensorDict(TensorDictBase):
                         futures=futures,
                         inplace=inplace,
                         share_non_tensor=share_non_tensor,
+                        existsok=existsok,
                     ),
                     inplace=False,
                     validated=True,
@@ -776,7 +781,7 @@ class PersistentTensorDict(TensorDictBase):
                         ),
                         copy_data=not like,
                         copy_existing=copy_existing,
-                        existsok=True,
+                        existsok=existsok,
                     )
                     tensordict._set_str(
                         key,
