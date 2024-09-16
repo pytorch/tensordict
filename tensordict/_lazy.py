@@ -1550,22 +1550,35 @@ class LazyStackedTensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _LazyStackedTensorDictKeysView:
         keys = _LazyStackedTensorDictKeysView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            sort=sort,
         )
         return keys
 
-    def values(self, include_nested=False, leaves_only=False, is_leaf=None):
+    def values(
+        self,
+        include_nested=False,
+        leaves_only=False,
+        is_leaf=None,
+        *,
+        sort: bool = False,
+    ):
         if is_leaf not in (
             _NESTED_TENSORS_AS_LISTS,
             _NESTED_TENSORS_AS_LISTS_NONTENSOR,
         ):
             yield from super().values(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
+                sort=sort,
             )
         else:
             for td in self.tensordicts:
@@ -1573,15 +1586,26 @@ class LazyStackedTensorDict(TensorDictBase):
                     include_nested=include_nested,
                     leaves_only=leaves_only,
                     is_leaf=is_leaf,
+                    sort=sort,
                 )
 
-    def items(self, include_nested=False, leaves_only=False, is_leaf=None):
+    def items(
+        self,
+        include_nested=False,
+        leaves_only=False,
+        is_leaf=None,
+        *,
+        sort: bool = False,
+    ):
         if is_leaf not in (
             _NESTED_TENSORS_AS_LISTS,
             _NESTED_TENSORS_AS_LISTS_NONTENSOR,
         ):
             yield from super().items(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
+                sort=sort,
             )
         else:
             for i, td in enumerate(self.tensordicts):
@@ -1589,6 +1613,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     include_nested=include_nested,
                     leaves_only=leaves_only,
                     is_leaf=is_leaf,
+                    sort=sort,
                 ):
                     if isinstance(key, str):
                         key = (str(i), key)
@@ -3383,9 +3408,14 @@ class _CustomOpTensorDict(TensorDictBase):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> _TensorDictKeysView:
         return self._source.keys(
-            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+            sort=sort,
         )
 
     def _select(

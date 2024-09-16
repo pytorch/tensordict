@@ -1014,10 +1014,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> Iterator[CompatibleType]:
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for v in self._param_td.values(include_nested, leaves_only):
+        for v in self._param_td.values(include_nested, leaves_only, sort=sort):
             if not is_leaf(type(v)):
                 yield v
                 continue
@@ -1082,10 +1084,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
     ) -> Iterator[CompatibleType]:
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        for k, v in self._param_td.items(include_nested, leaves_only):
+        for k, v in self._param_td.items(include_nested, leaves_only, sort=sort):
             if not is_leaf(type(v)):
                 yield k, v
                 continue
