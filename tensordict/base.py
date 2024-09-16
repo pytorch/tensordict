@@ -390,8 +390,7 @@ class TensorDictBase(MutableMapping):
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
-                result = self._get_tuple_maybe_non_tensor(idx_unravel, NO_DEFAULT)
-                return result
+                return self._get_tuple_maybe_non_tensor(idx_unravel, NO_DEFAULT)
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
             # empty tuple returns self
@@ -8495,9 +8494,10 @@ class TensorDictBase(MutableMapping):
         castable = None
         if isinstance(array, (float, int, bool)):
             castable = True
-            pass
         elif isinstance(array, np.ndarray) and array.dtype.names is not None:
             return TensorDictBase.from_struct_array(array, device=self.device)
+        elif isinstance(array, np.ndarray):
+            castable = array.dtype.kind in ("i", "f")
         elif isinstance(array, np.bool_):
             castable = True
             array = array.item()
