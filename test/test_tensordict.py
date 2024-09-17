@@ -10386,7 +10386,7 @@ class TestNonTensorData:
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
         assert is_non_tensor(data)
         data = torch.stack([data] * 3)
-        assert is_non_tensor(data)
+        assert is_non_tensor(data), data
         data = data.clone()
         assert is_non_tensor(data)
         data.memmap_(tmpdir)
