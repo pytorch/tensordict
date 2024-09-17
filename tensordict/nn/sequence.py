@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Any, Iterable
+from typing import Any, Iterable, List
 
 from tensordict._nestedkey import NestedKey
 
@@ -49,12 +49,19 @@ class TensorDictSequential(TensorDictModule):
 
     Args:
          modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
+    Keyword Args:
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
+         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
+            ``out_keys`` will be written.
+
+    .. note:: A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove
+      some of them after execution for clarity or memory purposes. If this is the case, the method :meth:`~.select_out_keys`
+      can be used after instantiation, or `selected_out_keys` may be passed to the constructor.
 
     Examples:
         >>> import torch
@@ -161,6 +168,7 @@ class TensorDictSequential(TensorDictModule):
         self,
         *modules: TensorDictModuleBase,
         partial_tolerant: bool = False,
+        selected_out_keys: List[NestedKey] | None = None,
     ) -> None:
         modules = self._convert_modules(modules)
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
@@ -170,6 +178,8 @@ class TensorDictSequential(TensorDictModule):
         )
 
         self.partial_tolerant = partial_tolerant
+        if selected_out_keys:
+            self.select_out_keys(*selected_out_keys)
 
     @staticmethod
     def _convert_modules(modules):
