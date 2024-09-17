@@ -611,6 +611,7 @@ class TestNN:
         assert module_compile(td) is not td
 
     def test_dispatch_nontensor(self, mode):
+        torch._dynamo.reset_code_caches()
 
         # Non tensor
         x = torch.randn(3)
@@ -624,6 +625,8 @@ class TestNN:
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
     def test_dispatch_tensor(self, mode):
+        torch._dynamo.reset_code_caches()
+
         x = torch.randn(3)
         y = torch.randn(3)
         mod = Seq(

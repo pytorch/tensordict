@@ -8562,17 +8562,17 @@ class TensorDictBase(MutableMapping):
         elif isinstance(array, np.ndarray) and array.dtype.names is not None:
             return TensorDictBase.from_struct_array(array, device=self.device)
         elif isinstance(array, np.ndarray):
-            castable = array.dtype.kind in ("i", "f")
+            castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif isinstance(array, np.bool_):
             castable = True
             array = array.item()
         elif isinstance(array, (list, tuple)):
             array = np.asarray(array)
-            castable = array.dtype.kind in ("i", "f")
+            castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
-            castable = array.dtype.kind in ("i", "f")
+            castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         if castable:
             return torch.as_tensor(array, device=self.device)
         else:
