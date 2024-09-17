@@ -22,6 +22,8 @@ TORCH_VERSION = version.parse(torch.__version__).base_version
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
+_v2_5 = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse("2.5.0")
+
 
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
@@ -621,7 +623,7 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "_z"], out_keys=["out"]),
         )
         assert mod(x=x, y=y)[-1].shape == torch.Size((1, 3))
-        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
     def test_dispatch_tensor(self, mode):
@@ -634,7 +636,7 @@ class TestNN:
             Mod(lambda x, z: z * x, in_keys=["x", "z"], out_keys=["out"]),
         )
         mod(x=x, y=y)
-        mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
+        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
 
@@ -769,6 +771,7 @@ class TestFunctional:
         assert (td_zero == 0).all()
 
 
+@pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
 class TestExport:
     def test_export_module(self):
         torch._dynamo.reset_code_caches()
