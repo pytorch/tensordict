@@ -393,6 +393,29 @@ the keyword argument in the function signature.</p></li>
 number of tensors returned by the embedded module. Using “_” as a key avoid writing tensor to output.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/string.html#module-string" title="(in Python v3.12)"><em>string</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), the output of the module are written in the tensordict
+provided to the <a class="reference internal" href="#tensordict.nn.TensorDictModule.forward" title="tensordict.nn.TensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, a new <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with and empty
+batch-size and no device is created. if <code class="docutils literal notranslate"><span class="pre">&quot;empty&quot;</span></code>, <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.empty" title="tensordict.TensorDict.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a> will be used to
+create the output tensordict.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>if <code class="docutils literal notranslate"><span class="pre">inplace=False</span></code> and the tensordict passed to the module is another
+<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass than <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the output will still
+be a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance. Its batch-size will be empty, and it will have no device.
+Set to <code class="docutils literal notranslate"><span class="pre">&quot;empty&quot;</span></code> to get the same <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subtype, an identical batch-size
+and device. Use <code class="docutils literal notranslate"><span class="pre">tensordict_out</span></code> at runtime (see below) to have a more fine-grained control over the
+output.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>if <code class="docutils literal notranslate"><span class="pre">inplace=False</span></code> and a <cite>tensordict_out</cite> is passed to the <a class="reference internal" href="#tensordict.nn.TensorDictModule.forward" title="tensordict.nn.TensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method,
+the <code class="docutils literal notranslate"><span class="pre">tensordict_out</span></code> will prevail. This is the way one can get a tensordict_out taensordict passed to the module is another
+<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass than <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the output will still
+be a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p>
+</div>
+</p>
+</dd>
 </dl>
 <p>Embedding a neural network in a TensorDictModule only requires to specify the input
 and output keys. TensorDictModule support functional and regular <code class="xref py py-obj docutils literal notranslate"><span class="pre">nn.Module</span></code>

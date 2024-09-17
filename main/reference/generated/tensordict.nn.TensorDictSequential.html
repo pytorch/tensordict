@@ -378,17 +378,27 @@ When calling a <code class="xref py py-obj docutils literal notranslate"><span c
 buffers) will be concatenated in a single list.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>modules</strong> (<em>iterable of TensorDictModules</em>) – ordered sequence of TensorDictModule instances to be run sequentially.</p></li>
-<li><p><strong>partial_tolerant</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if True, the input tensordict can miss some of the input keys.
+<dd class="field-odd"><p><strong>modules</strong> (<em>iterable of TensorDictModules</em>) – ordered sequence of TensorDictModule instances to be run sequentially.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>partial_tolerant</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if True, the input tensordict can miss some of the input keys.
 If so, the only module that will be executed are those who can be executed given the keys that
 are present.
 Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a> AND if the
 stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
 looking for those that have the required keys, if any.</p></li>
+<li><p><strong>selected_out_keys</strong> (<em>iterable of NestedKeys</em><em>, </em><em>optional</em>) – the list of out-keys to select. If not provided, all
+<code class="docutils literal notranslate"><span class="pre">out_keys</span></code> will be written.</p></li>
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>A <a class="reference internal" href="#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> instance may have a long list of output keys, and one may wish to remove
+some of them after execution for clarity or memory purposes. If this is the case, the method <a class="reference internal" href="tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase.select_out_keys" title="tensordict.nn.TensorDictModuleBase.select_out_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code></a>
+can be used after instantiation, or <cite>selected_out_keys</cite> may be passed to the constructor.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
