@@ -1083,7 +1083,7 @@ class TestTDSequence:
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert set(seq.out_keys) == set(unravel_key_list(("foo1", "key1", "key2")))
 
-    def test_key_exclusion(self):
+    def test_key_exclusion_constructor(self):
         module1 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
         )
