@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import importlib.util
 import os
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,8 +16,13 @@ from packaging import version
 
 from tensordict import assert_close, tensorclass, TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torch.utils._pytree import tree_map
 
 TORCH_VERSION = version.parse(torch.__version__).base_version
+
+_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+
+_v2_5 = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse("2.5.0")
 
 
 def test_vmap_compile():
@@ -605,6 +612,33 @@ class TestNN:
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
+    def test_dispatch_nontensor(self, mode):
+        torch._dynamo.reset_code_caches()
+
+        # Non tensor
+        x = torch.randn(3)
+        y = None
+        mod = Seq(
+            Mod(lambda x, y: x[y, :], in_keys=["x", "y"], out_keys=["_z"]),
+            Mod(lambda x, z: z * x, in_keys=["x", "_z"], out_keys=["out"]),
+        )
+        assert mod(x=x, y=y)[-1].shape == torch.Size((1, 3))
+        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
+
+    def test_dispatch_tensor(self, mode):
+        torch._dynamo.reset_code_caches()
+
+        x = torch.randn(3)
+        y = torch.randn(3)
+        mod = Seq(
+            Mod(lambda x, y: x + y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda x, z: z * x, in_keys=["x", "z"], out_keys=["out"]),
+        )
+        mod(x=x, y=y)
+        mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
+        torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
+
 
 @pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -735,6 +769,101 @@ class TestFunctional:
         assert (call_compile(x, td_zero) == 0).all()
         assert (TensorDict.from_module(module) == td).all()
         assert (td_zero == 0).all()
+
+
+@pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
+class TestExport:
+    def test_export_module(self):
+        torch._dynamo.reset_code_caches()
+        tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
+        x = torch.randn(3)
+        y = torch.randn(3)
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
+
+    def test_export_seq(self):
+        torch._dynamo.reset_code_caches()
+        tdm = Seq(
+            Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
+        )
+        x = torch.randn(3)
+        y = torch.randn(3)
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
+
+
+@pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
+class TestONNXExport:
+    def test_onnx_export_module(self, tmpdir):
+        tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
+        x = torch.randn(3)
+        y = torch.randn(3)
+        torch_input = {"x": x, "y": y}
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
+
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+
+        path = Path(tmpdir) / "file.onnx"
+        onnx_program.save(str(path))
+        import onnxruntime
+
+        ort_session = onnxruntime.InferenceSession(
+            path, providers=["CPUExecutionProvider"]
+        )
+
+        def to_numpy(tensor):
+            return (
+                tensor.detach().cpu().numpy()
+                if tensor.requires_grad
+                else tensor.cpu().numpy()
+            )
+
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
+
+        onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
+        torch.testing.assert_close(
+            torch.as_tensor(onnxruntime_outputs[0]), tdm(x=x, y=y)
+        )
+
+    def test_onnx_export_seq(self, tmpdir):
+        tdm = Seq(
+            Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
+            Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
+        )
+        x = torch.randn(3)
+        y = torch.randn(3)
+        torch_input = {"x": x, "y": y}
+        torch.onnx.dynamo_export(tdm, x=x, y=y)
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
+
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+
+        path = Path(tmpdir) / "file.onnx"
+        onnx_program.save(str(path))
+        import onnxruntime
+
+        ort_session = onnxruntime.InferenceSession(
+            path, providers=["CPUExecutionProvider"]
+        )
+
+        def to_numpy(tensor):
+            return (
+                tensor.detach().cpu().numpy()
+                if tensor.requires_grad
+                else tensor.cpu().numpy()
+            )
+
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
+
+        onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
+        torch.testing.assert_close(
+            tree_map(torch.as_tensor, onnxruntime_outputs), tdm(x=x, y=y)
+        )
 
 
 if __name__ == "__main__":

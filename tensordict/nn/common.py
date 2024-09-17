@@ -324,7 +324,52 @@ class dispatch:
                 return func(_self, tensordict, *args, **kwargs)
             return func(tensordict, *args, **kwargs)
 
+        return self._update_func_signature(func, wrapper)
+
+    def _update_func_signature(self, func, wrapper):
+        # Create a new signature with the desired parameters
+        # Get the original function's signature
+        orig_signature = inspect.signature(func)
+
+        # params = [inspect.Parameter(name='', kind=inspect.Parameter.VAR_POSITIONAL)]
+        params = []
+        i = -1
+        for i, param in enumerate(orig_signature.parameters.values()):
+            if param.kind in (
+                inspect.Parameter.VAR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            ):
+                i = i - 1
+                break
+            if param.default is inspect._empty:
+                params.append(
+                    inspect.Parameter(
+                        name=param.name,
+                        kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        default=None,
+                    )
+                )
+            else:
+                params.append(param)
+
+        # Add the **kwargs parameter
+
+        # for key in self.get_source(func, self_func):
+        if i >= 0:
+            params.extend(list(orig_signature.parameters.values())[i + 1 :])
+        elif i == -1:
+            params.extend(list(orig_signature.parameters.values()))
+
+        # Update the wrapper's signature
+        wrapper.__signature__ = inspect.Signature(params)
+
         return wrapper
+
+    def get_source(self, func, self_func):
+        source = self.source
+        if isinstance(source, str):
+            return getattr(self_func, source)
+        return source
 
 
 class _OutKeysSelect:
@@ -1226,7 +1271,12 @@ class TensorDictModule(TensorDictModuleBase):
                 tensors = ()
             else:
                 # TODO: v0.7: remove the None
-                tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
+                tensors = tuple(
+                    tensordict._get_tuple_maybe_non_tensor(
+                        _unravel_key_to_tuple(in_key), None
+                    )
+                    for in_key in self.in_keys
+                )
             try:
                 tensors = self._call_module(tensors, **kwargs)
             except Exception as err:
