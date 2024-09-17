@@ -13,8 +13,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+from tensordict._td import TensorDict
 
-from tensordict._td import is_tensor_collection, TensorDictBase
+from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.functional import make_tensordict
 from tensordict.nn.functional_modules import (
     _swap_state,
@@ -991,6 +992,25 @@ class TensorDictModule(TensorDictModuleBase):
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
 
+    Keyword Args:
+        inplace (bool or string, optional): if ``True`` (default), the output of the module are written in the tensordict
+          provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
+          batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
+          create the output tensordict.
+
+          .. note:: if ``inplace=False`` and the tensordict passed to the module is another
+            :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
+            be a :class:`~tensordict.TensorDict` instance. Its batch-size will be empty, and it will have no device.
+            Set to ``"empty"`` to get the same :class:`~tensordict.TensorDictBase` subtype, an identical batch-size
+            and device. Use ``tensordict_out`` at runtime (see below) to have a more fine-grained control over the
+            output.
+
+          .. note:: if ``inplace=False`` and a `tensordict_out` is passed to the :meth:`~.forward` method,
+            the ``tensordict_out`` will prevail. This is the way one can get a tensordict_out taensordict passed to the module is another
+            :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
+            be a :class:`~tensordict.TensorDict` instance.
+
+
     Embedding a neural network in a TensorDictModule only requires to specify the input
     and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
     objects. In the functional case, the 'params' (and 'buffers') keyword argument must
@@ -1151,7 +1171,8 @@ class TensorDictModule(TensorDictModuleBase):
         module: Callable,
         in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
         out_keys: NestedKey | List[NestedKey],
-        inplace: bool = True,
+        *,
+        inplace: bool | str = True,
     ) -> None:
         super().__init__()
 
@@ -1200,6 +1221,12 @@ class TensorDictModule(TensorDictModuleBase):
         self.module = module
         if _auto_make_functional():
             make_functional(self, keep_params=True, return_params=False)
+        if inplace not in (True, False, "empty"):
+            raise ValueError(
+                f"The only accepted valued for inplace is `True`, `False`, or `'empty'`. Got inplace={inplace} "
+                "instead."
+            )
+        self.inplace = inplace
 
     @property
     def is_functional(self) -> bool:
@@ -1218,7 +1245,13 @@ class TensorDictModule(TensorDictModuleBase):
         if out_keys is None:
             out_keys = self.out_keys_source
         if tensordict_out is None:
-            tensordict_out = tensordict
+            if self.inplace is not True:
+                if self.inplace == "empty":
+                    tensordict_out = tensordict.empty()
+                else:
+                    tensordict_out = TensorDict()
+            else:
+                tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
                 tensordict_out.set(_out_key, _tensor)
