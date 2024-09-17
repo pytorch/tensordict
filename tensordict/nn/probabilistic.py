@@ -476,9 +476,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         dist: D.Distribution,
         interaction_type: InteractionType | None = None,
     ) -> tuple[Tensor, ...] | Tensor:
+        if not isinstance(dist, D.Distribution):
+            raise TypeError("Expected Distribution, but got {}".format(type(dist)))
         if interaction_type is None:
             interaction_type = self.default_interaction_type
-
         if interaction_type is InteractionType.DETERMINISTIC:
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
