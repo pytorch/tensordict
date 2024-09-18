@@ -51,7 +51,7 @@ class TestKJT:
 
     def test_td_build(self):
         jag_tensor = _get_kjt()
-        _ = TensorDict({}, [])
+        _ = TensorDict()
         _ = TensorDict({"b": jag_tensor}, [])
         _ = TensorDict({"b": jag_tensor}, [3])
 

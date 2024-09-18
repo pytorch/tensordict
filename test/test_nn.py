@@ -1069,6 +1069,25 @@ class TestTDSequence:
         module = TensorDictSequential(module0, module1)
         assert (module(td)["a"] == 2).all()
 
+    def test_tdseq_tdoutput(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: (x + 2, x), in_keys=["b"], out_keys=["d", "e"]),
+        )
+        inp = TensorDict({"a": 0, "b": 1})
+        inp_clone = inp.clone()
+        out = TensorDict()
+        out2 = mod(inp, tensordict_out=out)
+        assert out is out2
+        assert set(out.keys()) == set(mod.out_keys)
+        assert set(inp.keys()) == set(inp_clone.keys())
+        mod.select_out_keys("d")
+        out = TensorDict()
+        out2 = mod(inp, tensordict_out=out)
+        assert out is out2
+        assert set(out.keys()) == set(mod.out_keys) == {"d"}
+        assert set(inp.keys()) == set(inp_clone.keys())
+
     def test_key_exclusion(self):
         module1 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
@@ -2437,7 +2456,7 @@ class TestSkipExisting:
         module = MyModule()
         td = module(TensorDict({"out": torch.zeros(())}, []))
         assert (td["out"] == 0).all()
-        td = module(TensorDict({}, []))  # prints hello
+        td = module(TensorDict())  # prints hello
         assert (td["out"] == 1).all()
 
     def test_tdmodule(self):

@@ -195,7 +195,7 @@ class set_skip_existing(_DecoratorContextManager):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
-        >>> module(TensorDict({}, []))  # prints hello
+        >>> module(TensorDict())  # prints hello
         hello
         TensorDict(
             fields={

@@ -10276,7 +10276,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
     Examples:
         >>> is_tensor_collection(TensorDictBase)  # True
-        >>> is_tensor_collection(TensorDict({}, []))  # True
+        >>> is_tensor_collection(TensorDict())  # True
         >>> @tensorclass
         ... class MyClass:
         ...     pass

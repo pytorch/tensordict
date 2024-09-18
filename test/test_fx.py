@@ -33,8 +33,8 @@ def test_tensordictmodule_trace_consistency():
 
     tensordict = TensorDict({"input": torch.randn(32, 100)}, [32])
 
-    module_out = TensorDict({}, [])
-    graph_module_out = TensorDict({}, [])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
 
     module(tensordict, tensordict_out=module_out)
     graph_module(tensordict, tensordict_out=graph_module_out)
@@ -84,8 +84,8 @@ def test_tensordictsequential_trace_consistency():
         batch_size=[32],
     )
 
-    module_out = TensorDict({}, [])
-    graph_module_out = TensorDict({}, [])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
 
     module(tensordict, tensordict_out=module_out)
     graph_module(tensordict, tensordict_out=graph_module_out)
@@ -131,8 +131,8 @@ def test_nested_tensordictsequential_trace_consistency():
 
     tensordict = TensorDict({"input": torch.rand(32, 100)}, [32])
 
-    module_out = TensorDict({}, [])
-    graph_module_out = TensorDict({}, [])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
 
     tdmodule(tensordict, tensordict_out=module_out)
     graph_module(tensordict, tensordict_out=graph_module_out)

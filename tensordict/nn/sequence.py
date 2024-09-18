@@ -470,7 +470,7 @@ class TensorDictSequential(TensorDictModule):
     ) -> TensorDictBase:
         if not len(kwargs):
             if tensordict_out is not None:
-                kwargs["tensordict_out"] = tensordict_out
+                tensordict = tensordict.copy()
             for module in self.module:
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
@@ -479,8 +479,7 @@ class TensorDictSequential(TensorDictModule):
             )
         if tensordict_out is not None:
             result = tensordict_out
-            if self._select_before_return:
-                return result.select(*self.out_keys)
+            result.update(tensordict, keys_to_update=self.out_keys)
         else:
             result = tensordict
             if self._select_before_return:
