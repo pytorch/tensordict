@@ -163,6 +163,7 @@ class TensorDictSequential(TensorDictModule):
     """
 
     module: nn.ModuleList
+    _select_before_return = False
 
     def __init__(
         self,
