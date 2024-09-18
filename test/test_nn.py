@@ -1083,7 +1083,7 @@ class TestTDSequence:
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert set(seq.out_keys) == set(unravel_key_list(("foo1", "key1", "key2")))
 
-    def test_key_exclusion(self):
+    def test_key_exclusion_constructor(self):
         module1 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
         )
@@ -2536,8 +2536,11 @@ class TestSelectOutKeys:
                 res = [res]
             for i, v in enumerate(list(out_d_key)):
                 assert (res[i] == exp_res[v]).all()
+
             mod2 = mod.reset_out_keys()
             assert mod2 is mod
+            assert mod.out_keys == ["c", "d", "e"]
+
             res = mod(torch.zeros(()), torch.ones(()))
             assert len(res) == 3
             for i, v in enumerate(["c", "d", "e"]):
@@ -2637,7 +2640,7 @@ class TestSelectOutKeys:
         else:
             with pytest.raises(
                 (RuntimeError, ValueError),
-                match=r"key should be a |Can't select non existent",
+                match=r"key should be a |Can't select non existent|All keys in selected_out_keys must be in out_keys",
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 
@@ -2670,7 +2673,7 @@ class TestSelectOutKeys:
         else:
             with pytest.raises(
                 (RuntimeError, ValueError),
-                match=r"key should be a |Can't select non existent",
+                match=r"key should be a |Can't select non existent|All keys in selected_out_keys must be in out_keys",
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 

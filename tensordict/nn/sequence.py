@@ -172,6 +172,7 @@ class TensorDictSequential(TensorDictModule):
     ) -> None:
         modules = self._convert_modules(modules)
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
+        self._complete_out_keys = list(out_keys)
 
         super().__init__(
             module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
@@ -179,7 +180,17 @@ class TensorDictSequential(TensorDictModule):
 
         self.partial_tolerant = partial_tolerant
         if selected_out_keys:
-            self.select_out_keys(*selected_out_keys)
+            self._select_before_return = True
+            selected_out_keys = unravel_key_list(selected_out_keys)
+            if not all(key in self.out_keys for key in selected_out_keys):
+                raise ValueError("All keys in selected_out_keys must be in out_keys.")
+            self.out_keys = selected_out_keys
+        else:
+            self._select_before_return = False
+
+    def reset_out_keys(self):
+        self.out_keys = list(self._complete_out_keys)
+        return self
 
     @staticmethod
     def _convert_modules(modules):
@@ -229,6 +240,14 @@ class TensorDictSequential(TensorDictModule):
                     f"couldn't find a functional module in module of type {type(module)}"
                 )
         return fmodule
+
+    def select_out_keys(self, *selected_out_keys) -> TensorDictSequential:
+        self._select_before_return = True
+        selected_out_keys = unravel_key_list(selected_out_keys)
+        if not all(key in self.out_keys for key in selected_out_keys):
+            raise ValueError("All keys in selected_out_keys must be in out_keys.")
+        self.out_keys = selected_out_keys
+        return self
 
     def select_subsequence(
         self,
@@ -450,6 +469,8 @@ class TensorDictSequential(TensorDictModule):
         **kwargs: Any,
     ) -> TensorDictBase:
         if not len(kwargs):
+            if tensordict_out is not None:
+                kwargs["tensordict_out"] = tensordict_out
             for module in self.module:
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
@@ -457,9 +478,14 @@ class TensorDictSequential(TensorDictModule):
                 f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
             )
         if tensordict_out is not None:
-            tensordict_out.update(tensordict, inplace=True)
-            return tensordict_out
-        return tensordict
+            result = tensordict_out
+            if self._select_before_return:
+                return result.select(*self.out_keys)
+        else:
+            result = tensordict
+            if self._select_before_return:
+                return result.select(*self.in_keys, *self.out_keys, strict=False)
+        return result
 
     def __len__(self) -> int:
         return len(self.module)

@@ -165,11 +165,53 @@ class CompositeDistribution(d.Distribution):
 
     @property
     def deterministic_sample(self) -> TensorDictBase:
-        samples = {name: dist.deterministic_sample for name, dist in self.dists.items()}
+        def maybe_deterministic_sample(dist):
+            if hasattr(dist, "deterministic_sample"):
+                return dist.deterministic_sample
+            else:
+                try:
+                    support = dist.support
+                    fallback = (
+                        "mean"
+                        if isinstance(support, torch.distributions.constraints._Real)
+                        else "mode"
+                    )
+                except NotImplementedError:
+                    # Some custom dists don't have a support
+                    # We arbitrarily fall onto 'mean' in these cases
+                    fallback = "mean"
+                try:
+                    if fallback == "mean":
+                        return dist.mean
+                    elif fallback == "mode":
+                        # Categorical dists don't have an average
+                        return dist.mode
+                    else:
+                        raise AttributeError
+                except AttributeError:
+                    raise NotImplementedError(
+                        f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
+                    )
+                finally:
+                    warnings.warn(
+                        f"deterministic_sample wasn't found when queried in {type(dist)}. "
+                        f"{type(self).__name__} is falling back on {fallback} instead. "
+                        f"For better code quality and efficiency, make sure to either "
+                        f"provide a distribution with a deterministic_sample attribute or "
+                        f"to change the InteractionMode to the desired value.",
+                        category=UserWarning,
+                    )
+
+        samples = {
+            name: maybe_deterministic_sample(dist) for name, dist in self.dists.items()
+        }
         return TensorDict(
             samples,
             self.batch_shape,
         )
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self.dists})"
 
     def rsample(self, shape=None) -> TensorDictBase:
         if shape is None:

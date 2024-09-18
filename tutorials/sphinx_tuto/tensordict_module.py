@@ -2,6 +2,8 @@
 TensorDictModule
 ================
 
+.. _tensordictmodule:
+
 **Author**: `Nicolas Dufour <https://github.com/nicolas-dufour>`_, `Vincent Moens <https://github.com/vmoens>`_
 
 In this tutorial you will learn how to use :class:`~.TensorDictModule` and

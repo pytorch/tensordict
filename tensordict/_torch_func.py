@@ -423,7 +423,7 @@ def _stack(
         from tensordict.tensorclass import NonTensorData
 
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
-    elif is_tc:
+    if is_tc:
         tc_type = type(list_of_tensordicts[0])
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
 
