@@ -12,8 +12,7 @@ import os
 
 import sys
 import tempfile
-from multiprocessing import util
-from multiprocessing.context import reduction
+from multiprocessing import reduction, util
 from pathlib import Path
 from typing import Any, Callable, overload
 
@@ -21,8 +20,6 @@ import numpy as np
 import torch
 
 from tensordict.utils import _shape, implement_for, IndexType, NESTED_TENSOR_ERR
-
-from torch.multiprocessing.reductions import ForkingPickler
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -1008,7 +1005,7 @@ def _reduce_memmap(memmap_tensor):
     return memmap_tensor.__reduce__()
 
 
-ForkingPickler.register(MemoryMappedTensor, _reduce_memmap)
+reduction.register(MemoryMappedTensor, _reduce_memmap)
 
 
 def _proc_args_const(*args, **kwargs):

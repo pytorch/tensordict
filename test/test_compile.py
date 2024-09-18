@@ -612,6 +612,7 @@ class TestNN:
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
+    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_nontensor(self, mode):
         torch._dynamo.reset_code_caches()
 
@@ -626,6 +627,7 @@ class TestNN:
         mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
+    @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_tensor(self, mode):
         torch._dynamo.reset_code_caches()
 
