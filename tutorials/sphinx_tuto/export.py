@@ -223,4 +223,6 @@ with set_interaction_type(InteractionType.MEAN):
 # - Check the ``torch.export`` tutorial, available `here <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`__;
 # - ONNX support: check the `ONNX tutorials <https://pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html>`_
 #   to learn more about this feature. Exporting to ONNX is very similar to `torch.export` explained here.
+# - For deployment of PyTorch code on servers without python environment, check the
+#   `AOTInductor <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_ documentation.
 #

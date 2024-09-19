@@ -74,6 +74,23 @@ assert "linear0" in tensordict
 # If the module outputs multiple tensors (or tensordicts!) their entries must be passed to
 # :class:`~tensordict.nn.TensorDictModule` in the right order.
 #
+# Support for Callables
+# ~~~~~~~~~~~~~~~~~~~~~
+#
+# When designing a model, it often happens that you want to incorporate an arbitrary non-parametric function into
+# the network. For instance, you may wish to permute the dimensions of an image when it is passed to a convolutional network
+# or a vision transformer, or divide the values by 255.
+# There are several ways to do this: you could use a `forward_hook`, for example, or design a new
+# :class:`~torch.nn.Module` that performs this operation.
+#
+# :class:`~tensordict.nn.TensorDictModule` works with any callable, not just modules, which makes it easy to
+# incorporate arbitrary functions into a module. For instance, let's see how we can integrate the ``relu`` activation
+# function without using the :class:`~torch.nn.ReLU` module:
+
+relu0 = TensorDictModule(torch.relu, in_keys=["linear0"], out_keys=["relu0"])
+
+###############################################################################
+#
 # Stacking modules
 # ~~~~~~~~~~~~~~~~
 #
@@ -87,7 +104,6 @@ assert "linear0" in tensordict
 #   built on-the-fly and programmatically.
 #
 
-relu0 = TensorDictModule(nn.ReLU(), in_keys=["linear0"], out_keys=["relu0"])
 block0 = TensorDictSequential(linear0, relu0)
 
 block0(tensordict)
