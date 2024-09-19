@@ -470,25 +470,25 @@ class TensorDictSequential(TensorDictModule):
         **kwargs: Any,
     ) -> TensorDictBase:
         if tensordict_out is None and self._select_before_return:
-            saved_keys = list(tensordict.keys(True, True))
+            tensordict_exec = tensordict.copy()
+        else:
+            tensordict_exec = tensordict
         if not len(kwargs):
             if tensordict_out is not None:
-                tensordict = tensordict.copy()
+                tensordict_exec = tensordict_exec.copy()
             for module in self.module:
-                tensordict = self._run_module(module, tensordict, **kwargs)
+                tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
         else:
             raise RuntimeError(
                 f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
             )
         if tensordict_out is not None:
             result = tensordict_out
-            result.update(tensordict, keys_to_update=self.out_keys)
+            result.update(tensordict_exec, keys_to_update=self.out_keys)
         else:
-            result = tensordict
+            result = tensordict_exec
             if self._select_before_return:
-                return result.select(
-                    *saved_keys, *self.out_keys, strict=False, inplace=True
-                )
+                return tensordict.update(result.select(*self.out_keys))
         return result
 
     def __len__(self) -> int:

@@ -1118,6 +1118,30 @@ class TestTDSequence:
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert seq.out_keys == ["key2"]
 
+    def test_key_exclusion_constructor_exec(self):
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        module3 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["foo1", "key3"], out_keys=["key2"]
+        )
+        seq = TensorDictSequential(
+            module1, module2, module3, selected_out_keys=["key2"]
+        )
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert seq.out_keys == ["key2"]
+        td = TensorDict(key1=0, key2=0, key3=1)
+        out = seq(td)
+        assert out is td
+        assert "key1" in out
+        assert "key2" in out
+        assert "key3" in out
+        assert "foo1" not in out
+        assert out["key2"] == 1
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)
