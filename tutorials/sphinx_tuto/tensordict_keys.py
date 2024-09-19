@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore")
 import torch
 from tensordict.tensordict import TensorDict
 
-tensordict = TensorDict({}, [])
+tensordict = TensorDict()
 
 # set a key
 a = torch.rand(10)
@@ -39,7 +39,7 @@ assert tensordict["a"] is a
 #
 # We can also use the methods ``.get()`` and ``.set`` to accomplish the same thing.
 
-tensordict = TensorDict({}, [])
+tensordict = TensorDict()
 
 # set a key
 a = torch.rand(10)

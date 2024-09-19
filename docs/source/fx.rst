@@ -51,8 +51,8 @@ We'll illustrate with an example from the overview. We create a :obj:`TensorDict
 We can check that a forward pass with each module results in the same outputs.
 
    >>> tensordict = TensorDict({"input": torch.randn(32, 100)}, [32])
-   >>> module_out = module(tensordict, tensordict_out=TensorDict({}, []))
-   >>> graph_module_out = graph_module(tensordict, tensordict_out=TensorDict({}, []))
+   >>> module_out = module(tensordict, tensordict_out=TensorDict())
+   >>> graph_module_out = graph_module(tensordict, tensordict_out=TensorDict())
    >>> assert (
    ...     module_out["outputs", "logits"] == graph_module_out["outputs", "logits"]
    ... ).all()

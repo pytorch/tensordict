@@ -10,8 +10,6 @@ on:
       - v[0-9]+.[0-9]+.[0-9]
       - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   pull_request:
-    branches:
-      - "*"
   workflow_dispatch:
 
 concurrency:
@@ -90,13 +88,13 @@ jobs:
 
         # 10. Build doc
         cd ./docs
-        make docs
+        sphinx-build ./source _local_build
         cd ..
 
-        cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
+        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r docs/build/html/* "${RUNNER_DOCS_DIR}"
+          cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
         fi
 
   upload:
@@ -118,7 +116,12 @@ jobs:
         REF_NAME=${{ github.ref_name }}
 
         if [[ "${REF_TYPE}" == branch ]]; then
-          TARGET_FOLDER="${REF_NAME}"
+          if [[ "${REF_NAME}" == main ]]; then
+            TARGET_FOLDER="${REF_NAME}"
+          # Bebug:
+          # else
+          #   TARGET_FOLDER="release-doc"
+          fi
         elif [[ "${REF_TYPE}" == tag ]]; then
           case "${REF_NAME}" in
             *-rc*)

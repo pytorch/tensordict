@@ -233,7 +233,7 @@ Here is a full example:
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
   >>> # later
   >>> snapshot = torchsnapshot.Snapshot(path=path)
-  >>> tensordict2 = TensorDict({}, [])
+  >>> tensordict2 = TensorDict()
   >>> target_state = {
   >>>     "state": tensordict2
   >>> }

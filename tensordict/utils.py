@@ -1204,7 +1204,7 @@ def _as_context_manager(attr=None):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> data = TensorDict({}, [])
+        >>> data = TensorDict()
         >>> with data.lock_(): # lock_ is decorated
         ...     assert data.is_locked
         >>> assert not data.is_locked

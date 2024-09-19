@@ -1069,6 +1069,25 @@ class TestTDSequence:
         module = TensorDictSequential(module0, module1)
         assert (module(td)["a"] == 2).all()
 
+    def test_tdseq_tdoutput(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: (x + 2, x), in_keys=["b"], out_keys=["d", "e"]),
+        )
+        inp = TensorDict({"a": 0, "b": 1})
+        inp_clone = inp.clone()
+        out = TensorDict()
+        out2 = mod(inp, tensordict_out=out)
+        assert out is out2
+        assert set(out.keys()) == set(mod.out_keys)
+        assert set(inp.keys()) == set(inp_clone.keys())
+        mod.select_out_keys("d")
+        out = TensorDict()
+        out2 = mod(inp, tensordict_out=out)
+        assert out is out2
+        assert set(out.keys()) == set(mod.out_keys) == {"d"}
+        assert set(inp.keys()) == set(inp_clone.keys())
+
     def test_key_exclusion(self):
         module1 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
@@ -1098,6 +1117,30 @@ class TestTDSequence:
         )
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert seq.out_keys == ["key2"]
+
+    def test_key_exclusion_constructor_exec(self):
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        module3 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["foo1", "key3"], out_keys=["key2"]
+        )
+        seq = TensorDictSequential(
+            module1, module2, module3, selected_out_keys=["key2"]
+        )
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert seq.out_keys == ["key2"]
+        td = TensorDict(key1=0, key2=0, key3=1)
+        out = seq(td)
+        assert out is td
+        assert "key1" in out
+        assert "key2" in out
+        assert "key3" in out
+        assert "foo1" not in out
+        assert out["key2"] == 1
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
@@ -2437,7 +2480,7 @@ class TestSkipExisting:
         module = MyModule()
         td = module(TensorDict({"out": torch.zeros(())}, []))
         assert (td["out"] == 0).all()
-        td = module(TensorDict({}, []))  # prints hello
+        td = module(TensorDict())  # prints hello
         assert (td["out"] == 1).all()
 
     def test_tdmodule(self):
@@ -2536,8 +2579,11 @@ class TestSelectOutKeys:
                 res = [res]
             for i, v in enumerate(list(out_d_key)):
                 assert (res[i] == exp_res[v]).all()
+
             mod2 = mod.reset_out_keys()
             assert mod2 is mod
+            assert mod.out_keys == ["c", "d", "e"]
+
             res = mod(torch.zeros(()), torch.ones(()))
             assert len(res) == 3
             for i, v in enumerate(["c", "d", "e"]):
@@ -2637,7 +2683,7 @@ class TestSelectOutKeys:
         else:
             with pytest.raises(
                 (RuntimeError, ValueError),
-                match=r"key should be a |Can't select non existent",
+                match=r"key should be a |Can't select non existent|All keys in selected_out_keys must be in out_keys",
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 
@@ -2670,7 +2716,7 @@ class TestSelectOutKeys:
         else:
             with pytest.raises(
                 (RuntimeError, ValueError),
-                match=r"key should be a |Can't select non existent",
+                match=r"key should be a |Can't select non existent|All keys in selected_out_keys must be in out_keys",
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 

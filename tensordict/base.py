@@ -5409,6 +5409,10 @@ class TensorDictBase(MutableMapping):
     ):
         """Returns a generator of tensordict keys.
 
+        .. warning:: TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
+            are queried but not iterated over and then the tensordict is modified, iterating over
+            the keys later will return the new configuration of the keys.
+
         Args:
             include_nested (bool, optional): if ``True``, nested values will be returned.
                 Defaults to ``False``.
@@ -10276,7 +10280,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
     Examples:
         >>> is_tensor_collection(TensorDictBase)  # True
-        >>> is_tensor_collection(TensorDict({}, []))  # True
+        >>> is_tensor_collection(TensorDict())  # True
         >>> @tensorclass
         ... class MyClass:
         ...     pass
