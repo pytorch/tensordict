@@ -119,7 +119,6 @@ Utils
     utils.expand_right
     utils.isin
     utils.remove_duplicates
-    is_memmap
     is_batchedtensor
     is_tensor_collection
     make_tensordict
