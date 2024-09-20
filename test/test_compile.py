@@ -774,7 +774,7 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
-@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("strict", [True, False])
 class TestExport:
     def test_export_module(self, strict):
         torch._dynamo.reset_code_caches()
@@ -795,7 +795,11 @@ class TestExport:
         out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y}, strict=strict)
         torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
 
-    def test_td_output(self, strict):
+    @pytest.mark.parametrize(
+        "same_shape,dymanic_shape", [[True, True], [True, False], [False, True]]
+    )
+    def test_td_output(self, strict, same_shape, dymanic_shape):
+        # This will only work when the tensordict is pytree-able
         class Test(torch.nn.Module):
             def forward(self, x: torch.Tensor, y: torch.Tensor):
                 return TensorDict(
@@ -807,20 +811,26 @@ class TestExport:
                 )
 
         test = Test()
-        x, y = torch.zeros(2, 100), torch.zeros(2, 100)
-        result = torch.export.export(
-            test,
-            args=(x, y),
-            strict=False,
-            dynamic_shapes={
-                "x": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
-                "y": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
-            },
-        )
+        if same_shape:
+            x, y = torch.zeros(5, 100), torch.zeros(5, 100)
+        else:
+            x, y = torch.zeros(2, 100), torch.zeros(2, 100)
+        if dymanic_shape:
+            kwargs = {
+                "dynamic_shapes": {
+                    "x": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+                    "y": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+                }
+            }
+        else:
+            kwargs = {}
+
+        result = torch.export.export(test, args=(x, y), strict=False, **kwargs)
         export_mod = result.module()
         x_new, y_new = torch.zeros(5, 100), torch.zeros(5, 100)
         export_test = export_mod(x_new, y_new)
         eager_test = test(x_new, y_new)
+        assert eager_test.batch_size == export_test.batch_size
         assert (export_test == eager_test).all()
 
 
