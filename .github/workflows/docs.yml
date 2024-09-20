@@ -88,7 +88,6 @@ jobs:
 
         # 10. Build doc
         cd ./docs
-#        sphinx-build ./source _local_build
         BUILDDIR=_local_build make docs
         cd ..
 
