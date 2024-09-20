@@ -1085,21 +1085,6 @@ class TensorDictModule(TensorDictModuleBase):
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
         try:
             if len(args):
-                tensordict_out = args[0]
-                args = args[1:]
-                # we will get rid of tensordict_out as a regular arg, because it
-                # blocks us when using vmap
-                # with stateful but functional modules: the functional module checks if
-                # it still contains parameters. If so it considers that only a "params" kwarg
-                # is indicative of what the params are, when we could potentially make a
-                # special rule for TensorDictModule that states that the second arg is
-                # likely to be the module params.
-                warnings.warn(
-                    "tensordict_out will be deprecated in v0.6. "
-                    "Make sure you have removed any such arg by then.",
-                    category=DeprecationWarning,
-                )
-            if len(args):
                 raise ValueError(
                     "Got a non-empty list of extra agruments, when none was expected."
                 )

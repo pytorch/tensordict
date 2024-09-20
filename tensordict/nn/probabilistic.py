@@ -9,8 +9,7 @@ import re
 import warnings
 from enum import auto, IntEnum
 from textwrap import indent
-from typing import Any, Callable, Dict, List, Optional
-from warnings import warn
+from typing import Any, Dict, List, Optional
 
 from tensordict._nestedkey import NestedKey
 
@@ -62,55 +61,9 @@ class InteractionType(IntEnum):
 _INTERACTION_TYPE: InteractionType | None = None
 
 
-def _insert_interaction_mode_deprecation_warning(
-    prefix: str = "",
-) -> Callable[[str, Warning, int], None]:
-    return warn(
-        (
-            f"{prefix}interaction_mode is deprecated for naming clarity and will be removed in v0.6. "
-            f"Please use {prefix}interaction_type with InteractionType enum instead."
-        ),
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
 def interaction_type() -> InteractionType | None:
     """Returns the current sampling type."""
     return _INTERACTION_TYPE
-
-
-def interaction_mode() -> str | None:
-    """*Deprecated* Returns the current sampling mode."""
-    _insert_interaction_mode_deprecation_warning()
-    type = interaction_type()
-    return type.name.lower() if type else None
-
-
-class set_interaction_mode(_DecoratorContextManager):
-    """*Deprecated* Sets the sampling mode of all ProbabilisticTDModules to the desired mode.
-
-    Args:
-        mode (str): mode to use when the policy is being called.
-    """
-
-    def __init__(self, mode: str | None = "mode") -> None:
-        _insert_interaction_mode_deprecation_warning("set_")
-        super().__init__()
-        self.mode = InteractionType.from_str(mode) if mode else None
-
-    def clone(self) -> set_interaction_mode:
-        # override this method if your children class takes __init__ parameters
-        return type(self)(self.mode)
-
-    def __enter__(self) -> None:
-        global _INTERACTION_TYPE
-        self.prev = _INTERACTION_TYPE
-        _INTERACTION_TYPE = self.mode
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global _INTERACTION_TYPE
-        _INTERACTION_TYPE = self.prev
 
 
 class set_interaction_type(_DecoratorContextManager):
@@ -363,12 +316,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.log_prob_key = log_prob_key
 
         if default_interaction_mode is not None:
-            _insert_interaction_mode_deprecation_warning("default_")
-            self.default_interaction_type = InteractionType.from_str(
-                default_interaction_mode
+            raise ValueError(
+                "default_interaction_mode is deprecated, use default_interaction_type instead."
             )
-        else:
-            self.default_interaction_type = default_interaction_type
+        self.default_interaction_type = default_interaction_type
 
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
@@ -415,12 +366,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def SAMPLE_LOG_PROB_KEY(self):
-        warnings.warn(
-            "SAMPLE_LOG_PROB_KEY will be deprecated in v0.6."
-            "Use 'obj.log_prob_key' instead",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "SAMPLE_LOG_PROB_KEY is fully deprecated. Use `obj.log_prob_key` instead."
         )
-        return self.log_prob_key
 
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()

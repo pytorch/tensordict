@@ -99,7 +99,6 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
 
 def pad_sequence(
     list_of_tensordicts: Sequence[T],
-    batch_first: bool | None = None,
     pad_dim: int = 0,
     padding_value: float = 0.0,
     out: T | None = None,
@@ -145,12 +144,6 @@ def pad_sequence(
         warnings.warn(
             "The device argument is ignored by this function and will be removed in v0.5. To cast your"
             " result to a different device, call `tensordict.to(device)` instead."
-        )
-    if batch_first is not None:
-        warnings.warn(
-            "The batch_first argument is deprecated and will be removed in v0.6. "
-            "The output will always be batch_first.",
-            category=DeprecationWarning,
         )
 
     if not len(list_of_tensordicts):
