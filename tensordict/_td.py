@@ -2061,7 +2061,7 @@ class TensorDict(TensorDictBase):
         source: T | dict | None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
     ) -> torch.Size:
-        ERR = "batch size was not specified when creating the TensorDict instance and it could not be retrieved from source."
+        ERR = "batch size {} was not specified when creating the TensorDict instance and it could not be retrieved from source."
 
         if is_dynamo_compiling():
             if isinstance(batch_size, torch.Size):
@@ -2072,22 +2072,22 @@ class TensorDict(TensorDictBase):
                 return torch.Size(tuple(batch_size))
             if batch_size is None:
                 return torch.Size([])
-            elif isinstance(batch_size, Number):
+            elif isinstance(batch_size, (Number, torch.SymInt)):
                 return torch.Size([batch_size])
             elif isinstance(source, TensorDictBase):
                 return source.batch_size
-            raise ValueError()
+            raise ValueError(ERR.format(batch_size))
 
         try:
             return torch.Size(batch_size)
         except Exception:
             if batch_size is None:
                 return torch.Size([])
-            elif isinstance(batch_size, Number):
+            elif isinstance(batch_size, (Number, torch.SymInt)):
                 return torch.Size([batch_size])
             elif isinstance(source, TensorDictBase):
                 return source.batch_size
-            raise ValueError(ERR)
+            raise ValueError(ERR.format(batch_size))
 
     @property
     def batch_dims(self) -> int:

@@ -774,16 +774,17 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
+@pytest.mark.parametrize("strict", [True, False])
 class TestExport:
-    def test_export_module(self):
+    def test_export_module(self, strict):
         torch._dynamo.reset_code_caches()
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
         x = torch.randn(3)
         y = torch.randn(3)
-        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y}, strict=strict)
         assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
 
-    def test_export_seq(self):
+    def test_export_seq(self, strict):
         torch._dynamo.reset_code_caches()
         tdm = Seq(
             Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
@@ -791,8 +792,46 @@ class TestExport:
         )
         x = torch.randn(3)
         y = torch.randn(3)
-        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y})
+        out = torch.export.export(tdm, args=(), kwargs={"x": x, "y": y}, strict=strict)
         torch.testing.assert_close(out.module()(x=x, y=y), tdm(x=x, y=y))
+
+    @pytest.mark.parametrize(
+        "same_shape,dymanic_shape", [[True, True], [True, False], [False, True]]
+    )
+    def test_td_output(self, strict, same_shape, dymanic_shape):
+        # This will only work when the tensordict is pytree-able
+        class Test(torch.nn.Module):
+            def forward(self, x: torch.Tensor, y: torch.Tensor):
+                return TensorDict(
+                    {
+                        "x": x,
+                        "y": y,
+                    },
+                    batch_size=x.shape[0],
+                )
+
+        test = Test()
+        if same_shape:
+            x, y = torch.zeros(5, 100), torch.zeros(5, 100)
+        else:
+            x, y = torch.zeros(2, 100), torch.zeros(2, 100)
+        if dymanic_shape:
+            kwargs = {
+                "dynamic_shapes": {
+                    "x": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+                    "y": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+                }
+            }
+        else:
+            kwargs = {}
+
+        result = torch.export.export(test, args=(x, y), strict=False, **kwargs)
+        export_mod = result.module()
+        x_new, y_new = torch.zeros(5, 100), torch.zeros(5, 100)
+        export_test = export_mod(x_new, y_new)
+        eager_test = test(x_new, y_new)
+        assert eager_test.batch_size == export_test.batch_size
+        assert (export_test == eager_test).all()
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")
