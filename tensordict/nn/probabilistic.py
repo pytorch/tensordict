@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from enum import auto, IntEnum
+from enum import StrEnum
 from textwrap import indent
 from typing import Any, Dict, List, Optional
 
@@ -29,7 +29,7 @@ from torch.utils._contextlib import _DecoratorContextManager
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
-class InteractionType(IntEnum):
+class InteractionType(StrEnum):
     """A list of possible interaction types with a distribution.
 
     MODE, MEDIAN and MEAN point to the property / attribute with the same name.
@@ -43,11 +43,11 @@ class InteractionType(IntEnum):
 
     """
 
-    MODE = auto()
-    MEDIAN = auto()
-    MEAN = auto()
-    RANDOM = auto()
-    DETERMINISTIC = auto()
+    MODE = "mode"
+    MEDIAN = "median"
+    MEAN = "mean"
+    RANDOM = "random"
+    DETERMINISTIC = "deterministic"
 
     @classmethod
     def from_str(cls, type_str: str) -> InteractionType:
