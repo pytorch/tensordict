@@ -88,13 +88,13 @@ jobs:
 
         # 10. Build doc
         cd ./docs
-        BUILDDIR=_local_build make docs
+        make docs
         cd ..
 
-        cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
+        cp -r docs/build/* "${RUNNER_ARTIFACT_DIR}"
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
+          cp -r docs/build/* "${RUNNER_DOCS_DIR}"
         fi
 
   upload:
