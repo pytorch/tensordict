@@ -49,6 +49,7 @@ from tensordict.utils import (
     is_batchedtensor,
     is_tensorclass,
     lazy_legacy,
+    parse_tensor_dict_string,
     set_lazy_legacy,
     unravel_key,
     unravel_key_list,

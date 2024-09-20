@@ -88,7 +88,8 @@ jobs:
 
         # 10. Build doc
         cd ./docs
-        sphinx-build ./source _local_build
+#        sphinx-build ./source _local_build
+        BUILDDIR=_local_build make docs
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"

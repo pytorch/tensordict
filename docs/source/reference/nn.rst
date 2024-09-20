@@ -323,7 +323,7 @@ Distributions
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    NormalParamsExtractor
+    NormalParamExtractor
     AddStateIndependentNormalScale
     CompositeDistribution
     Delta
