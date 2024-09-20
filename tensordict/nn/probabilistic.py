@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import re
 import warnings
-from enum import StrEnum
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from .utils import StrEnum
 from textwrap import indent
 from typing import Any, Dict, List, Optional
 
