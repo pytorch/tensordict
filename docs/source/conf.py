@@ -58,12 +58,12 @@ language = "en"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "sphinx.ext.napoleon",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
-    "sphinx.ext.napoleon",
     "sphinx_gallery.gen_gallery",
     "sphinxcontrib.aafig",
     "myst_parser",
@@ -107,7 +107,7 @@ master_doc = "index"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ["reference/generated/tutorials/README.rst"]
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -117,7 +117,13 @@ exclude_patterns = []
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 html_theme_options = {
-    "pytorch_project": "tensordict",
+    # "pytorch_project": "tensordict",
+    "collapse_navigation": False,
+    "display_version": True,
+    "logo_only": True,
+    "pytorch_project": "docs",
+    "navigation_with_keys": True,
+    "analytics_id": "GTM-T8XT4PS",
 }
 
 # Output file base name for HTML help builder.

@@ -1019,11 +1019,13 @@ class TensorDictBase(MutableMapping):
 
         Accepted classes currently include lists, tuples, named tuples and dict.
 
-        .. note:: for dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
+        .. note::
+            For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
             instances.
 
-        .. note:: Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-            NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+        .. note::
+            Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+            Note that this transformation is surjective: transforming back the tensordict to a pytree will not
             recover the original types.
 
         Examples:
@@ -1167,15 +1169,16 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, the state-dict from the
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
+
                 .. note::
-                  This is particularly useful when state-dict hooks have to be
-                  used.
+                    This is particularly useful when state-dict hooks have to be used.
 
         Examples:
             >>> from torch import nn
             >>> module = nn.TransformerDecoder(
             ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
+            ...     num_layers=1
+            ... )
             >>> params = TensorDict.from_module(module)
             >>> print(params["layers", "0", "linear1"])
             TensorDict(
@@ -1185,6 +1188,7 @@ class TensorDictBase(MutableMapping):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
+
         """
         ...
 
@@ -1214,13 +1218,15 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, the state-dict from the
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
+
                 .. note::
-                  This is particularly useful when state-dict hooks have to be
-                  used.
+                    This is particularly useful when state-dict hooks have to be used.
+
             lazy_stack (bool, optional): whether parameters should be densly or
                 lazily stacked. Defaults to ``False`` (dense stack).
 
-                .. note:: ``lazy_stack`` and ``as_module`` are exclusive features.
+                .. note::
+                    ``lazy_stack`` and ``as_module`` are exclusive features.
 
                 .. warning::
                     There is a crucial difference between lazy and non-lazy outputs
@@ -1242,6 +1248,7 @@ class TensorDictBase(MutableMapping):
                     or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
                     to be executed. In general, ``lazy_stack`` should be reserved
                     to very few use cases.
+
             expand_identical (bool, optional): if ``True`` and the same parameter (same
                 identity) is being stacked to itself, an expanded version of this parameter
                 will be returned instead. This argument is ignored when ``lazy_stack=True``.
@@ -3452,7 +3459,8 @@ class TensorDictBase(MutableMapping):
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
 
-        .. note:: If the tensordict is already consolidated, all arguments are ignored and ``self``
+        .. note::
+            If the tensordict is already consolidated, all arguments are ignored and ``self``
             is returned. Call :meth:`~.contiguous` to re-consolidate.
 
         Examples:
@@ -3825,7 +3833,8 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a shape and possibly a dtype.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
         Writing an existing entry will result in an error.
@@ -3855,10 +3864,12 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a storage, a shape and possibly a dtype.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
-        .. note:: If the storage has a filename associated, it must match the new filename for the file.
+        .. note::
+            If the storage has a filename associated, it must match the new filename for the file.
             If it has not a filename associated but the tensordict has an associated path, this will result in an
             exception.
 
@@ -3884,7 +3895,8 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a tensor.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
         This method always copies the storage content if ``copy_data`` is ``True`` (i.e., the storage is not shared).
@@ -4059,7 +4071,8 @@ class TensorDictBase(MutableMapping):
             A new ``TensorDict`` instance with data stored as memory-mapped tensors if ``return_early=False``,
             otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
-        .. note:: This is the recommended method to write a set of large buffers
+        .. note::
+            This is the recommended method to write a set of large buffers
             on disk, as :meth:`~.memmap_()` will copy the information, which can
             be slow for large content.
 
@@ -4167,11 +4180,14 @@ class TensorDictBase(MutableMapping):
 
         This method also allows loading nested tensordicts.
 
+        Examples:
             >>> nested = TensorDict.load_memmap("./saved_td/nested")
             >>> assert nested["e"] == 0
 
         A tensordict can also be loaded on "meta" device or, alternatively,
-        as a fake tensor:
+        as a fake tensor.
+
+        Examples:
             >>> import tempfile
             >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> with tempfile.TemporaryDirectory() as path:
@@ -4605,7 +4621,9 @@ class TensorDictBase(MutableMapping):
             key (str, tuple of str): key to be queried. If tuple of str it is
                 equivalent to chained calls of getattr.
             default: default value if the key is not found in the tensordict.
-                .. warning:: Currently, if a key is not present in the tensordict and no default
+
+                .. warning::
+                    Currently, if a key is not present in the tensordict and no default
                     is passed, a `KeyError` is raised. From v0.7, this behaviour will be changed
                     and a `None` value will be returned instead. To adopt the new behaviour,
                     set the environment variable `export TD_GET_DEFAULTS_TO_NONE='1'` or call
@@ -5409,7 +5427,8 @@ class TensorDictBase(MutableMapping):
     ):
         """Returns a generator of tensordict keys.
 
-        .. warning:: TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
+        .. warning::
+            TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
             are queried but not iterated over and then the tensordict is modified, iterating over
             the keys later will return the new configuration of the keys.
 
@@ -6258,7 +6277,8 @@ class TensorDictBase(MutableMapping):
                     >>> td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
-                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                .. warning::
+                    If the operation executed on the tensordict requires multiple keys to be accessed for
                     a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
                     to provide silently wrong results.
                     For instance:
@@ -6413,7 +6433,8 @@ class TensorDictBase(MutableMapping):
                     >>> td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
-                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                .. warning::
+                    If the operation executed on the tensordict requires multiple keys to be accessed for
                     a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
                     to provide silently wrong results.
                     For instance:
@@ -6745,6 +6766,14 @@ class TensorDictBase(MutableMapping):
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
+        .. note::
+            This method is particularly useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
         Args:
             fn (callable): function to apply to the tensordict.
                 Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
@@ -6788,6 +6817,7 @@ class TensorDictBase(MutableMapping):
                 is provided, a random integer will be used as seed.
                 To work with unseeded workers, a pool should be created separately
                 and passed to :meth:`map` directly.
+
                 .. note::
                   Caution should be taken when providing a low-valued seed as
                   this can cause autocorrelation between experiments, example:
@@ -6804,6 +6834,7 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
+
             max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
@@ -6837,14 +6868,6 @@ class TensorDictBase(MutableMapping):
             ...     print(data["y"][:, :10])
             ...
             tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
-
-        .. note:: This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
-
         """
         from torch import multiprocessing as mp
 
@@ -6924,6 +6947,18 @@ class TensorDictBase(MutableMapping):
         The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
         The function must be serializable.
 
+        .. note::
+            This method is particularly useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
+        .. note::
+            This function be used to represent a dataset and load from it,
+            in a dataloader-like fashion.
+
         Args:
             fn (callable): function to apply to the tensordict.
                 Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
@@ -6964,6 +6999,7 @@ class TensorDictBase(MutableMapping):
                 is provided, a random integer will be used as seed.
                 To work with unseeded workers, a pool should be created separately
                 and passed to :meth:`map` directly.
+
                 .. note::
                   Caution should be taken when providing a low-valued seed as
                   this can cause autocorrelation between experiments, example:
@@ -6980,6 +7016,7 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
+
             max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
@@ -6992,7 +7029,8 @@ class TensorDictBase(MutableMapping):
                 so a gain of processing time at init time may have a negative
                 impact on the total runtime. Defaults to ``True``.
 
-                .. note:: The default value of ``index_with_generator`` differs for ``map_iter``
+                .. note::
+                    The default value of ``index_with_generator`` differs for ``map_iter``
                     and ``map`` and the former assumes that it is prohibitively expensive to
                     store a split version of the TensorDict in memory.
 
@@ -7020,16 +7058,6 @@ class TensorDictBase(MutableMapping):
             ...         break
             ...
             tensor([[1., 1., 1., 1., 1.]])
-
-        .. note:: This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
-
-        .. note:: This function be used to represent a dataset and load from it,
-            in a dataloader-like fashion.
 
         """
         from torch import multiprocessing as mp
@@ -7838,7 +7866,8 @@ class TensorDictBase(MutableMapping):
     def add_(self, other: TensorDictBase | float, *, alpha: float | None = None):
         """In-place version of :meth:`~.add`.
 
-        .. note:: inplace ``add`` does not support ``default`` keyword argument.
+        .. note::
+            In-place ``add`` does not support ``default`` keyword argument.
         """
         torch.Tensor.add_
         if _is_tensor_collection(type(other)):
@@ -8075,7 +8104,9 @@ class TensorDictBase(MutableMapping):
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
         """In-place version of :meth:`~.sub`.
 
-        .. note:: inplace ``sub`` does not support ``default`` keyword argument.
+        .. note::
+            In-place ``sub`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8092,7 +8123,9 @@ class TensorDictBase(MutableMapping):
     def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.mul`.
 
-        .. note:: inplace ``mul`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``mul`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8157,7 +8190,9 @@ class TensorDictBase(MutableMapping):
     def maximum_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.maximum`.
 
-        .. note:: inplace ``maximum`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``maximum`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8217,7 +8252,9 @@ class TensorDictBase(MutableMapping):
     def minimum_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.minimum`.
 
-        .. note:: inplace ``minimum`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``minimum`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8277,7 +8314,9 @@ class TensorDictBase(MutableMapping):
     def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.clamp_max`.
 
-        .. note:: inplace ``clamp_max`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``clamp_max`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8337,7 +8376,9 @@ class TensorDictBase(MutableMapping):
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.clamp_min`.
 
-        .. note:: inplace ``clamp_min`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``clamp_min`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8396,7 +8437,9 @@ class TensorDictBase(MutableMapping):
     def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.pow`.
 
-        .. note:: inplace ``pow`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``pow`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8461,7 +8504,9 @@ class TensorDictBase(MutableMapping):
     def div_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.div`.
 
-        .. note:: inplace ``div`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``div`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8728,7 +8773,8 @@ class TensorDictBase(MutableMapping):
         Returns:
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.
 
-        .. note:: To select keys in a tensordict and return a version of this tensordict
+        .. note::
+            To select keys in a tensordict and return a version of this tensordict
             deprived of these keys, see the :meth:`~.split_keys` method.
 
         Examples:
@@ -8882,7 +8928,8 @@ class TensorDictBase(MutableMapping):
                 TensorDict will be copied too. Otherwise only the TensorDict
                 tree structure will be copied. Defaults to ``True``.
 
-        .. note:: Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
+        .. note::
+            Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
             original lock attribute. This design choice is made such that a clone can be created to be modified,
             which is the most frequent usage.
 
@@ -9661,9 +9708,11 @@ class TensorDictBase(MutableMapping):
                 the same tree structure as ``self``, even if some sub-tensordicts
                 contain no leaves.
 
-        .. note:: ``None`` non-tensor values will be ignored and not returned.
+        .. note::
+            ``None`` non-tensor values will be ignored and not returned.
 
-        .. note:: the method does not check for duplicates in the provided lists.
+        .. note::
+            The method does not check for duplicates in the provided lists.
 
         Examples:
             >>> td = TensorDict(
@@ -9956,15 +10005,19 @@ class TensorDictBase(MutableMapping):
             other (TensorDictBase, optional): TensorDict instance whose dtype
                 and device are the desired dtype and device for all tensors
                 in this TensorDict.
-                .. note:: Since :class:`~tensordict.TensorDictBase` instances do not have
+
+                .. note::
+                    Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
+
             non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
                 controlled via the ``num_threads`` argument.
 
-                .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
+                .. note::
+                    Calling ``tensordict.pin_memory().to("cuda")`` will usually
                     be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
                     Multithreaded ``pin_memory`` will usually be beneficial if the tensors
@@ -9984,7 +10037,8 @@ class TensorDictBase(MutableMapping):
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
-        .. note:: if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+        .. note::
+            If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
             Each new tensor will be a view on the consolidated storage cast to the desired device.
 
         Examples:
