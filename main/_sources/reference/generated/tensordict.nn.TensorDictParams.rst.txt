@@ -1,6 +1,0 @@
-﻿tensordict.nn.TensorDictParams
-==============================
-
-.. currentmodule:: tensordict.nn
-
-.. autoclass:: TensorDictParams

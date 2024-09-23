@@ -40,6 +40,15 @@
     <link rel="prev" title="Tracing TensorDictModule" href="fx.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -95,7 +104,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -256,7 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
@@ -335,27 +344,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">saving</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -582,7 +570,7 @@ destination tensordict:</p>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="c1"># later</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="p">[])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">target_state</span> <span class="o">=</span> <span class="p">{</span>
 <span class="o">&gt;&gt;&gt;</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict2</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="p">}</span>
@@ -926,7 +914,7 @@ key in the destination tensordict will go unnoticed.</p></li>
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

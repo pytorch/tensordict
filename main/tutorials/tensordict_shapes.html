@@ -40,6 +40,15 @@
     <link rel="prev" title="Welcome to the TensorDict Documentation!" href="../index.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -95,7 +104,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -256,7 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="data_fashion.html">Using TensorDict for datasets</a></li>
@@ -335,27 +344,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">tutorials/tensordict_shapes</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="../_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -429,18 +417,18 @@ interpreted relative to the <code class="docutils literal notranslate"><span cla
 function or method is called on. In particular, if there are nested
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> values with different batch sizes, the negative dimension is
 always interpreted relative to the batch dimensions of the root.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
-    <span class="p">{</span>
-        <span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-        <span class="s2">&quot;nested&quot;</span><span class="p">:</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
-    <span class="p">},</span>
-    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
-<span class="p">)</span>
-<span class="c1"># dim = -2 will be interpreted as the first dimension throughout, as the root</span>
-<span class="c1"># TensorDict has 2 batch dimensions, even though the nested TensorDict has 3</span>
-<a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">split</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
-<span class="k">assert</span> <a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <a href="https://pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
-<span class="k">assert</span> <a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;nested&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <a href="https://pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="s2">&quot;nested&quot;</span><span class="p">:</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># dim = -2 will be interpreted as the first dimension throughout, as the root</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># TensorDict has 2 batch dimensions, even though the nested TensorDict has 3</span>
+<span class="gp">&gt;&gt;&gt; </span><a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">split</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <a href="https://pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">chunks</span></a><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;nested&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <a href="https://pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
 </pre></div>
 </div>
 <p>As you can see from this example, the
@@ -532,6 +520,10 @@ converting the <code class="xref py py-class docutils literal notranslate"><span
 <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.to_tensordict" title="tensordict.LazyStackedTensorDict.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LazyStackedTensorDict.to_tensordict</span></code></a>
 or <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.contiguous" title="tensordict.LazyStackedTensorDict.contiguous"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LazyStackedTensorDict.contiguous</span></code></a>
 methods.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stacked_tensordict</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stacked_tensordict</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">)</span>
+</pre></div>
+</div>
 <p>After calling either of these methods, we will have a regular <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code>
 containing the stacked values, and no additional computation is performed when
 values are accessed.</p>
@@ -680,19 +672,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[2, 1, 0, 2],
-        [1, 1, 1, 3],
-        [3, 2, 3, 2]])
+ tensor([[1, 3, 3, 3],
+        [2, 3, 1, 3],
+        [1, 0, 3, 2]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.6917, 0.1755, 0.9874, 0.7746],
-        [0.7478, 0.6078, 0.3754, 0.1751],
-        [0.9032, 0.7984, 0.8799, 0.3917]])
+ tensor([[0.6490, 0.0909, 0.8022, 0.9849],
+        [0.6414, 0.5395, 0.4983, 0.3915],
+        [0.9428, 0.0213, 0.3450, 0.2203]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.9874, 0.1755, 0.6917, 0.9874],
-        [0.6078, 0.6078, 0.6078, 0.1751],
-        [0.3917, 0.8799, 0.3917, 0.8799]])
+ tensor([[0.0909, 0.9849, 0.9849, 0.9849],
+        [0.4983, 0.3915, 0.5395, 0.3915],
+        [0.0213, 0.9428, 0.2203, 0.3450]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>
@@ -945,7 +937,7 @@ gathered_tensordict[&#39;a&#39;]:
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

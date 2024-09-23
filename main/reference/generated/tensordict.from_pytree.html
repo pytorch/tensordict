@@ -40,6 +40,15 @@
     <link rel="prev" title="from_namedtuple" href="tensordict.from_namedtuple.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -95,7 +104,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -256,7 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
@@ -339,27 +348,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">reference/generated/tensordict.from_pytree</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="../../_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="../../_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="../../_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -378,13 +366,13 @@ a built-in pytree-to-tensordict bijective transform API.</p>
 <p>Accepted classes currently include lists, tuples, named tuples and dict.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>for dictionaries, non-NestedKey keys are registered separately as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
+<p>For dictionaries, non-NestedKey keys are registered separately as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
 instances.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+Note that this transformation is surjective: transforming back the tensordict to a pytree will not
 recover the original types.</p>
 </div>
 <p class="rubric">Examples</p>
@@ -639,7 +627,7 @@ recover the original types.</p>
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

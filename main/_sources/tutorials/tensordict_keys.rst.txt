@@ -40,7 +40,7 @@ We can set and get keys using the same syntax as a Python ``dict``
     import torch
     from tensordict.tensordict import TensorDict
 
-    tensordict = TensorDict({}, [])
+    tensordict = TensorDict()
 
     # set a key
     a = torch.rand(10)
@@ -71,7 +71,7 @@ We can also use the methods ``.get()`` and ``.set`` to accomplish the same thing
 .. code-block:: Python
 
 
-    tensordict = TensorDict({}, [])
+    tensordict = TensorDict()
 
     # set a key
     a = torch.rand(10)

@@ -40,6 +40,15 @@
     <link rel="prev" title="Using tensorclasses for datasets" href="tensorclass_fashion.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -95,7 +104,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -256,7 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="data_fashion.html">Using TensorDict for datasets</a></li>
@@ -335,27 +344,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">tutorials/tensorclass_imagenet</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="../_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -751,7 +739,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 219.23it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 238.53it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -800,10 +788,22 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 658.25it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 741.54it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 181.23it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 192.34it/s]ImageNetData(
+    images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
+    targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
+    batch_size=torch.Size([153]),
+    device=cpu,
+    is_shared=False)
+ImageNetData(
+    images=Tensor(shape=torch.Size([64, 3, 224, 224]), device=cpu, dtype=torch.float32, is_shared=True),
+    targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=True),
+    batch_size=torch.Size([64]),
+    device=None,
+    is_shared=False)
+ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -816,19 +816,7 @@ ImageNetData(
     device=None,
     is_shared=False)
 
- 84%|████████▎ | 128/153 [00:00&lt;00:00, 300.36it/s]ImageNetData(
-    images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
-    targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
-    batch_size=torch.Size([153]),
-    device=cpu,
-    is_shared=False)
-ImageNetData(
-    images=Tensor(shape=torch.Size([64, 3, 224, 224]), device=cpu, dtype=torch.float32, is_shared=True),
-    targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=True),
-    batch_size=torch.Size([64]),
-    device=None,
-    is_shared=False)
-ImageNetData(
+100%|██████████| 153/153 [00:00&lt;00:00, 394.23it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -841,14 +829,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 301.14it/s]
-One iteration over dataloader done! Rate: 931.9875 fps, time:  0.2361s
-One iteration over tensorclass dataloader done! Rate: 1499.2800 fps, time:  0.1467s
-One iteration over val data done! Rate: 635.5021 fps, time:  0.2030s
-One iteration over tensorclass val data done! Rate: 19413.8936 fps, time:  0.0066s
+100%|██████████| 153/153 [00:00&lt;00:00, 329.35it/s]
+One iteration over dataloader done! Rate: 914.0253 fps, time:  0.2407s
+One iteration over tensorclass dataloader done! Rate: 1591.4258 fps, time:  0.1382s
+One iteration over val data done! Rate: 547.6779 fps, time:  0.2355s
+One iteration over tensorclass val data done! Rate: 23624.2071 fps, time:  0.0055s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.792 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.627 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>
@@ -1080,7 +1068,7 @@ One iteration over tensorclass val data done! Rate: 19413.8936 fps, time:  0.006
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

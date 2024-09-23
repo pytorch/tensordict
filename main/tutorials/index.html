@@ -38,6 +38,15 @@
     <link rel="search" title="Search" href="../search.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -93,7 +102,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -254,7 +263,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="data_fashion.html">Using TensorDict for datasets</a></li>
@@ -333,27 +342,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">tutorials/index</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="../_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="../_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -371,15 +359,18 @@
 </div><div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to take advantage of memory pre-allocation in TensorDict."><img alt="" src="../_images/sphx_glr_tensordict_preallocation_thumb.png" />
 <p><a class="reference internal" href="tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py"><span class="std std-ref">Pre-allocating memory with TensorDict</span></a></p>
   <div class="sphx-glr-thumbnail-title">Pre-allocating memory with TensorDict</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="Functionalizing TensorDictModule"><img alt="" src="../_images/sphx_glr_tensordict_module_functional_thumb.png" />
-<p><a class="reference internal" href="tensordict_module_functional.html#sphx-glr-tutorials-tensordict-module-functional-py"><span class="std std-ref">Functionalizing TensorDictModule</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Functionalizing TensorDictModule</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens"><img alt="" src="../_images/sphx_glr_export_thumb.png" />
+<p><a class="reference internal" href="export.html#sphx-glr-tutorials-export-py"><span class="std std-ref">Exporting tensordict modules</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Exporting tensordict modules</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to work with and manipulate the keys in a TensorDict, including getting and setting keys, iterating over keys, manipulating nested values, and flattening the keys."><img alt="" src="../_images/sphx_glr_tensordict_keys_thumb.png" />
 <p><a class="reference internal" href="tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py"><span class="std std-ref">Manipulating the keys of a TensorDict</span></a></p>
   <div class="sphx-glr-thumbnail-title">Manipulating the keys of a TensorDict</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens"><img alt="" src="../_images/sphx_glr_streamed_tensordict_thumb.png" />
 <p><a class="reference internal" href="streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py"><span class="std std-ref">Building tensordicts from streams</span></a></p>
   <div class="sphx-glr-thumbnail-title">Building tensordicts from streams</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens"><img alt="" src="../_images/sphx_glr_tensordict_module_thumb.png" />
+<p><a class="reference internal" href="tensordict_module.html#sphx-glr-tutorials-tensordict-module-py"><span class="std std-ref">TensorDictModule</span></a></p>
+  <div class="sphx-glr-thumbnail-title">TensorDictModule</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to manipulate the shape of a TensorDict and its contents."><img alt="" src="../_images/sphx_glr_tensordict_shapes_thumb.png" />
 <p><a class="reference internal" href="tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py"><span class="std std-ref">Manipulating the shape of a TensorDict</span></a></p>
   <div class="sphx-glr-thumbnail-title">Manipulating the shape of a TensorDict</div>
@@ -389,9 +380,6 @@
 </div><div class="sphx-glr-thumbcontainer" tooltip="Using TensorDict for datasets"><img alt="" src="../_images/sphx_glr_data_fashion_thumb.png" />
 <p><a class="reference internal" href="data_fashion.html#sphx-glr-tutorials-data-fashion-py"><span class="std std-ref">Using TensorDict for datasets</span></a></p>
   <div class="sphx-glr-thumbnail-title">Using TensorDict for datasets</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="TensorDictModule"><img alt="" src="../_images/sphx_glr_tensordict_module_thumb.png" />
-<p><a class="reference internal" href="tensordict_module.html#sphx-glr-tutorials-tensordict-module-py"><span class="std std-ref">TensorDictModule</span></a></p>
-  <div class="sphx-glr-thumbnail-title">TensorDictModule</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Batched data loading with tensorclasses"><img alt="" src="../_images/sphx_glr_tensorclass_imagenet_thumb.png" />
 <p><a class="reference internal" href="tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py"><span class="std std-ref">Batched data loading with tensorclasses</span></a></p>
   <div class="sphx-glr-thumbnail-title">Batched data loading with tensorclasses</div>
@@ -616,7 +604,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

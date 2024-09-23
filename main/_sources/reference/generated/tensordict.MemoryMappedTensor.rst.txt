@@ -6,4 +6,3 @@ MemoryMappedTensor
 
 .. autoclass:: MemoryMappedTensor
     :members:
-    :inherited-members:

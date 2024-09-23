@@ -40,6 +40,15 @@
     <link rel="prev" title="tensordict.nn.biased_softplus" href="tensordict.nn.biased_softplus.html" />
   <!-- Google Analytics -->
   
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
   <!-- End Google Analytics -->
   
 
@@ -95,7 +104,7 @@
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li>
+          <li class="active docs-active">
             <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
               <a class="resource-option with-down-orange-arrow">
                 Docs
@@ -256,7 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module_functional.html">Functionalizing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
@@ -339,27 +348,6 @@
         <div class="pytorch-content-left">
 
           
-          <div class="pytorch-call-to-action-links">
-            <div id="tutorial-type">reference/generated/tensordict.nn.set_skip_existing</div>
-
-            <div id="google-colab-link">
-              <img class="call-to-action-img" src="../../_static/images/pytorch-colab.svg"/>
-              <div class="call-to-action-desktop-view">Run in Google Colab</div>
-              <div class="call-to-action-mobile-view">Colab</div>
-            </div>
-            <div id="download-notebook-link">
-              <img class="call-to-action-notebook-img" src="../../_static/images/pytorch-download.svg"/>
-              <div class="call-to-action-desktop-view">Download Notebook</div>
-              <div class="call-to-action-mobile-view">Notebook</div>
-            </div>
-            <div id="github-view-link">
-              <img class="call-to-action-img" src="../../_static/images/pytorch-github.svg"/>
-              <div class="call-to-action-desktop-view">View on GitHub</div>
-              <div class="call-to-action-mobile-view">GitHub</div>
-            </div>
-          </div>
-
-        
           
           <div class="rst-content">
           
@@ -411,8 +399,8 @@ in the module’s method being decorated. Defaults to <code class="docutils lite
 <span class="go">calling from outside: False</span>
 </pre></div>
 </div>
-<p>This class can also be used as a decorator:
-.. rubric:: Examples</p>
+<p>This class can also be used as a decorator:</p>
+<p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
@@ -431,7 +419,7 @@ in the module’s method being decorated. Defaults to <code class="docutils lite
 <span class="go">    batch_size=torch.Size([]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({},</span> <span class="p">[]))</span>  <span class="c1"># prints hello</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span>  <span class="c1"># prints hello</span>
 <span class="go">hello</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -443,6 +431,7 @@ in the module’s method being decorated. Defaults to <code class="docutils lite
 </div>
 <p>Decorating a method with the mode set to <code class="docutils literal notranslate"><span class="pre">None</span></code> is useful whenever one
 wants ot let the context manager take care of skipping things from the outside:</p>
+<p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
@@ -706,7 +695,7 @@ deactivated whenever the output keys are also the input keys:</p>
             <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="resources-mobile-menu-title">
+          <li class="resources-mobile-menu-title" class="active">
             Docs
           </li>
 

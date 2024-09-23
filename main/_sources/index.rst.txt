@@ -65,7 +65,6 @@ Basics
 .. toctree::
    :maxdepth: 1
 
-   tutorials/tensordict_basics
    tutorials/tensordict_shapes
    tutorials/tensordict_slicing
    tutorials/tensordict_keys
@@ -80,7 +79,7 @@ tensordict.nn
    :maxdepth: 1
 
    tutorials/tensordict_module
-   tutorials/tensordict_module_functional
+   tutorials/export
 
 Dataloading
 -----------

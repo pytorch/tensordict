@@ -133,7 +133,7 @@ whose entries are views of the corresponding entries in the original
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-106
+.. GENERATED FROM PYTHON SOURCE LINES 72-104
 
 .. note::
 
@@ -143,20 +143,18 @@ whose entries are views of the corresponding entries in the original
    :class:`~.TensorDict` values with different batch sizes, the negative dimension is
    always interpreted relative to the batch dimensions of the root.
 
-   .. code-block::
-
-      tensordict = TensorDict(
-          {
-              "a": torch.rand(3, 4),
-              "nested": TensorDict({"b": torch.rand(3, 4, 5)}, [3, 4, 5])
-          },
-          [3, 4],
-      )
-      # dim = -2 will be interpreted as the first dimension throughout, as the root
-      # TensorDict has 2 batch dimensions, even though the nested TensorDict has 3
-      chunks = tensordict.split([2, 1], dim=-2)
-      assert chunks[0].batch_size == torch.Size([2, 4])
-      assert chunks[0]["nested"].batch_size == torch.Size([2, 4, 5])
+      >>> tensordict = TensorDict(
+      ...     {
+      ...         "a": torch.rand(3, 4),
+      ...         "nested": TensorDict({"b": torch.rand(3, 4, 5)}, [3, 4, 5])
+      ...     },
+      ...     [3, 4],
+      ... )
+      >>> # dim = -2 will be interpreted as the first dimension throughout, as the root
+      >>> # TensorDict has 2 batch dimensions, even though the nested TensorDict has 3
+      >>> chunks = tensordict.split([2, 1], dim=-2)
+      >>> assert chunks[0].batch_size == torch.Size([2, 4])
+      >>> assert chunks[0]["nested"].batch_size == torch.Size([2, 4, 5])
 
    As you can see from this example, the
    :meth:`TensorDict.split <tensordict.TensorDict.split>` method behaves exactly as
@@ -170,7 +168,7 @@ Unbind
 :meth:`TensorDict.split <tensordict.TensorDict.split>`. It removes the specified
 dimension and returns a ``tuple`` of all slices along that dimension.
 
-.. GENERATED FROM PYTHON SOURCE LINES 106-112
+.. GENERATED FROM PYTHON SOURCE LINES 104-110
 
 .. code-block:: Python
 
@@ -187,7 +185,7 @@ dimension and returns a ``tuple`` of all slices along that dimension.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-127
+.. GENERATED FROM PYTHON SOURCE LINES 111-125
 
 Stacking and concatenating
 --------------------------
@@ -204,7 +202,7 @@ a lazy stack will be much faster than a proper stack.
 It relies on the :class:`~tensordict.LazyStackedTensorDict` class.
 In this case, values will only be stacked on-demand when they are accessed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-150
+.. GENERATED FROM PYTHON SOURCE LINES 125-148
 
 .. code-block:: Python
 
@@ -253,12 +251,12 @@ In this case, values will only be stacked on-demand when they are accessed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 151-153
+.. GENERATED FROM PYTHON SOURCE LINES 149-151
 
 If we index a :class:`~.LazyStackedTensorDict` along the stacking dimension we recover
 the original :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 153-157
+.. GENERATED FROM PYTHON SOURCE LINES 151-155
 
 .. code-block:: Python
 
@@ -273,13 +271,13 @@ the original :class:`~.TensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 158-161
+.. GENERATED FROM PYTHON SOURCE LINES 156-159
 
 Accessing a key in the :class:`~.LazyStackedTensorDict` results in those values being
 stacked. If the key corresponds to a nested :class:`~.TensorDict` then we will recover
 another :class:`~.LazyStackedTensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-164
+.. GENERATED FROM PYTHON SOURCE LINES 159-162
 
 .. code-block:: Python
 
@@ -293,7 +291,7 @@ another :class:`~.LazyStackedTensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 165-189
+.. GENERATED FROM PYTHON SOURCE LINES 163-186
 
 .. note::
 
@@ -306,9 +304,8 @@ another :class:`~.LazyStackedTensorDict`.
    or :meth:`LazyStackedTensorDict.contiguous <tensordict.LazyStackedTensorDict.contiguous>`
    methods.
 
-   .. code-block::
-      assert isinstance(stacked_tensordict.contiguous(), TensorDict)
-      assert isinstance(stacked_tensordict.contiguous(), TensorDict)
+      >>> assert isinstance(stacked_tensordict.contiguous(), TensorDict)
+      >>> assert isinstance(stacked_tensordict.contiguous(), TensorDict)
 
    After calling either of these methods, we will have a regular :class:`TensorDict`
    containing the stacked values, and no additional computation is performed when
@@ -320,7 +317,7 @@ Concatenation is not done lazily, instead calling :func:`torch.cat` on a list of
 :class:`~.TensorDict` instances simply returns a :class:`~.TensorDict` whose entries
 are the concatenated entries of the elements of the list.
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-195
+.. GENERATED FROM PYTHON SOURCE LINES 186-192
 
 .. code-block:: Python
 
@@ -337,14 +334,14 @@ are the concatenated entries of the elements of the list.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-200
+.. GENERATED FROM PYTHON SOURCE LINES 193-197
 
 Expanding ``TensorDict``
 ------------------------
 We can expand all of the entries of a :class:`~.TensorDict` using
 :meth:`TensorDict.expand <tensordict.TensorDict.expand>`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-205
+.. GENERATED FROM PYTHON SOURCE LINES 197-202
 
 .. code-block:: Python
 
@@ -360,7 +357,7 @@ We can expand all of the entries of a :class:`~.TensorDict` using
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-211
+.. GENERATED FROM PYTHON SOURCE LINES 203-208
 
 Squeezing and Unsqueezing ``TensorDict``
 ----------------------------------------
@@ -368,7 +365,7 @@ We can squeeze or unsqueeze the contents of a :class:`~.TensorDict` with the
 :meth:`~tensordict.TensorDictBase.squeeze` and
 :meth:`~tensordict.TensorDictBase.unsqueeze` methods.
 
-.. GENERATED FROM PYTHON SOURCE LINES 211-221
+.. GENERATED FROM PYTHON SOURCE LINES 208-218
 
 .. code-block:: Python
 
@@ -407,7 +404,7 @@ We can squeeze or unsqueeze the contents of a :class:`~.TensorDict` with the
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 222-238
+.. GENERATED FROM PYTHON SOURCE LINES 219-235
 
 .. note::
    Until now, operations like :meth:`~tensordict.TensorDictBase.unsqueeze`,
@@ -426,7 +423,7 @@ We can squeeze or unsqueeze the contents of a :class:`~.TensorDict` with the
 Bear in mind that as ever, these methods apply only to the batch dimensions. Any non
 batch dimensions of the entries will be unaffected
 
-.. GENERATED FROM PYTHON SOURCE LINES 238-245
+.. GENERATED FROM PYTHON SOURCE LINES 235-242
 
 .. code-block:: Python
 
@@ -444,14 +441,14 @@ batch dimensions of the entries will be unaffected
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-250
+.. GENERATED FROM PYTHON SOURCE LINES 243-247
 
 Viewing a TensorDict
 --------------------
 :class:`~.TensorDict` also supports ``view``. This creates a ``_ViewedTensorDict``
 which lazily creates views on its contents when they are accessed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-259
+.. GENERATED FROM PYTHON SOURCE LINES 247-256
 
 .. code-block:: Python
 
@@ -471,7 +468,7 @@ which lazily creates views on its contents when they are accessed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 260-269
+.. GENERATED FROM PYTHON SOURCE LINES 257-266
 
 Permuting batch dimensions
 --------------------------
@@ -483,7 +480,7 @@ This operation is lazy, so batch dimensions are only permuted when we try to acc
 the entries. As ever, if you are likely to need to access a particular entry multiple
 times, consider converting to a :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 269-277
+.. GENERATED FROM PYTHON SOURCE LINES 266-274
 
 .. code-block:: Python
 
@@ -502,7 +499,7 @@ times, consider converting to a :class:`~.TensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 278-288
+.. GENERATED FROM PYTHON SOURCE LINES 275-285
 
 Using tensordicts as decorators
 -------------------------------
@@ -515,7 +512,7 @@ or shape operations such as :meth:`~tensordict.TensorDictBase.view`, :meth:`~ten
 :meth:`~tensordict.TensorDictBase.unsqueeze`.
 Here is a quick example with the ``transpose`` function:
 
-.. GENERATED FROM PYTHON SOURCE LINES 288-299
+.. GENERATED FROM PYTHON SOURCE LINES 285-296
 
 .. code-block:: Python
 
@@ -537,7 +534,7 @@ Here is a quick example with the ``transpose`` function:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 300-305
+.. GENERATED FROM PYTHON SOURCE LINES 297-302
 
 Gathering values in ``TensorDict``
 ----------------------------------
@@ -545,7 +542,7 @@ The :meth:`TensorDict.gather <tensordict.TensorDict.gather>` method can be used 
 index along the batch dimensions and gather the results into a single dimension much
 like :func:`torch.gather`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 305-311
+.. GENERATED FROM PYTHON SOURCE LINES 302-308
 
 .. code-block:: Python
 
@@ -564,19 +561,19 @@ like :func:`torch.gather`.
  .. code-block:: none
 
     index:
-     tensor([[2, 1, 0, 2],
-            [1, 1, 1, 3],
-            [3, 2, 3, 2]])
+     tensor([[1, 3, 3, 3],
+            [2, 3, 1, 3],
+            [1, 0, 3, 2]])
 
     tensordict['a']:
-     tensor([[0.6917, 0.1755, 0.9874, 0.7746],
-            [0.7478, 0.6078, 0.3754, 0.1751],
-            [0.9032, 0.7984, 0.8799, 0.3917]])
+     tensor([[0.6490, 0.0909, 0.8022, 0.9849],
+            [0.6414, 0.5395, 0.4983, 0.3915],
+            [0.9428, 0.0213, 0.3450, 0.2203]])
 
     gathered_tensordict['a']:
-     tensor([[0.9874, 0.1755, 0.6917, 0.9874],
-            [0.6078, 0.6078, 0.6078, 0.1751],
-            [0.3917, 0.8799, 0.3917, 0.8799]])
+     tensor([[0.0909, 0.9849, 0.9849, 0.9849],
+            [0.4983, 0.3915, 0.5395, 0.3915],
+            [0.0213, 0.9428, 0.2203, 0.3450]])
 
 
 
