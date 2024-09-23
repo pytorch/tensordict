@@ -3,7 +3,6 @@ numpy
 sphinx-copybutton
 sphinx-gallery
 sphinx
-sphinx-build>=8.1.0
 Jinja2==3.1.4
 sphinx-autodoc-typehints
 sphinx-serve
