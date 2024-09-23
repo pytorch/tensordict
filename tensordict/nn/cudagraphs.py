@@ -41,7 +41,8 @@ class CudaGraphModule:
 
     ``CudaGraphModule`` is a wrapper class that provides a user-friendly interface to CUDA graphs for PyTorch callables.
 
-    .. warning:: ``CudaGraphModule`` is a prototype feature and its API restrictions are likely to change in the future.
+    .. warning::
+        ``CudaGraphModule`` is a prototype feature and its API restrictions are likely to change in the future.
 
     This class provides a user-friendly interface to cudagraphs, allowing for a fast, CPU-overhead free execution of
     operations on GPU.
@@ -101,7 +102,8 @@ class CudaGraphModule:
           id, then this identity will be preserved during a call to ``CudaGraphModule``. In all other cases, the output
           will be cloned, irrespective of whether its elements match or do not match one of the inputs.
 
-    .. warning:: ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
+    .. warning::
+        ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
 
     Args:
@@ -113,7 +115,8 @@ class CudaGraphModule:
         in_keys (list of NestedKeys): the input keys, if the module takes a TensorDict as input.
             Defaults to ``module.in_keys`` if this value exists, otherwise ``None``.
 
-            .. note:: If ``in_keys`` is provided but empty, the module is assumed to receive a tensordict as input.
+            .. note::
+                If ``in_keys`` is provided but empty, the module is assumed to receive a tensordict as input.
                 This is sufficient to make ``CudaGraphModule`` aware that the function should be treated as a
                 `TensorDictModule`, but keyword arguments will not be dispatched. See below for some examples.
 

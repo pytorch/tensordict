@@ -2566,8 +2566,9 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
 def parse_tensor_dict_string(s: str):
     """Parse a TensorDict repr to a TensorDict.
 
-    .. note:: This functions is intended to be used for debugging, to reproduce a tensordict
-      given its printed version, and should not be used in real applications.
+    .. note::
+        This functions is intended to be used for debugging, to reproduce a tensordict
+        given its printed version, and should not be used in real applications.
 
     """
     from tensordict import TensorDict

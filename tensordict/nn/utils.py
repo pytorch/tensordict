@@ -85,17 +85,18 @@ def mappings(key: str) -> Callable:
         key (str): one of `"softplus"`, `"exp"`, `"relu"`, `"expln"`,
             `"biased_softplus"` or `"none"` (no mapping).
 
-    .. note:: If the key begins with `"biased_softplus"`,
-      then it needs to take the following form:
-      ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
-      used to bias the softplus function.
-      Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
-      In that case, the additional ```min_val``` term is a floating point
-      number that will be used to encode the minimum value of the softplus transform.
-      In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
-      such that the conditions above are met.
+    .. note::
+        If the key begins with `"biased_softplus"`, then it needs to take the following form:
+        ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
+        used to bias the softplus function.
+        Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
+        In that case, the additional ```min_val``` term is a floating point
+        number that will be used to encode the minimum value of the softplus transform.
+        In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
+        such that the conditions above are met.
 
-    .. note:: Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
+    .. note::
+        Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
 
     Returns:
          a Callable
@@ -176,6 +177,7 @@ class set_skip_existing(_DecoratorContextManager):
         calling from outside: False
 
     This class can also be used as a decorator:
+
     Examples:
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase
@@ -206,6 +208,8 @@ class set_skip_existing(_DecoratorContextManager):
 
     Decorating a method with the mode set to ``None`` is useful whenever one
     wants ot let the context manager take care of skipping things from the outside:
+
+    Examples:
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase
         >>> class MyModule(TensorDictModuleBase):

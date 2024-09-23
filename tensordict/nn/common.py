@@ -176,7 +176,6 @@ class dispatch:
     must match the order of the input keys.
 
     .. note::
-
         If the first argument is a :class:`~.TensorDictBase` instance, it is
         assumed that dispatch is __not__ being used and that this tensordict
         contains all the necessary information to be run through the module.
@@ -804,21 +803,23 @@ class TensorDictModule(TensorDictModuleBase):
 
     Keyword Args:
         inplace (bool or string, optional): if ``True`` (default), the output of the module are written in the tensordict
-          provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
-          batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
-          create the output tensordict.
+            provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
+            batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
+            create the output tensordict.
 
-          .. note:: if ``inplace=False`` and the tensordict passed to the module is another
-            :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
-            be a :class:`~tensordict.TensorDict` instance. Its batch-size will be empty, and it will have no device.
-            Set to ``"empty"`` to get the same :class:`~tensordict.TensorDictBase` subtype, an identical batch-size
-            and device. Use ``tensordict_out`` at runtime (see below) to have a more fine-grained control over the
-            output.
+            .. note::
+                If ``inplace=False`` and the tensordict passed to the module is another
+                :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
+                be a :class:`~tensordict.TensorDict` instance. Its batch-size will be empty, and it will have no device.
+                Set to ``"empty"`` to get the same :class:`~tensordict.TensorDictBase` subtype, an identical batch-size
+                and device. Use ``tensordict_out`` at runtime (see below) to have a more fine-grained control over the
+                output.
 
-          .. note:: if ``inplace=False`` and a `tensordict_out` is passed to the :meth:`~.forward` method,
-            the ``tensordict_out`` will prevail. This is the way one can get a tensordict_out taensordict passed to the module is another
-            :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
-            be a :class:`~tensordict.TensorDict` instance.
+            .. note::
+                If ``inplace=False`` and a `tensordict_out` is passed to the :meth:`~.forward` method,
+                the ``tensordict_out`` will prevail. This is the way one can get a tensordict_out taensordict passed to the module is another
+                :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
+                be a :class:`~tensordict.TensorDict` instance.
 
 
     Embedding a neural network in a TensorDictModule only requires to specify the input

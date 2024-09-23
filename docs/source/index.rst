@@ -65,7 +65,6 @@ Basics
 .. toctree::
    :maxdepth: 1
 
-   tutorials/tensordict_basics
    tutorials/tensordict_shapes
    tutorials/tensordict_slicing
    tutorials/tensordict_keys

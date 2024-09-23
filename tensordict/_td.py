@@ -4559,9 +4559,9 @@ def from_module(
         use_state_dict (bool, optional): if ``True``, the state-dict from the
             module will be used and unflattened into a TensorDict with
             the tree structure of the model. Defaults to ``False``.
+
             .. note::
-              This is particularly useful when state-dict hooks have to be
-              used.
+                This is particularly useful when state-dict hooks have to be used.
 
     Examples:
         >>> from torch import nn
@@ -4607,13 +4607,15 @@ def from_modules(
         use_state_dict (bool, optional): if ``True``, the state-dict from the
             module will be used and unflattened into a TensorDict with
             the tree structure of the model. Defaults to ``False``.
+
             .. note::
-              This is particularly useful when state-dict hooks have to be
-              used.
+                This is particularly useful when state-dict hooks have to be used.
+
         lazy_stack (bool, optional): whether parameters should be densly or
             lazily stacked. Defaults to ``False`` (dense stack).
 
-            .. note:: ``lazy_stack`` and ``as_module`` are exclusive features.
+            .. note::
+                ``lazy_stack`` and ``as_module`` are exclusive features.
 
             .. warning::
                 There is a crucial difference between lazy and non-lazy outputs
@@ -4635,6 +4637,7 @@ def from_modules(
                 or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
                 to be executed. In general, ``lazy_stack`` should be reserved
                 to very few use cases.
+
         expand_identical (bool, optional): if ``True`` and the same parameter (same
             identity) is being stacked to itself, an expanded version of this parameter
             will be returned instead. This argument is ignored when ``lazy_stack=True``.
@@ -4845,11 +4848,13 @@ def from_pytree(
 
     Accepted classes currently include lists, tuples, named tuples and dict.
 
-    .. note:: for dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
+    .. note::
+        For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
         instances.
 
-    .. note:: Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-        NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+    .. note::
+        Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+        Note that this transformation is surjective: transforming back the tensordict to a pytree will not
         recover the original types.
 
     Examples:
@@ -5004,11 +5009,14 @@ def load_memmap(
 
     This method also allows loading nested tensordicts.
 
+    Examples:
         >>> nested = TensorDict.load_memmap("./saved_td/nested")
         >>> assert nested["e"] == 0
 
     A tensordict can also be loaded on "meta" device or, alternatively,
-    as a fake tensor:
+    as a fake tensor.
+
+    Examples:
         >>> import tempfile
         >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
         >>> with tempfile.TemporaryDirectory() as path:
