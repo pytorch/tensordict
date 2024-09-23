@@ -2,7 +2,7 @@ matplotlib
 numpy
 sphinx-copybutton
 sphinx-gallery
-sphinx==5.0.0
+sphinx==8.1.0
 Jinja2==3.1.4
 sphinx-autodoc-typehints
 sphinx-serve==1.0.1
