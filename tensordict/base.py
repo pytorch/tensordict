@@ -1495,6 +1495,16 @@ class TensorDictBase(MutableMapping):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
 
+    @grad.setter
+    def grad(self, grad):
+        def set_grad(x, grad):
+            if x.grad is None:
+                x.grad = grad
+            else:
+                x.grad.copy_(grad)
+
+        self._fast_apply(set_grad, grad)
+
     def zero_grad(self, set_to_none: bool = True) -> T:
         """Zeros all the gradients of the TensorDict recursively.
 
