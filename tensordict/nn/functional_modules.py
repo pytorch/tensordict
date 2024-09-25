@@ -270,15 +270,6 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             with _exclude_td_from_pytree():
                 flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
 
-        for out in flat_batched_outputs:
-            # Change here:
-            if isinstance(out, torch.Tensor) or is_tensor_collection(out):
-                continue
-            raise ValueError(
-                f"vmap({_get_name(func)}, ...): `{_get_name(func)}` must only return "
-                f"Tensors, got type {type(out)} as a return."
-            )
-
         def incompatible_error():
             raise ValueError(
                 f"vmap({_get_name(func)}, ..., out_dims={out_dims})(<inputs>): "
@@ -320,7 +311,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
-    vmap_src._unwrap_batched = _unwrap_batched
+        vmap_src._unwrap_batched = _unwrap_batched
 
 
 # Tensordict-compatible Functional modules
