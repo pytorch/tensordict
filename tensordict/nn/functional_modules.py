@@ -311,7 +311,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
-        vmap_src._unwrap_batched = _unwrap_batched
+    vmap_src._unwrap_batched = _unwrap_batched
 
 
 # Tensordict-compatible Functional modules
