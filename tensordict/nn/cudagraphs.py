@@ -272,20 +272,20 @@ class CudaGraphModule:
                         return tensordict_out.update(out, clone=True)
                     return out.clone() if self._out is not None else None
                 else:
-                    self._tensordict.update_(tensordict)
+                    self._tensordict.update_(tensordict, non_blocking=True)
                     torch.cuda.synchronize()
                     self.graph.replay()
-                    torch.cuda.synchronize()
                     if self._out_matches_in:
-                        return tensordict.update(
+                        result = tensordict.update(
                             self._out, keys_to_update=self._selected_keys
                         )
-                    if tensordict_out is not None:
-                        return tensordict_out.update(self._out, clone=True)
-                    return self._out.clone() if self._out is not None else None
-
+                    elif tensordict_out is not None:
+                        result = tensordict_out.update(self._out, clone=True)
+                    else:
+                        result = self._out.clone() if self._out is not None else None
+                    torch.cuda.synchronize()
+                    return result
         else:
-
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter < self._warmup:
                     if self._warmup_stream is not None:
@@ -350,20 +350,23 @@ class CudaGraphModule:
                     return tree_map(lambda x: x.clone(), out)
                 else:
                     tree_map(
-                        lambda x, y: x.copy_(y),
+                        lambda x, y: x.copy_(y, non_blocking=True),
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
                     torch.cuda.synchronize()
                     self.graph.replay()
-                    torch.cuda.synchronize()
                     if self._return_unchanged == "clone":
-                        return self._out.clone()
+                        result = self._out.clone()
                     elif self._return_unchanged:
-                        return self._out
-                    return tree_map(
-                        lambda x: x.clone() if x is not None else x, self._out
-                    )
+                        result = self._out
+                    else:
+                        result = tree_map(
+                            lambda x: x.clone() if x is not None else x, self._out
+                        )
+                    torch.cuda.synchronize()
+                    return result
+
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
