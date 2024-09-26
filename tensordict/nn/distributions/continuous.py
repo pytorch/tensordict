@@ -168,6 +168,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         scale_shape: Union[torch.Size, int, tuple],
         scale_mapping: str = "exp",
         scale_lb: Number = 1e-4,
+        device=None,
     ) -> None:
 
         super().__init__()
@@ -176,7 +177,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
             scale_shape = (scale_shape,)
         self.scale_shape = scale_shape
         self.scale_mapping = scale_mapping
-        self.state_independent_scale = torch.nn.Parameter(torch.zeros(scale_shape))
+        self.state_independent_scale = torch.nn.Parameter(torch.zeros(scale_shape, device=device))
 
     def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
         loc, *others = tensors

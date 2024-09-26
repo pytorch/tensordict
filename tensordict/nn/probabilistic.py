@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
-
+import torch
 import re
 import warnings
 from enum import auto, IntEnum
@@ -601,10 +601,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     @property
     def det_part(self):
-        if not hasattr(self, "_det_part"):
-            # we use a list to avoid having the submodules listed in module.modules()
-            self._det_part = [TensorDictSequential(*self.module[:-1])]
-        return self._det_part[0]
+        _det_part = getattr(self, "_det_part", None)
+        if torch.compiler.is_dynamo_compiling() or _det_part is None:
+            _det_part = self.__dict__["_det_part"] = TensorDictSequential(*self.module[:-1])
+        return _det_part
 
     def get_dist_params(
         self,
