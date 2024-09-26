@@ -171,7 +171,7 @@ class CudaGraphModule:
         self._warmup = warmup
         if torch.cuda.is_available():
             self._warmup_stream = torch.cuda.Stream()
-            self._warmup_stream_cm = torch.cuda.Stream(self._warmup_stream)
+            self._warmup_stream_cm = torch.cuda.stream(self._warmup_stream)
         else:
             self._warmup_stream = None
             self._warmup_stream_cm = contextlib.nullcontext()
@@ -232,6 +232,7 @@ class CudaGraphModule:
                     tree_map(self._check_non_tensor, (args, kwargs))
 
                     self.graph = torch.cuda.CUDAGraph()
+                    torch.cuda.synchronize()
                     self._tensordict = tensordict.copy()
                     with torch.cuda.graph(self.graph):
                         if tensordict_out is not None:
@@ -272,7 +273,9 @@ class CudaGraphModule:
                     return out.clone() if self._out is not None else None
                 else:
                     self._tensordict.update_(tensordict)
+                    torch.cuda.synchronize()
                     self.graph.replay()
+                    torch.cuda.synchronize()
                     if self._out_matches_in:
                         return tensordict.update(
                             self._out, keys_to_update=self._selected_keys
@@ -294,7 +297,6 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 elif self.counter == self._warmup:
-                    self.graph = torch.cuda.CUDAGraph()
 
                     def check_device_and_clone(x):
                         if isinstance(x, torch.Tensor) or is_tensor_collection(x):
@@ -315,6 +317,7 @@ class CudaGraphModule:
                     self._args, self._kwargs = tree_map(
                         check_device_and_clone, (args, kwargs)
                     )
+                    self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
                     self.graph.replay()
@@ -351,7 +354,9 @@ class CudaGraphModule:
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
+                    torch.cuda.synchronize()
                     self.graph.replay()
+                    torch.cuda.synchronize()
                     if self._return_unchanged == "clone":
                         return self._out.clone()
                     elif self._return_unchanged:
