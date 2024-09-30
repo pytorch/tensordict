@@ -199,8 +199,6 @@ class CudaGraphModule:
                     )
                 _exclude_td_from_pytree().set()
 
-        functools.update_wrapper(self, module)
-
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
@@ -235,6 +233,7 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     if self._has_cuda:
                         torch.cuda.synchronize()
+                    print('self.module', self.module, 'out', out, 'tensordict', tensordict)
                     return out
                 else:
                     if tensordict.device is None:
@@ -246,15 +245,18 @@ class CudaGraphModule:
 
                     tree_map(self._check_non_tensor, (args, kwargs))
                     self._tensordict = tensordict.copy()
+                    if tensordict_out is not None:
+                        td_out_save = tensordict_out.copy()
+                        kwargs["tensordict_out"] = tensordict_out
 
                     torch.cuda.synchronize()
                     this_out = self.module(tensordict, *args, **kwargs)
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
+                    if tensordict_out is not None:
+                        kwargs["tensordict_out"] = td_out_save
                     with torch.cuda.graph(self.graph):
-                        if tensordict_out is not None:
-                            kwargs["tensordict_out"] = tensordict_out
                         out = self.module(self._tensordict, *args, **kwargs)
 
                     if not is_tensor_collection(out) and out is not None:
