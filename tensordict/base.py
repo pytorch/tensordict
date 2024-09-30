@@ -7936,10 +7936,10 @@ class TensorDictBase(MutableMapping):
             end_val = end._values_list(True, True)
         else:
             end_val = end
-        if _is_tensor_collection(type(weight)):
-            weight_val = weight._values_list(True, True)
-        else:
-            weight_val = weight
+        # if isinstance(weight, TensorDictBase) or _is_tensor_collection(type(weight)):
+        # weight_val = weight._values_list(True, True)
+        #else:
+        weight_val = weight
         torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
         return self
 

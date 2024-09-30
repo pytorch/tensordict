@@ -36,7 +36,6 @@ except ImportError:
         """Torch 2.0 compatible version of tree_leaves."""
         return tree_flatten(pytree)[0]
 
-
 class CudaGraphModule:
     """A cudagraph wrapper for PyTorch callables.
 
@@ -209,8 +208,7 @@ class CudaGraphModule:
                 **kwargs: Any,
             ) -> Any:
                 if self.counter < self._warmup:
-                    if self._warmup_stream is not None:
-                        self._warmup_stream.wait_stream(torch.cuda.current_stream())
+                    torch.cuda.synchronize()
                     with self._warmup_stream_cm:
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = tensordict_out
@@ -218,8 +216,7 @@ class CudaGraphModule:
                         if self._out_matches_in is None:
                             self._out_matches_in = out is tensordict
                     self.counter += self._has_cuda
-                    if self._warmup_stream is not None:
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
+                    torch.cuda.synchronize()
                     return out
                 elif self.counter == self._warmup:
                     if tensordict.device is None:
@@ -230,15 +227,17 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
+                    self._tensordict = tensordict.copy()
+
+                    torch.cuda.synchronize()
+                    this_out = self.module(self._tensordict, *args, **kwargs)
+                    torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
-                    torch.cuda.synchronize()
-                    self._tensordict = tensordict.copy()
                     with torch.cuda.graph(self.graph):
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = tensordict_out
                         out = self.module(self._tensordict, *args, **kwargs)
-                    self.graph.replay()
 
                     if not is_tensor_collection(out) and out is not None:
                         raise RuntimeError(
@@ -265,15 +264,9 @@ class CudaGraphModule:
                                 default=None,
                                 filter_empty=True,
                             )
-                        return tensordict.update(
-                            self._out, keys_to_update=self._selected_keys
-                        )
-                    if tensordict_out is not None:
-                        return tensordict_out.update(out, clone=True)
-                    return out.clone() if self._out is not None else None
+                    return this_out
                 else:
                     self._tensordict.update_(tensordict, non_blocking=True)
-                    torch.cuda.synchronize()
                     self.graph.replay()
                     if self._out_matches_in:
                         result = tensordict.update(
@@ -283,17 +276,14 @@ class CudaGraphModule:
                         result = tensordict_out.update(self._out, clone=True)
                     else:
                         result = self._out.clone() if self._out is not None else None
-                    torch.cuda.synchronize()
                     return result
         else:
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter < self._warmup:
-                    if self._warmup_stream is not None:
-                        self._warmup_stream.wait_stream(torch.cuda.current_stream())
+                    torch.cuda.synchronize()
                     with self._warmup_stream_cm:
                         out = self.module(*args, **kwargs)
-                    if self._warmup_stream is not None:
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
+                    torch.cuda.synchronize()
                     self.counter += self._has_cuda
                     return out
                 elif self.counter == self._warmup:
@@ -317,6 +307,9 @@ class CudaGraphModule:
                     self._args, self._kwargs = tree_map(
                         check_device_and_clone, (args, kwargs)
                     )
+                    torch.cuda.synchronize()
+                    this_out = self.module(*self._args, **self._kwargs)
+                    torch.cuda.synchronize()
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
@@ -341,20 +334,15 @@ class CudaGraphModule:
                         self._return_unchanged = (
                             "clone" if self._out is not None else True
                         )
-                        return (
-                            self._out.clone()
-                            if self._return_unchanged == "clone"
-                            else self._out
-                        )
-                    self._return_unchanged = False
-                    return tree_map(lambda x: x.clone(), out)
+                    else:
+                        self._return_unchanged = False
+                    return this_out
                 else:
                     tree_map(
                         lambda x, y: x.copy_(y, non_blocking=True),
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
-                    torch.cuda.synchronize()
                     self.graph.replay()
                     if self._return_unchanged == "clone":
                         result = self._out.clone()
@@ -362,9 +350,9 @@ class CudaGraphModule:
                         result = self._out
                     else:
                         result = tree_map(
-                            lambda x: x.clone() if x is not None else x, self._out
+                            lambda x: x.detach().clone() if x is not None else x, self._out
                         )
-                    torch.cuda.synchronize()
+                    # torch.cuda.synchronize()
                     return result
 
 
