@@ -36,6 +36,7 @@ except ImportError:
         """Torch 2.0 compatible version of tree_leaves."""
         return tree_flatten(pytree)[0]
 
+
 class CudaGraphModule:
     """A cudagraph wrapper for PyTorch callables.
 
@@ -198,6 +199,8 @@ class CudaGraphModule:
                     )
                 _exclude_td_from_pytree().set()
 
+        functools.update_wrapper(self, module)
+
         if self._is_tensordict_module:
 
             @dispatch(source=self.in_keys, dest=self.out_keys, auto_batch_size=False)
@@ -208,7 +211,8 @@ class CudaGraphModule:
                 **kwargs: Any,
             ) -> Any:
                 if self.counter < self._warmup:
-                    torch.cuda.synchronize()
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     with self._warmup_stream_cm:
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = tensordict_out
@@ -216,9 +220,10 @@ class CudaGraphModule:
                         if self._out_matches_in is None:
                             self._out_matches_in = out is tensordict
                     self.counter += self._has_cuda
-                    torch.cuda.synchronize()
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     return out
-                elif self.counter == self._warmup:
+                elif self.counter == self._warmup - 1:
                     if tensordict.device is None:
                         tensordict.apply(self._check_device_and_grad, filter_empty=True)
                     elif tensordict.device.type != "cuda":
@@ -277,39 +282,29 @@ class CudaGraphModule:
                     else:
                         result = self._out.clone() if self._out is not None else None
                     return result
+
         else:
+
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter < self._warmup:
-                    torch.cuda.synchronize()
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     with self._warmup_stream_cm:
                         out = self.module(*args, **kwargs)
-                    torch.cuda.synchronize()
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     self.counter += self._has_cuda
                     return out
-                elif self.counter == self._warmup:
-
-                    def check_device_and_clone(x):
-                        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
-                            if x.requires_grad:
-                                raise RuntimeError(self._REQUIRES_GRAD_ERROR)
-                            if x.device is None:
-                                # Check device of leaves of tensordict
-                                x.apply(self._check_device_and_grad, filter_empty=True)
-
-                            elif x.device.type != "cuda":
-                                raise ValueError(
-                                    f"All tensors must be stored on CUDA. Got {x.device.type}."
-                                )
-
-                            return x.clone()
-                        return x
+                elif self.counter == self._warmup - 1:
 
                     self._args, self._kwargs = tree_map(
-                        check_device_and_clone, (args, kwargs)
+                        self._check_device_and_clone, (args, kwargs)
                     )
+
                     torch.cuda.synchronize()
                     this_out = self.module(*self._args, **self._kwargs)
                     torch.cuda.synchronize()
+
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
@@ -350,14 +345,31 @@ class CudaGraphModule:
                         result = self._out
                     else:
                         result = tree_map(
-                            lambda x: x.detach().clone() if x is not None else x, self._out
+                            lambda x: x.detach().clone() if x is not None else x,
+                            self._out,
                         )
                     # torch.cuda.synchronize()
                     return result
 
-
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
+
+    @classmethod
+    def _check_device_and_clone(cls, x):
+        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+            if x.requires_grad:
+                raise RuntimeError(cls._REQUIRES_GRAD_ERROR)
+            if x.device is None:
+                # Check device of leaves of tensordict
+                x.apply(cls._check_device_and_grad, filter_empty=True)
+
+            elif x.device.type != "cuda":
+                raise ValueError(
+                    f"All tensors must be stored on CUDA. Got {x.device.type}."
+                )
+
+            return x.clone()
+        return x
 
     @classmethod
     def _check_device_and_grad(cls, x):
