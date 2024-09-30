@@ -7916,7 +7916,9 @@ class TensorDictBase(MutableMapping):
             end_val = end._values_list(True, True)
         else:
             end_val = end
-        if _is_tensor_collection(type(weight)):
+        if isinstance(weight, (float, torch.Tensor)):
+            weight_val = weight
+        elif _is_tensor_collection(type(weight)):
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
@@ -7936,7 +7938,9 @@ class TensorDictBase(MutableMapping):
             end_val = end._values_list(True, True)
         else:
             end_val = end
-        if _is_tensor_collection(type(weight)):
+        if isinstance(weight, (float, torch.Tensor)):
+            weight_val = weight
+        elif _is_tensor_collection(type(weight)):
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
