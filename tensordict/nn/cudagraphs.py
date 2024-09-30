@@ -233,7 +233,6 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     if self._has_cuda:
                         torch.cuda.synchronize()
-                    print('self.module', self.module, 'out', out, 'tensordict', tensordict)
                     return out
                 else:
                     if tensordict.device is None:
