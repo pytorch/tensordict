@@ -235,13 +235,13 @@ class TensorDict(TensorDictBase):
 
     def __init__(
         self,
-        source: T | dict[str, CompatibleType] = None,
+        source: T | dict[NestedKey, CompatibleType] = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
-        non_blocking: bool = None,
+        non_blocking: bool | None = None,
         lock: bool = False,
-        **kwargs,
+        **kwargs: dict[str, Any] | None,
     ) -> None:
         if (source is not None) and kwargs:
             raise ValueError(
@@ -304,14 +304,14 @@ class TensorDict(TensorDictBase):
     @classmethod
     def _new_unsafe(
         cls,
-        source: T | dict[str, CompatibleType] = None,
+        source: T | dict[NestedKey, CompatibleType] = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
-        non_blocking: bool = None,
+        non_blocking: bool | None = None,
         lock: bool = False,
         nested: bool = True,
-        **kwargs,
+        **kwargs: dict[str, Any] | None,
     ) -> TensorDict:
         if is_dynamo_compiling():
             return TensorDict(

@@ -4003,7 +4003,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> T:
