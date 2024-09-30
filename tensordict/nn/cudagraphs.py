@@ -248,7 +248,7 @@ class CudaGraphModule:
                     self._tensordict = tensordict.copy()
 
                     torch.cuda.synchronize()
-                    this_out = self.module(self._tensordict, *args, **kwargs)
+                    this_out = self.module(tensordict, *args, **kwargs)
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
@@ -303,7 +303,6 @@ class CudaGraphModule:
                             lambda x: x.detach().clone() if x is not None else x,
                             self._out,
                         )
-                    # torch.cuda.synchronize()
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
@@ -321,13 +320,12 @@ class CudaGraphModule:
                     )
 
                     torch.cuda.synchronize()
-                    this_out = self.module(*self._args, **self._kwargs)
+                    this_out = self.module(*args, **kwargs)
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
-                    self.graph.replay()
                     self._out = out
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
