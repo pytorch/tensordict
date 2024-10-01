@@ -2404,7 +2404,7 @@ class TestGeneric:
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
 
-    @pytest.mark.skipif(not torch.cuda.is_available())
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
         s1 = torch.cuda.Stream(1)
