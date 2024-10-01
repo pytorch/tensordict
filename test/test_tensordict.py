@@ -2407,7 +2407,7 @@ class TestGeneric:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
-        s1 = torch.cuda.Stream(1)
+        s1 = torch.cuda.Stream(0)
         with torch.cuda.stream(s1):
             td = TensorDict(
                 {
