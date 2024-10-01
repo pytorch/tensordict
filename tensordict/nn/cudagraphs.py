@@ -223,7 +223,7 @@ class CudaGraphModule:
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     # We must clone the data because providing non-contiguous data will fail later when we clone
-                    tensordict = self._tensordict = tensordict.clone()
+                    tensordict = tensordict.apply(self._clone, out=tensordict)
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
@@ -309,9 +309,7 @@ class CudaGraphModule:
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
-                    args, kwargs = tree_map(
-                        self._check_device_and_clone, (args, kwargs)
-                    )
+                    args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
@@ -373,6 +371,14 @@ class CudaGraphModule:
                     f"All tensors must be stored on CUDA. Got {x.device.type}."
                 )
 
+            return x.clone()
+        return x
+
+    @classmethod
+    def _clone(cls, x):
+        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+            if x.requires_grad:
+                raise RuntimeError(cls._REQUIRES_GRAD_ERROR)
             return x.clone()
         return x
 
