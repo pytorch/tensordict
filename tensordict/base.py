@@ -2281,6 +2281,72 @@ class TensorDictBase(MutableMapping):
             entries = [self.pop(key) for key in keys]
         return self.set(out_key, torch.stack(entries, dim=dim))
 
+    def cat_from_tensordict(
+        self,
+        dim: int = 0,
+        *,
+        sorted: bool | List[NestedKey] | None = None,
+        out: torch.Tensor | None = None,
+    ) -> torch.Tensor:  # noqa: D417
+        """Concatenates all entries of a tensordict in a single tensor.
+
+        Args:
+            dim (int, optional): the dimension along which the entries should be concatenated.
+
+        Keyword Args:
+            sorted (bool or list of NestedKeys): if ``True``, the entries will be concatenated in alphabetical order.
+                If ``False`` (default), the dict order will be used. Alternatively, a list of key names can be provided
+                and the tensors will be concatenated accordingly. This incurs some overhead as the list of keys will
+                be checked against the list of leaf names in the tensordict.
+            out (torch.Tensor, optional): an optional destination tensor for the cat operation.
+
+        """
+        if sorted in (None, False):
+            tensors = list(self.values(True, True))
+        elif sorted in (True,):
+            tensors = list(self.values(True, True, sort=True))
+        else:
+            keys = unravel_key_list(sorted)
+            if set(keys) != set(self.keys(True, True)):
+                raise RuntimeError(
+                    "The provided set of keys differs from the tensordict list of keys."
+                )
+            tensors = [self.get(key) for key in keys]
+        return torch.cat(tensors, dim, out=out)
+
+    def stack_from_tensordict(
+        self,
+        dim: int = 0,
+        *,
+        sorted: bool | List[NestedKey] | None = None,
+        out: torch.Tensor | None = None,
+    ) -> torch.Tensor:  # noqa: D417
+        """Stacks all entries of a tensordict in a single tensor.
+
+        Args:
+            dim (int, optional): the dimension along which the entries should be stacked.
+
+        Keyword Args:
+            sorted (bool or list of NestedKeys): if ``True``, the entries will be stacked in alphabetical order.
+                If ``False`` (default), the dict order will be used. Alternatively, a list of key names can be provided
+                and the tensors will be stacked accordingly. This incurs some overhead as the list of keys will
+                be checked against the list of leaf names in the tensordict.
+            out (torch.Tensor, optional): an optional destination tensor for the stack operation.
+
+        """
+        if sorted in (None, False):
+            tensors = list(self.values(True, True))
+        elif sorted in (True,):
+            tensors = list(self.values(True, True, sort=True))
+        else:
+            keys = unravel_key_list(sorted)
+            if set(keys) != set(self.keys(True, True)):
+                raise RuntimeError(
+                    "The provided set of keys differs from the tensordict list of keys."
+                )
+            tensors = [self.get(key) for key in keys]
+        return torch.stack(tensors, dim, out=out)
+
     @classmethod
     def stack(cls, input, dim=0, *, out=None):
         """Stacks tensordicts into a single tensordict along the given dimension.

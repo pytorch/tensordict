@@ -282,6 +282,15 @@ class TestGeneric:
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
 
+    def test_cat_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.cat_from_tensordict(dim=1)
+        assert tensor.shape == (3, 8)
+        assert (tensor[:, :4] == 0).all()
+        assert (tensor[:, 4:] == 1).all()
+
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("num_threads", [0, 1, 2])
@@ -2403,6 +2412,15 @@ class TestGeneric:
 
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
+
+    def test_stack_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.stack_from_tensordict(dim=1)
+        assert tensor.shape == (3, 2, 4)
+        assert (tensor[:, 0] == 0).all()
+        assert (tensor[:, 1] == 1).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
