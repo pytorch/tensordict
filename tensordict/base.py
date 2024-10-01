@@ -7373,7 +7373,7 @@ class TensorDictBase(MutableMapping):
 
         """
         if self._stream is not None and self._stream != stream:
-            return RuntimeError(
+            raise RuntimeError(
                 "A stream is already associated with this TensorDict instance."
             )
         self._stream = stream
