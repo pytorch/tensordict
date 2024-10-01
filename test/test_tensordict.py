@@ -282,6 +282,15 @@ class TestGeneric:
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
 
+    def test_cat_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.cat_from_tensordict(dim=1)
+        assert tensor.shape == (3, 8)
+        assert (tensor[:, :4] == 0).all()
+        assert (tensor[:, 4:] == 1).all()
+
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("num_threads", [0, 1, 2])
@@ -2404,6 +2413,15 @@ class TestGeneric:
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
 
+    def test_stack_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.stack_from_tensordict(dim=1)
+        assert tensor.shape == (3, 2, 4)
+        assert (tensor[:, 0] == 0).all()
+        assert (tensor[:, 1] == 1).all()
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
@@ -3578,6 +3596,25 @@ class TestTensorDicts(TestTensorDictsBase):
             value.dtype is torch.int
             for value in tdint.values(True, True, is_leaf=is_leaf)
         )
+
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_cat_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            a = td.pop("a")
+            td["a"] = a.unsqueeze(-1)
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.cat([td["a"], td["a_bis"]], -1)
+            td.cat_tensors("a", "a_bis", out_key="cat", dim=-1, **kwargs)
+            assert (td["cat"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
 
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
@@ -6001,6 +6038,23 @@ class TestTensorDicts(TestTensorDictsBase):
         assert stacked_td.batch_size == td.batch_size
         for key in ("a", "b", "c"):
             assert (stacked_td[key] == td[key]).all()
+
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_stack_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.stack([td["a"], td["a_bis"]], -1)
+            td.stack_tensors("a", "a_bis", out_key="stack", dim=-1, **kwargs)
+            assert (td["stack"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
 
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
