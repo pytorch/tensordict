@@ -206,6 +206,7 @@ class TensorDictBase(MutableMapping):
     _cache: bool = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
+    _stream: torch.cuda.Stream | None = None
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -7360,6 +7361,28 @@ class TensorDictBase(MutableMapping):
                 else:
                     out = torch.cat(imaplist, dim)
             return out
+
+    # Stream
+    def record_stream(self, stream: torch.cuda.Stream):
+        """Marks the tensordict as having been used by this stream.
+
+        When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
+        queued on stream at the time of deallocation is complete.
+
+        See :meth:`~torch.Tensor.record_stream` for more information.`
+
+        """
+        if self._stream is not None and self._stream != stream:
+            raise RuntimeError(
+                "A stream is already associated with this TensorDict instance."
+            )
+        self._stream = stream
+
+        def record(tensor):
+            tensor.record_stream(stream)
+
+        self._fast_apply(record, filter_empty=True)
+        return self
 
     # point-wise arithmetic ops
     def __add__(self, other: TensorDictBase | torch.Tensor) -> T:

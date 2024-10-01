@@ -2422,6 +2422,24 @@ class TestGeneric:
         assert (tensor[:, 0] == 0).all()
         assert (tensor[:, 1] == 1).all()
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_record_stream(self):
+        s0 = torch.cuda.Stream(0)
+        s1 = torch.cuda.Stream(0)
+        with torch.cuda.stream(s1):
+            td = TensorDict(
+                {
+                    "a": torch.randn(3, device="cuda:0"),
+                    ("b", "c"): torch.randn(3, device="cuda:0"),
+                }
+            )
+            td.record_stream(s1)
+        with pytest.raises(
+            RuntimeError,
+            match="A stream is already associated with this TensorDict instance",
+        ):
+            td.record_stream(s0)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
