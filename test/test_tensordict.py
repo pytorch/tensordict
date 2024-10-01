@@ -2404,6 +2404,24 @@ class TestGeneric:
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
 
+    @pytest.mark.skipif(not torch.cuda.is_available())
+    def test_record_stream(self):
+        s0 = torch.cuda.Stream(0)
+        s1 = torch.cuda.Stream(1)
+        with torch.cuda.stream(s1):
+            td = TensorDict(
+                {
+                    "a": torch.randn(3, device="cuda:0"),
+                    ("b", "c"): torch.randn(3, device="cuda:0"),
+                }
+            )
+            td.record_stream(s1)
+        with pytest.raises(
+            RuntimeError,
+            match="A stream is already associated with this TensorDict instance",
+        ):
+            td.record_stream(s0)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
