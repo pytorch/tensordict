@@ -2213,6 +2213,74 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    def cat_tensors(
+        self,
+        *keys: NestedKey,
+        out_key: NestedKey,
+        dim: int = 0,
+        keep_entries: bool = False,
+    ) -> T:
+        """Concatenates entries into a new entry and possibly remove the original values.
+
+        Args:
+            keys (sequence of NestedKey): entries to concatenate.
+
+        Keyword Argument:
+            out_key (NestedKey): new key name for the concatenated inputs.
+            keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
+                Defaults to ``False``.
+            dim (int, optional): the dimension along which the concatenation must occur.
+                Defaults to ``0``.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(a=torch.zeros(1), b=torch.ones(1))
+            >>> td.cat_tensors("a", "b", out_key="c")
+            >>> assert "a" not in td
+            >>> assert (td["c"] == torch.tensor([0, 1])).all()
+
+        """
+        if keep_entries:
+            entries = [self.get(key) for key in keys]
+        else:
+            entries = [self.pop(key) for key in keys]
+        return self.set(out_key, torch.cat(entries, dim=dim))
+
+    def stack_tensors(
+        self,
+        *keys: NestedKey,
+        out_key: NestedKey,
+        dim: int = 0,
+        keep_entries: bool = False,
+    ) -> T:
+        """Stacks entries into a new entry and possibly remove the original values.
+
+        Args:
+            keys (sequence of NestedKey): entries to stack.
+
+        Keyword Argument:
+            out_key (NestedKey): new key name for the stacked inputs.
+            keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
+                Defaults to ``False``.
+            dim (int, optional): the dimension along which the stack must occur.
+                Defaults to ``0``.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+            >>> td.stack_tensors("a", "b", out_key="c")
+            >>> assert "a" not in td
+            >>> assert (td["c"] == torch.tensor([0, 1])).all()
+
+        """
+        if keep_entries:
+            entries = [self.get(key) for key in keys]
+        else:
+            entries = [self.pop(key) for key in keys]
+        return self.set(out_key, torch.stack(entries, dim=dim))
+
     @classmethod
     def stack(cls, input, dim=0, *, out=None):
         """Stacks tensordicts into a single tensordict along the given dimension.
