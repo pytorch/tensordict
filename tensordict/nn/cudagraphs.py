@@ -245,7 +245,9 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
-                    tensordict = self._tensordict = tensordict.apply(self._clone, out=tensordict)
+                    tensordict = self._tensordict = tensordict.apply(
+                        self._clone, out=tensordict
+                    )
                     if tensordict_out is not None:
                         td_out_save = tensordict_out.copy()
                         kwargs["tensordict_out"] = tensordict_out
