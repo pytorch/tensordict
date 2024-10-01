@@ -3561,6 +3561,25 @@ class TestTensorDicts(TestTensorDictsBase):
             for value in tdint.values(True, True, is_leaf=is_leaf)
         )
 
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_cat_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            a = td.pop("a")
+            td["a"] = a.unsqueeze(-1)
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.cat([td["a"], td["a_bis"]], -1)
+            td.cat_tensors("a", "a_bis", out_key="cat", dim=-1, **kwargs)
+            assert (td["cat"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
+
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
     def test_chunk(self, td_name, device, dim, chunks):
@@ -5983,6 +6002,23 @@ class TestTensorDicts(TestTensorDictsBase):
         assert stacked_td.batch_size == td.batch_size
         for key in ("a", "b", "c"):
             assert (stacked_td[key] == td[key]).all()
+
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_stack_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.stack([td["a"], td["a_bis"]], -1)
+            td.stack_tensors("a", "a_bis", out_key="stack", dim=-1, **kwargs)
+            assert (td["stack"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
 
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
