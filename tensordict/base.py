@@ -10346,6 +10346,20 @@ class TensorDictBase(MutableMapping):
         untyped_storage = storage_cast.untyped_storage()
 
         def set_(x):
+            if x.is_nested:
+                if x.layout != torch.jagged:
+                    raise RuntimeError(
+                        "to(device) with nested tensors that do not have a jagged layout is not implemented yet. "
+                        "Please raise an issue on GitHub."
+                    )
+                values = x._values
+                lengths = x._lengths
+                offsets = x._offsets
+                return torch.nested.nested_tensor_from_jagged(
+                    set_(values),
+                    offsets=set_(offsets),
+                    lengths=set_(lengths) if lengths is not None else None,
+                )
             storage_offset = x.storage_offset()
             stride = x.stride()
             return torch.empty_like(x, device=device).set_(
