@@ -1541,6 +1541,9 @@ def assert_close(
             continue
         elif not isinstance(input1, torch.Tensor):
             continue
+        if input1.is_nested:
+            input1 = input1._base
+            input2 = input2._base
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 

@@ -42,6 +42,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._lazy import _CustomOpTensorDict
+from tensordict._reductions import _reduce_td
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -7846,6 +7847,7 @@ class TestLazyStackedTensorDict:
             batch_size=[1, 3],
         )
         td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+
         if not use_file:
             td_c = td.consolidate()
             assert td_c.device == device
@@ -7858,6 +7860,7 @@ class TestLazyStackedTensorDict:
         assert type(td_c) == type(td)  # noqa
         assert (td.to(td_c.device) == td_c).all()
         assert td_c["d"] == [["a string!"] * 3]
+
         storage = td_c._consolidated["storage"]
         storage *= 0
         assert (td.to(td_c.device) != td_c).any()
@@ -7880,6 +7883,60 @@ class TestLazyStackedTensorDict:
 
         torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
         assert tdload.is_consolidated()
+
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate_njt(self, device, use_file, tmpdir):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(4, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(4, 3).clone()},
+                "d": "a string!",
+                "njt": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10), offsets=torch.tensor([0, 2, 5, 8, 10])
+                ),
+                "njt_lengths": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10),
+                    offsets=torch.tensor([0, 2, 5, 8, 10]),
+                    lengths=torch.tensor([2, 3, 3, 2]),
+                ),
+            },
+            device=device,
+            batch_size=[4],
+        )
+
+        if not use_file:
+            td_c = td.consolidate()
+            assert td_c.device == device
+        else:
+            filename = Path(tmpdir) / "file.mmap"
+            td_c = td.consolidate(filename=filename)
+            assert td_c.device == torch.device("cpu")
+            assert assert_allclose_td(TensorDict.from_consolidated(filename), td_c)
+        assert hasattr(td_c, "_consolidated")
+        assert type(td_c) == type(td)  # noqa
+        assert td_c["d"] == "a string!"
+        for _td, _tdc in zip(td.to(td_c.device).unbind(0), td_c.unbind(0)):
+            assert (_td == _tdc).all()
+
+        tdload_make, tdload_data = _reduce_td(td)
+        tdload = tdload_make(*tdload_data)
+        assert (td == tdload).all()
+
+        td_c = td.consolidate()
+        tdload_make, tdload_data = _reduce_td(td_c)
+        tdload = tdload_make(*tdload_data)
+        assert assert_allclose_td(td, tdload)
+
+        def check_id(a, b):
+            if isinstance(a, (torch.Size, str)):
+                assert a == b
+            if isinstance(a, torch.Tensor):
+                assert (a == b).all()
+
+        torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
+        assert tdload.is_consolidated()
+        assert tdload["njt_lengths"]._lengths is not None
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
     def test_consolidate_to_device(self):
