@@ -21,7 +21,7 @@ from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy, deepcopy
-from functools import partial, wraps
+from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import Thread
@@ -3432,8 +3432,17 @@ class TensorDictBase(MutableMapping):
         flat_size = []
         start = 0
 
-        def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
+        def add_single_value(
+            value,
+            key: str,
+            metadata_dict: dict,
+            dtype: torch.dtype,
+            shape: torch.Size,
+            total_key_str: NestedKey,
+        ):
+            nonlocal flat_size
             nonlocal start
+            nonlocal flat_key_values
             n = value.element_size() * value.numel()
             if need_padding:
                 pad = n % 8
@@ -3453,14 +3462,21 @@ class TensorDictBase(MutableMapping):
                     pad,
                 )
             start = stop
+            flat_key_values[total_key_str] = value
+
+        main_queue = queue.Queue()
+        njt_vals_queue = queue.Queue()
+        njt_offsets_queue = queue.Queue()
+        njt_lengths_queue = queue.Queue()
 
         def assign(
             key,
             value,
             track_key=(),
             metadata_dict=metadata_dict,
-            flat_size=flat_size,
         ):
+            nonlocal flat_size
+
             total_key = key if isinstance(key, tuple) else (key,)
             total_key = track_key + total_key
             cls = type(value)
@@ -3482,12 +3498,20 @@ class TensorDictBase(MutableMapping):
                         "leaves": {},
                         "cls_metadata": value._reduce_get_metadata(),
                     }
-                local_assign = partial(
-                    assign,
-                    track_key=total_key,
-                    metadata_dict=metadata_dict_key,
-                    flat_size=flat_size,
-                )
+
+                def local_assign(
+                    key,
+                    value,
+                    total_key_=total_key,
+                    metadata_dict_key_=metadata_dict_key,
+                ):
+                    return assign(
+                        key,
+                        value,
+                        track_key=total_key_,
+                        metadata_dict=metadata_dict_key_,
+                    )
+
                 value._fast_apply(
                     local_assign,
                     named=True,
@@ -3513,39 +3537,38 @@ class TensorDictBase(MutableMapping):
                     # We will rely on the fact that the writing order is preserved in python dict
                     # (since python 3.7). Later, we will read the NJT then the NJT offset in that order
                     # to do the allocation.
-                    flat_key_values[_prefix_last_key(total_key, "<NJT>")] = values
-                    add_single_value(
-                        values,
-                        _prefix_last_key(key, "<NJT>"),
-                        metadata_dict,
-                        values.dtype,
-                        shape,
-                        flat_size,
+                    njt_vals_queue.put(
+                        (
+                            values,
+                            "<NJT>" + key,
+                            metadata_dict,
+                            values.dtype,
+                            shape,
+                            _prefix_last_key(total_key, "<NJT>"),
+                        )
                     )
                     # Lengths
                     if lengths is not None:
-                        flat_key_values[
-                            _prefix_last_key(total_key, "<NJT_LENGTHS>")
-                        ] = lengths
-                        add_single_value(
-                            lengths,
-                            _prefix_last_key(key, "<NJT_LENGTHS>"),
-                            metadata_dict,
-                            lengths.dtype,
-                            lengths.shape,
-                            flat_size,
+                        njt_lengths_queue.put(
+                            (
+                                lengths,
+                                "<NJT_LENGTHS>" + key,
+                                metadata_dict,
+                                lengths.dtype,
+                                lengths.shape,
+                                _prefix_last_key(total_key, "<NJT_LENGTHS>"),
+                            )
                         )
                     # Offsets
-                    flat_key_values[_prefix_last_key(total_key, "<NJT_OFFSETS>")] = (
-                        offsets
-                    )
-                    add_single_value(
-                        offsets,
-                        _prefix_last_key(key, "<NJT_OFFSETS>"),
-                        metadata_dict,
-                        offsets.dtype,
-                        offsets.shape,
-                        flat_size,
+                    njt_offsets_queue.put(
+                        (
+                            offsets,
+                            "<NJT_OFFSETS>" + key,
+                            metadata_dict,
+                            offsets.dtype,
+                            offsets.shape,
+                            _prefix_last_key(total_key, "<NJT_OFFSETS>"),
+                        )
                     )
 
                 else:
@@ -3553,15 +3576,15 @@ class TensorDictBase(MutableMapping):
                         "NST is not supported, please use layout=torch.jagged when building the nested tensor."
                     )
                 return
-            flat_key_values[total_key] = value
-            add_single_value(
-                value,
-                key,
-                metadata_dict,
-                value.dtype,
-                value.shape,
-                # value.device,
-                flat_size,
+            main_queue.put(
+                (
+                    value,
+                    key,
+                    metadata_dict,
+                    value.dtype,
+                    value.shape,
+                    total_key,
+                )
             )
 
         self._fast_apply(
@@ -3572,6 +3595,19 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             filter_empty=True,
         )
+
+        while not main_queue.empty():
+            add_single_value(*main_queue.get())
+        if not njt_vals_queue.empty():
+            metadata_dict["njt_values_start"] = start
+            while not njt_vals_queue.empty():
+                add_single_value(*njt_vals_queue.get())
+            metadata_dict["njt_lengths_start"] = start
+            while not njt_lengths_queue.empty():
+                add_single_value(*njt_lengths_queue.get())
+            metadata_dict["njt_offsets_start"] = start
+            while not njt_offsets_queue.empty():
+                add_single_value(*njt_offsets_queue.get())
         return metadata_dict, flat_key_values, flat_size, need_padding
 
     def consolidate(
@@ -3832,6 +3868,10 @@ class TensorDictBase(MutableMapping):
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
+            _nt_values_and_names = queue.Queue()
+            _nt_lengths = queue.Queue()
+            _nt_offsets = queue.Queue()
+
             for v, (k, oldv) in _zip_strict(
                 storage.split(flat_size), list(flat_dict.items())
             ):
@@ -3839,28 +3879,28 @@ class TensorDictBase(MutableMapping):
                     flat_dict[k] = view_old_as_new(v, oldv)
                 elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
-                    _nested_values = view_old_as_new(v, oldv)
-                    nt_lengths = None
+                    newk = k[:-1] + (k[-1].replace("<NJT>", ""),)
+                    _nt_values_and_names.put((view_old_as_new(v, oldv), newk))
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_LENGTHS>"):
-                    nt_lengths = view_old_as_new(v, oldv)
+                    _nt_lengths.put(view_old_as_new(v, oldv))
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_OFFSETS>"):
-                    newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
-                    nt_offsets = view_old_as_new(v, oldv)
+                    _nt_offsets.put(view_old_as_new(v, oldv))
+                    if _nt_lengths.qsize() < _nt_offsets.qsize():
+                        _nt_lengths.put(None)
                     del flat_dict[k]
-
-                    flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
-                        _nested_values,
-                        offsets=nt_offsets,
-                        lengths=nt_lengths,
-                    )
-                    # delete the nested value to make sure that if there was an
-                    # ordering mismatch we wouldn't be looking at the value key of
-                    # another nested tensor.
-                    del _nested_values
                 else:
                     flat_dict[k] = view_old_as_new(v, oldv)
+            while not _nt_values_and_names.empty():
+                vals, newk = _nt_values_and_names.get()
+                lengths = _nt_lengths.get()
+                offsets = _nt_offsets.get()
+                flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
+                    vals,
+                    offsets=offsets,
+                    lengths=lengths,
+                )
 
         def assign_val(key, val):
             if isinstance(key, str):
@@ -3889,9 +3929,6 @@ class TensorDictBase(MutableMapping):
             if use_buffer:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
-            # with open(Path(filename).with_suffix(".json"), "wb") as f:
-            #     metadata_dict["size"] = filesize
-            #     f.write(json.dumps(metadata_dict))
         return result
 
     @classmethod
