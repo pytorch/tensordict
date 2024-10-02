@@ -7864,11 +7864,22 @@ class TestLazyStackedTensorDict:
 
         filename = Path(tmpdir) / "file.pkl"
         torch.save(td, filename)
-        assert (td == torch.load(filename, weights_only=False)).all()
+        tdload = torch.load(filename, weights_only=False)
+        assert (td == tdload).all()
 
         td_c = td.consolidate()
         torch.save(td_c, filename)
-        assert (td == torch.load(filename, weights_only=False)).all()
+        tdload = torch.load(filename, weights_only=False)
+        assert (td == tdload).all()
+
+        def check_id(a, b):
+            if isinstance(a, (torch.Size, str)):
+                assert a == b
+            if isinstance(a, torch.Tensor):
+                assert (a == b).all()
+
+        torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
+        assert tdload.is_consolidated()
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
     def test_consolidate_to_device(self):
