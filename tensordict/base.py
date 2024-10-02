@@ -10236,16 +10236,19 @@ class TensorDictBase(MutableMapping):
         if device is not None and dtype is None and device == self.device:
             return result
 
+        if self.is_consolidated() and dtype is None:
+            return self._to_consolidated(
+                device=device,
+                pin_memory=non_blocking_pin,
+                num_threads=num_threads,
+                non_blocking=non_blocking,
+            )
+
         if non_blocking is None:
             sub_non_blocking = True
             non_blocking = False
         else:
             sub_non_blocking = non_blocking
-
-        if self.is_consolidated() and dtype is None:
-            return self._to_consolidated(
-                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
-            )
 
         if convert_to_format is not None:
 
@@ -10296,7 +10299,7 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads):
+    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10322,6 +10325,16 @@ class TensorDictBase(MutableMapping):
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
             result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
+        if not non_blocking:
+            if device.type == "cuda":
+                cuda_device = device
+            elif storage.device.type == "cuda":
+                cuda_device = device
+            else:
+                cuda_device = None
+            if cuda_device is not None:
+                torch.cuda.current_stream(cuda_device).synchronize()
+
         return result
 
     def _sync_all(self):
