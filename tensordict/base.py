@@ -3505,7 +3505,10 @@ class TensorDictBase(MutableMapping):
                     values = value.values()
                     shape = [v if isinstance(v, int) else -1 for v in values.shape]
                     # Get the offsets
-                    offsets = value.offsets()
+                    offsets = value._offsets
+                    # Get the lengths
+                    lengths = value._lengths
+
                     # Now we're saving the two tensors
                     # We will rely on the fact that the writing order is preserved in python dict
                     # (since python 3.7). Later, we will read the NJT then the NJT offset in that order
@@ -3517,9 +3520,22 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         values.dtype,
                         shape,
-                        # values.device,
                         flat_size,
                     )
+                    # Lengths
+                    if lengths is not None:
+                        flat_key_values[
+                            _prefix_last_key(total_key, "<NJT_LENGTHS>")
+                        ] = lengths
+                        add_single_value(
+                            lengths,
+                            _prefix_last_key(key, "<NJT_LENGTHS>"),
+                            metadata_dict,
+                            lengths.dtype,
+                            lengths.shape,
+                            flat_size,
+                        )
+                    # Offsets
                     flat_key_values[_prefix_last_key(total_key, "<NJT_OFFSETS>")] = (
                         offsets
                     )
@@ -3529,9 +3545,9 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
-                        # offsets.device,
                         flat_size,
                     )
+
                 else:
                     raise NotImplementedError(
                         "NST is not supported, please use layout=torch.jagged when building the nested tensor."
@@ -3700,12 +3716,14 @@ class TensorDictBase(MutableMapping):
         if num_threads > 0:
 
             def assign(
+                *,
                 k,
                 v,
                 start,
                 stop,
                 njts,
                 njts_offsets,
+                njts_lengths,
                 storage=storage,
                 non_blocking=non_blocking,
             ):
@@ -3725,12 +3743,15 @@ class TensorDictBase(MutableMapping):
                 new_v = new_v.view(shape)
                 if k[-1].startswith("<NJT>"):
                     njts[k] = new_v
+                elif k[-1].startswith("<NJT_LENGTHS>"):
+                    njts_lengths[k] = new_v
                 elif k[-1].startswith("<NJT_OFFSETS>"):
                     njts_offsets[k] = new_v
                 flat_dict[k] = new_v
 
             njts = {}
             njts_offsets = {}
+            njts_lengths = {}
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
@@ -3738,12 +3759,13 @@ class TensorDictBase(MutableMapping):
                     r.append(
                         executor.submit(
                             assign,
-                            k,
-                            v,
-                            offsets[i],
-                            offsets[i + 1],
-                            njts,
-                            njts_offsets,
+                            k=k,
+                            v=v,
+                            start=offsets[i],
+                            stop=offsets[i + 1],
+                            njts=njts,
+                            njts_offsets=njts_offsets,
+                            njts_lengths=njts_lengths,
                         )
                     )
                 if not return_early:
@@ -3756,22 +3778,29 @@ class TensorDictBase(MutableMapping):
             else:
                 for i, (k, v) in enumerate(flat_dict.items()):
                     assign(
-                        k,
-                        v,
-                        offsets[i],
-                        offsets[i + 1],
-                        njts,
-                        njts_offsets,
+                        k=k,
+                        v=v,
+                        start=offsets[i],
+                        stop=offsets[i + 1],
+                        njts=njts,
+                        njts_offsets=njts_offsets,
+                        njts_lengths=njts_lengths,
                     )
             for njt_key, njt_val in njts.items():
                 njt_key_offset = njt_key[:-1] + (
                     njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
                 )
+                njt_key_lengths = njt_key[:-1] + (
+                    njt_key[-1].replace("<NJT>", "<NJT_LENGTHS>"),
+                )
                 val = torch.nested.nested_tensor_from_jagged(
-                    njt_val, flat_dict[njt_key_offset]
+                    njt_val,
+                    offsets=flat_dict[njt_key_offset],
+                    lengths=flat_dict.get(njt_key_lengths),
                 )
                 del flat_dict[njt_key]
                 del flat_dict[njt_key_offset]
+                flat_dict.pop(njt_key_lengths, None)
                 newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
                 flat_dict[newkey] = val
 
@@ -3811,13 +3840,20 @@ class TensorDictBase(MutableMapping):
                 elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
                     _nested_values = view_old_as_new(v, oldv)
+                    nt_lengths = None
+                    del flat_dict[k]
+                elif k[-1].startswith("<NJT_LENGTHS>"):
+                    nt_lengths = view_old_as_new(v, oldv)
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_OFFSETS>"):
                     newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
                     nt_offsets = view_old_as_new(v, oldv)
                     del flat_dict[k]
+
                     flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
-                        _nested_values, nt_offsets
+                        _nested_values,
+                        offsets=nt_offsets,
+                        lengths=nt_lengths,
                     )
                     # delete the nested value to make sure that if there was an
                     # ordering mismatch we wouldn't be looking at the value key of
@@ -10236,16 +10272,19 @@ class TensorDictBase(MutableMapping):
         if device is not None and dtype is None and device == self.device:
             return result
 
+        if self.is_consolidated() and dtype is None:
+            return self._to_consolidated(
+                device=device,
+                pin_memory=non_blocking_pin,
+                num_threads=num_threads,
+                non_blocking=non_blocking,
+            )
+
         if non_blocking is None:
             sub_non_blocking = True
             non_blocking = False
         else:
             sub_non_blocking = non_blocking
-
-        if self.is_consolidated() and dtype is None:
-            return self._to_consolidated(
-                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
-            )
 
         if convert_to_format is not None:
 
@@ -10296,7 +10335,7 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads):
+    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10322,6 +10361,16 @@ class TensorDictBase(MutableMapping):
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
             result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
+        if not non_blocking:
+            if device.type == "cuda":
+                cuda_device = device
+            elif storage.device.type == "cuda":
+                cuda_device = device
+            else:
+                cuda_device = None
+            if cuda_device is not None:
+                torch.cuda.current_stream(cuda_device).synchronize()
+
         return result
 
     def _sync_all(self):
