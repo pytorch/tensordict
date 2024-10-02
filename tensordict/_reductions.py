@@ -69,11 +69,12 @@ def _rebuild_tensordict_files_consolidated(
     storage,
 ):
     def from_metadata(metadata=metadata, prefix=None):
+        consolidated = {"storage": storage, "metadata": metadata}
         metadata = dict(metadata)
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
-        cls_metadata = metadata.pop("cls_metadata")
+        cls_metadata = dict(metadata.pop("cls_metadata"))
         is_locked = cls_metadata.pop("is_locked", False)
         # size can be there to tell what the size of the file is
         _ = metadata.pop("size", None)
@@ -106,6 +107,7 @@ def _rebuild_tensordict_files_consolidated(
         result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()
+        result._consolidated = consolidated
         return result
 
     return from_metadata()
