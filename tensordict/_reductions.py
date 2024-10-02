@@ -48,6 +48,7 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = 
                     nested_values, offsets=offsets, lengths=nested_lengths
                 )
                 del nested_values
+                del nested_lengths
             else:
                 value = flat_key_values[total_key]
             d[key] = value
