@@ -2203,14 +2203,22 @@ class TensorDict(TensorDictBase):
             )
         return all(share_list) and len(share_list) > 0
 
-    def _check_device(self) -> None:
-        devices = {value.device for value in self.values()}
-        if self.device is not None and len(devices) >= 1 and devices != {self.device}:
-            raise RuntimeError(
-                f"TensorDict.device is {self._device}, but elements have "
-                f"device values {devices}. If TensorDict.device is set then "
-                "all elements must share that device."
-            )
+    def _check_device(self, *, raise_exception: bool = True) -> None | bool:
+        val = True
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                val &= value._check_device(raise_exception=raise_exception)
+                if not val:
+                    return False
+            val &= self.device is None or (self.device == value.device)
+            if not val:
+                if raise_exception:
+                    raise RuntimeError(
+                        f"devices are incongruent, got value with device {value.device}, "
+                        f"-- expected {self.device}."
+                    )
+                return False
+        return val
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
