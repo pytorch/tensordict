@@ -9374,6 +9374,28 @@ class TestLock:
                 ids.add(id(td))
         assert count == expected, {id(ref()) for ref in weakref_list}
 
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() and not torch.mps.is_available(),
+        reason="a device is required.",
+    )
+    def test_cached_data_lock_device(self):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "mps:0")
+        td = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.ones(1)), device="cpu"), no_convert=True
+        )
+        dataptr = td.data.data_ptr()
+        assert (td.to(device).data.data_ptr() != dataptr).all()
+        original_td = TensorDict(a=nn.Parameter(torch.ones(1)), device="cpu")
+        td = TensorDictParams(original_td, no_convert=True)
+        td.lock_()
+        dataptr = td.data.data_ptr()
+        tddevice = nn.ModuleList([td]).to(device)[0]
+        assert td.device == device
+        assert original_td.device == torch.device("cpu")
+        assert (td.data.data_ptr() != dataptr).all()
+        assert tddevice.device == device
+        assert (tddevice.data.data_ptr() != dataptr).all()
+
     def test_lock_stack(self):
         td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td1 = td0.clone()

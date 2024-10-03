@@ -865,6 +865,24 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    def auto_device_(self) -> T:
+        """Automatically sets the device, if it is unique.
+
+        Returns: self with the edited ``device`` attribute.
+
+        """
+        devices = {
+            value.device
+            for value in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            if value.device is not None
+        }
+        if len(devices) == 1:
+            self.clear_device_()
+            self._set_device(list(devices)[0])
+        else:
+            self.clear_device_()
+        return self
+
     @classmethod
     @abc.abstractmethod
     def from_dict(
@@ -3112,6 +3130,13 @@ class TensorDictBase(MutableMapping):
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value.clear_device_()
+        return self
+
+    def _set_device(self, device: torch.device) -> T:
+        self._device = device
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                value._set_device(device=device)
         return self
 
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
@@ -8870,16 +8895,23 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T: ...
 
-    def _check_batch_size(self) -> None:
+    def _check_batch_size(self, *, raise_exception: bool = True) -> None | bool:
         batch_dims = self.batch_dims
+        val = True
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                value._check_batch_size()
-            if _shape(value)[:batch_dims] != self.batch_size:
-                raise RuntimeError(
-                    f"batch_size are incongruent, got value with shape {_shape(value)}, "
-                    f"-- expected {self.batch_size}"
-                )
+                val &= value._check_batch_size(raise_exception=raise_exception)
+                if not val:
+                    return False
+            val &= _shape(value)[:batch_dims] != self.batch_size
+            if not val:
+                if raise_exception:
+                    raise RuntimeError(
+                        f"batch_size are incongruent, got value with shape {_shape(value)}, "
+                        f"-- expected {self.batch_size}"
+                    )
+                return False
+        return val
 
     @abc.abstractmethod
     def _check_is_shared(self) -> bool: ...
@@ -8894,7 +8926,7 @@ class TensorDictBase(MutableMapping):
                 )
 
     @abc.abstractmethod
-    def _check_device(self) -> None: ...
+    def _check_device(self, *, raise_exception: bool = True) -> None | bool: ...
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
