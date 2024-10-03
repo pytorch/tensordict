@@ -192,8 +192,6 @@ class _RecordDeviceTransfer:
 
 _device_recorder = _RecordDeviceTransfer()
 
-_TENSOR_COLLECTION_MEMO = {}
-
 
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
@@ -865,6 +863,24 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    def auto_device_(self) -> T:
+        """Automatically sets the device, if it is unique.
+
+        Returns: self with the edited ``device`` attribute.
+
+        """
+        devices = {
+            value.device
+            for value in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            if value.device is not None
+        }
+        if len(devices) == 1:
+            self.clear_device_()
+            self._set_device(list(devices)[0])
+        else:
+            self.clear_device_()
+        return self
+
     @classmethod
     @abc.abstractmethod
     def from_dict(
@@ -1502,6 +1518,68 @@ class TensorDictBase(MutableMapping):
     def grad(self):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
+
+    def data_ptr(self, *, storage: bool = False):
+        """Returns the data_ptr of the tensordict leaves.
+
+        This can be useful to check if two tensordicts share the same ``data_ptr()``.
+
+        Keyword Args:
+            storage (bool, optional): if ``True``, `tensor.untyped_storage().data_ptr()` will be called
+                instead. Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+            >>> assert (td0.data_ptr() == td.data_ptr()).all()
+
+        .. note:: :class:`~tensordict.LazyStackedTensorDict` instances will be displayed as nested tensordicts to
+            reflect the true ``data_ptr()`` of their leaves:
+
+                >>> td0 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td1 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td = TensorDict.lazy_stack([td0, td1])
+                >>> td.data_ptr()
+                TensorDict(
+                    fields={
+                        0: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        1: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)
+
+        """
+        if storage:
+
+            def func(x):
+                return x.untyped_storage().data_ptr()
+
+        else:
+
+            def func(x):
+                return x.data_ptr()
+
+        from tensordict import TensorDict
+
+        return TensorDict(
+            {
+                key: func(val)
+                for key, val in self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            },
+            device=torch.device("cpu"),
+        )
 
     @grad.setter
     def grad(self, grad):
@@ -3050,6 +3128,13 @@ class TensorDictBase(MutableMapping):
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value.clear_device_()
+        return self
+
+    def _set_device(self, device: torch.device) -> T:
+        self._device = device
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                value._set_device(device=device)
         return self
 
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
@@ -8808,16 +8893,23 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T: ...
 
-    def _check_batch_size(self) -> None:
+    def _check_batch_size(self, *, raise_exception: bool = True) -> None | bool:
         batch_dims = self.batch_dims
+        val = True
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                value._check_batch_size()
-            if _shape(value)[:batch_dims] != self.batch_size:
-                raise RuntimeError(
-                    f"batch_size are incongruent, got value with shape {_shape(value)}, "
-                    f"-- expected {self.batch_size}"
-                )
+                val &= value._check_batch_size(raise_exception=raise_exception)
+                if not val:
+                    return False
+            val &= _shape(value)[:batch_dims] == self.batch_size
+            if not val:
+                if raise_exception:
+                    raise RuntimeError(
+                        f"batch_size are incongruent, got value with shape {_shape(value)}, "
+                        f"-- expected {self.batch_size}"
+                    )
+                return False
+        return val
 
     @abc.abstractmethod
     def _check_is_shared(self) -> bool: ...
@@ -8832,7 +8924,7 @@ class TensorDictBase(MutableMapping):
                 )
 
     @abc.abstractmethod
-    def _check_device(self) -> None: ...
+    def _check_device(self, *, raise_exception: bool = True) -> None | bool: ...
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
@@ -10484,16 +10576,7 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    out = _TENSOR_COLLECTION_MEMO.get(datatype)
-    if out is None:
-        if issubclass(datatype, TensorDictBase):
-            out = True
-        elif _is_tensorclass(datatype):
-            out = True
-        else:
-            out = False
-        _TENSOR_COLLECTION_MEMO[datatype] = out
-    return out
+    return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
 
 
 def is_tensor_collection(datatype: type | Any) -> bool:

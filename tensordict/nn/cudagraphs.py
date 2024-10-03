@@ -222,6 +222,8 @@ class CudaGraphModule:
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
+                    # We must clone the data because providing non-contiguous data will fail later when we clone
+                    tensordict.apply(self._clone, out=tensordict)
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
@@ -243,6 +245,7 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
+                    tensordict.apply(self._clone, out=tensordict)
                     self._tensordict = tensordict.copy()
                     if tensordict_out is not None:
                         td_out_save = tensordict_out.copy()
@@ -307,6 +310,7 @@ class CudaGraphModule:
                     return result
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
+                    args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
@@ -316,7 +320,7 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
-                    self._args, self._kwargs = tree_map(
+                    args, kwargs = self._args, self._kwargs = tree_map(
                         self._check_device_and_clone, (args, kwargs)
                     )
 
@@ -368,6 +372,14 @@ class CudaGraphModule:
                     f"All tensors must be stored on CUDA. Got {x.device.type}."
                 )
 
+            return x.clone()
+        return x
+
+    @classmethod
+    def _clone(cls, x):
+        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+            if x.requires_grad:
+                raise RuntimeError(cls._REQUIRES_GRAD_ERROR)
             return x.clone()
         return x
 
