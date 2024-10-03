@@ -125,7 +125,7 @@ _METHOD_FROM_TD = [
     "memmap_refresh_",
     "save",
 ]
-# Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+# Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_check_dim_name",
     "_check_unlock",
@@ -144,6 +144,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_propagate_lock",
     "_propagate_unlock",
     "_values_list",
+    "data_ptr",
     "dim",
     "is_empty",
     "is_memmap",
@@ -201,6 +202,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "atan",
     "atan_",
     "auto_batch_size_",
+    "auto_device_",
     "ceil",
     "ceil_",
     "chunk",
