@@ -9375,7 +9375,7 @@ class TestLock:
         assert count == expected, {id(ref()) for ref in weakref_list}
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not torch.mps.is_available(),
+        not torch.cuda.is_available() and not torch.backends.mps.is_available(),
         reason="a device is required.",
     )
     def test_cached_data_lock_device(self):
