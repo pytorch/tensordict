@@ -223,7 +223,7 @@ class CudaGraphModule:
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     # We must clone the data because providing non-contiguous data will fail later when we clone
-                    tensordict = tensordict.apply(self._clone, out=tensordict)
+                    tensordict.apply(self._clone, out=tensordict)
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
@@ -245,9 +245,10 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
-                    tensordict = self._tensordict = tensordict.apply(
+                    tensordict.apply(
                         self._clone, out=tensordict
                     )
+                    self._tensordict = tensordict.copy()
                     if tensordict_out is not None:
                         td_out_save = tensordict_out.copy()
                         kwargs["tensordict_out"] = tensordict_out
