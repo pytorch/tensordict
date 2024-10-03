@@ -3700,6 +3700,12 @@ class TestTensorDicts(TestTensorDictsBase):
         with td.lock_(), pytest.raises(RuntimeError):
             td.create_nested("root")
 
+    def test_data_ptr(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert td.data_ptr().batch_size == torch.Size(())
+        assert td.data_ptr(storage=True).batch_size == torch.Size(())
+
     def test_default_nested(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
