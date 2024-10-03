@@ -192,8 +192,6 @@ class _RecordDeviceTransfer:
 
 _device_recorder = _RecordDeviceTransfer()
 
-_TENSOR_COLLECTION_MEMO = {}
-
 
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
@@ -10484,16 +10482,7 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    out = _TENSOR_COLLECTION_MEMO.get(datatype)
-    if out is None:
-        if issubclass(datatype, TensorDictBase):
-            out = True
-        elif _is_tensorclass(datatype):
-            out = True
-        else:
-            out = False
-        _TENSOR_COLLECTION_MEMO[datatype] = out
-    return out
+    return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
 
 
 def is_tensor_collection(datatype: type | Any) -> bool:
