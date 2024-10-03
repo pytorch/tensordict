@@ -1166,9 +1166,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self._param_td = param_td.copy()
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
         # Check device and shape
-        if not out._check_batch_size(raise_exception=False):
+        cbs = out._check_batch_size(raise_exception=False)
+        if not cbs:
             out.auto_batch_size_()
-        if not out._check_device(raise_exception=False):
+        cd = out._check_device(raise_exception=False)
+        if not cd:
             out.auto_device_()
         return out
 

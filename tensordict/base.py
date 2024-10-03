@@ -8901,7 +8901,7 @@ class TensorDictBase(MutableMapping):
                 val &= value._check_batch_size(raise_exception=raise_exception)
                 if not val:
                     return False
-            val &= _shape(value)[:batch_dims] != self.batch_size
+            val &= _shape(value)[:batch_dims] == self.batch_size
             if not val:
                 if raise_exception:
                     raise RuntimeError(
