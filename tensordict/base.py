@@ -10417,11 +10417,13 @@ class TensorDictBase(MutableMapping):
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
             result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
-        if not non_blocking:
-            if device.type == "cuda":
+        if non_blocking in (False, None):
+            if device.type == "cuda" and non_blocking is False:
+                # sending to CUDA force sync
                 cuda_device = device
             elif storage.device.type == "cuda":
-                cuda_device = device
+                # sending from cuda: need sync unless intentionally not asked for
+                cuda_device = storage.device.type
             else:
                 cuda_device = None
             if cuda_device is not None:
