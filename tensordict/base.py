@@ -1501,6 +1501,68 @@ class TensorDictBase(MutableMapping):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
 
+    def data_ptr(self, *, storage: bool = False):
+        """Returns the data_ptr of the tensordict leaves.
+
+        This can be useful to check if two tensordicts share the same ``data_ptr()``.
+
+        Keyword Args:
+            storage (bool, optional): if ``True``, `tensor.untyped_storage().data_ptr()` will be called
+                instead. Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+            >>> assert (td0.data_ptr() == td.data_ptr()).all()
+
+        .. note:: :class:`~tensordict.LazyStackedTensorDict` instances will be displayed as nested tensordicts to
+            reflect the true ``data_ptr()`` of their leaves:
+
+                >>> td0 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td1 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td = TensorDict.lazy_stack([td0, td1])
+                >>> td.data_ptr()
+                TensorDict(
+                    fields={
+                        0: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        1: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)
+
+        """
+        if storage:
+
+            def func(x):
+                return x.untyped_storage().data_ptr()
+
+        else:
+
+            def func(x):
+                return x.data_ptr()
+
+        from tensordict import TensorDict
+
+        return TensorDict(
+            {
+                key: func(val)
+                for key, val in self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            },
+            device=torch.device("cpu"),
+        )
+
     @grad.setter
     def grad(self, grad):
         def set_grad(x, grad):
