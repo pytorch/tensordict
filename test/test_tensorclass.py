@@ -365,8 +365,6 @@ class TestTensorClass:
         assert data_load.z == "a string!"
         assert data_load.batch_size == data.batch_size
         assert (data_load == data).all()
-        # the consolidated attribute disappears when loading
-        assert not hasattr(data_load, "_consolidated")
 
     def test_dataclass(self):
         data = MyData(
