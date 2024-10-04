@@ -7899,13 +7899,13 @@ class TestLazyStackedTensorDict:
                 "b": {"c": torch.arange(3, dtype=torch.double).expand(4, 3).clone()},
                 "d": "a string!",
                 "njt": torch.nested.nested_tensor_from_jagged(
-                    torch.arange(9, -1, -1), offsets=torch.tensor([0, 2, 5, 8, 10])
+                    torch.arange(9, -1, -1, device=device), offsets=torch.tensor([0, 2, 5, 8, 10], device=device)
                 ),
                 "intermediate": torch.randn(4),
                 "njt_lengths": torch.nested.nested_tensor_from_jagged(
-                    torch.arange(10, 20),
-                    offsets=torch.tensor([0, 2, 5, 8, 10]),
-                    lengths=torch.tensor([2, 3, 3, 2]),
+                    torch.arange(10, 20, device=device),
+                    offsets=torch.tensor([0, 2, 5, 8, 10], device=device),
+                    lengths=torch.tensor([2, 3, 3, 2], device=device),
                 ),
             },
             device=device,
