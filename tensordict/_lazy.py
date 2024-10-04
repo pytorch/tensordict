@@ -1360,9 +1360,10 @@ class LazyStackedTensorDict(TensorDictBase):
             default (Any, optiona): the default value to return in case the key
                 isn't in all sub-tensordicts.
 
-                .. note:: In case the default is a tensor, this method will attempt
-                  the construction of a nestedtensor with it. Otherwise, the default
-                  value will be returned.
+                .. note::
+                    In case the default is a tensor, this method will attempt
+                    the construction of a nestedtensor with it. Otherwise, the default
+                    value will be returned.
 
         Keyword Args:
             layout (torch.layout, optional): the layout for the nested tensor.
@@ -4002,7 +4003,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> T:

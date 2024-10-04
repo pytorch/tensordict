@@ -1541,6 +1541,9 @@ def assert_close(
             continue
         elif not isinstance(input1, torch.Tensor):
             continue
+        if input1.is_nested:
+            input1 = input1._base
+            input2 = input2._base
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
@@ -2566,8 +2569,9 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
 def parse_tensor_dict_string(s: str):
     """Parse a TensorDict repr to a TensorDict.
 
-    .. note:: This functions is intended to be used for debugging, to reproduce a tensordict
-      given its printed version, and should not be used in real applications.
+    .. note::
+        This functions is intended to be used for debugging, to reproduce a tensordict
+        given its printed version, and should not be used in real applications.
 
     """
     from tensordict import TensorDict

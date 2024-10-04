@@ -186,29 +186,32 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             (in which case the value is sampled randomly from the distribution). Default
             is MODE.
 
-            .. note:: When a sample is drawn, the
-              :class:`ProbabilisticTensorDictModule` instance will
-              first look for the interaction mode dictated by the
-              :func:`~tensordict.nn.probabilistic.interaction_type`
-              global function. If this returns `None` (its default value), then the
-              `default_interaction_type` of the `ProbabilisticTDModule`
-              instance will be used. Note that
-              :class:`~torchrl.collectors.collectors.DataCollectorBase`
-              instances will use `set_interaction_type` to
-              :class:`tensordict.nn.InteractionType.RANDOM` by default.
+            .. note::
+                When a sample is drawn, the
+                :class:`ProbabilisticTensorDictModule` instance will
+                first look for the interaction mode dictated by the
+                :func:`~tensordict.nn.probabilistic.interaction_type`
+                global function. If this returns `None` (its default value), then the
+                `default_interaction_type` of the `ProbabilisticTDModule`
+                instance will be used. Note that
+                :class:`~torchrl.collectors.collectors.DataCollectorBase`
+                instances will use `set_interaction_type` to
+                :class:`tensordict.nn.InteractionType.RANDOM` by default.
 
-            .. note:: In some cases, the mode, median or mean value may not be
-              readily available through the corresponding attribute.
-              To paliate this, :class:`~ProbabilisticTensorDictModule` will first attempt
-              to get the value through a call to ``get_mode()``, ``get_median()`` or ``get_mean()``
-              if the method exists.
+            .. note::
+                In some cases, the mode, median or mean value may not be
+                readily available through the corresponding attribute.
+                To paliate this, :class:`~ProbabilisticTensorDictModule` will first attempt
+                to get the value through a call to ``get_mode()``, ``get_median()`` or ``get_mean()``
+                if the method exists.
 
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
             Default is :class:`~tensordict.nn.distributions.Delta`.
 
-            .. note:: If the distribution class is of type
+            .. note::
+                If the distribution class is of type
                 :class:`~tensordict.nn.distributions.CompositeDistribution`, the ``out_keys``
                 can be inferred directly form the ``"distribution_map"`` or ``"name_map"``
                 keywork arguments provided through this class' ``distribution_kwargs``
@@ -597,14 +600,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         # distribution using `get_dist` or to sample log_probabilities
         _, out_keys = self._compute_in_and_out_keys(modules[:-1])
         self._requires_sample = modules[-1].out_keys[0] not in set(out_keys)
+        self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
         super().__init__(*modules, partial_tolerant=partial_tolerant)
 
     @property
     def det_part(self):
-        if not hasattr(self, "_det_part"):
-            # we use a list to avoid having the submodules listed in module.modules()
-            self._det_part = [TensorDictSequential(*self.module[:-1])]
-        return self._det_part[0]
+        return self._det_part
 
     def get_dist_params(
         self,
