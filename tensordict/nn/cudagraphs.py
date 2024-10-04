@@ -210,6 +210,7 @@ class CudaGraphModule:
             ) -> Any:
                 if self.counter >= self._warmup:
                     self._tensordict.update_(tensordict, non_blocking=True)
+                    torch.cuda.synchronize()
                     self.graph.replay()
                     if self._out_matches_in:
                         result = tensordict.update(
@@ -297,6 +298,7 @@ class CudaGraphModule:
                         (self._args, self._kwargs),
                         (args, kwargs),
                     )
+                    torch.cuda.synchronize()
                     self.graph.replay()
                     if self._return_unchanged == "clone":
                         result = self._out.clone()
