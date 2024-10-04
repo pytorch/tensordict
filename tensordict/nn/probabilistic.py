@@ -600,14 +600,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         # distribution using `get_dist` or to sample log_probabilities
         _, out_keys = self._compute_in_and_out_keys(modules[:-1])
         self._requires_sample = modules[-1].out_keys[0] not in set(out_keys)
+        self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
         super().__init__(*modules, partial_tolerant=partial_tolerant)
 
     @property
     def det_part(self):
-        if not hasattr(self, "_det_part"):
-            # we use a list to avoid having the submodules listed in module.modules()
-            self._det_part = [TensorDictSequential(*self.module[:-1])]
-        return self._det_part[0]
+        return self._det_part
 
     def get_dist_params(
         self,
