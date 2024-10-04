@@ -9,6 +9,7 @@ import contextlib
 
 import functools
 import gc
+import importlib.util
 import json
 import os
 import pathlib
@@ -22,8 +23,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import tensordict.base as tensordict_base
 
+import tensordict.base as tensordict_base
 import torch
 from _utils_internal import (
     decompose,
@@ -32,6 +33,7 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
+from packaging import version
 
 from tensordict import (
     get_defaults_to_none,
@@ -90,6 +92,11 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
+TORCH_VERSION = version.parse(torch.__version__).base_version
+
+_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+
+_v2_5 = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse("2.5.0")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
@@ -7890,6 +7897,7 @@ class TestLazyStackedTensorDict:
         torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
         assert tdload.is_consolidated()
 
+    @pytest.mark.skipif(not _v2_5, reason="v2.5 required for this test")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate_njt(self, device, use_file, tmpdir):
