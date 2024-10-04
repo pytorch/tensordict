@@ -1,3 +1,5 @@
+.. _distributed:
+
 TensorDict in distributed settings
 ==================================
 

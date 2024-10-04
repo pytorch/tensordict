@@ -76,13 +76,16 @@ The syntax for setting or retrieving values is much like that for a regular dict
 >>> zeros = tensordict["zeros"]
 >>> tensordict["twos"] = 2 * torch.ones(2, 3)
 
-One can also index a tensordict along its batch_size which makes it possible to obtain congruent slices of data in just a few characters (notice that indexing the nth leading dimensions with tree_map using an ellipsis would require a bit more coding):
+One can also index a tensordict along its batch_size which makes it possible to obtain congruent slices of data in just
+a few characters (notice that indexing the nth leading dimensions with tree_map using an ellipsis would require a bit more coding):
 
 >>> sub_tensordict = tensordict[..., :2]
 
-One can also use the set method with inplace=True or the set_ method to do inplace updates of the contents. The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.
+One can also use the set method with ``inplace=True`` or the ``set_`` method to do inplace updates of the contents.
+The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.
 
-The contents of the TensorDict can now be manipulated collectively. For example, to place all of the contents onto a particular device one can simply do
+The contents of the TensorDict can now be manipulated collectively.
+For example, to place all of the contents onto a particular device one can simply do
 
 >>> tensordict = tensordict.to("cuda:0")
 

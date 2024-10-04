@@ -9,6 +9,7 @@ import contextlib
 
 import functools
 import gc
+import importlib.util
 import json
 import os
 import pathlib
@@ -22,8 +23,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import tensordict.base as tensordict_base
 
+import tensordict.base as tensordict_base
 import torch
 from _utils_internal import (
     decompose,
@@ -32,6 +33,7 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
+from packaging import version
 
 from tensordict import (
     get_defaults_to_none,
@@ -42,6 +44,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._lazy import _CustomOpTensorDict
+from tensordict._reductions import _reduce_td
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
@@ -89,6 +92,11 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
+TORCH_VERSION = version.parse(torch.__version__).base_version
+
+_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+
+_v2_5 = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse("2.5.0")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
@@ -281,6 +289,15 @@ class TestGeneric:
         assert (td_out["key1"] != 0).all()
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
+
+    def test_cat_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.cat_from_tensordict(dim=1)
+        assert tensor.shape == (3, 8)
+        assert (tensor[:, :4] == 0).all()
+        assert (tensor[:, 4:] == 1).all()
 
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
@@ -2404,6 +2421,33 @@ class TestGeneric:
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
 
+    def test_stack_from_tensordict(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
+        )
+        tensor = td.stack_from_tensordict(dim=1)
+        assert tensor.shape == (3, 2, 4)
+        assert (tensor[:, 0] == 0).all()
+        assert (tensor[:, 1] == 1).all()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_record_stream(self):
+        s0 = torch.cuda.Stream(0)
+        s1 = torch.cuda.Stream(0)
+        with torch.cuda.stream(s1):
+            td = TensorDict(
+                {
+                    "a": torch.randn(3, device="cuda:0"),
+                    ("b", "c"): torch.randn(3, device="cuda:0"),
+                }
+            )
+            td.record_stream(s1)
+        with pytest.raises(
+            RuntimeError,
+            match="A stream is already associated with this TensorDict instance",
+        ):
+            td.record_stream(s0)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
@@ -3561,6 +3605,25 @@ class TestTensorDicts(TestTensorDictsBase):
             for value in tdint.values(True, True, is_leaf=is_leaf)
         )
 
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_cat_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            a = td.pop("a")
+            td["a"] = a.unsqueeze(-1)
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.cat([td["a"], td["a_bis"]], -1)
+            td.cat_tensors("a", "a_bis", out_key="cat", dim=-1, **kwargs)
+            assert (td["cat"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
+
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
     def test_chunk(self, td_name, device, dim, chunks):
@@ -3644,6 +3707,12 @@ class TestTensorDicts(TestTensorDictsBase):
 
         with td.lock_(), pytest.raises(RuntimeError):
             td.create_nested("root")
+
+    def test_data_ptr(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert td.data_ptr().batch_size == torch.Size(())
+        assert td.data_ptr(storage=True).batch_size == torch.Size(())
 
     def test_default_nested(self, td_name, device):
         torch.manual_seed(1)
@@ -5984,6 +6053,23 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in ("a", "b", "c"):
             assert (stacked_td[key] == td[key]).all()
 
+    @pytest.mark.parametrize("keep_entries", [False, True, None])
+    def test_stack_tensors(self, td_name, device, keep_entries):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td["a_bis"] = td["a"] + 1
+            kwargs = {}
+            if keep_entries is not None:
+                kwargs["keep_entries"] = keep_entries
+            pred_stack = torch.stack([td["a"], td["a_bis"]], -1)
+            td.stack_tensors("a", "a_bis", out_key="stack", dim=-1, **kwargs)
+            assert (td["stack"] == pred_stack).all()
+            if keep_entries:
+                assert "a" in td
+            else:
+                assert "a" not in td
+
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
         torch.manual_seed(1)
@@ -7774,6 +7860,7 @@ class TestLazyStackedTensorDict:
             batch_size=[1, 3],
         )
         td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+
         if not use_file:
             td_c = td.consolidate()
             assert td_c.device == device
@@ -7786,17 +7873,90 @@ class TestLazyStackedTensorDict:
         assert type(td_c) == type(td)  # noqa
         assert (td.to(td_c.device) == td_c).all()
         assert td_c["d"] == [["a string!"] * 3]
+
         storage = td_c._consolidated["storage"]
         storage *= 0
         assert (td.to(td_c.device) != td_c).any()
 
         filename = Path(tmpdir) / "file.pkl"
         torch.save(td, filename)
-        assert (td == torch.load(filename, weights_only=False)).all()
+        tdload = torch.load(filename, weights_only=False)
+        assert (td == tdload).all()
 
         td_c = td.consolidate()
         torch.save(td_c, filename)
-        assert (td == torch.load(filename, weights_only=False)).all()
+        tdload = torch.load(filename, weights_only=False)
+        assert (td == tdload).all()
+
+        def check_id(a, b):
+            if isinstance(a, (torch.Size, str)):
+                assert a == b
+            if isinstance(a, torch.Tensor):
+                assert (a == b).all()
+
+        torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
+        assert tdload.is_consolidated()
+
+    @pytest.mark.skipif(not _v2_5, reason="v2.5 required for this test")
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate_njt(self, device, use_file, tmpdir):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(4, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(4, 3).clone()},
+                "d": "a string!",
+                "njt": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10, device=device),
+                    offsets=torch.tensor([0, 2, 5, 8, 10], device=device),
+                ),
+                "njt_lengths": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10, device=device),
+                    offsets=torch.tensor([0, 2, 5, 8, 10], device=device),
+                    lengths=torch.tensor([2, 3, 3, 2], device=device),
+                ),
+            },
+            device=device,
+            batch_size=[4],
+        )
+
+        if not use_file:
+            td_c = td.consolidate()
+            assert td_c.device == device
+        else:
+            filename = Path(tmpdir) / "file.mmap"
+            td_c = td.consolidate(filename=filename)
+            assert td_c.device == torch.device("cpu")
+            assert assert_allclose_td(TensorDict.from_consolidated(filename), td_c)
+        assert hasattr(td_c, "_consolidated")
+        assert type(td_c) == type(td)  # noqa
+        assert td_c["d"] == "a string!"
+        with (
+            pytest.raises(KeyError)
+            if td.device != td_c.device and device is not None
+            else contextlib.nullcontext()
+        ):
+            # njt.to(device) is currently broken when it has lengths
+            assert_allclose_td(td.to(td_c.device), td_c)
+
+        tdload_make, tdload_data = _reduce_td(td)
+        tdload = tdload_make(*tdload_data)
+        assert (td == tdload).all()
+
+        td_c = td.consolidate()
+        tdload_make, tdload_data = _reduce_td(td_c)
+        tdload = tdload_make(*tdload_data)
+        assert assert_allclose_td(td, tdload)
+
+        def check_id(a, b):
+            if isinstance(a, (torch.Size, str)):
+                assert a == b
+            if isinstance(a, torch.Tensor):
+                assert (a == b).all()
+
+        torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
+        assert tdload.is_consolidated()
+        assert tdload["njt_lengths"]._lengths is not None
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
     def test_consolidate_to_device(self):
@@ -9295,6 +9455,28 @@ class TestLock:
             if td is not None:
                 ids.add(id(td))
         assert count == expected, {id(ref()) for ref in weakref_list}
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() and not torch.backends.mps.is_available(),
+        reason="a device is required.",
+    )
+    def test_cached_data_lock_device(self):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "mps:0")
+        td = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.ones(1)), device="cpu"), no_convert=True
+        )
+        dataptr = td.data.data_ptr()
+        assert (td.to(device).data.data_ptr() != dataptr).all()
+        original_td = TensorDict(a=nn.Parameter(torch.ones(1)), device="cpu")
+        td = TensorDictParams(original_td, no_convert=True)
+        td.lock_()
+        dataptr = td.data.data_ptr()
+        tddevice = nn.ModuleList([td]).to(device)[0]
+        assert td.device == device
+        assert original_td.device == torch.device("cpu")
+        assert (td.data.data_ptr() != dataptr).all()
+        assert tddevice.device == device
+        assert (tddevice.data.data_ptr() != dataptr).all()
 
     def test_lock_stack(self):
         td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
