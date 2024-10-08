@@ -101,6 +101,10 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
+try:
+    from torch import _foreach_copy_
+except ImportError:
+    _foreach_copy_ = None
 
 try:
     from torch.nn.parameter import Buffer
@@ -5207,11 +5211,11 @@ class TensorDictBase(MutableMapping):
             new_keys, other_val = input_dict_or_td._items_list(
                 True, True, sorting_keys=keys, default="intersection"
             )
-            if len(new_keys):
+            if len(new_keys) and _foreach_copy_ is not None:
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                torch._foreach_copy_(vals, other_val, non_blocking=non_blocking)
+                _foreach_copy_(vals, other_val, non_blocking=non_blocking)
                 return self
             named = False
 
