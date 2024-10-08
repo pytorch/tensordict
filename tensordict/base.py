@@ -5676,7 +5676,9 @@ class TensorDictBase(MutableMapping):
                 )
             return sorting_keys, new_vals
         if isinstance(default, str) and default == "intersection":
-            new_keys = list(set(sorting_keys).intersection(keys))
+            new_keys = [
+                key for key in keys if key in set(sorting_keys)
+            ]  # intersection does not keep the sorting
         else:
             new_keys = list(set(sorting_keys).union(keys))
         if is_dynamo_compiling():
