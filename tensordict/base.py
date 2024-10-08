@@ -5201,17 +5201,6 @@ class TensorDictBase(MutableMapping):
                     if key == name[: len(key)]:
                         dest.copy_(source, non_blocking=non_blocking)
 
-            self._apply_nest(
-                inplace_update,
-                input_dict_or_td,
-                nested_keys=True,
-                default=None,
-                filter_empty=True,
-                named=named,
-                is_leaf=_is_leaf_nontensor,
-            )
-            return self
-
         else:
             # Fastest route using _foreach_copy_
             keys, vals = self._items_list(True, True)
@@ -5220,10 +5209,27 @@ class TensorDictBase(MutableMapping):
             )
             if len(new_keys):
                 if len(other_val) != len(vals):
-                    vals = [val for key, val in zip(keys, vals) if key in new_keys]
+                    vals = dict(*zip(keys, vals))
+                    vals = [vals[k] for k in new_keys]
                 torch._foreach_copy_(vals, other_val)
                 return self
-            self.update(input_dict_or_td.empty(recurse=True))
+            named = False
+
+            def inplace_update(dest, source):
+                if source is None:
+                    return None
+                dest.copy_(source, non_blocking=non_blocking)
+
+        self._apply_nest(
+            inplace_update,
+            input_dict_or_td,
+            nested_keys=True,
+            default=None,
+            filter_empty=True,
+            named=named,
+            is_leaf=_is_leaf_nontensor,
+        )
+        return self
 
     def update_at_(
         self,
