@@ -5209,9 +5209,9 @@ class TensorDictBase(MutableMapping):
             )
             if len(new_keys):
                 if len(other_val) != len(vals):
-                    vals = dict(*zip(keys, vals))
+                    vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                torch._foreach_copy_(vals, other_val)
+                torch._foreach_copy_(vals, other_val, non_blocking=non_blocking)
                 return self
             named = False
 
@@ -5676,7 +5676,9 @@ class TensorDictBase(MutableMapping):
                 )
             return sorting_keys, new_vals
         if isinstance(default, str) and default == "intersection":
-            new_keys = list(set(sorting_keys).intersection(keys))
+            new_keys = [
+                key for key in sorting_keys if key in set(keys)
+            ]  # intersection does not keep the sorting
         else:
             new_keys = list(set(sorting_keys).union(keys))
         if is_dynamo_compiling():

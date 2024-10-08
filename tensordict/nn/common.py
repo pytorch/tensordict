@@ -17,18 +17,7 @@ from tensordict._td import TensorDict
 
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.functional import make_tensordict
-from tensordict.nn.functional_modules import (
-    _swap_state,
-    extract_weights_and_buffers,
-    is_functional,
-    make_functional,
-    repopulate_module,
-)
-from tensordict.nn.utils import (
-    _auto_make_functional,
-    _dispatch_td_nn_modules,
-    _set_skip_existing_None,
-)
+from tensordict.nn.utils import _dispatch_td_nn_modules, _set_skip_existing_None
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
@@ -741,32 +730,9 @@ class TensorDictModuleBase(nn.Module):
             lambda x: x.detach().requires_grad_(), inplace=False
         )
 
-        if _auto_make_functional() and not is_functional(self):
-            make_functional(self, keep_params=True)
-            is_stateless = self._is_stateless
-            if is_stateless:
-                repopulate_module(self, sanitized_parameters)
-            else:
-                old_params = _swap_state(
-                    self,
-                    sanitized_parameters,
-                    is_stateless=False,
-                    return_old_tensordict=True,
-                )
-
+        with sanitized_parameters.to_module(self):
             self._reset_parameters(self)
-
-            if is_stateless:
-                new_parameters = extract_weights_and_buffers(self)
-            else:
-                new_parameters = _swap_state(
-                    self, old_params, is_stateless=False, return_old_tensordict=True
-                )
-            return new_parameters
-        else:
-            with sanitized_parameters.to_module(self):
-                self._reset_parameters(self)
-            return sanitized_parameters
+        return sanitized_parameters
 
     def _reset_parameters(self, module: nn.Module) -> bool:
         any_reset = False
@@ -936,42 +902,6 @@ class TensorDictModule(TensorDictModuleBase):
             device=None,
             is_shared=False)
 
-    One can use a vmap operator to call the functional module.
-
-    Examples:
-        >>> from torch import vmap
-        >>> from tensordict.nn.functional_modules import extract_weights_and_buffers
-        >>> params = extract_weights_and_buffers(td_module)
-        >>> params_repeat = params.expand(4)
-        >>> print(params_repeat)
-        TensorDict(
-            fields={
-                module: TensorDict(
-                    fields={
-                        bias_hh: Tensor(shape=torch.Size([4, 24]), device=cpu, dtype=torch.float32, is_shared=False),
-                        bias_ih: Tensor(shape=torch.Size([4, 24]), device=cpu, dtype=torch.float32, is_shared=False),
-                        weight_hh: Tensor(shape=torch.Size([4, 24, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                        weight_ih: Tensor(shape=torch.Size([4, 24, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4]),
-                    device=None,
-                    is_shared=False)},
-            batch_size=torch.Size([4]),
-            device=None,
-            is_shared=False)
-        >>> def func(td, params):
-        ...     with params.to_module(td_module):
-        ...         return td_module(td)
-        >>> td_vmap = vmap(func, (None, 0))(td.clone(), params_repeat)
-        >>> print(td_vmap)
-        TensorDict(
-            fields={
-                hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                output: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 3]),
-            device=None,
-            is_shared=False)
-
     """
 
     _IN_KEY_ERR = "in_keys must be of type list, str or tuples of str, or dict."
@@ -1030,8 +960,6 @@ class TensorDictModule(TensorDictModuleBase):
             )
 
         self.module = module
-        if _auto_make_functional():
-            make_functional(self, keep_params=True, return_params=False)
         if inplace not in (True, False, "empty"):
             raise ValueError(
                 f"The only accepted valued for inplace is `True`, `False`, or `'empty'`. Got inplace={inplace} "

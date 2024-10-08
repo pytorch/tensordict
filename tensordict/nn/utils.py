@@ -8,7 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
-from enum import ReprEnum
+from enum import Enum
 from typing import Any, Callable
 
 import torch
@@ -19,8 +19,6 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
-
-AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
 
 DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
@@ -397,31 +395,6 @@ except ImportError:
     from tensordict.utils import Buffer  # noqa
 
 
-def _auto_make_functional():
-    """Returns ``True`` if TensorDictModuleBase subclasses are automatically made functional with the old API."""
-    global AUTO_MAKE_FUNCTIONAL
-    return AUTO_MAKE_FUNCTIONAL
-
-
-class _set_auto_make_functional(_DecoratorContextManager):
-    """Controls if TensorDictModule subclasses should be made functional automatically with the old API."""
-
-    def __init__(self, mode):
-        self.mode = mode
-
-    def clone(self):
-        return type(self)(self.mode)
-
-    def __enter__(self):
-        global AUTO_MAKE_FUNCTIONAL
-        self._saved_mode = AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self.mode
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self._saved_mode
-
-
 def _dispatch_td_nn_modules():
     """Returns ``True`` if @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
     global DISPATCH_TDNN_MODULES
@@ -450,7 +423,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 # Reproduce StrEnum for python<3.11
 
 
-class StrEnum(str, ReprEnum):  # noqa
+class StrEnum(str, Enum):  # noqa
     def __new__(cls, *values):
         if len(values) > 3:
             raise TypeError("too many arguments for str(): %r" % (values,))
