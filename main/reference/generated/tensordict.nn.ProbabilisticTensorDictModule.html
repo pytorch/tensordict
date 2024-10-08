@@ -382,7 +382,7 @@ a deterministic mapping function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>in_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.12)"><em>dict</em></a>) – key(s) that will be read from the
+<li><p><strong>in_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – key(s) that will be read from the
 input TensorDict and used to build the distribution. Importantly, if it’s an
 list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
 the distribution class of interest, e.g. <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;loc&quot;</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;scale&quot;</span></code> for
@@ -392,7 +392,7 @@ tensordict that will get match to the corresponding distribution keys.</p></li>
 <li><p><strong>out_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em>) – keys where the sampled values will be
 written. Importantly, if these keys are found in the input TensorDict, the
 sampling step will be skipped.</p></li>
-<li><p><strong>default_interaction_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><em>str</em></a><em>, </em><em>optional</em>) – <em>Deprecated</em> keyword-only argument.
+<li><p><strong>default_interaction_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – <em>Deprecated</em> keyword-only argument.
 Please use default_interaction_type instead.</p></li>
 <li><p><strong>default_interaction_type</strong> (<em>InteractionType</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
@@ -434,22 +434,22 @@ keywork arguments provided through this class’ <code class="docutils literal n
 keyword argument, making the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> optional in such cases.</p>
 </div>
 </p></li>
-<li><p><strong>distribution_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.12)"><em>dict</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>distribution_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Keyword-argument pairs to be passed to the distribution.</p></li>
-<li><p><strong>return_log_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>return_log_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probability of the
 distribution sample will be written in the tensordict with the key
 <cite>log_prob_key</cite>. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>log_prob_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – key where to write the log_prob if return_log_prob = True.
 Defaults to <cite>‘sample_log_prob’</cite>.</p></li>
-<li><p><strong>cache_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>cache_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 EXPERIMENTAL: if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the parameters of the
 distribution (i.e. the output of the module) will be written to the
 tensordict along with the sample. Those parameters can be used to re-compute
 the original distribution later on (e.g. to compute the divergence between
 the distribution used to sample the action and the updated distribution in
 PPO). Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>n_empirical_estimate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>n_empirical_estimate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
 </ul>
@@ -531,7 +531,7 @@ mean when it is not available. Defaults to 1000.</p></li>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">tensordict.base.TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_requires_sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">tensordict.base.TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_requires_sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Define the computation performed at every call.</p>
 <p>Should be overridden by all subclasses.</p>
 <div class="admonition note">

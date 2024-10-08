@@ -540,7 +540,7 @@ the identity check of non-tensor / meta data is done instead of equality to
 avoid performance issues. User needs to make sure that the non-tensor data
 of an item matches with the object to avoid discrepancies.</p>
 <p>Here is an example:</p>
-<p>While setting an item with different <code class="docutils literal notranslate"><span class="pre">non_tensor</span></code> data, a <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#UserWarning" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserWarning</span></code></a> will be
+<p>While setting an item with different <code class="docutils literal notranslate"><span class="pre">non_tensor</span></code> data, a <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#UserWarning" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserWarning</span></code></a> will be
 thrown</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span><span class="o">.</span><span class="n">non_tensordata</span> <span class="o">=</span> <span class="s2">&quot;test_new&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">data2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>

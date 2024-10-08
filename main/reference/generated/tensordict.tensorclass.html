@@ -360,16 +360,16 @@
 <dt class="sig sig-object py" id="tensordict.tensorclass">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">tensorclass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.tensorclass" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator to create <a class="reference internal" href="#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> classes.</p>
-<p><code class="docutils literal notranslate"><span class="pre">tensorclass</span></code> classes are specialized <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass" title="(in Python v3.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.dataclass()</span></code></a> instances that
+<p><code class="docutils literal notranslate"><span class="pre">tensorclass</span></code> classes are specialized <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass" title="(in Python v3.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.dataclass()</span></code></a> instances that
 can execute some pre-defined tensor operations out of the box, such as
 indexing, item assignment, reshaping, casting to device or storage and many
 others.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>autocast</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the types indicated will be enforced when an argument is set.
+<li><p><strong>autocast</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the types indicated will be enforced when an argument is set.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>frozen</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensorclass cannot be modified. This argument is
+<li><p><strong>frozen</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensorclass cannot be modified. This argument is
 provided to dataclass-compatibility, a similar behavior can be obtained through the <cite>lock</cite> argument in
 the class constructor. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
