@@ -6,7 +6,6 @@ import argparse
 import contextlib
 import importlib.util
 import inspect
-import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -662,10 +661,10 @@ class TestNN:
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
-        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = os.environ.get(
-            "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = (
+            torch._dynamo.config.inline_inbuilt_nn_modules
         )
-        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "1"
+        torch._dynamo.config.inline_inbuilt_nn_modules = True
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -675,7 +674,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.clone())
         td_zero.zero_()
 
-        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"
+        torch._dynamo.config.inline_inbuilt_nn_modules = False
         try:
 
             def call(x, td):
@@ -685,12 +684,12 @@ class TestFunctional:
             call_compile = torch.compile(call, fullgraph=True, mode=mode)
             x = torch.randn(2, 3)
             with pytest.raises(
-                RuntimeError, match="TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+                RuntimeError, match="torch._dynamo.config.inline_inbuilt_nn_modules"
             ):
                 call_compile(x, td_zero)
         finally:
-            if TORCHDYNAMO_INLINE_INBUILT_NN_MODULES is not None:
-                os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = (
+            if torch._dynamo.config.inline_inbuilt_nn_modules is not None:
+                torch._dynamo.config.inline_inbuilt_nn_modules = (
                     TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
                 )
 
