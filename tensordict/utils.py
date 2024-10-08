@@ -705,11 +705,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
             if _is_lis_of_list_of_bools(index):
                 index = torch.tensor(index, device=tensor.device)
                 if index.dtype is torch.bool:
-                    warnings.warn(
+                    raise RuntimeError(
                         "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated in v0.6 as this functionality is not supported "
-                        f"by PyTorch. (follows error: {err})",
-                        category=DeprecationWarning,
+                        "not supported by PyTorch.",
                     )
                 return tensor[index]
             raise err
@@ -1541,6 +1539,9 @@ def assert_close(
             continue
         elif not isinstance(input1, torch.Tensor):
             continue
+        if input1.is_nested:
+            input1 = input1._base
+            input2 = input2._base
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
