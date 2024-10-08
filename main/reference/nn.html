@@ -492,7 +492,6 @@ to build distributions from network outputs and get summary statistics or sample
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn.distributions</span> <span class="kn">import</span> <span class="n">NormalParamWrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn.functional_modules</span> <span class="kn">import</span> <span class="n">make_functional</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn.prototype</span> <span class="kn">import</span> <span class="p">(</span>
 <span class="gp">... </span>    <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
@@ -549,81 +548,6 @@ to build distributions from network outputs and get summary statistics or sample
 </tr>
 </tbody>
 </table>
-<section id="functional">
-<h2>Functional<a class="headerlink" href="#functional" title="Permalink to this heading">¶</a></h2>
-<p>The tensordict package is compatible with most functorch capabilities.
-We also provide a dedicated functional API that leverages the advantages of
-tensordict to handle parameters in functional programs.</p>
-<p>The <a class="reference internal" href="generated/tensordict.nn.make_functional.html#tensordict.nn.make_functional" title="tensordict.nn.make_functional"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_functional()</span></code></a> method will turn a module in a functional module. The
-module will be modified in-place and a <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> containing the module
-parameters will be returned. This tensordict has a structure that reflects exactly
-the structure of the model. In the following example, we show that</p>
-<ol class="arabic simple">
-<li><p><a class="reference internal" href="generated/tensordict.nn.make_functional.html#tensordict.nn.make_functional" title="tensordict.nn.make_functional"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_functional()</span></code></a> extracts the parameters of the module;</p></li>
-<li><p>These parameters have a structure that matches exactly the structure of the
-model (though they can be flattened using <code class="docutils literal notranslate"><span class="pre">params.flatten_keys(&quot;.&quot;)</span></code>).</p></li>
-<li><p>It converts the module and all its sub-modules to be functional.</p></li>
-</ol>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">make_functional</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">vmap</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">layer1</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">layer2</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">layer1</span><span class="p">,</span> <span class="n">layer2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">make_functional</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># params is the last arg (or kwarg)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">intermediate</span> <span class="o">=</span> <span class="n">model</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">x</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s2">&quot;0&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">out2</span> <span class="o">=</span> <span class="n">model</span><span class="p">[</span><span class="mi">1</span><span class="p">](</span><span class="n">intermediate</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s2">&quot;1&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">out2</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Alternatively, parameters can also be constructed using the following methods:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">param</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">()},</span> <span class="p">[])</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="p">[])</span>  <span class="c1"># provided that the state_dict() just returns params and buffer tensors</span>
-</pre></div>
-</div>
-<p>Unlike what is done with functorch, <a class="reference internal" href="generated/tensordict.nn.make_functional.html#tensordict.nn.make_functional" title="tensordict.nn.make_functional"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_functional()</span></code></a> does not
-distinguish on a high level parameters and buffers (they are all packed together).</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Tensordict funcitonal modules can be used in several ways, with parameters
-passed as arguments or keyword arguments.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">make_functional</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="n">input_td</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># alternatively</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="n">input_td</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>However, this will currently not work:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">get_functional</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="n">input_td</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>  <span class="c1"># breaks!</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="n">input_td</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># works</span>
-</pre></div>
-</div>
-<p>as <a class="reference internal" href="generated/tensordict.nn.get_functional.html#tensordict.nn.get_functional" title="tensordict.nn.get_functional"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_functional()</span></code></a> re-populates
-the module with its parameters, we rely on the keyword argument <code class="docutils literal notranslate"><span class="pre">&quot;params&quot;</span></code>
-as a signature for a functional call.</p>
-</div>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.get_functional.html#tensordict.nn.get_functional" title="tensordict.nn.get_functional"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_functional</span></code></a>(module[, funs_to_decorate])</p></td>
-<td><p>Converts a nn.Module to a functional module in-place, and returns a stateful version of this module that can be used in functional settings.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.is_functional.html#tensordict.nn.is_functional" title="tensordict.nn.is_functional"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_functional</span></code></a>(module)</p></td>
-<td><p>Checks if <a class="reference internal" href="generated/tensordict.nn.make_functional.html#tensordict.nn.make_functional" title="tensordict.nn.make_functional"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_functional()</span></code></a> has been called on the module.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.make_functional.html#tensordict.nn.make_functional" title="tensordict.nn.make_functional"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_functional</span></code></a>(module[, funs_to_decorate, ...])</p></td>
-<td><p>Converts a nn.Module to a functional module in-place, and returns its params.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.repopulate_module.html#tensordict.nn.repopulate_module" title="tensordict.nn.repopulate_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">repopulate_module</span></code></a>(model, tensordict)</p></td>
-<td><p>Repopulates a module with its parameters, presented as a nested TensorDict.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
 <section id="ensembles">
 <h2>Ensembles<a class="headerlink" href="#ensembles" title="Permalink to this heading">¶</a></h2>
 <p>The functional approach enables a straightforward ensemble implementation.
@@ -761,7 +685,6 @@ a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.h
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">tensordict.nn package</a><ul>
-<li><a class="reference internal" href="#functional">Functional</a></li>
 <li><a class="reference internal" href="#ensembles">Ensembles</a></li>
 <li><a class="reference internal" href="#compiling-tensordictmodules">Compiling TensorDictModules</a></li>
 <li><a class="reference internal" href="#distributions">Distributions</a></li>

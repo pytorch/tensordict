@@ -1,6 +1,0 @@
-﻿tensordict.nn.get\_functional
-=============================
-
-.. currentmodule:: tensordict.nn
-
-.. autofunction:: get_functional
