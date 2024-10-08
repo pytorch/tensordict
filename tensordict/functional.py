@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import warnings
 
-from typing import Sequence
+from typing import Any, Callable, Dict, Mapping, Sequence
 
 import torch
 
@@ -238,19 +238,106 @@ def pad_sequence(
     return out
 
 
-def merge_tensordicts(*tensordicts: T) -> T:
-    """Merges tensordicts together."""
+def merge_tensordicts(
+    *tensordicts: T,
+    callback_exist: (
+        Callable[[Any], Any] | Dict[NestedKey, Callable[[Any], Any]] | None
+    ) = None,
+) -> T:
+    """Merges tensordicts together.
+
+    Args:
+        *tensordicts (sequence of TensorDict or equivalent): the list of tensordicts to merge together.
+
+    Keyword Args:
+        callback_exist (callable or Dict[str, callable], optional): a callable in case an entry exists in each and every tensordict.
+            If the entry is present in some but not all tensordicts, or if ``callback_exist`` is not passed,
+            `update` is used and the first non-``None`` value in the tensordict sequence will be used.
+            If a dictionary of callables is passed, it will contain the associated callback function for some of the
+            nested keys in the tensordicts passed to the function.
+
+    Examples:
+        >>> from tensordict import merge_tensordicts, TensorDict
+        >>> td0 = TensorDict({"a": {"b0": 0}, "c": {"d": {"e": 0}}, "common": 0})
+        >>> td1 = TensorDict({"a": {"b1": 1}, "f": {"g": {"h": 1}}, "common": 1})
+        >>> td2 = TensorDict({"a": {"b2": 2}, "f": {"g": {"h": 2}}, "common": 2})
+        >>> td = merge_tensordicts(td0, td1, td2, callback_exist=lambda *v: torch.stack(list(v)))
+        >>> print(td)
+        TensorDict(
+            fields={
+                a: TensorDict(
+                    fields={
+                        b0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                c: TensorDict(
+                    fields={
+                        d: TensorDict(
+                            fields={
+                                e: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                common: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
+                f: TensorDict(
+                    fields={
+                        g: TensorDict(
+                            fields={
+                                h: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(td["common"])
+        tensor([0, 1, 2])
+
+    """
     if len(tensordicts) < 2:
         raise RuntimeError(
             f"at least 2 tensordicts must be provided, got" f" {len(tensordicts)}"
         )
-    d = tensordicts[0].to_dict()
-    batch_size = tensordicts[0].batch_size
-    for td in tensordicts[1:]:
-        d.update(td.to_dict())
-        if td.batch_dims < len(batch_size):
-            batch_size = td.batch_size
-    return TensorDict._new_unsafe(d, batch_size, device=td.device)
+
+    out = tensordicts[0].empty(recurse=True)
+    key_list = set()
+
+    def func(name, *vals):
+        nonlocal key_list
+        if name in key_list:
+            return
+        key_list.add(name)
+        cb = (
+            callback_exist
+            if not isinstance(callback_exist, Mapping)
+            else callback_exist.get(name)
+        )
+        if cb is not None and all(val is not None for val in vals):
+            out.set(name, cb(*vals))
+            return
+        for val in vals:
+            if val is not None:
+                out.set(name, val)
+                return
+
+    for i in range(len(tensordicts)):
+        if i > 0:
+            tds = tensordicts[i + 1 :] + tensordicts[:i]
+        else:
+            tds = tensordicts[1:]
+        tensordicts[i]._fast_apply(
+            func, *tds, named=True, nested_keys=True, filter_empty=True, default=None
+        )
+    return out
 
 
 def dense_stack_tds(
