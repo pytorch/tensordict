@@ -5193,30 +5193,29 @@ class TensorDictBase(MutableMapping):
                     if key == name[: len(key)]:
                         dest.copy_(source, non_blocking=non_blocking)
 
-        else:
-            named = False
-
-            def inplace_update(dest, source):
-                if source is None:
-                    return None
-                dest.copy_(source, non_blocking=non_blocking)
-
-        if not _is_tensor_collection(type(input_dict_or_td)):
-            from tensordict import TensorDict
-
-            input_dict_or_td = TensorDict.from_dict(
-                input_dict_or_td, batch_dims=self.batch_dims
+            self._apply_nest(
+                inplace_update,
+                input_dict_or_td,
+                nested_keys=True,
+                default=None,
+                filter_empty=True,
+                named=named,
+                is_leaf=_is_leaf_nontensor,
             )
-        self._apply_nest(
-            inplace_update,
-            input_dict_or_td,
-            nested_keys=True,
-            default=None,
-            filter_empty=True,
-            named=named,
-            is_leaf=_is_leaf_nontensor,
-        )
-        return self
+            return self
+        else:
+            if not _is_tensor_collection(type(input_dict_or_td)):
+                from tensordict import TensorDict
+
+                input_dict_or_td = TensorDict.from_dict(
+                    input_dict_or_td, batch_dims=self.batch_dims
+                )
+
+            # Fastest route using _foreach_copy_
+            keys, vals = self._items_list(True, True)
+            other_val = input_dict_or_td._values_list(True, True, sorting_keys=keys)
+            torch._foreach_copy_(vals, other_val)
+            return self
 
     def update_at_(
         self,
@@ -8157,7 +8156,6 @@ class TensorDictBase(MutableMapping):
         .. note::
             In-place ``add`` does not support ``default`` keyword argument.
         """
-        torch.Tensor.add_
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
