@@ -883,11 +883,6 @@ class TestONNXExport:
         )
 
 
-if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
-
-
 @pytest.mark.skipif(TORCH_VERSION <= "2.4.1", reason="requires torch>=2.5")
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
@@ -1060,3 +1055,8 @@ class TestCudaGraphs:
             func(td)
             if i == 5:
                 assert not func._is_tensordict_module
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
