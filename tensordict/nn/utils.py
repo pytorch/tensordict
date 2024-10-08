@@ -8,7 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
-from enum import ReprEnum
+from enum import Enum
 from typing import Any, Callable
 
 import torch
@@ -423,7 +423,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 # Reproduce StrEnum for python<3.11
 
 
-class StrEnum(str, ReprEnum):  # noqa
+class StrEnum(str, Enum):  # noqa
     def __new__(cls, *values):
         if len(values) > 3:
             raise TypeError("too many arguments for str(): %r" % (values,))
