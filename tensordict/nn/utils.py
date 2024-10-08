@@ -19,8 +19,6 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
-AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
-
 
 DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
 
@@ -394,31 +392,6 @@ try:
     from torch.nn.parameter import Buffer  # noqa
 except ImportError:
     from tensordict.utils import Buffer  # noqa
-
-
-def _auto_make_functional():
-    """Returns ``True`` if TensorDictModuleBase subclasses are automatically made functional with the old API."""
-    global AUTO_MAKE_FUNCTIONAL
-    return AUTO_MAKE_FUNCTIONAL
-
-
-class _set_auto_make_functional(_DecoratorContextManager):
-    """Controls if TensorDictModule subclasses should be made functional automatically with the old API."""
-
-    def __init__(self, mode):
-        self.mode = mode
-
-    def clone(self):
-        return type(self)(self.mode)
-
-    def __enter__(self):
-        global AUTO_MAKE_FUNCTIONAL
-        self._saved_mode = AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self.mode
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self._saved_mode
 
 
 def _dispatch_td_nn_modules():
