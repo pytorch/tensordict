@@ -5178,6 +5178,14 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
+
+        if not _is_tensor_collection(type(input_dict_or_td)):
+            from tensordict import TensorDict
+
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -5193,29 +5201,35 @@ class TensorDictBase(MutableMapping):
                     if key == name[: len(key)]:
                         dest.copy_(source, non_blocking=non_blocking)
 
-            self._apply_nest(
-                inplace_update,
-                input_dict_or_td,
-                nested_keys=True,
-                default=None,
-                filter_empty=True,
-                named=named,
-                is_leaf=_is_leaf_nontensor,
-            )
-            return self
         else:
-            if not _is_tensor_collection(type(input_dict_or_td)):
-                from tensordict import TensorDict
-
-                input_dict_or_td = TensorDict.from_dict(
-                    input_dict_or_td, batch_dims=self.batch_dims
-                )
-
             # Fastest route using _foreach_copy_
             keys, vals = self._items_list(True, True)
-            other_val = input_dict_or_td._values_list(True, True, sorting_keys=keys)
-            torch._foreach_copy_(vals, other_val)
-            return self
+            new_keys, other_val = input_dict_or_td._items_list(
+                True, True, sorting_keys=keys, default="intersection"
+            )
+            if len(new_keys):
+                if len(other_val) != len(vals):
+                    vals = dict(*zip(keys, vals))
+                    vals = [vals[k] for k in new_keys]
+                torch._foreach_copy_(vals, other_val)
+                return self
+            named = False
+
+            def inplace_update(dest, source):
+                if source is None:
+                    return None
+                dest.copy_(source, non_blocking=non_blocking)
+
+        self._apply_nest(
+            inplace_update,
+            input_dict_or_td,
+            nested_keys=True,
+            default=None,
+            filter_empty=True,
+            named=named,
+            is_leaf=_is_leaf_nontensor,
+        )
+        return self
 
     def update_at_(
         self,
@@ -5638,7 +5652,10 @@ class TensorDictBase(MutableMapping):
             leaves_only=leaves_only,
             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
-        keys, vals = zip(*items)
+        keys_vals = tuple(zip(*items))
+        if not keys_vals:
+            return (), ()
+        keys, vals = keys_vals
         if sorting_keys is None:
             return list(keys), list(vals)
         if default is None:
