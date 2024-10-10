@@ -42,6 +42,7 @@ from tensordict import (
     PersistentTensorDict,
     set_get_defaults_to_none,
     TensorDict,
+    TensorDictCatView,
 )
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._reductions import _reduce_td
@@ -10823,6 +10824,231 @@ def _to_float(td, td_name, tmpdir):
     return td
 
 
+class TestTensorDictCatView:
+    @pytest.fixture
+    def lazy_cat_tensordict(self):
+        with torch.device("cuda:0" if torch.cuda.is_available() else "cpu"):
+            return TensorDictCatView(
+                {
+                    "a": torch.zeros(3, 4),
+                    "b": {"c": torch.ones(3, 4)},
+                    ("b", "e"): torch.full((3, 4), 2.0),
+                },
+                batch_size=[3],
+            )
+
+    def test_keys_values_items(self, lazy_cat_tensordict):
+        assert set(lazy_cat_tensordict.keys()) == {"a", "b"}
+        assert set(lazy_cat_tensordict["b"].keys()) == {"c", "e"}
+        assert set(lazy_cat_tensordict.keys(True, True)) == {
+            "a",
+            ("b", "c"),
+            ("b", "e"),
+        }
+        assert set(
+            lazy_cat_tensordict.keys(include_nested=False, leaves_only=True)
+        ) == {"a"}
+        assert set(
+            lazy_cat_tensordict.keys(include_nested=True, leaves_only=False)
+        ) == {"a", "b", ("b", "c"), ("b", "e")}
+
+        # items
+        assert set(list(zip(*lazy_cat_tensordict.items()))[0]) == {"a", "b"}
+        assert set(list(zip(*lazy_cat_tensordict.items(True, True)))[0]) == {
+            "a",
+            ("b", "c"),
+            ("b", "e"),
+        }
+
+    def test_get_set_(self, lazy_cat_tensordict):
+        assert "a" not in lazy_cat_tensordict._tensordict
+        _ = lazy_cat_tensordict.get("a")
+        assert "a" in lazy_cat_tensordict._tensordict
+        c = lazy_cat_tensordict.get(("b", "c"))
+        cc = c.clone()
+        assert c is lazy_cat_tensordict["b", "c"]
+        lazy_cat_tensordict.set_(("b", "c"), c + 1)
+        assert (c == cc + 1).all()
+
+    def test_sub_td(self, lazy_cat_tensordict):
+        assert isinstance(lazy_cat_tensordict, TensorDictCatView)
+        assert not isinstance(lazy_cat_tensordict, TensorDict)
+        b = lazy_cat_tensordict["b"]
+        assert isinstance(b, TensorDictCatView), type(b)
+        assert b.batch_size == lazy_cat_tensordict.batch_size
+
+    def test_data_ptr(self, lazy_cat_tensordict):
+        assert (
+            len(
+                set(
+                    lazy_cat_tensordict.data_ptr(storage=True)
+                    .flatten_keys()
+                    .stack_from_tensordict()
+                    .tolist()
+                )
+            )
+            == 1
+        )
+
+    def test_to_tensordict(self, lazy_cat_tensordict):
+        td = lazy_cat_tensordict.to_tensordict(clone=False)
+        assert isinstance(td, TensorDict)
+        assert (
+            len(
+                set(
+                    td.data_ptr(storage=True)
+                    .flatten_keys()
+                    .stack_from_tensordict()
+                    .tolist()
+                )
+            )
+            == 1
+        )
+        td = lazy_cat_tensordict.to_tensordict()
+        assert isinstance(td, TensorDict)
+        assert (
+            len(
+                set(
+                    td.data_ptr(storage=True)
+                    .flatten_keys()
+                    .stack_from_tensordict()
+                    .tolist()
+                )
+            )
+            > 1
+        )
+
+    def test_materialize(self, lazy_cat_tensordict):
+        assert "a" not in lazy_cat_tensordict._tensordict
+        assert "c" not in lazy_cat_tensordict._tensordict["b"]._tensordict
+        lazy_cat_tensordict.materialize()
+        assert "a" in lazy_cat_tensordict._tensordict
+        assert "c" in lazy_cat_tensordict._tensordict["b"]._tensordict
+
+    def test_clone(self, lazy_cat_tensordict):
+        td = lazy_cat_tensordict.clone(False)
+        assert td._cat_tensor is lazy_cat_tensordict._cat_tensor
+        td = lazy_cat_tensordict.clone()
+        assert isinstance(td, TensorDictCatView)
+        assert (
+            td._cat_tensor.untyped_storage().data_ptr()
+            != lazy_cat_tensordict._cat_tensor.untyped_storage().data_ptr()
+        )
+
+    def test_pointwise(self, lazy_cat_tensordict):
+        out0 = lazy_cat_tensordict + lazy_cat_tensordict
+        out1 = lazy_cat_tensordict * 2
+        out2 = lazy_cat_tensordict * 4 - out1
+        assert (out0 == out1).all()
+        assert (out0 == out2).all()
+        assert lazy_cat_tensordict.batch_size == out0.batch_size
+        assert isinstance(out0, TensorDictCatView)
+        assert isinstance(out1, TensorDictCatView)
+        assert isinstance(out2, TensorDictCatView)
+        ct = lazy_cat_tensordict._cat_tensor.clone()
+        td = lazy_cat_tensordict.to_tensordict(clone=False)
+        assert (lazy_cat_tensordict._cat_tensor == ct).all()
+        assert (td["a"] == 0).all()
+        assert (lazy_cat_tensordict._cat_tensor == ct).all()
+        assert isinstance(lazy_cat_tensordict == td, TensorDict)
+        assert_allclose_td(lazy_cat_tensordict, td)
+        assert isinstance(td == lazy_cat_tensordict, TensorDict)
+        assert (lazy_cat_tensordict._cat_tensor == ct).all()
+        assert (lazy_cat_tensordict._cat_tensor == ct).all()
+
+    def test_apply(self, lazy_cat_tensordict):
+        ref = (lazy_cat_tensordict + 1).to_tensordict(clone=False)
+        applied = lazy_cat_tensordict.apply(lambda x: x + 1)
+        assert set(ref.keys(True, True)) == set(applied.keys(True, True))
+        assert_allclose_td(applied, ref)
+        assert_allclose_td(lazy_cat_tensordict.named_apply(lambda name, x: x + 1), ref)
+        assert_allclose_td(
+            lazy_cat_tensordict.named_apply(lambda name, x: x + 1, call_on_nested=True),
+            ref,
+        )
+
+    def test_to_device(self, lazy_cat_tensordict):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps:0")
+        else:
+            device = torch.device("cpu")
+        lazy_cat_tensordict_device = lazy_cat_tensordict.to(device)
+        assert lazy_cat_tensordict_device.device == device
+        assert lazy_cat_tensordict_device["a"].device == device
+        assert (
+            lazy_cat_tensordict_device["a"].untyped_storage().data_ptr()
+            == lazy_cat_tensordict_device["b", "e"].untyped_storage().data_ptr()
+        )
+
+    def test_share_mem(self, lazy_cat_tensordict):
+        if lazy_cat_tensordict.device.type == "cpu":
+            assert not lazy_cat_tensordict.is_shared()
+        elif lazy_cat_tensordict.device.type == "cuda":
+            assert lazy_cat_tensordict.is_shared()
+        elif lazy_cat_tensordict.device.type == "mps":
+            assert not lazy_cat_tensordict.is_shared()
+            return
+        lazy_cat_tensordict.share_memory_()
+        assert lazy_cat_tensordict.is_shared()
+
+    def test_setitem(self, lazy_cat_tensordict):
+        lazy_cat_tensordict[0] = lazy_cat_tensordict[0].clone() + 5
+        assert (lazy_cat_tensordict[0] == lazy_cat_tensordict[1] + 5).all()
+        assert_allclose_td(lazy_cat_tensordict[0], lazy_cat_tensordict[1] + 5)
+
+    def test_unbind(self, lazy_cat_tensordict):
+        assert "a" not in lazy_cat_tensordict._tensordict
+        td0, td1, td2 = lazy_cat_tensordict.unbind(0)
+        assert set(td0.keys(True, True)) == set(lazy_cat_tensordict.keys(True, True))
+        assert isinstance(td0, TensorDict)
+        assert (
+            td0.data_ptr(storage=True) == lazy_cat_tensordict.data_ptr(storage=True)
+        ).all()
+
+    def test_split(self, lazy_cat_tensordict):
+        assert "a" not in lazy_cat_tensordict._tensordict
+        td0, td1 = lazy_cat_tensordict.split([1, 2])
+        assert set(td0.keys(True, True)) == set(lazy_cat_tensordict.keys(True, True))
+        assert isinstance(td0, TensorDict)
+        assert (
+            td0.data_ptr(storage=True) == lazy_cat_tensordict.data_ptr(storage=True)
+        ).all()
+        assert set(td1.keys(True, True)) == set(lazy_cat_tensordict.keys(True, True))
+        assert isinstance(td1, TensorDict)
+        assert (
+            td1.data_ptr(storage=True) == lazy_cat_tensordict.data_ptr(storage=True)
+        ).all()
+
+    def test_stack_onto(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_flatten_unflatten_keys(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_flatten_unflatten(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_reshape(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_view(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_permute(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_transpose(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_squeeze_unsqueeze(self, lazy_cat_tensordict):
+        raise NotImplementedError
+
+    def test_repr(self, lazy_cat_tensordict):
+        assert repr(lazy_cat_tensordict) == str(lazy_cat_tensordict) == ""
+
+
 _SYNC_COUNTER = 0
 
 
@@ -10841,4 +11067,4 @@ def _path_td_sync():
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    pytest.main([__file__, "--capture", "no", "--exitfirst", "--tb", "short"] + unknown)

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import tensordict._reductions
-from tensordict._lazy import LazyStackedTensorDict
+from tensordict._lazy import LazyStackedTensorDict, TensorDictCatView
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
     cat,
