@@ -340,7 +340,7 @@ class TensorDict(TensorDictBase):
         self._device = device
         self._tensordict = _tensordict = _StringOnlyDict()
         self._batch_size = batch_size
-        if source:  # faster than calling items
+        if source is not None:  # faster than calling items
             for key, value in source.items():
                 if nested and isinstance(value, dict):
                     value = TensorDict._new_unsafe(
@@ -4267,10 +4267,13 @@ class _TensorDictKeysView:
             _CustomOpTensorDict,
             _iter_items_lazystack,
             LazyStackedTensorDict,
+            TensorDictCatView,
         )
 
         if isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
+        if isinstance(tensordict, TensorDictCatView):
+            return tensordict.items()
         if isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
