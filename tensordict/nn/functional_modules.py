@@ -128,11 +128,14 @@ class _exclude_td_from_pytree:
 
     def __enter__(self):
         for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
+            node = SUPPORTED_NODES.pop(tdtype, None)
+            if node is None:
+                continue
+            self.tdnodes[tdtype] = node
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
-            SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
+        for tdtype, node in self.tdnodes.items():
+            SUPPORTED_NODES[tdtype] = node
 
     def set(self):
         self.__enter__()
