@@ -30,7 +30,6 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
-    set_interaction_mode,
     set_interaction_type,
 )
 from tensordict.nn.sequence import TensorDictSequential

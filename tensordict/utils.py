@@ -705,11 +705,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
             if _is_lis_of_list_of_bools(index):
                 index = torch.tensor(index, device=tensor.device)
                 if index.dtype is torch.bool:
-                    warnings.warn(
+                    raise RuntimeError(
                         "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated in v0.6 as this functionality is not supported "
-                        f"by PyTorch. (follows error: {err})",
-                        category=DeprecationWarning,
+                        "not supported by PyTorch.",
                     )
                 return tensor[index]
             raise err
@@ -2515,9 +2513,9 @@ _lock_warn = assume_constant_result(_lock_warn)
 
 
 def _check_inbuild():
-    if not strtobool(os.environ.get("TORCHDYNAMO_INLINE_INBUILT_NN_MODULES", "0")):
+    if not torch._dynamo.config.inline_inbuilt_nn_modules:
         raise RuntimeError(
-            "to_module requires TORCHDYNAMO_INLINE_INBUILT_NN_MODULES to be set."
+            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
         )
 
 
