@@ -101,6 +101,10 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
+try:
+    from torch import _foreach_copy_
+except ImportError:
+    _foreach_copy_ = None
 
 try:
     from torch.nn.parameter import Buffer
@@ -5178,6 +5182,14 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
+
+        if not _is_tensor_collection(type(input_dict_or_td)):
+            from tensordict import TensorDict
+
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -5194,6 +5206,17 @@ class TensorDictBase(MutableMapping):
                         dest.copy_(source, non_blocking=non_blocking)
 
         else:
+            # Fastest route using _foreach_copy_
+            keys, vals = self._items_list(True, True)
+            new_keys, other_val = input_dict_or_td._items_list(
+                True, True, sorting_keys=keys, default="intersection"
+            )
+            if len(new_keys) and _foreach_copy_ is not None:
+                if len(other_val) != len(vals):
+                    vals = dict(zip(keys, vals))
+                    vals = [vals[k] for k in new_keys]
+                _foreach_copy_(vals, other_val, non_blocking=non_blocking)
+                return self
             named = False
 
             def inplace_update(dest, source):
@@ -5201,12 +5224,6 @@ class TensorDictBase(MutableMapping):
                     return None
                 dest.copy_(source, non_blocking=non_blocking)
 
-        if not _is_tensor_collection(type(input_dict_or_td)):
-            from tensordict import TensorDict
-
-            input_dict_or_td = TensorDict.from_dict(
-                input_dict_or_td, batch_dims=self.batch_dims
-            )
         self._apply_nest(
             inplace_update,
             input_dict_or_td,
@@ -5639,7 +5656,10 @@ class TensorDictBase(MutableMapping):
             leaves_only=leaves_only,
             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
-        keys, vals = zip(*items)
+        keys_vals = tuple(zip(*items))
+        if not keys_vals:
+            return (), ()
+        keys, vals = keys_vals
         if sorting_keys is None:
             return list(keys), list(vals)
         if default is None:
@@ -5660,7 +5680,9 @@ class TensorDictBase(MutableMapping):
                 )
             return sorting_keys, new_vals
         if isinstance(default, str) and default == "intersection":
-            new_keys = list(set(sorting_keys).intersection(keys))
+            new_keys = [
+                key for key in sorting_keys if key in set(keys)
+            ]  # intersection does not keep the sorting
         else:
             new_keys = list(set(sorting_keys).union(keys))
         if is_dynamo_compiling():
@@ -8157,7 +8179,6 @@ class TensorDictBase(MutableMapping):
         .. note::
             In-place ``add`` does not support ``default`` keyword argument.
         """
-        torch.Tensor.add_
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
