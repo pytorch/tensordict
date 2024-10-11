@@ -298,7 +298,8 @@ class CudaGraphModule:
                         tree_leaves((args, kwargs)), self._flat_tree
                     ):
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
-                    torch._foreach_copy_(dests, srcs)
+                    if dests:
+                        torch._foreach_copy_(dests, srcs)
                     torch.cuda.synchronize()
                     self.graph.replay()
                     if self._return_unchanged == "clone":
