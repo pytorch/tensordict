@@ -4199,6 +4199,8 @@ class TensorDictCatView(TensorDictBase):
 
     _is_memmap: bool = False
     _is_shared: bool = False
+    _tensordict: TensorDict
+    _is_locked: bool = True
 
     def __init__(
         self,
@@ -4281,10 +4283,13 @@ class TensorDictCatView(TensorDictBase):
         tensors = self._cat_tensor.split(lengths, dim=self.dim)
         for k, t in zip(keys, tensors):
             if isinstance(k, tuple):
-                self._set_tuple(k, t, validated=True, inplace=False)
+                self._tensordict._set_tuple(
+                    k, t, validated=True, inplace=False, ignore_lock=True
+                )
             else:
-                self._set_str(k, t, validated=True, inplace=False)
-
+                self._tensordict._set_str(
+                    k, t, validated=True, inplace=False, ignore_lock=True
+                )
         return self
 
     @classmethod
@@ -4367,6 +4372,42 @@ class TensorDictCatView(TensorDictBase):
             self._tensordict._set_tuple(key, result, validated=True, inplace=False)
 
         return result
+
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+        non_blocking: bool = False,
+    ):
+        return self._tensordict._set_str(
+            key,
+            value,
+            inplace=inplace,
+            validated=validated,
+            ignore_lock=ignore_lock,
+            non_blocking=non_blocking,
+        )
+
+    def _set_tuple(
+        self,
+        key: NestedKey,
+        value: dict[str, CompatibleType] | CompatibleType,
+        *,
+        inplace: bool,
+        validated: bool,
+        non_blocking: bool = False,
+    ):
+        return self._tensordict._set_tuple(
+            key,
+            value,
+            inplace=inplace,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
 
     def __setitem__(self, key, value):
         return TensorDict.__setitem__(self, key, value)
@@ -4537,6 +4578,7 @@ class TensorDictCatView(TensorDictBase):
     def clamp_max(self, *args, **kwargs): ...
     @_pointwise_op_catview_dispatch
     def clamp_max_(self, *args, **kwargs): ...
+
     def all(self, dim: int = None) -> bool | TensorDictBase:
         if dim is None:
             return self._cat_tensor.all()
@@ -4563,17 +4605,17 @@ class TensorDictCatView(TensorDictBase):
         return self._clone_given_cat_tensor(cat_tensor)
 
     def _clone_given_cat_tensor(self, cat_tensor, **kwargs):
-        new_kwargs = dict(
-            lengths=self._lengths,
-            offsets=self._offsets,
-            keys=self._key_map.keys(),
-            cat_tensor=cat_tensor,
-            dim=self.dim,
-            names=self.names,
-            device=self.device,
-            batch_size=self.batch_size,
-            td_example=self._tensordict,
-        )
+        new_kwargs = {
+            'lengths': self._lengths,
+            'offsets': self._offsets,
+            'keys': self._key_map.keys(),
+            'cat_tensor': cat_tensor,
+            'dim': self.dim,
+            'names': self.names,
+            'device': self.device,
+            'batch_size': self.batch_size,
+            'td_example': self._tensordict
+        }
         new_kwargs.update(kwargs)
         return self._new_unsafe(**new_kwargs)
 
@@ -4600,15 +4642,6 @@ class TensorDictCatView(TensorDictBase):
         share_non_tensor,
         existsok,
     ) -> T:
-        raise NotImplementedError
-
-    def make_memmap(
-        self,
-        key: NestedKey,
-        shape: torch.Size | torch.Tensor,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> MemoryMappedTensor:
         raise NotImplementedError
 
     def make_memmap(
@@ -4836,8 +4869,6 @@ class TensorDictCatView(TensorDictBase):
 
     _set_at_str = TensorDict._set_at_str
     _set_at_tuple = TensorDict._set_at_tuple
-    _set_str = TensorDict._set_str
-    _set_tuple = TensorDict._set_tuple
 
     _stack_onto_ = TensorDict._stack_onto_
 
