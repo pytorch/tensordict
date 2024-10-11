@@ -6,7 +6,6 @@ import argparse
 import contextlib
 import importlib.util
 import inspect
-import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -662,10 +661,10 @@ class TestNN:
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
-        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = os.environ.get(
-            "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = (
+            torch._dynamo.config.inline_inbuilt_nn_modules
         )
-        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "1"
+        torch._dynamo.config.inline_inbuilt_nn_modules = True
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
             torch.nn.ReLU(),
@@ -675,7 +674,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.clone())
         td_zero.zero_()
 
-        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"
+        torch._dynamo.config.inline_inbuilt_nn_modules = False
         try:
 
             def call(x, td):
@@ -685,12 +684,12 @@ class TestFunctional:
             call_compile = torch.compile(call, fullgraph=True, mode=mode)
             x = torch.randn(2, 3)
             with pytest.raises(
-                RuntimeError, match="TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+                RuntimeError, match="torch._dynamo.config.inline_inbuilt_nn_modules"
             ):
                 call_compile(x, td_zero)
         finally:
-            if TORCHDYNAMO_INLINE_INBUILT_NN_MODULES is not None:
-                os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = (
+            if torch._dynamo.config.inline_inbuilt_nn_modules is not None:
+                torch._dynamo.config.inline_inbuilt_nn_modules = (
                     TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
                 )
 
@@ -884,11 +883,6 @@ class TestONNXExport:
         )
 
 
-if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
-
-
 @pytest.mark.skipif(TORCH_VERSION <= "2.4.1", reason="requires torch>=2.5")
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
@@ -1061,3 +1055,21 @@ class TestCudaGraphs:
             func(td)
             if i == 5:
                 assert not func._is_tensordict_module
+
+    def test_td_input_non_tdmodule_nontensor(self, compiled):
+        func = lambda x, y: x + y
+        func = self._make_cudagraph(func, compiled)
+        for i in range(10):
+            assert func(torch.zeros(()), 1.0) == 1.0
+            if i == 5:
+                assert not func._is_tensordict_module
+        if torch.cuda.is_available():
+            with pytest.raises(
+                ValueError, match="Varying inputs must be torch.Tensor subclasses."
+            ):
+                func(torch.zeros(()), 2.0)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
