@@ -2155,7 +2155,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _unsqueeze(self, dim): ...
+    def _unsqueeze(self, dim: int) -> T: ...
 
     def _legacy_unsqueeze(self, dim: int) -> T:
         if dim < 0:
@@ -2224,7 +2224,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _squeeze(self, dim=None): ...
+    def _squeeze(self, dim: int | None = None) -> T: ...
 
     def _legacy_squeeze(self, dim: int | None = None) -> T:
         from tensordict._lazy import _SqueezedTensorDict
@@ -2677,7 +2677,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _transpose(self, dim0, dim1): ...
+    def _transpose(self, dim0: int, dim1: int) -> T: ...
 
     def _legacy_transpose(self, dim0, dim1):
         if dim0 < 0:
@@ -9214,8 +9214,13 @@ class TensorDictBase(MutableMapping):
             if lock:
                 result.lock_()
 
-    def to_tensordict(self) -> T:
+    def to_tensordict(self, *, clone: bool = True) -> T:
         """Returns a regular TensorDict instance from the TensorDictBase.
+
+        Keyword Args:
+            clone (bool, optional): if ``True``, the values are cloned. Otherwise,
+                a :class:`~tensordict.TensorDict` instance is returned with values not cloned.
+                Defaults to ``True``.
 
         Returns:
             a new TensorDict object containing the same values.
@@ -9223,15 +9228,19 @@ class TensorDictBase(MutableMapping):
         """
         from tensordict import TensorDict
 
+        def _maybe_clone(value):
+            if clone and not _is_tensor_collection(type(value)):
+                return value.clone()
+            if not clone or is_non_tensor(value):
+                return value
+            return value.to_tensordict(clone=clone)
+
+        d = {
+            key: _maybe_clone(value)
+            for key, value in self.items(is_leaf=_is_leaf_nontensor)
+        }
         return TensorDict(
-            {
-                key: (
-                    value.clone()
-                    if not _is_tensor_collection(type(value))
-                    else value if is_non_tensor(value) else value.to_tensordict()
-                )
-                for key, value in self.items(is_leaf=_is_leaf_nontensor)
-            },
+            d,
             device=self.device,
             batch_size=self.batch_size,
             names=self._maybe_names(),
