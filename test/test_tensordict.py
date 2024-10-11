@@ -48,7 +48,7 @@ from tensordict._reductions import _reduce_td
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
-from tensordict.functional import dense_stack_tds, pad, pad_sequence
+from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
@@ -1585,6 +1585,22 @@ class TestGeneric:
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
+
+    @pytest.mark.parametrize("dist_of_callables", [False, True])
+    def test_merge_tensordicts(self, dist_of_callables):
+        td0 = TensorDict({"a": {"b0": 0}, "c": {"d": {"e": 0}}, "common": 0})
+        td1 = TensorDict({"a": {"b1": 1}, "f": {"g": {"h": 1}}, "common": 1})
+        td2 = TensorDict({"a": {"b2": 2}, "f": {"g": {"h": 2}}, "common": 2})
+        caller = lambda *v: torch.stack(list(v))
+        if dist_of_callables:
+            caller = {"common": caller}
+        td = merge_tensordicts(td0, td1, td2, callback_exist=caller)
+        assert td["a", "b0"] == 0
+        assert td["a", "b1"] == 1
+        assert td["a", "b2"] == 2
+        assert (td["common"] == torch.arange(3)).all()
+        assert td["c", "d", "e"] == 0
+        assert td["f", "g", "h"] == 1
 
     def test_no_batch_size(self):
         td = TensorDict({"a": torch.zeros(3, 4)})
