@@ -376,16 +376,17 @@ class CudaGraphModule:
         if is_tensor_collection(src):
             dest.copy_(src)
             return
+        isdiff = False
         try:
-            if src != dest:
-                raise ValueError("Varying inputs must be torch.Tensor subclasses.")
-            return
+            isdiff = src != dest
         except Exception as err:
             raise RuntimeError(
                 "Couldn't assess input value. Make sure your function only takes tensor inputs or that "
                 "the input value can be easily checked and is constant. For a better efficiency, avoid "
                 "passing non-tensor inputs to your function."
             ) from err
+        if isdiff:
+            raise ValueError("Varying inputs must be torch.Tensor subclasses.")
 
     @classmethod
     def _check_device_and_clone(cls, x):
