@@ -371,6 +371,7 @@ class CudaGraphModule:
         if isinstance(src, (torch.Tensor, TensorDictBase)):
             srcs.append(src)
             dests.append(dest)
+            return
         try:
             if src != dest:
                 raise ValueError("Varying inputs must be torch.Tensor subclasses.")
