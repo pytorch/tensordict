@@ -1056,6 +1056,19 @@ class TestCudaGraphs:
             if i == 5:
                 assert not func._is_tensordict_module
 
+    def test_td_input_non_tdmodule_nontensor(self, compiled):
+        func = lambda x, y: x + y
+        func = self._make_cudagraph(func, compiled)
+        for i in range(10):
+            assert func(torch.zeros(()), 1.0) == 1.0
+            if i == 5:
+                assert not func._is_tensordict_module
+        if torch.cuda.is_available():
+            with pytest.raises(
+                ValueError, match="Varying inputs must be torch.Tensor subclasses."
+            ):
+                func(torch.zeros(()), 2.0)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
