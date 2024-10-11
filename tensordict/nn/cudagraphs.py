@@ -375,6 +375,7 @@ class CudaGraphModule:
             return
         if is_tensor_collection(src):
             dest.copy_(src)
+            return
         try:
             if src != dest:
                 raise ValueError("Varying inputs must be torch.Tensor subclasses.")
