@@ -28,9 +28,9 @@ from torch import Tensor
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 try:
-    from torch.utils._pytree import tree_leaves
+    from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 except ImportError:
-    from torch.utils._pytree import tree_flatten
+    from torch.utils._pytree import tree_flatten, tree_unflatten
 
     def tree_leaves(pytree):
         """Torch 2.0 compatible version of tree_leaves."""
@@ -293,11 +293,12 @@ class CudaGraphModule:
 
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter >= self._warmup:
-                    tree_map(
-                        lambda x, y: x.copy_(y, non_blocking=True),
-                        (self._args, self._kwargs),
-                        (args, kwargs),
-                    )
+                    srcs, dests = [], []
+                    for arg_src, arg_dest in zip(
+                        tree_leaves((args, kwargs)), self._flat_tree
+                    ):
+                        self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
+                    torch._foreach_copy_(dests, srcs)
                     torch.cuda.synchronize()
                     self.graph.replay()
                     if self._return_unchanged == "clone":
@@ -322,8 +323,13 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
-                    args, kwargs = self._args, self._kwargs = tree_map(
-                        self._check_device_and_clone, (args, kwargs)
+                    self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
+
+                    self._flat_tree = tuple(
+                        self._check_device_and_clone(arg) for arg in self._flat_tree
+                    )
+                    args, kwargs = self._args, self._kwargs = tree_unflatten(
+                        self._flat_tree, self._tree_spec
                     )
 
                     torch.cuda.synchronize()
@@ -359,6 +365,21 @@ class CudaGraphModule:
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
+
+    @staticmethod
+    def _maybe_copy_onto_(src, dest, srcs, dests):
+        if isinstance(src, (torch.Tensor, TensorDictBase)):
+            srcs.append(src)
+            dests.append(dest)
+        try:
+            if src != dest:
+                raise ValueError("Varying inputs must be torch.Tensor subclasses.")
+        except Exception:
+            raise RuntimeError(
+                "Couldn't assess input value. Make sure your function only takes tensor inputs or that "
+                "the input value can be easily checked and is constant. For a better efficiency, avoid "
+                "passing non-tensor inputs to your function."
+            )
 
     @classmethod
     def _check_device_and_clone(cls, x):
