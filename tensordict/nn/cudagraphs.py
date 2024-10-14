@@ -306,7 +306,7 @@ class CudaGraphModule:
                         result = self._out
                     else:
                         result = tree_unflatten(
-                            torch._foreach_add(self._out, 0.0), self._out_struct
+                            [out.clone() for out in self._out], self._out_struct
                         )
                     return result
 
