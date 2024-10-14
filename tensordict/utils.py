@@ -1540,9 +1540,14 @@ def assert_close(
         elif not isinstance(input1, torch.Tensor):
             continue
         if input1.is_nested:
-            input1 = input1._base
-            input2 = input2._base
-        mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
+            input1o = input1.offsets()
+            input2o = input2.offsets()
+            mse = (input1o.to(torch.float) - input2o.to(torch.float)).pow(2).sum()
+            input1 = input1.values()
+            input2 = input2.values()
+            mse = mse + (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
+        else:
+            mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
         local_msg = f"key {key} does not match, got mse = {mse:4.4f}"

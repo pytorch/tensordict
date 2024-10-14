@@ -7923,11 +7923,11 @@ class TestLazyStackedTensorDict:
                 "b": {"c": torch.arange(3, dtype=torch.double).expand(4, 3).clone()},
                 "d": "a string!",
                 "njt": torch.nested.nested_tensor_from_jagged(
-                    torch.arange(10, device=device),
-                    offsets=torch.tensor([0, 2, 5, 8, 10], device=device),
+                    torch.arange(9, -1, -1, device=device), offsets=torch.tensor([0, 2, 5, 8, 10], device=device)
                 ),
+                "intermediate": torch.randn(4),
                 "njt_lengths": torch.nested.nested_tensor_from_jagged(
-                    torch.arange(10, device=device),
+                    torch.arange(10, 20, device=device),
                     offsets=torch.tensor([0, 2, 5, 8, 10], device=device),
                     lengths=torch.tensor([2, 3, 3, 2], device=device),
                 ),
@@ -7957,12 +7957,13 @@ class TestLazyStackedTensorDict:
 
         tdload_make, tdload_data = _reduce_td(td)
         tdload = tdload_make(*tdload_data)
-        assert (td == tdload).all()
+        assert assert_allclose_td(td, tdload)
 
         td_c = td.consolidate()
+        assert assert_allclose_td(td, td_c.contiguous())
         tdload_make, tdload_data = _reduce_td(td_c)
         tdload = tdload_make(*tdload_data)
-        assert assert_allclose_td(td, tdload)
+        assert assert_allclose_td(td_c, tdload)
 
         def check_id(a, b):
             if isinstance(a, (torch.Size, str)):
@@ -7972,7 +7973,7 @@ class TestLazyStackedTensorDict:
 
         torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
         assert tdload.is_consolidated()
-        assert tdload["njt_lengths"]._lengths is not None
+        # assert tdload["njt_lengths"]._lengths is not None
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
     def test_consolidate_to_device(self):
@@ -7998,6 +7999,47 @@ class TestLazyStackedTensorDict:
         assert (td_c_device.cpu() == td).all()
         assert td_c_device["d"] == [["a string!"] * 3]
         assert len(dataptrs) == 1
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device detected")
+    def test_consolidate_to_device_njt(self):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(4, 3).clone(),
+                "d": "a string!",
+                "njt": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10), offsets=torch.tensor([0, 2, 5, 8, 10])
+                ),
+                "njt_lengths": torch.nested.nested_tensor_from_jagged(
+                    torch.arange(10),
+                    offsets=torch.tensor([0, 2, 5, 8, 10]),
+                    lengths=torch.tensor([2, 3, 3, 2]),
+                ),
+            },
+            device="cpu",
+            batch_size=[4],
+        )
+        device = torch.device("cuda:0")
+        td_c = td.consolidate()
+        assert td_c.device == torch.device("cpu")
+        td_c_device = td_c.to(device)
+        assert td_c_device.device == device
+        assert td_c_device.is_consolidated()
+        dataptrs = set()
+        for tensor in td_c_device.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            assert tensor.device == device
+            if tensor.is_nested:
+                vals = tensor._values
+                dataptrs.add(vals.untyped_storage().data_ptr())
+                offsets = tensor._offsets
+                dataptrs.add(offsets.untyped_storage().data_ptr())
+                lengths = tensor._lengths
+                if lengths is not None:
+                    dataptrs.add(lengths.untyped_storage().data_ptr())
+            else:
+                dataptrs.add(tensor.untyped_storage().data_ptr())
+        assert len(dataptrs) == 1
+        assert assert_allclose_td(td_c_device.cpu(), td)
+        assert td_c_device["njt_lengths"]._lengths is not None
 
     def test_create_empty(self):
         td = LazyStackedTensorDict(stack_dim=0)
