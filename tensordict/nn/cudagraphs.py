@@ -267,6 +267,8 @@ class CudaGraphModule:
                             "The output of the function must be a tensordict, a tensorclass or None. Got "
                             f"type(out)={type(out)}."
                         )
+                    if is_tensor_collection(out):
+                        out.lock_()
                     self._out = out
                     self.counter += 1
                     if self._out_matches_in:
@@ -356,6 +358,7 @@ class CudaGraphModule:
                     if not self._out:
                         self._return_unchanged = True
                     else:
+                        self._out = [out.lock_() if is_tensor_collection(out) else out for out in self._out]
                         self._return_unchanged = False
                     return this_out
 
