@@ -29,7 +29,6 @@ from typing import (
     Callable,
     get_type_hints,
     List,
-    overload,
     Sequence,
     Type,
     TypeVar,
@@ -370,6 +369,7 @@ class _tensorclass_dec:
         clz.autocast = self.autocast
         return clz
 
+
 @dataclass_transform()
 def tensorclass(cls=None, /, *, autocast: bool = False, frozen: bool = False):
     """A decorator to create :obj:`tensorclass` classes.
@@ -452,6 +452,7 @@ def tensorclass(cls=None, /, *, autocast: bool = False, frozen: bool = False):
 
 
     """
+
     def wrap(cls):
         return _tensorclass_dec(autocast, frozen)(cls)
 
