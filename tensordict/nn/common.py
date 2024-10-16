@@ -745,6 +745,14 @@ class TensorDictModuleBase(nn.Module):
                 any_reset |= True
         return any_reset
 
+    @property
+    def __name__(self):
+        # This is necessary to make compiled vmap over TDModule happy
+        return self.__class__.__name__
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
 
 class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
