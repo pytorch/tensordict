@@ -53,7 +53,9 @@ def test_vmap_compile():
     funcv_c(x, y)
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -340,7 +342,9 @@ class MyClass:
     c: Any = None
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -579,7 +583,9 @@ class TestTC:
         assert (tc_op == tc_op_c).all()
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
