@@ -895,7 +895,9 @@ class TestONNXExport:
         )
 
 
-@pytest.mark.skipif(TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5")
+@pytest.mark.skipif(
+    TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5"
+)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
