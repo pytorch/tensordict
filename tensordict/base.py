@@ -10457,7 +10457,9 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking, compilable):
+    def _to_consolidated(
+        self, *, device, pin_memory, num_threads, non_blocking, compilable
+    ):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10470,12 +10472,17 @@ class TensorDictBase(MutableMapping):
                 storage = storage.pin_memory()
             storage_cast = storage.to(device, non_blocking=True)
             return storage_cast
+
         storage_cast = to(storage)
 
         if compilable:
-            result = self._to_consolidated_compile(device=device, num_threads=num_threads, storage_cast=storage_cast)
+            result = self._to_consolidated_compile(
+                device=device, num_threads=num_threads, storage_cast=storage_cast
+            )
         else:
-            result = self._to_consolidated_eager(device=device, num_threads=num_threads, storage_cast=storage_cast)
+            result = self._to_consolidated_eager(
+                device=device, num_threads=num_threads, storage_cast=storage_cast
+            )
 
         if non_blocking in (False, None):
             if device.type == "cuda" and non_blocking is False:
@@ -10578,12 +10585,18 @@ class TensorDictBase(MutableMapping):
                 keys.append(prefix + (k,))
             for k, d in metadata.items():
                 if "leaves" in d:
-                    get_tensors_length(d, lengths=lengths, pos=pos, keys=keys, prefix=prefix + (k,))
+                    get_tensors_length(
+                        d, lengths=lengths, pos=pos, keys=keys, prefix=prefix + (k,)
+                    )
             if root:
                 # l = torch.empty(len(lengths), dtype=torch.long)
                 # l[torch.as_tensor(pos)] = torch.as_tensor(lengths)
-                out0 = [None, ] * len(pos)
-                out1 = [None, ] * len(pos)
+                out0 = [
+                    None,
+                ] * len(pos)
+                out1 = [
+                    None,
+                ] * len(pos)
                 for p, l, k in zip(pos, lengths, keys):
                     out0[p] = k
                     out1[p] = l
@@ -10610,6 +10623,9 @@ class TensorDictBase(MutableMapping):
 
         slice_map = split_storage(_consolidated)
 
+        def view_as(src, dest):
+            return src.view(dest.dtype)[: dest.numel()].view(dest.shape)
+
         def set_(name, x):
             if not isinstance(name, tuple):
                 name = (name,)
@@ -10631,11 +10647,21 @@ class TensorDictBase(MutableMapping):
                 values = x._values
                 lengths = x._lengths
                 offsets = x._offsets
-                storage_offsets = slice_map[(*name[:-1], "<NJT_OFFSETS>"+name[-1],)]
-                kwargs["offsets"] = storage_offsets.view(offsets.dtype).view(offsets.shape)
+                storage_offsets = slice_map[
+                    (
+                        *name[:-1],
+                        "<NJT_OFFSETS>" + name[-1],
+                    )
+                ]
+                kwargs["offsets"] = view_as(storage_offsets, offsets)
                 if lengths is not None:
-                    storage_lengths = slice_map[(*name[:-1], "<NJT_LENGTHS>"+name[-1],)]
-                    kwargs["lengths"] = storage_lengths.view(lengths.dtype).view(lengths.shape)
+                    storage_lengths = slice_map[
+                        (
+                            *name[:-1],
+                            "<NJT_LENGTHS>" + name[-1],
+                        )
+                    ]
+                    kwargs["lengths"] = view_as(storage_lengths, lengths)
                     ragged_source = lengths
                 else:
                     ragged_source = offsets
@@ -10654,18 +10680,28 @@ class TensorDictBase(MutableMapping):
                         ragged_source
                     ]
 
-                storage_values = slice_map[(*name[:-1], "<NJT_VALUES>"+name[-1],)]
+                storage_values = slice_map[
+                    (
+                        *name[:-1],
+                        "<NJT_VALUES>" + name[-1],
+                    )
+                ]
                 return NestedTensor(
-                    storage_values.view(values.dtype).view(values.shape),
+                    view_as(storage_values, values),
                     **kwargs,
                 )
-            return slice_map[name].view(x.dtype).view(x.shape)
+            return view_as(slice_map[name], x)
 
         result = self._fast_apply(
-            set_, device=torch.device(device), num_threads=num_threads, named=True, nested_keys=True,
+            set_,
+            device=torch.device(device),
+            num_threads=num_threads,
+            named=True,
+            nested_keys=True,
         )
         result._consolidated = _consolidated
         return result
+
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
