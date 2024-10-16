@@ -3009,6 +3009,9 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def _clone(self, recurse: bool = True) -> T:
+        if recurse and self.device is not None and self.device.type == "cuda":
+            return self._clone_recurse()
+
         result = TensorDict._new_unsafe(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
