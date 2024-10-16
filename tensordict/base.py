@@ -10394,11 +10394,12 @@ class TensorDictBase(MutableMapping):
             return result
 
         if self.is_consolidated() and dtype is None:
-            return self._to_consolidated_compile(
+            return self._to_consolidated(
                 device=device,
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
+                compilable=is_dynamo_compiling(),
             )
 
         if non_blocking is None:
@@ -10456,14 +10457,42 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
+    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking, compilable):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
+
         storage = self._consolidated["storage"]
-        if pin_memory:
-            storage = storage.pin_memory()
-        storage_cast = storage.to(device, non_blocking=True)
+
+        @torch.compiler.disable()
+        def to(storage):
+            if pin_memory:
+                storage = storage.pin_memory()
+            storage_cast = storage.to(device, non_blocking=True)
+            return storage_cast
+        storage_cast = to(storage)
+
+        if compilable:
+            result = self._to_consolidated_compile(device=device, num_threads=num_threads, storage_cast=storage_cast)
+        else:
+            result = self._to_consolidated_eager(device=device, num_threads=num_threads, storage_cast=storage_cast)
+
+        if non_blocking in (False, None):
+            if device.type == "cuda" and non_blocking is False:
+                # sending to CUDA force sync
+                cuda_device = device
+            elif storage.device.type == "cuda":
+                # sending from cuda: need sync unless intentionally not asked for
+                cuda_device = storage.device.type
+            else:
+                cuda_device = None
+            if cuda_device is not None:
+                torch.cuda.current_stream(cuda_device).synchronize()
+
+        return result
+
+    def _to_consolidated_eager(self, *, device, num_threads, storage_cast):
+
         untyped_storage = storage_cast.untyped_storage()
 
         def set_(x):
@@ -10532,21 +10561,10 @@ class TensorDictBase(MutableMapping):
                 }
 
             result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
-        if non_blocking in (False, None):
-            if device.type == "cuda" and non_blocking is False:
-                # sending to CUDA force sync
-                cuda_device = device
-            elif storage.device.type == "cuda":
-                # sending from cuda: need sync unless intentionally not asked for
-                cuda_device = storage.device.type
-            else:
-                cuda_device = None
-            if cuda_device is not None:
-                torch.cuda.current_stream(cuda_device).synchronize()
-
         return result
 
-    def _to_consolidated_compile(self, *, device, pin_memory, num_threads, non_blocking):
+    @torch.compile(dynamic=True)
+    def _to_consolidated_compile(self, *, device, num_threads, storage_cast):
 
         def get_l(metadata, lengths=None, pos=None, keys=None, prefix=()):
             root = False
@@ -10579,10 +10597,6 @@ class TensorDictBase(MutableMapping):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
-        storage = self._consolidated["storage"]
-        if pin_memory:
-            storage = storage.pin_memory()
-        storage_cast = storage.to(device, non_blocking=True)
 
         _consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
@@ -10649,21 +10663,7 @@ class TensorDictBase(MutableMapping):
             set_, device=torch.device(device), num_threads=num_threads, named=True, nested_keys=True,
         )
         result._consolidated = _consolidated
-
-        if non_blocking in (False, None):
-            if device.type == "cuda" and non_blocking is False:
-                # sending to CUDA force sync
-                cuda_device = device
-            elif storage.device.type == "cuda":
-                # sending from cuda: need sync unless intentionally not asked for
-                cuda_device = storage.device.type
-            else:
-                cuda_device = None
-            if cuda_device is not None:
-                torch.cuda.current_stream(cuda_device).synchronize()
-
         return result
-
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
