@@ -7948,13 +7948,8 @@ class TestLazyStackedTensorDict:
         assert hasattr(td_c, "_consolidated")
         assert type(td_c) == type(td)  # noqa
         assert td_c["d"] == "a string!"
-        with (
-            pytest.raises(KeyError)
-            if td.device != td_c.device and device is not None
-            else contextlib.nullcontext()
-        ):
-            # njt.to(device) is currently broken when it has lengths
-            assert_allclose_td(td.to(td_c.device), td_c)
+
+        assert_allclose_td(td.to(td_c.device), td_c)
 
         tdload_make, tdload_data = _reduce_td(td)
         tdload = tdload_make(*tdload_data)
