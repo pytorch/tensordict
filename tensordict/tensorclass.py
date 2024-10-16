@@ -24,15 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    get_type_hints,
-    List,
-    Sequence,
-    Type,
-    TypeVar,
-)
+from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
 import orjson as json
