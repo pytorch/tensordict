@@ -129,7 +129,9 @@ def _rebuild_tensordict_files_consolidated(
                 value = value[: local_shape.numel()]
             value = value.view(local_shape)
             if key.startswith("<NJT>"):
-                key = key.replace("<NJT>", "")
+                raise RuntimeError
+            elif key.startswith("<NJT_VALUES>"):
+                key = key.replace("<NJT_VALUES>", "")
                 if prefix:
                     total_key = prefix + (key,)
                 else:

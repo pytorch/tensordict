@@ -7916,7 +7916,8 @@ class TestLazyStackedTensorDict:
     @pytest.mark.skipif(not _v2_5, reason="v2.5 required for this test")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
-    def test_consolidate_njt(self, device, use_file, tmpdir):
+    @pytest.mark.parametrize("num_threads", [0, 1, 4])
+    def test_consolidate_njt(self, device, use_file, tmpdir, num_threads):
         td = TensorDict(
             {
                 "a": torch.arange(3).expand(4, 3).clone(),
@@ -7937,11 +7938,11 @@ class TestLazyStackedTensorDict:
         )
 
         if not use_file:
-            td_c = td.consolidate()
+            td_c = td.consolidate(num_threads=num_threads)
             assert td_c.device == device
         else:
             filename = Path(tmpdir) / "file.mmap"
-            td_c = td.consolidate(filename=filename)
+            td_c = td.consolidate(filename=filename, num_threads=num_threads)
             assert td_c.device == torch.device("cpu")
             assert assert_allclose_td(TensorDict.from_consolidated(filename), td_c)
         assert hasattr(td_c, "_consolidated")
@@ -7959,7 +7960,7 @@ class TestLazyStackedTensorDict:
         tdload = tdload_make(*tdload_data)
         assert assert_allclose_td(td, tdload)
 
-        td_c = td.consolidate()
+        td_c = td.consolidate(num_threads=num_threads)
         assert assert_allclose_td(td, td_c.contiguous())
         tdload_make, tdload_data = _reduce_td(td_c)
         tdload = tdload_make(*tdload_data)

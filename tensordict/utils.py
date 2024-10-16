@@ -1552,9 +1552,14 @@ def assert_close(
 
         local_msg = f"key {key} does not match, got mse = {mse:4.4f}"
         new_msg = ",\t".join([local_msg, msg]) if len(msg) else local_msg
-        torch.testing.assert_close(
-            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
-        )
+        if input1.is_nested:
+            torch.testing.assert_close(
+                input1v, input2v, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
+            )
+        else:
+            torch.testing.assert_close(
+                input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
+            )
         local_msg = f"key {key} matches"
         msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
 
@@ -2655,3 +2660,36 @@ def parse_tensor_dict_string(s: str):
         raise ValueError("Device not found in the string")
     tensor_dict = TensorDict(fields, batch_size=torch.Size(batch_size), device=device)
     return tensor_dict
+
+
+def _rebuild_njt_from_njt(x, values, offsets, lengths):
+    from torch._subclasses.fake_tensor import FakeTensor
+    from torch._subclasses.functional_tensor import FunctionalTensor
+    from torch.nested._internal.nested_tensor import (
+        _tensor_symint_registry,
+        NestedTensor,
+    )
+    from torch.nested._internal.ops import extract_kwargs
+
+    kwargs = extract_kwargs(x)
+    kwargs["offsets"] = offsets
+    if x._lengths is not None:
+        kwargs["lengths"] = lengths
+        ragged_source = x._lengths
+    else:
+        ragged_source = x._offsets
+    new_thing = kwargs.get("lengths", kwargs.get("offsets"))
+    if isinstance(new_thing, (FakeTensor, FunctionalTensor)):
+        from torch._subclasses.functional_tensor import mb_unwrap_functional_tensor
+
+        # Temporary hack until we have the union find
+        tgt = mb_unwrap_functional_tensor(new_thing)
+        src = mb_unwrap_functional_tensor(ragged_source)
+        tgt.nested_int_memo = src.nested_int_memo
+    else:
+        _tensor_symint_registry[new_thing] = _tensor_symint_registry[ragged_source]
+
+    return NestedTensor(
+        values,
+        **kwargs,
+    )
