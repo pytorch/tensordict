@@ -3009,7 +3009,7 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def _clone(self, recurse: bool = True) -> T:
-        if recurse and self.device is not None and self.device.type == "cuda":
+        if recurse and self.device is not None:
             return self._clone_recurse()
 
         result = TensorDict._new_unsafe(

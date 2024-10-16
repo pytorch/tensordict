@@ -8121,14 +8121,17 @@ class TensorDictBase(MutableMapping):
 
     def _clone_recurse(self) -> TensorDictBase:  # noqa: D417
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_add(vals, 0)
+        if all(type(val) is torch.Tensor and not val.requires_grad for val in vals):
+            vals = torch._foreach_add(vals, 0)
+        else:
+            vals = (val.clone() for val in vals)
         items = dict(zip(keys, vals))
         result = self._fast_apply(
             lambda name, val: items.pop(name, None),
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
+            propagate_lock=False,
             filter_empty=True,
             default=None,
         )
