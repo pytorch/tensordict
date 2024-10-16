@@ -9,13 +9,15 @@ import sys
 
 import pytest
 import torch
+
+from packaging import version
 from tensordict import TensorDict, TensorDictParams
 
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
-sys.setrecursionlimit(10000)
+TORCH_VERSION = version.parse(".".join(torch.__version__.split(".")[:3]))
 
-TORCH_VERSION = torch.__version__
+sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

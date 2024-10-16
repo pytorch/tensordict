@@ -7,8 +7,11 @@ import argparse
 
 import pytest
 import torch
+from packaging import version
 
 from tensordict import TensorDict
+
+TORCH_VERSION = version.parse(".".join(torch.__version__.split(".")[:3]))
 
 
 @pytest.fixture
@@ -50,6 +53,7 @@ def default_device():
 
 
 @pytest.mark.parametrize("consolidated", [False, True])
+@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
 class TestTo:
     def test_to(self, benchmark, consolidated, td, default_device):
         if consolidated:
