@@ -10563,10 +10563,9 @@ class TensorDictBase(MutableMapping):
             result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
         return result
 
-    @torch.compile(dynamic=True)
     def _to_consolidated_compile(self, *, device, num_threads, storage_cast):
 
-        def get_l(metadata, lengths=None, pos=None, keys=None, prefix=()):
+        def get_tensors_length(metadata, lengths=None, pos=None, keys=None, prefix=()):
             root = False
             if lengths is None:
                 lengths = []
@@ -10579,7 +10578,7 @@ class TensorDictBase(MutableMapping):
                 keys.append(prefix + (k,))
             for k, d in metadata.items():
                 if "leaves" in d:
-                    get_l(d, lengths=lengths, pos=pos, keys=keys, prefix=prefix + (k,))
+                    get_tensors_length(d, lengths=lengths, pos=pos, keys=keys, prefix=prefix + (k,))
             if root:
                 # l = torch.empty(len(lengths), dtype=torch.long)
                 # l[torch.as_tensor(pos)] = torch.as_tensor(lengths)
@@ -10591,7 +10590,7 @@ class TensorDictBase(MutableMapping):
                 return out0, out1
 
         def split_storage(consolidated):
-            keys, splits = get_l(consolidated["metadata"])
+            keys, splits = get_tensors_length(consolidated["metadata"])
             return dict(zip(keys, consolidated["storage"].split(splits)))
 
         if num_threads is None:
@@ -10632,9 +10631,11 @@ class TensorDictBase(MutableMapping):
                 values = x._values
                 lengths = x._lengths
                 offsets = x._offsets
-                kwargs["offsets"] = slice_map[(*name[:-1], "<NJT_OFFSETS>"+name[-1],)].view(offsets.dtype).view(offsets.shape)
+                storage_offsets = slice_map[(*name[:-1], "<NJT_OFFSETS>"+name[-1],)]
+                kwargs["offsets"] = storage_offsets.view(offsets.dtype).view(offsets.shape)
                 if lengths is not None:
-                    kwargs["lengths"] = slice_map[(*name[:-1], "<NJT_LENGTHS>"+name[-1],)].view(lengths.dtype).view(lengths.shape)
+                    storage_lengths = slice_map[(*name[:-1], "<NJT_LENGTHS>"+name[-1],)]
+                    kwargs["lengths"] = storage_lengths.view(lengths.dtype).view(lengths.shape)
                     ragged_source = lengths
                 else:
                     ragged_source = offsets
@@ -10653,8 +10654,9 @@ class TensorDictBase(MutableMapping):
                         ragged_source
                     ]
 
+                storage_values = slice_map[(*name[:-1], "<NJT_VALUES>"+name[-1],)]
                 return NestedTensor(
-                    slice_map[(*name[:-1], "<NJT_VALUES>"+name[-1],)].view(values.dtype).view(values.shape),
+                    storage_values.view(values.dtype).view(values.shape),
                     **kwargs,
                 )
             return slice_map[name].view(x.dtype).view(x.shape)
