@@ -99,6 +99,8 @@ def _rebuild_tensordict_files_consolidated(
                 value = value[: local_shape.numel()]
             value = value.view(local_shape)
             if key.startswith("<NJT>"):
+                raise RuntimeError
+            elif key.startswith("<NJT_VALUES>"):
                 nested_values = value
                 nested_lengths = None
                 continue
@@ -106,8 +108,10 @@ def _rebuild_tensordict_files_consolidated(
                 nested_lengths = value
                 continue
             elif key.startswith("<NJT_OFFSETS>"):
+                from torch.nested._internal.nested_tensor import NestedTensor
+
                 offsets = value
-                value = torch.nested.nested_tensor_from_jagged(
+                value = NestedTensor(
                     nested_values, offsets=offsets, lengths=nested_lengths
                 )
                 key = key.replace("<NJT_OFFSETS>", "")

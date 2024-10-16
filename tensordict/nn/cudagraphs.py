@@ -308,7 +308,11 @@ class CudaGraphModule:
                         result = self._out
                     else:
                         result = tree_unflatten(
-                            [out.clone() for out in self._out], self._out_struct
+                            [
+                                out.clone() if hasattr(out, "clone") else out
+                                for out in self._out
+                            ],
+                            self._out_struct,
                         )
                     return result
 
