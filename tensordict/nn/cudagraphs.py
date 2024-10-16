@@ -267,6 +267,8 @@ class CudaGraphModule:
                             "The output of the function must be a tensordict, a tensorclass or None. Got "
                             f"type(out)={type(out)}."
                         )
+                    if is_tensor_collection(out):
+                        out.lock_()
                     self._out = out
                     self.counter += 1
                     if self._out_matches_in:
@@ -302,14 +304,11 @@ class CudaGraphModule:
                         torch._foreach_copy_(dests, srcs)
                     torch.cuda.synchronize()
                     self.graph.replay()
-                    if self._return_unchanged == "clone":
-                        result = self._out.clone()
-                    elif self._return_unchanged:
+                    if self._return_unchanged:
                         result = self._out
                     else:
-                        result = tree_map(
-                            lambda x: x.detach().clone() if x is not None else x,
-                            self._out,
+                        result = tree_unflatten(
+                            [out.clone() for out in self._out], self._out_struct
                         )
                     return result
 
@@ -340,7 +339,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
-                    self._out = out
+                    self._out, self._out_struct = tree_flatten(out)
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
                     # user.
@@ -356,11 +355,13 @@ class CudaGraphModule:
                                 f"and the identity between input and output will not match anymore. "
                                 f"Make sure you don't rely on input-output identity further in the code."
                             )
-                    if isinstance(self._out, torch.Tensor) or self._out is None:
-                        self._return_unchanged = (
-                            "clone" if self._out is not None else True
-                        )
+                    if not self._out:
+                        self._return_unchanged = True
                     else:
+                        self._out = [
+                            out.lock_() if is_tensor_collection(out) else out
+                            for out in self._out
+                        ]
                         self._return_unchanged = False
                     return this_out
 
