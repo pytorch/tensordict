@@ -10472,7 +10472,7 @@ class TensorDictBase(MutableMapping):
                 if x.layout != torch.jagged:
                     raise RuntimeError(
                         "to(device) with nested tensors that do not have a jagged layout is not implemented yet. "
-                        "Please raise an issue on GitHub."
+                        "Please raise an issue on GitHub: https://github.com/pytorch/tensordict/issues"
                     )
                 values = x._values
                 lengths = x._lengths
