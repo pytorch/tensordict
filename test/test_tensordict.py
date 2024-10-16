@@ -7913,7 +7913,9 @@ class TestLazyStackedTensorDict:
         torch.utils._pytree.tree_map(check_id, td_c._consolidated, tdload._consolidated)
         assert tdload.is_consolidated()
 
-    @pytest.mark.skipif(not _v2_5, reason="v2.5 required for this test")
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"), reason="v2.6 required for this test"
+    )
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize("num_threads", [0, 1, 4])
