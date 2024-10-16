@@ -108,9 +108,7 @@ class TestFSDP:
 
 
 # not using TorchVersion to make the comparison work with dev
-TORCH_VERSION = version.parse(
-    ".".join(map(str, version.parse(torch.__version__).release))
-)
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @pytest.mark.skipif(

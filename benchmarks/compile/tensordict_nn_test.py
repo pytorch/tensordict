@@ -15,7 +15,7 @@ from tensordict import TensorDict, TensorDictParams
 
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
-TORCH_VERSION = version.parse(".".join(torch.__version__.split(".")[:3]))
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 sys.setrecursionlimit(10000)
 

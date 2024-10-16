@@ -33,7 +33,7 @@ from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
-TORCH_VERSION = version.parse(torch.__version__).base_version
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 

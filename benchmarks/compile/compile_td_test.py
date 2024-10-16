@@ -10,7 +10,7 @@ from packaging import version
 from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
 from torch.utils._pytree import tree_map
 
-TORCH_VERSION = version.parse(".".join(torch.__version__.split(".")[:3]))
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @tensorclass
