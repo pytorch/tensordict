@@ -663,7 +663,9 @@ class TestNN:
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
 
-@pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
@@ -701,7 +703,9 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
-    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
+    @pytest.mark.skipif(
+        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
+    )
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -763,7 +767,9 @@ class TestFunctional:
             assert (td_zero == 0).all()
 
     # in-place modif raises an error even if fullgraph=False
-    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
+    @pytest.mark.skipif(
+        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
+    )
     def test_vmap_functional(self, mode):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
