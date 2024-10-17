@@ -97,7 +97,7 @@ class TestTo:
         self, benchmark, consolidated, njt_td, default_device, compile_mode, num_threads
     ):
         tensordict_logger.info(
-            f"njtd size {njtd.bytes() / 1024 / 1024 :.2f} Mb"
+            f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb"
         )
         if consolidated:
             njt_td = njt_td.consolidate()
