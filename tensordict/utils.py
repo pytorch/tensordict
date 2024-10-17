@@ -2694,3 +2694,11 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
         values,
         **kwargs,
     )
+
+
+@torch.compiler.disable()
+def _to_escape_compile(storage, device, pin_memory):
+    if pin_memory:
+        storage = storage.pin_memory()
+    storage_cast = storage.to(device, non_blocking=True)
+    return storage_cast

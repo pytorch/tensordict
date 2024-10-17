@@ -74,8 +74,10 @@ class TestTo:
 
         if compiled:
             to = torch.compile(to)
+
         for _ in range(3):
             to(td)
+
         benchmark(to, td)
 
     def test_to_njt(self, benchmark, consolidated, njt_td, default_device, compiled):
@@ -87,8 +89,10 @@ class TestTo:
 
         if compiled:
             to = torch.compile(to)
+
         for _ in range(3):
             to(njt_td)
+
         benchmark(to, njt_td)
 
 

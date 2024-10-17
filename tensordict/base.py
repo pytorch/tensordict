@@ -72,7 +72,7 @@ from tensordict.utils import (
     _split_tensordict,
     _td_fields,
     _unravel_key_to_tuple,
-    _zip_strict,
+    _zip_strict,_to_escape_compile,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -10512,14 +10512,7 @@ class TensorDictBase(MutableMapping):
 
         storage = self._consolidated["storage"]
 
-        @torch.compiler.disable()
-        def to(storage):
-            if pin_memory:
-                storage = storage.pin_memory()
-            storage_cast = storage.to(device, non_blocking=True)
-            return storage_cast
-
-        storage_cast = to(storage)
+        storage_cast = _to_escape_compile(storage)
 
         if compilable:
             result = self._to_consolidated_compile(
