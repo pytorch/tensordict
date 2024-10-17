@@ -10512,7 +10512,7 @@ class TensorDictBase(MutableMapping):
 
         storage = self._consolidated["storage"]
 
-        storage_cast = _to_escape_compile(storage)
+        storage_cast = _to_escape_compile(storage, device=device, pin_memory=pin_memory)
 
         if compilable:
             result = self._to_consolidated_compile(
