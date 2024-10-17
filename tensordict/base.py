@@ -10669,20 +10669,67 @@ class TensorDictBase(MutableMapping):
             if not isinstance(name, tuple):
                 name = (name,)
             if x.is_nested:
-                from torch._subclasses.fake_tensor import FakeTensor
-                from torch._subclasses.functional_tensor import FunctionalTensor
-                from torch.nested._internal.nested_tensor import (
-                    _tensor_symint_registry,
-                    NestedTensor,
-                )
-                from torch.nested._internal.ops import extract_kwargs
-
                 if x.layout != torch.jagged:
                     raise RuntimeError(
                         "to(device) with nested tensors that do not have a jagged layout is not implemented yet. "
                         "Please raise an issue on GitHub."
                     )
-                kwargs = extract_kwargs(x)
+                # from torch._subclasses.fake_tensor import FakeTensor
+                # from torch._subclasses.functional_tensor import FunctionalTensor
+                # from torch.nested._internal.nested_tensor import (
+                #     _tensor_symint_registry,
+                #     NestedTensor,
+                # )
+                # from torch.nested._internal.ops import extract_kwargs
+                #
+                # kwargs = extract_kwargs(x)
+                # values = x._values
+                # lengths = x._lengths
+                # offsets = x._offsets
+                # storage_offsets = slice_map[
+                #     (
+                #         *name[:-1],
+                #         "<NJT_OFFSETS>" + name[-1],
+                #     )
+                # ]
+                # kwargs["offsets"] = view_as(storage_offsets, offsets)
+                # if lengths is not None:
+                #     storage_lengths = slice_map[
+                #         (
+                #             *name[:-1],
+                #             "<NJT_LENGTHS>" + name[-1],
+                #         )
+                #     ]
+                #     kwargs["lengths"] = view_as(storage_lengths, lengths)
+                #     ragged_source = lengths
+                # else:
+                #     ragged_source = offsets
+                # new_thing = kwargs.get("lengths", kwargs.get("offsets"))
+                # if isinstance(new_thing, (FakeTensor, FunctionalTensor)):
+                #     from torch._subclasses.functional_tensor import (
+                #         mb_unwrap_functional_tensor,
+                #     )
+                #
+                #     # Temporary hack until we have the union find
+                #     tgt = mb_unwrap_functional_tensor(new_thing)
+                #     src = mb_unwrap_functional_tensor(ragged_source)
+                #     tgt.nested_int_memo = src.nested_int_memo
+                # else:
+                #     _tensor_symint_registry[new_thing] = _tensor_symint_registry[
+                #         ragged_source
+                #     ]
+                #
+                # storage_values = slice_map[
+                #     (
+                #         *name[:-1],
+                #         "<NJT_VALUES>" + name[-1],
+                #     )
+                # ]
+                # return NestedTensor(
+                #     view_as(storage_values, values),
+                #     **kwargs,
+                # )
+                from torch.nested import nested_tensor_from_jagged
                 values = x._values
                 lengths = x._lengths
                 offsets = x._offsets
@@ -10692,7 +10739,7 @@ class TensorDictBase(MutableMapping):
                         "<NJT_OFFSETS>" + name[-1],
                     )
                 ]
-                kwargs["offsets"] = view_as(storage_offsets, offsets)
+                offsets = view_as(storage_offsets, offsets)
                 if lengths is not None:
                     storage_lengths = slice_map[
                         (
@@ -10700,35 +10747,19 @@ class TensorDictBase(MutableMapping):
                             "<NJT_LENGTHS>" + name[-1],
                         )
                     ]
-                    kwargs["lengths"] = view_as(storage_lengths, lengths)
-                    ragged_source = lengths
-                else:
-                    ragged_source = offsets
-                new_thing = kwargs.get("lengths", kwargs.get("offsets"))
-                if isinstance(new_thing, (FakeTensor, FunctionalTensor)):
-                    from torch._subclasses.functional_tensor import (
-                        mb_unwrap_functional_tensor,
-                    )
-
-                    # Temporary hack until we have the union find
-                    tgt = mb_unwrap_functional_tensor(new_thing)
-                    src = mb_unwrap_functional_tensor(ragged_source)
-                    tgt.nested_int_memo = src.nested_int_memo
-                else:
-                    _tensor_symint_registry[new_thing] = _tensor_symint_registry[
-                        ragged_source
-                    ]
-
+                    lengths = view_as(storage_lengths, lengths)
                 storage_values = slice_map[
                     (
                         *name[:-1],
                         "<NJT_VALUES>" + name[-1],
                     )
                 ]
-                return NestedTensor(
+                return nested_tensor_from_jagged(
                     view_as(storage_values, values),
-                    **kwargs,
+                    offsets=offsets,
+                    lengths=lengths
                 )
+
             return view_as(slice_map[name], x)
 
         result = self._fast_apply(
