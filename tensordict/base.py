@@ -3142,6 +3142,25 @@ class TensorDictBase(MutableMapping):
                 value._set_device(device=device)
         return self
 
+    @cache
+    def param_count(self, *, count_duplicates: bool = True) -> int:
+        """Counts the number of parameters (total number of indexable items), accounting for tensors only.
+
+        Args:
+            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
+                If ``False``, only strictly identical tensors will be discarded (same views but different
+                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
+                to be a single copy).
+
+        """
+        vals = self._values_list(True, True)
+        total = 0
+        if not count_duplicates:
+            vals = set(vals)
+        for v in vals:
+            total += v.numel()
+        return total
+
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 

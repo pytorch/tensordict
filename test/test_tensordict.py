@@ -1903,6 +1903,16 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    @pytest.mark.parametrize("count_duplicates", [False, True])
+    def test_param_count(self, count_duplicates):
+        td = TensorDict(a=torch.randn(3), b=torch.randn(6))
+        td["c"] = td["a"]
+        assert len(td._values_list(True, True)) == 3
+        if count_duplicates:
+            assert td.param_count(count_duplicates=count_duplicates) == 12
+        else:
+            assert td.param_count(count_duplicates=count_duplicates) == 9
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_permute(self, device):
         torch.manual_seed(1)
