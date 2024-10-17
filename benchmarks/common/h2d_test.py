@@ -100,10 +100,12 @@ class TestTo:
         if consolidated is True:
             td = td.consolidate()
 
-        def to(td, num_threads):
-            if consolidated == "within":
-                td = td.consolidate()
-            return td.to(default_device, num_threads=num_threads)
+        if consolidated == "within":
+            def to(td, num_threads):
+                return td.consolidate().to(default_device, num_threads=num_threads)
+        else:
+            def to(td, num_threads):
+                return td.to(default_device, num_threads=num_threads)
 
         if compile_mode:
             to = torch.compile(to, mode=compile_mode)
@@ -120,10 +122,12 @@ class TestTo:
         if consolidated is True:
             njt_td = njt_td.consolidate()
 
-        def to(td, num_threads):
-            if consolidated == "within":
-                td = td.consolidate()
-            return td.to(default_device, num_threads=num_threads)
+        if consolidated == "within":
+            def to(td, num_threads):
+                return td.consolidate().to(default_device, num_threads=num_threads)
+        else:
+            def to(td, num_threads):
+                return td.to(default_device, num_threads=num_threads)
 
         if compile_mode:
             to = torch.compile(to, mode=compile_mode)
