@@ -23,6 +23,13 @@ class MyTensorClass:
     f: torch.Tensor
 
 
+@pytest.fixture(autouse=True, scope="module")
+def empty_compiler_cache():
+    torch._dynamo.reset_code_caches()
+    print("Emptying cache")
+    yield
+
+
 # Functions
 def add_one(td):
     return td + 1
