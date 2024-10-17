@@ -134,6 +134,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
     "_propagate_unlock",
+    "_reduce_get_metadata",
     "_values_list",
     "data_ptr",
     "dim",

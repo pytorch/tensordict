@@ -71,6 +71,7 @@ from tensordict.utils import (
     _shape,
     _split_tensordict,
     _td_fields,
+    _to_escape_compile,
     _unravel_key_to_tuple,
     _zip_strict,
     cache,
@@ -3573,7 +3574,7 @@ class TensorDictBase(MutableMapping):
         )
 
     # Generic method to get a class metadata
-    def _reduce_get_metadata(self):
+    def _reduce_get_metadata(self) -> dict:
         return {
             "device": str(self.device) if self.device is not None else None,
             "names": self.names,
@@ -3607,9 +3608,10 @@ class TensorDictBase(MutableMapping):
 
         flat_size = []
         start = 0
+        sorting_index = 0
 
         def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
-            nonlocal start
+            nonlocal start, sorting_index
             n = value.element_size() * value.numel()
             if need_padding:
                 pad = n % 8
@@ -3627,7 +3629,10 @@ class TensorDictBase(MutableMapping):
                     start,
                     stop,
                     pad,
+                    flat_size[-1],
+                    sorting_index,
                 )
+            sorting_index = sorting_index + 1
             start = stop
 
         def assign(
@@ -10527,6 +10532,7 @@ class TensorDictBase(MutableMapping):
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
+                compilable=is_dynamo_compiling(),
             )
 
         if non_blocking is None:
@@ -10584,14 +10590,42 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
+    def _to_consolidated(
+        self, *, device, pin_memory, num_threads, non_blocking, compilable
+    ):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
+
         storage = self._consolidated["storage"]
-        if pin_memory:
-            storage = storage.pin_memory()
-        storage_cast = storage.to(device, non_blocking=True)
+
+        storage_cast = _to_escape_compile(storage, device=device, pin_memory=pin_memory)
+
+        if compilable:
+            result = self._to_consolidated_compile(
+                device=device, num_threads=num_threads, storage_cast=storage_cast
+            )
+        else:
+            result = self._to_consolidated_eager(
+                device=device, num_threads=num_threads, storage_cast=storage_cast
+            )
+
+        if non_blocking in (False, None):
+            if device.type == "cuda" and non_blocking is False:
+                # sending to CUDA force sync
+                cuda_device = device
+            elif storage.device.type == "cuda":
+                # sending from cuda: need sync unless intentionally not asked for
+                cuda_device = storage.device.type
+            else:
+                cuda_device = None
+            if cuda_device is not None:
+                torch.cuda.current_stream(cuda_device).synchronize()
+
+        return result
+
+    def _to_consolidated_eager(self, *, device, num_threads, storage_cast):
+
         untyped_storage = storage_cast.untyped_storage()
 
         def set_(x):
@@ -10660,18 +10694,113 @@ class TensorDictBase(MutableMapping):
                 }
 
             result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
-        if non_blocking in (False, None):
-            if device.type == "cuda" and non_blocking is False:
-                # sending to CUDA force sync
-                cuda_device = device
-            elif storage.device.type == "cuda":
-                # sending from cuda: need sync unless intentionally not asked for
-                cuda_device = storage.device.type
-            else:
-                cuda_device = None
-            if cuda_device is not None:
-                torch.cuda.current_stream(cuda_device).synchronize()
+        return result
 
+    def _to_consolidated_compile(self, *, device, num_threads, storage_cast):
+
+        def get_tensors_length(metadata, lengths=None, pos=None, keys=None, prefix=()):
+            root = False
+            if lengths is None:
+                lengths = []
+                pos = []
+                keys = []
+                root = True
+            for k, v in metadata["leaves"].items():
+                lengths.append(v[-2])
+                pos.append(v[-1])
+                keys.append(prefix + (k,))
+            for k, d in metadata.items():
+                if "leaves" in d:
+                    get_tensors_length(
+                        d, lengths=lengths, pos=pos, keys=keys, prefix=prefix + (k,)
+                    )
+            if root:
+                # l = torch.empty(len(lengths), dtype=torch.long)
+                # l[torch.as_tensor(pos)] = torch.as_tensor(lengths)
+                out0 = [
+                    None,
+                ] * len(pos)
+                out1 = [
+                    None,
+                ] * len(pos)
+                for p, l, k in zip(pos, lengths, keys):
+                    out0[p] = k
+                    out1[p] = l
+                return out0, out1
+
+        def split_storage(consolidated):
+            keys, splits = get_tensors_length(consolidated["metadata"])
+            return dict(zip(keys, consolidated["storage"].split(splits)))
+
+        if num_threads is None:
+            # unspecified num_threads should mean 0
+            num_threads = 0
+
+        _consolidated = {"storage": storage_cast}
+        if "metadata" in self._consolidated:
+            # faster than deepcopy
+            def copy_dict(d):
+                return {
+                    k: v if not isinstance(v, dict) else copy_dict(v)
+                    for k, v in d.items()
+                }
+
+            _consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+
+        slice_map = split_storage(_consolidated)
+
+        def view_as(src, dest):
+            return src.view(dest.dtype)[: dest.numel()].view(dest.shape)
+
+        def set_(name, x):
+            if not isinstance(name, tuple):
+                name = (name,)
+            if x.is_nested:
+                if x.layout != torch.jagged:
+                    raise RuntimeError(
+                        "to(device) with nested tensors that do not have a jagged layout is not implemented yet. "
+                        "Please raise an issue on GitHub."
+                    )
+                from torch.nested import nested_tensor_from_jagged
+
+                values = x._values
+                lengths = x._lengths
+                offsets = x._offsets
+                storage_offsets = slice_map[
+                    (
+                        *name[:-1],
+                        "<NJT_OFFSETS>" + name[-1],
+                    )
+                ]
+                offsets = view_as(storage_offsets, offsets)
+                if lengths is not None:
+                    storage_lengths = slice_map[
+                        (
+                            *name[:-1],
+                            "<NJT_LENGTHS>" + name[-1],
+                        )
+                    ]
+                    lengths = view_as(storage_lengths, lengths)
+                storage_values = slice_map[
+                    (
+                        *name[:-1],
+                        "<NJT_VALUES>" + name[-1],
+                    )
+                ]
+                return nested_tensor_from_jagged(
+                    view_as(storage_values, values), offsets=offsets, lengths=lengths
+                )
+
+            return view_as(slice_map[name], x)
+
+        result = self._fast_apply(
+            set_,
+            device=torch.device(device),
+            num_threads=num_threads,
+            named=True,
+            nested_keys=True,
+        )
+        result._consolidated = _consolidated
         return result
 
     def _sync_all(self):
