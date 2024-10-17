@@ -26,7 +26,6 @@ class MyTensorClass:
 @pytest.fixture(autouse=True, scope="function")
 def empty_compiler_cache():
     torch._dynamo.reset_code_caches()
-    print("Emptying cache")
     yield
 
 
