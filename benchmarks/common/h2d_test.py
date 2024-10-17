@@ -59,46 +59,57 @@ def default_device():
 
 
 @pytest.mark.parametrize(
-    "consolidated,compile_mode",
-    [[False, False], [True, False], [True, "default"], [True, "reduce-overhead"]],
+    "consolidated,compile_mode,num_threads",
+    [
+        [False, False, None],
+        [True, False, None],
+        [True, False, 4],
+        [True, False, 16],
+        [True, "default", 0],
+    ],
 )
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
 )
 class TestTo:
-    def test_to(self, benchmark, consolidated, td, default_device, compile_mode):
+    def test_to(
+        self, benchmark, consolidated, td, default_device, compile_mode, num_threads
+    ):
         if consolidated:
             td = td.consolidate()
 
-        def to(td):
-            return td.to(default_device)
+        def to(td, num_threads):
+            return td.to(default_device, num_threads=num_threads)
 
         if compile_mode:
             to = torch.compile(to, mode=compile_mode)
 
         for _ in range(3):
-            to(td)
+            to(td, num_threads=num_threads)
 
-        benchmark(to, td)
+        benchmark(to, td, num_threads)
 
     def test_to_njt(
-        self, benchmark, consolidated, njt_td, default_device, compile_mode
+        self, benchmark, consolidated, njt_td, default_device, compile_mode, num_threads
     ):
         if consolidated:
             njt_td = njt_td.consolidate()
 
-        def to(td):
-            return td.to(default_device)
+        def to(td, num_threads):
+            return td.to(default_device, num_threads=num_threads)
 
         if compile_mode:
             to = torch.compile(to, mode=compile_mode)
 
         for _ in range(3):
-            to(njt_td)
+            to(njt_td, num_threads=num_threads)
 
-        benchmark(to, njt_td)
+        benchmark(to, njt_td, num_threads)
 
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    pytest.main(
+        [__file__, "--capture", "no", "--exitfirst", "--benchmark-group-by", "func"]
+        + unknown
+    )
