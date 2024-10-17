@@ -76,7 +76,9 @@ class TestTo:
     def test_to(
         self, benchmark, consolidated, td, default_device, compile_mode, num_threads
     ):
-        tensordict_logger.info(f"td size (Gb) {td.bytes() / 1024 / 1024 / 1024 :.2f} GB")
+        tensordict_logger.info(
+            f"td size {td.bytes() / 1024 / 1024:.2f} Mb"
+        )
         if consolidated:
             td = td.consolidate()
 
@@ -94,7 +96,9 @@ class TestTo:
     def test_to_njt(
         self, benchmark, consolidated, njt_td, default_device, compile_mode, num_threads
     ):
-        tensordict_logger.info(f"njtd size (Gb) {td.bytes() / 1024 / 1024 / 1024 :.2f} GB")
+        tensordict_logger.info(
+            f"njtd size {td.bytes() / 1024 / 1024 :.2f} Mb"
+        )
         if consolidated:
             njt_td = njt_td.consolidate()
 
