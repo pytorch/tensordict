@@ -3574,7 +3574,7 @@ class TensorDictBase(MutableMapping):
         )
 
     # Generic method to get a class metadata
-    def _reduce_get_metadata(self):
+    def _reduce_get_metadata(self) -> dict:
         return {
             "device": str(self.device) if self.device is not None else None,
             "names": self.names,
