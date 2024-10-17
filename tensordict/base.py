@@ -3172,23 +3172,60 @@ class TensorDictBase(MutableMapping):
                 to be a single copy).
 
         """
-        vals = self._values_list(True, True)
-        total = 0
-        if not count_duplicates:
-            vals = set(vals)
-        for v in vals:
-            if v.is_nested:
-                if not v.layout == torch.jagged:
+        set_of_tensors = set() if not count_duplicates else []
+
+        def add(tensor):
+            if count_duplicates:
+                set_of_tensors.append(tensor)
+            else:
+                set_of_tensors.add(tensor)
+
+        def count_bytes(tensor):
+            if tensor.is_nested:
+                if not tensor.layout == torch.jagged:
                     raise RuntimeError(
                         "NTs that are not jagged are not supported by the bytes method. Please use the jagged layout instead "
                         "or raise and issue on https://github.com/pytorch/tensordict/issues instead."
                     )
-                total += v._values.numel() * v._values.dtype.itemsize
-                total += v._offsets.numel() * v._offsets.dtype.itemsize
-                if v._lengths is not None:
-                    total += v._lengths.numel() * v._lengths.dtype.itemsize
-            else:
-                total += v.numel() * v.dtype.itemsize
+                attrs, ctx = tensor.__tensor_flatten__()
+                for attr in attrs:
+                    t = getattr(tensor, attr)
+                    count_bytes(t)
+                return
+            if isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, MemoryMappedTensor):
+                    add(tensor)
+                    return
+                if type(tensor) is not torch.Tensor:
+                    try:
+                        attrs, ctx = tensor.__tensor_flatten__()
+                        for attr in attrs:
+                            t = getattr(tensor, attr)
+                            count_bytes(t)
+                        return
+                    except AttributeError:
+                        warnings.warn(
+                            "The sub-tensor doesn't ot have a __tensor_flatten__ attribute, making it "
+                            "impossible to count the bytes it contains. Falling back on regular count.",
+                            category=UserWarning,
+                        )
+                        count_bytes(torch.as_tensor(tensor))
+                        return
+
+                grad = getattr(tensor, "grad", None)
+                if grad is not None:
+                    count_bytes(grad)
+                    count_bytes(tensor.data)
+                else:
+                    add(tensor)
+                return
+
+        vals = self._values_list(True, True)
+        for v in vals:
+            count_bytes(v)
+        total = 0
+        for tensor in set_of_tensors:
+            total += tensor.numel() * tensor.dtype.itemsize
         return total
 
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
