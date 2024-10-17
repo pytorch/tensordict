@@ -14,7 +14,7 @@ from tensordict import TensorDict
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True, scope="function")
 def empty_compiler_cache():
     torch._dynamo.reset_code_caches()
     print("Emptying cache")
