@@ -132,6 +132,17 @@ pytestmark = [
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
 
 
+@pytest.fixture
+def device_fixture():
+    device = torch.get_default_device()
+    if torch.cuda.is_available():
+        torch.set_default_device(torch.device("cuda:0"))
+    elif torch.backends.mps.is_available():
+        torch.set_default_device(torch.device("mps:0"))
+    yield
+    torch.set_default_device(device)
+
+
 def _compare_tensors_identity(td0, td1):
     if isinstance(td0, LazyStackedTensorDict):
         if not isinstance(td1, LazyStackedTensorDict):
@@ -242,7 +253,32 @@ class TestGeneric:
                 td_u.batch_size = [1]
             td_u.to_tensordict().batch_size = [1]
 
-    def test_depth(ggself):
+    @pytest.mark.parametrize("count_duplicates", [False, True])
+    def test_bytes(self, count_duplicates, device_fixture):
+        tensor = torch.zeros(3)
+        tensor_with_grad = torch.ones(3, requires_grad=True)
+        (tensor_with_grad + 1).sum().backward()
+        v = torch.ones(3) * 2  # 12 bytes
+        offsets = torch.tensor([0, 1, 3])  # 24 bytes
+        lengths = torch.tensor([1, 2])  # 16 bytes
+        njt = torch.nested.nested_tensor_from_jagged(
+            v, offsets, lengths=lengths
+        )  # 52 bytes
+        tricky = torch.nested.nested_tensor_from_jagged(
+            tensor, offsets, lengths=lengths
+        )  # 52 bytes or 0
+        td = TensorDict(
+            tensor=tensor,  # 3 * 4 = 12 bytes
+            tensor_with_grad=tensor_with_grad,  # 3 * 4 * 2 = 24 bytes
+            njt=njt,  # 32
+            tricky=tricky,  # 32 or 0
+        )
+        if count_duplicates:
+            assert td.bytes(count_duplicates=count_duplicates) == 12 + 24 + 52 + 52
+        else:
+            assert td.bytes(count_duplicates=count_duplicates) == 12 + 24 + 52 + 0
+
+    def test_depth(self):
         td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
         assert td.depth == 3
         with td.unlock_():
@@ -1902,6 +1938,16 @@ class TestGeneric:
             assert (padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == 0).all()
         else:
             assert "masks" not in padded_td.keys()
+
+    @pytest.mark.parametrize("count_duplicates", [False, True])
+    def test_param_count(self, count_duplicates):
+        td = TensorDict(a=torch.randn(3), b=torch.randn(6))
+        td["c"] = td["a"]
+        assert len(td._values_list(True, True)) == 3
+        if count_duplicates:
+            assert td.param_count(count_duplicates=count_duplicates) == 12
+        else:
+            assert td.param_count(count_duplicates=count_duplicates) == 9
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_permute(self, device):

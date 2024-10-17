@@ -3143,6 +3143,92 @@ class TensorDictBase(MutableMapping):
                 value._set_device(device=device)
         return self
 
+    @cache  # noqa: B019
+    def param_count(self, *, count_duplicates: bool = True) -> int:
+        """Counts the number of parameters (total number of indexable items), accounting for tensors only.
+
+        Keyword Args:
+            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
+                If ``False``, only strictly identical tensors will be discarded (same views but different
+                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
+                to be a single copy).
+
+        """
+        vals = self._values_list(True, True)
+        total = 0
+        if not count_duplicates:
+            vals = set(vals)
+        for v in vals:
+            total += v.numel()
+        return total
+
+    @cache  # noqa: B019
+    def bytes(self, *, count_duplicates: bool = True) -> int:
+        """Counts the number of bytes of the contained tensors.
+
+        Keyword Args:
+            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
+                If ``False``, only strictly identical tensors will be discarded (same views but different
+                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
+                to be a single copy).
+
+        """
+        set_of_tensors = set() if not count_duplicates else []
+
+        def add(tensor):
+            if count_duplicates:
+                set_of_tensors.append(tensor)
+            else:
+                set_of_tensors.add(tensor)
+
+        def count_bytes(tensor):
+            if tensor.is_nested:
+                if not tensor.layout == torch.jagged:
+                    raise RuntimeError(
+                        "NTs that are not jagged are not supported by the bytes method. Please use the jagged layout instead "
+                        "or raise and issue on https://github.com/pytorch/tensordict/issues instead."
+                    )
+                attrs, ctx = tensor.__tensor_flatten__()
+                for attr in attrs:
+                    t = getattr(tensor, attr)
+                    count_bytes(t)
+                return
+            if isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, MemoryMappedTensor):
+                    add(tensor)
+                    return
+                if type(tensor) is not torch.Tensor:
+                    try:
+                        attrs, ctx = tensor.__tensor_flatten__()
+                        for attr in attrs:
+                            t = getattr(tensor, attr)
+                            count_bytes(t)
+                        return
+                    except AttributeError:
+                        warnings.warn(
+                            "The sub-tensor doesn't ot have a __tensor_flatten__ attribute, making it "
+                            "impossible to count the bytes it contains. Falling back on regular count.",
+                            category=UserWarning,
+                        )
+                        count_bytes(torch.as_tensor(tensor))
+                        return
+
+                grad = getattr(tensor, "grad", None)
+                if grad is not None:
+                    count_bytes(grad)
+                    count_bytes(tensor.data)
+                else:
+                    add(tensor)
+                return
+
+        vals = self._values_list(True, True)
+        for v in vals:
+            count_bytes(v)
+        total = 0
+        for tensor in set_of_tensors:
+            total += tensor.numel() * tensor.dtype.itemsize
+        return total
+
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 

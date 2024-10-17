@@ -10,6 +10,7 @@ import torch
 from packaging import version
 
 from tensordict import TensorDict
+from tensordict.utils import logger as tensordict_logger
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -75,6 +76,7 @@ class TestTo:
     def test_to(
         self, benchmark, consolidated, td, default_device, compile_mode, num_threads
     ):
+        tensordict_logger.info("td size (bytes)", td.bytes())
         if consolidated:
             td = td.consolidate()
 
@@ -92,6 +94,7 @@ class TestTo:
     def test_to_njt(
         self, benchmark, consolidated, njt_td, default_device, compile_mode, num_threads
     ):
+        tensordict_logger.info("njt_td size (bytes)", njt_td.bytes())
         if consolidated:
             njt_td = njt_td.consolidate()
 
