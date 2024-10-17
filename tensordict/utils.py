@@ -2531,6 +2531,7 @@ if sys.version_info >= (3, 10):
 else:
 
     def _zip_strict(*iterables):
+        iterables = tuple(tuple(it) for it in iterables)
         lengths = {len(it) for it in iterables}
         if len(lengths) > 1:
             raise ValueError("lengths of iterables differ.")

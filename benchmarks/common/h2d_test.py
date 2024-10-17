@@ -7,8 +7,11 @@ import argparse
 
 import pytest
 import torch
+from packaging import version
 
 from tensordict import TensorDict
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @pytest.fixture
@@ -49,17 +52,32 @@ def default_device():
         pytest.skip("CUDA/MPS is not available")
 
 
-@pytest.mark.parametrize("consolidated", [False, True])
+@pytest.mark.parametrize("consolidated,compiled", [[False,False], [True,False],[True,True]])
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
+)
 class TestTo:
-    def test_to(self, benchmark, consolidated, td, default_device):
+    def test_to(self, benchmark, consolidated, td, default_device, compiled):
         if consolidated:
             td = td.consolidate()
-        benchmark(lambda: td.to(default_device))
+        def to(td):
+            return td.to(default_device)
 
-    def test_to_njt(self, benchmark, consolidated, njt_td, default_device):
+        if compiled:
+            to = torch.compile(to)
+
+        benchmark(to, td)
+
+    def test_to_njt(self, benchmark, consolidated, njt_td, default_device, compiled):
         if consolidated:
             njt_td = njt_td.consolidate()
-        benchmark(lambda: njt_td.to(default_device))
+        def to(td):
+            return td.to(default_device)
+
+        if compiled:
+            to = torch.compile(to)
+
+        benchmark(to, njt_td)
 
 
 if __name__ == "__main__":

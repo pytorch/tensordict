@@ -33,11 +33,11 @@ from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
-TORCH_VERSION = version.parse(torch.__version__).base_version
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
-_v2_5 = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse("2.5.0")
+_v2_5 = TORCH_VERSION >= version.parse("2.5.0")
 
 
 def test_vmap_compile():
@@ -53,7 +53,9 @@ def test_vmap_compile():
     funcv_c(x, y)
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -340,7 +342,9 @@ class MyClass:
     c: Any = None
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -579,7 +583,9 @@ class TestTC:
         assert (tc_op == tc_op_c).all()
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>=2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -657,7 +663,9 @@ class TestNN:
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
 
-@pytest.mark.skipif(not (TORCH_VERSION > "2.4.0"), reason="requires torch>2.4")
+@pytest.mark.skipif(
+    TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
+)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     def test_functional_error(self, mode):
@@ -695,7 +703,9 @@ class TestFunctional:
 
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
-    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
+    @pytest.mark.skipif(
+        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
+    )
     def test_functional(self, modif_param, mode):
 
         # TODO: UNTESTED
@@ -757,7 +767,9 @@ class TestFunctional:
             assert (td_zero == 0).all()
 
     # in-place modif raises an error even if fullgraph=False
-    @pytest.mark.skipif(not (TORCH_VERSION > "2.5.0"), reason="requires torch>2.5")
+    @pytest.mark.skipif(
+        TORCH_VERSION <= version.parse("2.5.0"), reason="requires torch>2.5"
+    )
     def test_vmap_functional(self, mode):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
@@ -883,7 +895,9 @@ class TestONNXExport:
         )
 
 
-@pytest.mark.skipif(TORCH_VERSION <= "2.4.1", reason="requires torch>=2.5")
+@pytest.mark.skipif(
+    TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5"
+)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
