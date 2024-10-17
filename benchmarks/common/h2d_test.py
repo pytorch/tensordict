@@ -59,36 +59,39 @@ def default_device():
 
 
 @pytest.mark.parametrize(
-    "consolidated,compiled", [[False, False], [True, False], [True, True]]
+    "consolidated,compile_mode",
+    [[False, False], [True, False], [True, "default"], [True, "reduce-overhead"]],
 )
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
 )
 class TestTo:
-    def test_to(self, benchmark, consolidated, td, default_device, compiled):
+    def test_to(self, benchmark, consolidated, td, default_device, compile_mode):
         if consolidated:
             td = td.consolidate()
 
         def to(td):
             return td.to(default_device)
 
-        if compiled:
-            to = torch.compile(to)
+        if compile_mode:
+            to = torch.compile(to, mode=compile_mode)
 
         for _ in range(3):
             to(td)
 
         benchmark(to, td)
 
-    def test_to_njt(self, benchmark, consolidated, njt_td, default_device, compiled):
+    def test_to_njt(
+        self, benchmark, consolidated, njt_td, default_device, compile_mode
+    ):
         if consolidated:
             njt_td = njt_td.consolidate()
 
         def to(td):
             return td.to(default_device)
 
-        if compiled:
-            to = torch.compile(to)
+        if compile_mode:
+            to = torch.compile(to, mode=compile_mode)
 
         for _ in range(3):
             to(njt_td)

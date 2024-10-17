@@ -2697,11 +2697,14 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
 
 
 @torch.library.custom_op("tensordict::_to_escape_compile", mutates_args=())
-def _to_escape_compile(storage: torch.Tensor, device: torch.device, pin_memory: bool) -> torch.Tensor:
+def _to_escape_compile(
+    storage: torch.Tensor, device: torch.device, pin_memory: bool
+) -> torch.Tensor:
     if pin_memory:
         storage = storage.pin_memory()
     storage_cast = storage.to(device, non_blocking=True)
     return storage_cast
+
 
 @_to_escape_compile.register_fake
 def _(storage: torch.Tensor, device: torch.device, pin_memory: bool) -> torch.Tensor:

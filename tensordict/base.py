@@ -71,8 +71,9 @@ from tensordict.utils import (
     _shape,
     _split_tensordict,
     _td_fields,
+    _to_escape_compile,
     _unravel_key_to_tuple,
-    _zip_strict,_to_escape_compile,
+    _zip_strict,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -10730,6 +10731,7 @@ class TensorDictBase(MutableMapping):
                 #     **kwargs,
                 # )
                 from torch.nested import nested_tensor_from_jagged
+
                 values = x._values
                 lengths = x._lengths
                 offsets = x._offsets
@@ -10755,9 +10757,7 @@ class TensorDictBase(MutableMapping):
                     )
                 ]
                 return nested_tensor_from_jagged(
-                    view_as(storage_values, values),
-                    offsets=offsets,
-                    lengths=lengths
+                    view_as(storage_values, values), offsets=offsets, lengths=lengths
                 )
 
             return view_as(slice_map[name], x)
