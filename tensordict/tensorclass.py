@@ -858,7 +858,7 @@ def _get_type_hints(cls, with_locals=False):
         cls._type_hints = None
 
 
-def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
+def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
     """Tensor class wrapper to instantiate a new tensor class object.
 
     Args:
@@ -866,7 +866,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
 
     """
-    if not isinstance(tensordict, TensorDictBase):
+    if safe and not isinstance(tensordict, TensorDictBase):
         raise RuntimeError(
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
@@ -918,8 +918,8 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
-        tc.__dict__["_tensordict"] = tensordict
-        tc.__dict__["_non_tensordict"] = non_tensordict
+        tc.__dict__.update({"_tensordict": tensordict,
+                            "_non_tensordict": non_tensordict})
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
         if hasattr(cls, "__post_init__"):
@@ -1162,10 +1162,10 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             else:
                 non_tensordict = self._non_tensordict
             non_tensordict = dict(non_tensordict)
-            if copy_non_tensor:
+            if copy_non_tensor and non_tensordict:
                 # use tree_map to copy
                 non_tensordict = tree_map(lambda x: x, non_tensordict)
-            return self._from_tensordict(result, non_tensordict)
+            return self._from_tensordict(result, non_tensordict, safe=False)
         return result
 
     def wrapped_func(self, *args, **kwargs):
