@@ -4012,7 +4012,6 @@ class TensorDictBase(MutableMapping):
                     stride = v.stride()
                     if (stride and stride[-1] != 1) or v.storage_offset():
                         v = v.clone(memory_format=torch.contiguous_format)
-                # v, pad = _view_and_pad(v)
                 items.append(v)
 
             items = view_cat_split(

@@ -2734,7 +2734,7 @@ def view_old_as_new(v: torch.Tensor, oldv: torch.Tensor) -> torch.Tensor:
 def view_cat_split(
     td, items, storage, need_padding, non_blocking, device, flat_size, set_on_tensor
 ):
-    items_flat = [view_and_pad(v, need_padding) for v in items]
+    items_flat = [view_and_pad(v, need_padding) for v in items if v is not None]
     if non_blocking and device.type != "cuda":
         # sync if needed
         td._sync_all()
