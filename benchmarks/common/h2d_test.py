@@ -99,12 +99,12 @@ class TestTo:
         tensordict_logger.info(f"td size {td.bytes() / 1024 / 1024:.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:
-            td = td.consolidate(pin_memory=pin_mem, set_on_tensor=True)
+            td = td.consolidate(pin_memory=pin_mem)
 
         if consolidated == "within":
 
             def to(td, num_threads):
-                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(
+                return td.consolidate(pin_memory=pin_mem).to(
                     default_device, num_threads=num_threads
                 )
 
@@ -127,12 +127,12 @@ class TestTo:
         tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:
-            njt_td = njt_td.consolidate(pin_memory=pin_mem, set_on_tensor=True)
+            njt_td = njt_td.consolidate(pin_memory=pin_mem)
 
         if consolidated == "within":
 
             def to(td, num_threads):
-                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(
+                return td.consolidate(pin_memory=pin_mem).to(
                     default_device, num_threads=num_threads
                 )
 
