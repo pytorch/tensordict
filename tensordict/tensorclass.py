@@ -871,7 +871,6 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
     # Validating keys of tensordict
-    # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
     # TODO: compile doesn't like set() over an arbitrary object
     if is_dynamo_compiling():
@@ -891,10 +890,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         exp_keys = set(cls.__expected_keys__)
         if non_tensordict is not None:
             nontensor_keys = set(non_tensordict.keys())
+            total_keys = tensor_keys.union(nontensor_keys)
         else:
             nontensor_keys = set()
             non_tensordict = {}
-        total_keys = tensor_keys.union(nontensor_keys)
+            total_keys = tensor_keys
     for key in nontensor_keys:
         if key not in tensor_keys:
             continue
@@ -922,7 +922,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         tc.__dict__["_non_tensordict"] = non_tensordict
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
-        if hasattr(tc, "__post_init__"):
+        if hasattr(cls, "__post_init__"):
             tc.__post_init__()
         return tc
     else:
