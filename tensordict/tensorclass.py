@@ -1145,11 +1145,8 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
     def check_out(kwargs, result):
-        out = kwargs.get("out")
-        if out is result:
-            # No need to transform output
-            return True
-        return False
+        # No need to transform output if True
+        return kwargs.get("out") is result
 
     def deliver_result(self, result, kwargs):
         if result is None:
