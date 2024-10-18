@@ -93,6 +93,9 @@ from tensordict.utils import (
     TensorDictFuture,
     unravel_key,
     unravel_key_list,
+    view_and_pad,
+    view_cat_split,
+    view_old_as_new,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
@@ -3645,8 +3648,9 @@ class TensorDictBase(MutableMapping):
             total_key = key if isinstance(key, tuple) else (key,)
             total_key = track_key + total_key
             cls = type(value)
-            if issubclass(cls, torch.Tensor):
+            if cls is Tensor or issubclass(cls, Tensor):
                 pass
+            # must go before is_tensor_collection
             elif _is_non_tensor(cls):
                 if requires_metadata:
                     metadata_dict["non_tensors"][key] = (
@@ -3663,19 +3667,22 @@ class TensorDictBase(MutableMapping):
                         "leaves": {},
                         "cls_metadata": value._reduce_get_metadata(),
                     }
-                local_assign = partial(
-                    assign,
+                local_assign = lambda key, value: assign(
+                    key,
+                    value,
                     track_key=total_key,
                     metadata_dict=metadata_dict_key,
                     flat_size=flat_size,
                 )
-                value._fast_apply(
+                r = value._fast_apply(
                     local_assign,
                     named=True,
                     nested_keys=True,
                     call_on_nested=True,
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+                    filter_empty=True,
                 )
+                assert r is None
                 return
             # Tensors: DTensor, nested and then regular
             if hasattr(value, "full_tensor"):
@@ -3772,6 +3779,7 @@ class TensorDictBase(MutableMapping):
         share_memory: bool = False,
         pin_memory: bool = False,
         metadata: bool = False,
+        set_on_tensor: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -3892,12 +3900,6 @@ class TensorDictBase(MutableMapping):
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
 
-        def view_old_as_new(v, oldv):
-            v = v.view(oldv.dtype)
-            if v.numel() > oldv.numel():
-                return v[: oldv.numel()].view(oldv.shape)
-            return v.view(oldv.shape)
-
         if num_threads > 0:
 
             def assign(
@@ -3920,14 +3922,22 @@ class TensorDictBase(MutableMapping):
                 pad = exp_length - v_pad.numel()
                 if pad:
                     v_pad = torch.cat([v_pad, v_pad.new_zeros(pad)])
-                storage[start:stop].copy_(v_pad, non_blocking=non_blocking)
-
                 storage_slice = storage[start:stop]
+                storage_slice.copy_(v_pad, non_blocking=non_blocking)
+
                 shape, dtype = v.shape, v.dtype
                 new_v = storage_slice.view(dtype)
                 if pad:
                     new_v = new_v[: v.numel()]
                 new_v = new_v.view(shape)
+                if set_on_tensor:
+                    v.set_(
+                        new_v.untyped_storage(),
+                        storage_offset=new_v.storage_offset(),
+                        stride=new_v.stride(),
+                        size=new_v.size(),
+                    )
+                    return
                 flat_dict[k] = new_v
 
             njts = {}
@@ -3961,76 +3971,81 @@ class TensorDictBase(MutableMapping):
                         stop=offsets[i + 1],
                         njts=njts,
                     )
-            for njt_key, njt in njts.items():
-                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
-                njt_key_values = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_VALUES>"),
-                )
-                njt_key_offset = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
-                )
-                njt_key_lengths = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_LENGTHS>"),
-                )
-                val = _rebuild_njt_from_njt(
-                    njt,
-                    values=flat_dict.pop(njt_key_values),
-                    offsets=flat_dict.pop(njt_key_offset),
-                    lengths=flat_dict.pop(njt_key_lengths, None),
-                )
-                del flat_dict[njt_key]
-                flat_dict[newkey] = val
+            if not set_on_tensor:
+                for njt_key, njt in njts.items():
+                    newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
+                    njt_key_values = njt_key[:-1] + (
+                        njt_key[-1].replace("<NJT>", "<NJT_VALUES>"),
+                    )
+                    njt_key_offset = njt_key[:-1] + (
+                        njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
+                    )
+                    njt_key_lengths = njt_key[:-1] + (
+                        njt_key[-1].replace("<NJT>", "<NJT_LENGTHS>"),
+                    )
+                    val = _rebuild_njt_from_njt(
+                        njt,
+                        values=flat_dict.pop(njt_key_values),
+                        offsets=flat_dict.pop(njt_key_offset),
+                        lengths=flat_dict.pop(njt_key_lengths, None),
+                    )
+                    del flat_dict[njt_key]
+                    flat_dict[newkey] = val
 
             if non_blocking and device.type != "cuda":
                 # sync if needed
                 self._sync_all()
+            if set_on_tensor:
+                return self
         else:
-
-            def _view_and_pad(tensor):
-                result = tensor.view(-1).view(torch.uint8)
-                # result must always have a multiple of 8 elements
-                pad = 0
-                if need_padding:
-                    pad = result.numel() % 8
-                    if pad != 0:
-                        result = torch.cat([result, result.new_zeros(8 - pad)])
-                return result, pad
 
             items = []
             for v in flat_dict.values():
                 if v.is_nested:
+                    items.append(None)
                     continue
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
-                stride = v.stride()
-                if (stride and stride[-1] != 1) or v.storage_offset():
+                if is_dynamo_compiling():
                     v = v.clone(memory_format=torch.contiguous_format)
-                v, pad = _view_and_pad(v)
+                else:
+                    stride = v.stride()
+                    if (stride and stride[-1] != 1) or v.storage_offset():
+                        v = v.clone(memory_format=torch.contiguous_format)
+                # v, pad = _view_and_pad(v)
                 items.append(v)
-            if non_blocking and device.type != "cuda":
-                # sync if needed
-                self._sync_all()
-            torch.cat(items, out=storage)
-            for v, (k, oldv) in _zip_strict(
-                storage.split(flat_size), list(flat_dict.items())
-            ):
+
+            items = view_cat_split(
+                self,
+                items,
+                storage,
+                need_padding,
+                non_blocking,
+                device,
+                flat_size,
+                set_on_tensor,
+            )
+            if set_on_tensor:
+                return self
+
+            for k, v in _zip_strict(flat_dict.keys(), items):
                 if not k[-1].startswith("<"):
-                    flat_dict[k] = view_old_as_new(v, oldv)
+                    flat_dict[k] = v
                 elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
-                    nt = oldv
+                    nt = flat_dict[k]
                     assert not v.numel()
                     nt_lengths = None
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_VALUES>"):
-                    nt_vaues = view_old_as_new(v, oldv)
+                    nt_vaues = v
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_LENGTHS>"):
-                    nt_lengths = view_old_as_new(v, oldv)
+                    nt_lengths = v
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_OFFSETS>"):
                     newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
-                    nt_offsets = view_old_as_new(v, oldv)
+                    nt_offsets = v
                     del flat_dict[k]
 
                     val = _rebuild_njt_from_njt(
@@ -4044,7 +4059,7 @@ class TensorDictBase(MutableMapping):
                     # another nested tensor.
                     del nt, nt_vaues, nt_offsets, nt_lengths
                 else:
-                    flat_dict[k] = view_old_as_new(v, oldv)
+                    flat_dict[k] = v
 
         def assign_val(key, val):
             if isinstance(key, str):
@@ -4060,12 +4075,16 @@ class TensorDictBase(MutableMapping):
             device = None
         else:
             device = None
+        if inplace:
+            result = self
+        else:
+            result = None
         result = self._fast_apply(
             assign_val,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
-            out=self if inplace else None,
+            out=result,
             device=device,
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}

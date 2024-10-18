@@ -1166,6 +1166,8 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             return self
 
         def deliver_result(result):
+            if result is None:
+                return
             if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
                 if not is_dynamo_compiling():
                     non_tensordict = super(type(self), self).__getattribute__(
