@@ -2694,3 +2694,65 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
         values,
         **kwargs,
     )
+
+
+@torch.library.custom_op("tensordict::_to_escape_compile", mutates_args=())
+def _to_escape_compile(
+    storage: torch.Tensor, device: torch.device, pin_memory: bool
+) -> torch.Tensor:
+    if pin_memory:
+        storage = storage.pin_memory()
+    storage_cast = storage.to(device, non_blocking=True)
+    return storage_cast
+
+
+@_to_escape_compile.register_fake
+def _(storage: torch.Tensor, device: torch.device, pin_memory: bool) -> torch.Tensor:
+    return torch.empty_like(storage, device=device)
+
+
+def view_and_pad(tensor: torch.Tensor, need_padding: bool) -> torch.Tensor:
+    result = tensor.view(-1).view(torch.uint8)
+    # result must always have a multiple of 8 elements
+    if need_padding:
+        pad = result.numel() % 8
+        if pad != 0:
+            result = torch.cat([result, result.new_zeros(8 - pad)])
+    return result
+
+
+def view_old_as_new(v: torch.Tensor, oldv: torch.Tensor) -> torch.Tensor:
+    if oldv is None:
+        return v
+    v = v.view(oldv.dtype)
+    if v.numel() > oldv.numel():
+        return v[: oldv.numel()].view(oldv.shape)
+    return v.view(oldv.shape)
+
+
+@torch.compiler.disable()
+def view_cat_split(
+    td, items, storage, need_padding, non_blocking, device, flat_size, set_on_tensor
+):
+    items_flat = [view_and_pad(v, need_padding) for v in items if v is not None]
+    if non_blocking and device.type != "cuda":
+        # sync if needed
+        td._sync_all()
+    torch.cat(items_flat, out=storage)
+    # TODO: breaks with NJT
+    result = [
+        view_old_as_new(v, oldv)
+        for (v, oldv) in zip(storage.split(flat_size), items, strict=True)
+    ]
+    if set_on_tensor:
+        for t_dest, t_src in zip(result, items):
+            if t_src is None:
+                # njt is decomposed
+                continue
+            t_src.set_(
+                t_dest.untyped_storage(),
+                storage_offset=t_dest.storage_offset(),
+                stride=t_dest.stride(),
+                size=t_dest.size(),
+            )
+    return result

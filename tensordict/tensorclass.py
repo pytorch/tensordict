@@ -134,6 +134,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
     "_propagate_unlock",
+    "_reduce_get_metadata",
     "_values_list",
     "data_ptr",
     "dim",
@@ -569,7 +570,7 @@ def _tensorclass(cls: T, *, frozen) -> T:
             setattr(cls, method_name, getattr(TensorDict, method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name))
+            setattr(cls, method_name, _wrap_td_method(method_name, force_wrap=True))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
@@ -857,7 +858,7 @@ def _get_type_hints(cls, with_locals=False):
         cls._type_hints = None
 
 
-def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
+def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
     """Tensor class wrapper to instantiate a new tensor class object.
 
     Args:
@@ -865,12 +866,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
 
     """
-    if not isinstance(tensordict, TensorDictBase):
+    if safe and not isinstance(tensordict, TensorDictBase):
         raise RuntimeError(
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
     # Validating keys of tensordict
-    # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
     # TODO: compile doesn't like set() over an arbitrary object
     if is_dynamo_compiling():
@@ -890,10 +890,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         exp_keys = set(cls.__expected_keys__)
         if non_tensordict is not None:
             nontensor_keys = set(non_tensordict.keys())
+            total_keys = tensor_keys.union(nontensor_keys)
         else:
             nontensor_keys = set()
             non_tensordict = {}
-        total_keys = tensor_keys.union(nontensor_keys)
+            total_keys = tensor_keys
     for key in nontensor_keys:
         if key not in tensor_keys:
             continue
@@ -917,11 +918,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
-        tc.__dict__["_tensordict"] = tensordict
-        tc.__dict__["_non_tensordict"] = non_tensordict
+        tc.__dict__.update({"_tensordict": tensordict,
+                            "_non_tensordict": non_tensordict})
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
-        if hasattr(tc, "__post_init__"):
+        if hasattr(cls, "__post_init__"):
             tc.__post_init__()
         return tc
     else:
@@ -1142,7 +1143,24 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
+def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False, force_wrap=False):
+    def deliver_result(self, result, kwargs):
+        if result is None:
+            return
+        if (force_wrap or isinstance(result, TensorDictBase)) and kwargs.get("out") is not result:
+            if not is_dynamo_compiling():
+                non_tensordict = super(type(self), self).__getattribute__(
+                    "_non_tensordict"
+                )
+            else:
+                non_tensordict = self._non_tensordict
+            non_tensordict = dict(non_tensordict)
+            if copy_non_tensor and non_tensordict:
+                # use tree_map to copy
+                non_tensordict = tree_map(lambda x: x, non_tensordict)
+            return self._from_tensordict(result, non_tensordict, safe=False)
+        return result
+
     def wrapped_func(self, *args, **kwargs):
         if not is_dynamo_compiling():
             td = super(type(self), self).__getattribute__("_tensordict")
@@ -1154,34 +1172,12 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
         if no_wrap:
             return result
 
-        def check_out(kwargs, result):
-            out = kwargs.get("out")
-            if out is result:
-                # No need to transform output
-                return True
-            return False
-
         if result is td:
             return self
 
-        def deliver_result(result):
-            if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
-                if not is_dynamo_compiling():
-                    non_tensordict = super(type(self), self).__getattribute__(
-                        "_non_tensordict"
-                    )
-                else:
-                    non_tensordict = self._non_tensordict
-                non_tensordict = dict(non_tensordict)
-                if copy_non_tensor:
-                    # use tree_map to copy
-                    non_tensordict = tree_map(lambda x: x, non_tensordict)
-                return self._from_tensordict(result, non_tensordict)
-            return result
-
         if isinstance(result, tuple):
-            return tuple(deliver_result(r) for r in result)
-        return deliver_result(result)
+            return tuple(deliver_result(self, r, kwargs) for r in result)
+        return deliver_result(self, result, kwargs)
 
     return wrapped_func
 
