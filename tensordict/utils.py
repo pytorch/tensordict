@@ -2746,6 +2746,9 @@ def view_cat_split(
     ]
     if set_on_tensor:
         for t_dest, t_src in zip(result, items):
+            if t_src is None:
+                # njt is decomposed
+                continue
             t_src.set_(
                 t_dest.untyped_storage(),
                 storage_offset=t_dest.storage_offset(),
