@@ -3580,12 +3580,12 @@ class TensorDictBase(MutableMapping):
     def _reduce_get_metadata(self) -> dict:
         return {
             "device": str(self.device) if self.device is not None else None,
-            "names": self.names,
+            "names": self._maybe_names(),
             "batch_size": list(self.batch_size),
             "is_locked": self._is_locked,
         }
 
-    # @cache  # noqa: B019
+    @torch.compile(mode="reduce-overhead")
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
         if dtype is NO_DEFAULT:
@@ -3674,7 +3674,7 @@ class TensorDictBase(MutableMapping):
                     metadata_dict=metadata_dict_key,
                     flat_size=flat_size,
                 )
-                r = value._fast_apply(
+                value._fast_apply(
                     local_assign,
                     named=True,
                     nested_keys=True,
@@ -3682,7 +3682,6 @@ class TensorDictBase(MutableMapping):
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
                     filter_empty=True,
                 )
-                assert r is None
                 return
             # Tensors: DTensor, nested and then regular
             if hasattr(value, "full_tensor"):
@@ -10618,14 +10617,26 @@ class TensorDictBase(MutableMapping):
         storage = self._consolidated["storage"]
 
         storage_cast = _to_escape_compile(storage, device=device, pin_memory=pin_memory)
+        _consolidated = {
+            "storage": storage_cast,
+        }
+        if "metadata" in self._consolidated:
+            # faster than deepcopy
+            def copy_dict(d):
+                return {
+                    k: v if not isinstance(v, dict) else copy_dict(v)
+                    for k, v in d.items()
+                }
+
+            _consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
 
         if compilable:
             result = self._to_consolidated_compile(
-                device=device, num_threads=num_threads, storage_cast=storage_cast
+                device=device, num_threads=num_threads, storage_cast=storage_cast, _consolidated=_consolidated,
             )
         else:
             result = self._to_consolidated_eager(
-                device=device, num_threads=num_threads, storage_cast=storage_cast
+                device=device, num_threads=num_threads, storage_cast=storage_cast, _consolidated=_consolidated,
             )
 
         if non_blocking in (False, None):
@@ -10642,7 +10653,7 @@ class TensorDictBase(MutableMapping):
 
         return result
 
-    def _to_consolidated_eager(self, *, device, num_threads, storage_cast):
+    def _to_consolidated_eager(self, *, device, num_threads, storage_cast, _consolidated):
 
         untyped_storage = storage_cast.untyped_storage()
 
@@ -10702,19 +10713,10 @@ class TensorDictBase(MutableMapping):
         result = self._fast_apply(
             set_, device=torch.device(device), num_threads=num_threads
         )
-        result._consolidated = {"storage": storage_cast}
-        if "metadata" in self._consolidated:
-            # faster than deepcopy
-            def copy_dict(d):
-                return {
-                    k: v if not isinstance(v, dict) else copy_dict(v)
-                    for k, v in d.items()
-                }
-
-            result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+        result._consolidated = _consolidated
         return result
 
-    def _to_consolidated_compile(self, *, device, num_threads, storage_cast):
+    def _to_consolidated_compile(self, *, device, num_threads, storage_cast, _consolidated):
 
         def get_tensors_length(metadata, lengths=None, pos=None, keys=None, prefix=()):
             root = False
@@ -10753,17 +10755,6 @@ class TensorDictBase(MutableMapping):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
-
-        _consolidated = {"storage": storage_cast}
-        if "metadata" in self._consolidated:
-            # faster than deepcopy
-            def copy_dict(d):
-                return {
-                    k: v if not isinstance(v, dict) else copy_dict(v)
-                    for k, v in d.items()
-                }
-
-            _consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
 
         slice_map = split_storage(_consolidated)
 
