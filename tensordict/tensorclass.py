@@ -570,7 +570,7 @@ def _tensorclass(cls: T, *, frozen) -> T:
             setattr(cls, method_name, getattr(TensorDict, method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name))
+            setattr(cls, method_name, _wrap_td_method(method_name, force_wrap=True))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
@@ -1143,15 +1143,11 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
-    def check_out(kwargs, result):
-        # No need to transform output if True
-        return kwargs.get("out") is result
-
+def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False, force_wrap=False):
     def deliver_result(self, result, kwargs):
         if result is None:
             return
-        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
+        if (force_wrap or isinstance(result, TensorDictBase)) and kwargs.get("out") is not result:
             if not is_dynamo_compiling():
                 non_tensordict = super(type(self), self).__getattribute__(
                     "_non_tensordict"
