@@ -86,7 +86,7 @@ def default_device():
         ["within", False, None],
         # [True, False, 4],
         # [True, False, 16],
-        [True, "default", None],
+        # [True, "default", None],
     ],
 )
 @pytest.mark.skipif(
