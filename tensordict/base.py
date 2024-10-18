@@ -3585,7 +3585,6 @@ class TensorDictBase(MutableMapping):
             "is_locked": self._is_locked,
         }
 
-    @torch.compile(mode="reduce-overhead")
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
         if dtype is NO_DEFAULT:
