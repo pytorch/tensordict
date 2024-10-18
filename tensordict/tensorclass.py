@@ -1144,6 +1144,30 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 
 def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
+    def check_out(kwargs, result):
+        out = kwargs.get("out")
+        if out is result:
+            # No need to transform output
+            return True
+        return False
+
+    def deliver_result(self, result, kwargs):
+        if result is None:
+            return
+        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
+            if not is_dynamo_compiling():
+                non_tensordict = super(type(self), self).__getattribute__(
+                    "_non_tensordict"
+                )
+            else:
+                non_tensordict = self._non_tensordict
+            non_tensordict = dict(non_tensordict)
+            if copy_non_tensor:
+                # use tree_map to copy
+                non_tensordict = tree_map(lambda x: x, non_tensordict)
+            return self._from_tensordict(result, non_tensordict)
+        return result
+
     def wrapped_func(self, *args, **kwargs):
         if not is_dynamo_compiling():
             td = super(type(self), self).__getattribute__("_tensordict")
@@ -1155,36 +1179,12 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
         if no_wrap:
             return result
 
-        def check_out(kwargs, result):
-            out = kwargs.get("out")
-            if out is result:
-                # No need to transform output
-                return True
-            return False
-
         if result is td:
             return self
 
-        def deliver_result(result):
-            if result is None:
-                return
-            if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
-                if not is_dynamo_compiling():
-                    non_tensordict = super(type(self), self).__getattribute__(
-                        "_non_tensordict"
-                    )
-                else:
-                    non_tensordict = self._non_tensordict
-                non_tensordict = dict(non_tensordict)
-                if copy_non_tensor:
-                    # use tree_map to copy
-                    non_tensordict = tree_map(lambda x: x, non_tensordict)
-                return self._from_tensordict(result, non_tensordict)
-            return result
-
         if isinstance(result, tuple):
-            return tuple(deliver_result(r) for r in result)
-        return deliver_result(result)
+            return tuple(deliver_result(self, r, kwargs) for r in result)
+        return deliver_result(self, result, kwargs)
 
     return wrapped_func
 
