@@ -4027,7 +4027,7 @@ class TensorDictBase(MutableMapping):
             if set_on_tensor:
                 return self
 
-            for k, v in _zip_strict(flat_dict.keys(), items):
+            for k, v in _zip_strict(list(flat_dict.keys()), items):
                 if not k[-1].startswith("<"):
                     flat_dict[k] = v
                 elif k[-1].startswith("<NJT>"):

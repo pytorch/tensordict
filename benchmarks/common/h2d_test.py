@@ -104,7 +104,9 @@ class TestTo:
         if consolidated == "within":
 
             def to(td, num_threads):
-                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(default_device, num_threads=num_threads)
+                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(
+                    default_device, num_threads=num_threads
+                )
 
         else:
 
@@ -130,7 +132,9 @@ class TestTo:
         if consolidated == "within":
 
             def to(td, num_threads):
-                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(default_device, num_threads=num_threads)
+                return td.consolidate(pin_memory=pin_mem, set_on_tensor=True).to(
+                    default_device, num_threads=num_threads
+                )
 
         else:
 
