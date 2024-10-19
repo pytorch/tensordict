@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copyreg
-from  multiprocessing import reduction
+from multiprocessing import reduction
 
 import torch
 from tensordict._lazy import LazyStackedTensorDict
