@@ -130,8 +130,8 @@ class PersistentTensorDict(TensorDictBase):
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
     .. note::
-      Currently, PersistentTensorDict instances are not closed when getting out-of-scope.
-      This means that it is the responsibility of the user to close them if necessary.
+        Currently, PersistentTensorDict instances are not closed when getting out-of-scope.
+        This means that it is the responsibility of the user to close them if necessary.
 
     Examples:
         >>> import tempfile

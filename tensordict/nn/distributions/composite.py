@@ -46,7 +46,8 @@ class CompositeDistribution(d.Distribution):
         entropy_key (NestedKey, optional): key where to write the entropy.
             Defaults to `'entropy'`.
 
-    .. note:: In this distribution class, the batch-size of the input tensordict containing the params
+    .. note::
+        In this distribution class, the batch-size of the input tensordict containing the params
         (``params``) is indicative of the batch_shape of the distribution. For instance,
         the ``"sample_log_prob"`` entry resulting from a call to ``log_prob``
         will be of the shape of the params (+ any supplementary batch dimension).

@@ -77,20 +77,18 @@ torch.testing.assert_close(chunks[0]["a"], tensordict["a"][:, :-1])
 #    :class:`~.TensorDict` values with different batch sizes, the negative dimension is
 #    always interpreted relative to the batch dimensions of the root.
 #
-#    .. code-block::
-#
-#       tensordict = TensorDict(
-#           {
-#               "a": torch.rand(3, 4),
-#               "nested": TensorDict({"b": torch.rand(3, 4, 5)}, [3, 4, 5])
-#           },
-#           [3, 4],
-#       )
-#       # dim = -2 will be interpreted as the first dimension throughout, as the root
-#       # TensorDict has 2 batch dimensions, even though the nested TensorDict has 3
-#       chunks = tensordict.split([2, 1], dim=-2)
-#       assert chunks[0].batch_size == torch.Size([2, 4])
-#       assert chunks[0]["nested"].batch_size == torch.Size([2, 4, 5])
+#       >>> tensordict = TensorDict(
+#       ...     {
+#       ...         "a": torch.rand(3, 4),
+#       ...         "nested": TensorDict({"b": torch.rand(3, 4, 5)}, [3, 4, 5])
+#       ...     },
+#       ...     [3, 4],
+#       ... )
+#       >>> # dim = -2 will be interpreted as the first dimension throughout, as the root
+#       >>> # TensorDict has 2 batch dimensions, even though the nested TensorDict has 3
+#       >>> chunks = tensordict.split([2, 1], dim=-2)
+#       >>> assert chunks[0].batch_size == torch.Size([2, 4])
+#       >>> assert chunks[0]["nested"].batch_size == torch.Size([2, 4, 5])
 #
 #    As you can see from this example, the
 #    :meth:`TensorDict.split <tensordict.TensorDict.split>` method behaves exactly as
@@ -173,9 +171,8 @@ assert stacked_tensordict["a"].shape == torch.Size([2, 3, 4])
 #    or :meth:`LazyStackedTensorDict.contiguous <tensordict.LazyStackedTensorDict.contiguous>`
 #    methods.
 #
-#    .. code-block::
-#       assert isinstance(stacked_tensordict.contiguous(), TensorDict)
-#       assert isinstance(stacked_tensordict.contiguous(), TensorDict)
+#       >>> assert isinstance(stacked_tensordict.contiguous(), TensorDict)
+#       >>> assert isinstance(stacked_tensordict.contiguous(), TensorDict)
 #
 #    After calling either of these methods, we will have a regular :class:`TensorDict`
 #    containing the stacked values, and no additional computation is performed when

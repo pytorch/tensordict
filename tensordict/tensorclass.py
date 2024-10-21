@@ -24,16 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    get_type_hints,
-    List,
-    overload,
-    Sequence,
-    Type,
-    TypeVar,
-)
+from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
 import orjson as json
@@ -125,7 +116,7 @@ _METHOD_FROM_TD = [
     "memmap_refresh_",
     "save",
 ]
-# Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+# Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_check_dim_name",
     "_check_unlock",
@@ -144,6 +135,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_propagate_lock",
     "_propagate_unlock",
     "_values_list",
+    "data_ptr",
     "dim",
     "is_empty",
     "is_memmap",
@@ -201,6 +193,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "atan",
     "atan_",
     "auto_batch_size_",
+    "auto_device_",
     "ceil",
     "ceil_",
     "chunk",
@@ -369,20 +362,8 @@ class _tensorclass_dec:
         return clz
 
 
-@overload
-def tensorclass(autocast: bool = False, frozen: bool = False) -> _tensorclass_dec: ...
-
-
-@overload
-def tensorclass(cls: T) -> T: ...
-
-
-@overload
-def tensorclass(cls: T) -> T: ...
-
-
 @dataclass_transform()
-def tensorclass(*args, **kwargs):
+def tensorclass(cls=None, /, *, autocast: bool = False, frozen: bool = False):
     """A decorator to create :obj:`tensorclass` classes.
 
     ``tensorclass`` classes are specialized :func:`dataclasses.dataclass` instances that
@@ -463,7 +444,17 @@ def tensorclass(*args, **kwargs):
 
 
     """
-    return _tensorclass_dec(*args, **kwargs)
+
+    def wrap(cls):
+        return _tensorclass_dec(autocast, frozen)(cls)
+
+    # See if we're being called as @tensorclass or @tensorclass().
+    if cls is None:
+        # We're called with parens.
+        return wrap
+
+    # We're called as @tensorclass without parens.
+    return wrap(cls)
 
 
 @dataclass_transform()
@@ -2180,14 +2171,16 @@ class NonTensorData:
     holds. We try to avoid pickling/unpickling objects for performance and security
     reasons (as pickle can execute arbitrary code during loading).
 
-    .. note:: if the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
+    .. note::
+        If the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
         itself, the data from the nested object will be gathered.
 
         >>> non_tensor = NonTensorData("a string!")
         >>> non_tensor = NonTensorData(non_tensor)
         >>> assert non_tensor.data == "a string!"
 
-    .. note:: To faciliate ``NonTensorData`` integration in tensordict, the
+    .. note::
+        To faciliate ``NonTensorData`` integration in tensordict, the
         :meth:`~tensordict.TensorDictBase.__getitem__` and :meth:`~tensordict.TensorDictBase.__setitem__`
         are overloaded to set non-tensor data appropriately (unlike :meth:`~tensordict.TensorDictBase.set`
         and :meth:`~tensordict.TensorDictBase.get` which are reserved for tensor-like
@@ -2201,7 +2194,8 @@ class NonTensorData:
         >>> assert td[0]["b"] == "a string!"
         >>> td.get("b")  # returns the NonTensorData
 
-    .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
+    .. note::
+        Unlike other tensorclass classes, :class:`NonTensorData` supports
         comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
         of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
@@ -2220,7 +2214,8 @@ class NonTensorData:
         >>> print(a == b)
         tensor([True, True, True])
 
-    .. note:: Stacking :class:`NonTensorData` instances results in either
+    .. note::
+        Stacking :class:`NonTensorData` instances results in either
         a single :class:`NonTensorData` instance if all shapes match, or a
         :class:`~tensordict.LazyStackedTensorDict` object if the content
         mismatch. To get to this result, the content of the :class:`NonTensorData`
@@ -2242,7 +2237,8 @@ class NonTensorData:
             device=None,
             is_shared=False)
 
-    .. note:: Non-tensor data can be filtered out from a tensordict using
+    .. note::
+        Non-tensor data can be filtered out from a tensordict using
         :meth:`~tensordict.TensorDictBase.filter_non_tensor`.
 
     Examples:
@@ -2278,10 +2274,11 @@ class NonTensorData:
             meta.json
         >>> assert loaded.get_non_tensor("pickable").value == 10
 
-    .. note:: __Preallocation__ is also possible with ``NonTensorData``.
-      This class can handle conversion from ``NonTensorData`` to
-      ``NonTensorStack`` where appropriate, as the following example
-      demonstrates:
+    .. note::
+        __Preallocation__ is also possible with ``NonTensorData``.
+        This class can handle conversion from ``NonTensorData`` to
+        ``NonTensorStack`` where appropriate, as the following example
+        demonstrates:
 
         >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         >>> print(td)

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import functools
 import os
 import warnings
@@ -27,9 +28,9 @@ from torch import Tensor
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 try:
-    from torch.utils._pytree import tree_leaves
+    from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 except ImportError:
-    from torch.utils._pytree import tree_flatten
+    from torch.utils._pytree import tree_flatten, tree_unflatten
 
     def tree_leaves(pytree):
         """Torch 2.0 compatible version of tree_leaves."""
@@ -41,7 +42,8 @@ class CudaGraphModule:
 
     ``CudaGraphModule`` is a wrapper class that provides a user-friendly interface to CUDA graphs for PyTorch callables.
 
-    .. warning:: ``CudaGraphModule`` is a prototype feature and its API restrictions are likely to change in the future.
+    .. warning::
+        ``CudaGraphModule`` is a prototype feature and its API restrictions are likely to change in the future.
 
     This class provides a user-friendly interface to cudagraphs, allowing for a fast, CPU-overhead free execution of
     operations on GPU.
@@ -101,7 +103,8 @@ class CudaGraphModule:
           id, then this identity will be preserved during a call to ``CudaGraphModule``. In all other cases, the output
           will be cloned, irrespective of whether its elements match or do not match one of the inputs.
 
-    .. warning:: ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
+    .. warning::
+        ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
         of the input module and passing them to an optimizer.
 
     Args:
@@ -113,7 +116,8 @@ class CudaGraphModule:
         in_keys (list of NestedKeys): the input keys, if the module takes a TensorDict as input.
             Defaults to ``module.in_keys`` if this value exists, otherwise ``None``.
 
-            .. note:: If ``in_keys`` is provided but empty, the module is assumed to receive a tensordict as input.
+            .. note::
+                If ``in_keys`` is provided but empty, the module is assumed to receive a tensordict as input.
                 This is sufficient to make ``CudaGraphModule`` aware that the function should be treated as a
                 `TensorDictModule`, but keyword arguments will not be dispatched. See below for some examples.
 
@@ -165,6 +169,12 @@ class CudaGraphModule:
         if not isinstance(warmup, int) or warmup < 1:
             raise ValueError("warmup must be an integer greater than 0.")
         self._warmup = warmup
+        if torch.cuda.is_available():
+            self._warmup_stream = torch.cuda.Stream()
+            self._warmup_stream_cm = torch.cuda.stream(self._warmup_stream)
+        else:
+            self._warmup_stream = None
+            self._warmup_stream_cm = contextlib.nullcontext()
 
         if hasattr(module, "in_keys"):
             self.in_keys = module.in_keys
@@ -198,15 +208,36 @@ class CudaGraphModule:
                 tensordict_out: TensorDictBase | None = None,
                 **kwargs: Any,
             ) -> Any:
-                if self.counter < self._warmup:
-                    if tensordict_out is not None:
-                        kwargs["tensordict_out"] = tensordict_out
-                    out = self.module(tensordict, *args, **kwargs)
-                    if self._out_matches_in is None:
-                        self._out_matches_in = out is tensordict
+                if self.counter >= self._warmup:
+                    self._tensordict.update_(tensordict, non_blocking=True)
+                    torch.cuda.synchronize()
+                    self.graph.replay()
+                    if self._out_matches_in:
+                        result = tensordict.update(
+                            self._out, keys_to_update=self._selected_keys
+                        )
+                    elif tensordict_out is not None:
+                        result = tensordict_out.update(self._out, clone=True)
+                    else:
+                        result = self._out.clone() if self._out is not None else None
+                    return result
+
+                if not self._has_cuda or self.counter < self._warmup - 1:
+                    # We must clone the data because providing non-contiguous data will fail later when we clone
+                    tensordict.apply(self._clone, out=tensordict)
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
+                    with self._warmup_stream_cm:
+                        if tensordict_out is not None:
+                            kwargs["tensordict_out"] = tensordict_out
+                        out = self.module(tensordict, *args, **kwargs)
+                        if self._out_matches_in is None:
+                            self._out_matches_in = out is tensordict
                     self.counter += self._has_cuda
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     return out
-                elif self.counter == self._warmup:
+                else:
                     if tensordict.device is None:
                         tensordict.apply(self._check_device_and_grad, filter_empty=True)
                     elif tensordict.device.type != "cuda":
@@ -215,20 +246,29 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
+                    tensordict.apply(self._clone, out=tensordict)
+                    self._tensordict = tensordict.copy()
+                    if tensordict_out is not None:
+                        td_out_save = tensordict_out.copy()
+                        kwargs["tensordict_out"] = tensordict_out
+
+                    torch.cuda.synchronize()
+                    this_out = self.module(tensordict, *args, **kwargs)
+                    torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
-                    self._tensordict = tensordict.copy()
+                    if tensordict_out is not None:
+                        kwargs["tensordict_out"] = td_out_save
                     with torch.cuda.graph(self.graph):
-                        if tensordict_out is not None:
-                            kwargs["tensordict_out"] = tensordict_out
                         out = self.module(self._tensordict, *args, **kwargs)
-                    self.graph.replay()
 
                     if not is_tensor_collection(out) and out is not None:
                         raise RuntimeError(
                             "The output of the function must be a tensordict, a tensorclass or None. Got "
                             f"type(out)={type(out)}."
                         )
+                    if is_tensor_collection(out):
+                        out.lock_()
                     self._out = out
                     self.counter += 1
                     if self._out_matches_in:
@@ -249,56 +289,61 @@ class CudaGraphModule:
                                 default=None,
                                 filter_empty=True,
                             )
-                        return tensordict.update(
-                            self._out, keys_to_update=self._selected_keys
-                        )
-                    if tensordict_out is not None:
-                        return tensordict_out.update(out, clone=True)
-                    return out.clone() if self._out is not None else None
-                else:
-                    self._tensordict.update_(tensordict)
-                    self.graph.replay()
-                    if self._out_matches_in:
-                        return tensordict.update(
-                            self._out, keys_to_update=self._selected_keys
-                        )
-                    if tensordict_out is not None:
-                        return tensordict_out.update(self._out, clone=True)
-                    return self._out.clone() if self._out is not None else None
+                    return this_out
 
         else:
 
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
-                if self.counter < self._warmup:
-                    out = self.module(*args, **kwargs)
+                if self.counter >= self._warmup:
+                    srcs, dests = [], []
+                    for arg_src, arg_dest in zip(
+                        tree_leaves((args, kwargs)), self._flat_tree
+                    ):
+                        self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
+                    if dests:
+                        torch._foreach_copy_(dests, srcs)
+                    torch.cuda.synchronize()
+                    self.graph.replay()
+                    if self._return_unchanged:
+                        result = self._out
+                    else:
+                        result = tree_unflatten(
+                            [
+                                out.clone() if hasattr(out, "clone") else out
+                                for out in self._out
+                            ],
+                            self._out_struct,
+                        )
+                    return result
+
+                if not self._has_cuda or self.counter < self._warmup - 1:
+                    args, kwargs = tree_map(self._clone, (args, kwargs))
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
+                    with self._warmup_stream_cm:
+                        out = self.module(*args, **kwargs)
+                    if self._has_cuda:
+                        torch.cuda.synchronize()
                     self.counter += self._has_cuda
                     return out
-                elif self.counter == self._warmup:
-                    self.graph = torch.cuda.CUDAGraph()
+                else:
+                    self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
 
-                    def check_device_and_clone(x):
-                        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
-                            if x.requires_grad:
-                                raise RuntimeError(self._REQUIRES_GRAD_ERROR)
-                            if x.device is None:
-                                # Check device of leaves of tensordict
-                                x.apply(self._check_device_and_grad, filter_empty=True)
-
-                            elif x.device.type != "cuda":
-                                raise ValueError(
-                                    f"All tensors must be stored on CUDA. Got {x.device.type}."
-                                )
-
-                            return x.clone()
-                        return x
-
-                    self._args, self._kwargs = tree_map(
-                        check_device_and_clone, (args, kwargs)
+                    self._flat_tree = tuple(
+                        self._check_device_and_clone(arg) for arg in self._flat_tree
                     )
+                    args, kwargs = self._args, self._kwargs = tree_unflatten(
+                        self._flat_tree, self._tree_spec
+                    )
+
+                    torch.cuda.synchronize()
+                    this_out = self.module(*args, **kwargs)
+                    torch.cuda.synchronize()
+
+                    self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph):
                         out = self.module(*self._args, **self._kwargs)
-                    self.graph.replay()
-                    self._out = out
+                    self._out, self._out_struct = tree_flatten(out)
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
                     # user.
@@ -314,34 +359,64 @@ class CudaGraphModule:
                                 f"and the identity between input and output will not match anymore. "
                                 f"Make sure you don't rely on input-output identity further in the code."
                             )
-                    if isinstance(self._out, torch.Tensor) or self._out is None:
-                        self._return_unchanged = (
-                            "clone" if self._out is not None else True
-                        )
-                        return (
-                            self._out.clone()
-                            if self._return_unchanged == "clone"
-                            else self._out
-                        )
-                    self._return_unchanged = False
-                    return tree_map(lambda x: x.clone(), out)
-                else:
-                    tree_map(
-                        lambda x, y: x.copy_(y),
-                        (self._args, self._kwargs),
-                        (args, kwargs),
-                    )
-                    self.graph.replay()
-                    if self._return_unchanged == "clone":
-                        return self._out.clone()
-                    elif self._return_unchanged:
-                        return self._out
-                    return tree_map(
-                        lambda x: x.clone() if x is not None else x, self._out
-                    )
+                    if not self._out:
+                        self._return_unchanged = True
+                    else:
+                        self._out = [
+                            out.lock_() if is_tensor_collection(out) else out
+                            for out in self._out
+                        ]
+                        self._return_unchanged = False
+                    return this_out
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
+
+    @staticmethod
+    def _maybe_copy_onto_(src, dest, srcs, dests):
+        if isinstance(src, torch.Tensor):
+            srcs.append(src)
+            dests.append(dest)
+            return
+        if is_tensor_collection(src):
+            dest.copy_(src)
+            return
+        isdiff = False
+        try:
+            isdiff = src != dest
+        except Exception as err:
+            raise RuntimeError(
+                "Couldn't assess input value. Make sure your function only takes tensor inputs or that "
+                "the input value can be easily checked and is constant. For a better efficiency, avoid "
+                "passing non-tensor inputs to your function."
+            ) from err
+        if isdiff:
+            raise ValueError("Varying inputs must be torch.Tensor subclasses.")
+
+    @classmethod
+    def _check_device_and_clone(cls, x):
+        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+            if x.requires_grad:
+                raise RuntimeError(cls._REQUIRES_GRAD_ERROR)
+            if x.device is None:
+                # Check device of leaves of tensordict
+                x.apply(cls._check_device_and_grad, filter_empty=True)
+
+            elif x.device.type != "cuda":
+                raise ValueError(
+                    f"All tensors must be stored on CUDA. Got {x.device.type}."
+                )
+
+            return x.clone()
+        return x
+
+    @classmethod
+    def _clone(cls, x):
+        if isinstance(x, torch.Tensor) or is_tensor_collection(x):
+            if x.requires_grad:
+                raise RuntimeError(cls._REQUIRES_GRAD_ERROR)
+            return x.clone()
+        return x
 
     @classmethod
     def _check_device_and_grad(cls, x):

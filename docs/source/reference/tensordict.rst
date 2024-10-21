@@ -103,7 +103,7 @@ However, physical storage of PyTorch tensors should not be any different:
 
 .. autosummary::
     :toctree: generated/
-    :template: td_template.rst
+    :template: td_template_noinherit.rst
 
     MemoryMappedTensor
 

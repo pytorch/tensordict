@@ -59,9 +59,10 @@ class TensorDictSequential(TensorDictModule):
          selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
 
-    .. note:: A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove
-      some of them after execution for clarity or memory purposes. If this is the case, the method :meth:`~.select_out_keys`
-      can be used after instantiation, or `selected_out_keys` may be passed to the constructor.
+    .. note::
+        A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove
+        some of them after execution for clarity or memory purposes. If this is the case, the method :meth:`~.select_out_keys`
+        can be used after instantiation, or `selected_out_keys` may be passed to the constructor.
 
     Examples:
         >>> import torch
