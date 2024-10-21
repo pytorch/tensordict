@@ -387,7 +387,7 @@ way.</p>
 <section id="reshaping-a-tensordict">
 <h2>Reshaping a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code><a class="headerlink" href="#reshaping-a-tensordict" title="Permalink to this heading">¶</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.reshape" title="tensordict.TensorDict.reshape"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.reshape</span></code></a> works just like
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.reshape.html#torch.Tensor.reshape" title="(in PyTorch v2.4)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.reshape()</span></code></a>. It applies to all of the contents of the
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.reshape.html#torch.Tensor.reshape" title="(in PyTorch v2.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.reshape()</span></code></a>. It applies to all of the contents of the
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> along the batch dimensions - note the shape of <code class="docutils literal notranslate"><span class="pre">b</span></code> in the
 example below. It also updates the <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> attribute.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">reshaped_tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -400,7 +400,7 @@ example below. It also updates the <code class="docutils literal notranslate"><s
 <section id="splitting-a-tensordict">
 <h2>Splitting a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code><a class="headerlink" href="#splitting-a-tensordict" title="Permalink to this heading">¶</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.split" title="tensordict.TensorDict.split"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.split</span></code></a> is similar to
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.split.html#torch.Tensor.split" title="(in PyTorch v2.4)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.split()</span></code></a>. It splits the <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> into chunks. Each
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.split.html#torch.Tensor.split" title="(in PyTorch v2.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.split()</span></code></a>. It splits the <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> into chunks. Each
 chunk is a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with the same structure as the original one, but
 whose entries are views of the corresponding entries in the original
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
@@ -440,7 +440,7 @@ calling.</p>
 <section id="unbind">
 <h2>Unbind<a class="headerlink" href="#unbind" title="Permalink to this heading">¶</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.unbind" title="tensordict.TensorDict.unbind"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.unbind</span></code></a> is similar to
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind" title="(in PyTorch v2.4)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.unbind()</span></code></a>, and conceptually similar to
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind" title="(in PyTorch v2.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.unbind()</span></code></a>, and conceptually similar to
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.split" title="tensordict.TensorDict.split"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.split</span></code></a>. It removes the specified
 dimension and returns a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> of all slices along that dimension.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.python.org/3/library/stdtypes.html#tuple" title="builtins.tuple" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">slices</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
@@ -531,7 +531,7 @@ values are accessed.</p>
 </section>
 <section id="concatenating-tensordict">
 <h3>Concatenating <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code><a class="headerlink" href="#concatenating-tensordict" title="Permalink to this heading">¶</a></h3>
-<p>Concatenation is not done lazily, instead calling <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> on a list of
+<p>Concatenation is not done lazily, instead calling <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> on a list of
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instances simply returns a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> whose entries
 are the concatenated entries of the elements of the list.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">concatenated_tensordict</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">([</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cloned_tensordict</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
@@ -624,7 +624,7 @@ which lazily creates views on its contents when they are accessed.</p>
 <section id="permuting-batch-dimensions">
 <h2>Permuting batch dimensions<a class="headerlink" href="#permuting-batch-dimensions" title="Permalink to this heading">¶</a></h2>
 <p>The <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.permute" title="tensordict.TensorDict.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.permute</span></code></a> method can be used to
-permute the batch dimensions much like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.permute.html#torch.permute" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.permute()</span></code></a>. Non batch dimensions are
+permute the batch dimensions much like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.permute.html#torch.permute" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.permute()</span></code></a>. Non batch dimensions are
 left untouched.</p>
 <p>This operation is lazy, so batch dimensions are only permuted when we try to access
 the entries. As ever, if you are likely to need to access a particular entry multiple
@@ -663,7 +663,7 @@ Here is a quick example with the <code class="docutils literal notranslate"><spa
 <h2>Gathering values in <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code><a class="headerlink" href="#gathering-values-in-tensordict" title="Permalink to this heading">¶</a></h2>
 <p>The <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.gather" title="tensordict.TensorDict.gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.gather</span></code></a> method can be used to
 index along the batch dimensions and gather the results into a single dimension much
-like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.gather.html#torch.gather" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.gather()</span></code></a>.</p>
+like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.gather.html#torch.gather" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.gather()</span></code></a>.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">index</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randint.html#torch.randint" title="torch.randint" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randint</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
 <span class="n">gathered_tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">index</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">index</span></a><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;index:</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">index</span></a><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -672,19 +672,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 3, 3, 0],
-        [1, 3, 0, 1],
-        [1, 0, 0, 0]])
+ tensor([[0, 3, 2, 0],
+        [0, 2, 1, 1],
+        [2, 0, 3, 3]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.0091, 0.6500, 0.5733, 0.0911],
-        [0.9044, 0.8190, 0.2613, 0.2864],
-        [0.9301, 0.6007, 0.1488, 0.3547]])
+ tensor([[0.1096, 0.2171, 0.7539, 0.9424],
+        [0.8070, 0.5851, 0.8247, 0.2580],
+        [0.8233, 0.3365, 0.3864, 0.6103]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.6500, 0.0911, 0.0911, 0.0091],
-        [0.8190, 0.2864, 0.9044, 0.8190],
-        [0.6007, 0.9301, 0.9301, 0.9301]])
+ tensor([[0.1096, 0.9424, 0.7539, 0.1096],
+        [0.8070, 0.8247, 0.5851, 0.5851],
+        [0.3864, 0.8233, 0.6103, 0.6103]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

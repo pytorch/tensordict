@@ -352,14 +352,14 @@
               
   <section id="saving-tensordict-and-tensorclass-objects">
 <h1>Saving TensorDict and tensorclass objects<a class="headerlink" href="#saving-tensordict-and-tensorclass-objects" title="Permalink to this heading">¶</a></h1>
-<p>While we can just save a tensordict with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, this
+<p>While we can just save a tensordict with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, this
 will create a single file with the whole content of the data structure.
 One can easily imagine situations where this is sub-optimal!</p>
 <p>TensorDict serialization API mainly relies on <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict’s one.</p>
 <p>TensorDict’s serialization speed can be an order of magnitude __faster__ than
-PyTorch’s one with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
+PyTorch’s one with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
 how to create and interact with data stored on disk using TensorDict.</p>
 <section id="saving-memmory-mapped-tensordicts">
 <h2>Saving memmory-mapped TensorDicts<a class="headerlink" href="#saving-memmory-mapped-tensordicts" title="Permalink to this heading">¶</a></h2>
@@ -387,7 +387,7 @@ of the data content.</p></li>
 <li><p>Not every data type can be saved. <a class="reference internal" href="reference/generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> allows to save
 any non-tensor data: if these data can be represented in a json file, a json
 format will be used. Otherwise, non-tensor data will be saved independently
-with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> as a fallback.
+with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> as a fallback.
 The <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> class can be used to represent non-tensor
 data in a regular <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p></li>
 </ul>
