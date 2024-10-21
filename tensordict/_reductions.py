@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copyreg
-from multiprocessing.reduction import ForkingPickler
+from multiprocessing import reduction
 
 import torch
 from tensordict._lazy import LazyStackedTensorDict
@@ -32,16 +32,23 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = 
             key: NonTensorData(data, batch_size=batch_size)
             for (key, (data, batch_size)) in non_tensor.items()
         }
-        for key, _ in leaves.items():
+        for key in leaves.keys():
             total_key = (key,) if prefix is None else prefix + (key,)
             if total_key[-1].startswith("<NJT>"):
                 nested_values = flat_key_values[total_key]
+                nested_lengths = None
                 continue
-            if total_key[-1].startswith("<NJT_OFFSETS"):
+            if total_key[-1].startswith("<NJT_LENGTHS>"):
+                nested_lengths = flat_key_values[total_key]
+                continue
+            elif total_key[-1].startswith("<NJT_OFFSETS"):
                 offsets = flat_key_values[total_key]
                 key = key.replace("<NJT_OFFSETS>", "")
-                value = torch.nested.nested_tensor_from_jagged(nested_values, offsets)
+                value = torch.nested.nested_tensor_from_jagged(
+                    nested_values, offsets=offsets, lengths=nested_lengths
+                )
                 del nested_values
+                del nested_lengths
             else:
                 value = flat_key_values[total_key]
             d[key] = value
@@ -69,11 +76,12 @@ def _rebuild_tensordict_files_consolidated(
     storage,
 ):
     def from_metadata(metadata=metadata, prefix=None):
+        consolidated = {"storage": storage, "metadata": metadata}
         metadata = dict(metadata)
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
-        cls_metadata = metadata.pop("cls_metadata")
+        cls_metadata = dict(metadata.pop("cls_metadata"))
         is_locked = cls_metadata.pop("is_locked", False)
         # size can be there to tell what the size of the file is
         _ = metadata.pop("size", None)
@@ -91,11 +99,21 @@ def _rebuild_tensordict_files_consolidated(
                 value = value[: local_shape.numel()]
             value = value.view(local_shape)
             if key.startswith("<NJT>"):
+                raise RuntimeError
+            elif key.startswith("<NJT_VALUES>"):
                 nested_values = value
+                nested_lengths = None
+                continue
+            elif key.startswith("<NJT_LENGTHS>"):
+                nested_lengths = value
                 continue
             elif key.startswith("<NJT_OFFSETS>"):
+                from torch.nested._internal.nested_tensor import NestedTensor
+
                 offsets = value
-                value = torch.nested.nested_tensor_from_jagged(nested_values, offsets)
+                value = NestedTensor(
+                    nested_values, offsets=offsets, lengths=nested_lengths
+                )
                 key = key.replace("<NJT_OFFSETS>", "")
             d[key] = value
         for k, v in metadata.items():
@@ -106,6 +124,7 @@ def _rebuild_tensordict_files_consolidated(
         result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()
+        result._consolidated = consolidated
         return result
 
     return from_metadata()
@@ -141,10 +160,10 @@ def _reduce_td(data: TensorDict):
     # return (_rebuild_tensordict_files, (flat_key_values, metadata_dict))
 
 
-ForkingPickler.register(TensorDict, _reduce_td)
+reduction.register(TensorDict, _reduce_td)
 
 copyreg.pickle(TensorDict, _reduce_td)
 
-ForkingPickler.register(LazyStackedTensorDict, _reduce_td)
+reduction.register(LazyStackedTensorDict, _reduce_td)
 
 copyreg.pickle(LazyStackedTensorDict, _reduce_td)

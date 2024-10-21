@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
+from enum import Enum
 from typing import Any, Callable
 
 import torch
@@ -18,8 +19,6 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
-
-AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
 
 DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
@@ -85,17 +84,18 @@ def mappings(key: str) -> Callable:
         key (str): one of `"softplus"`, `"exp"`, `"relu"`, `"expln"`,
             `"biased_softplus"` or `"none"` (no mapping).
 
-    .. note:: If the key begins with `"biased_softplus"`,
-      then it needs to take the following form:
-      ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
-      used to bias the softplus function.
-      Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
-      In that case, the additional ```min_val``` term is a floating point
-      number that will be used to encode the minimum value of the softplus transform.
-      In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
-      such that the conditions above are met.
+    .. note::
+        If the key begins with `"biased_softplus"`, then it needs to take the following form:
+        ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be
+        used to bias the softplus function.
+        Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used.
+        In that case, the additional ```min_val``` term is a floating point
+        number that will be used to encode the minimum value of the softplus transform.
+        In practice, the equation used is `softplus(x + bias) + min_val`, where bias and min_val are values computed
+        such that the conditions above are met.
 
-    .. note:: Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
+    .. note::
+        Custom mappings can be added through ``tensordict.nn.add_custom_mapping``.
 
     Returns:
          a Callable
@@ -176,6 +176,7 @@ class set_skip_existing(_DecoratorContextManager):
         calling from outside: False
 
     This class can also be used as a decorator:
+
     Examples:
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase
@@ -206,6 +207,8 @@ class set_skip_existing(_DecoratorContextManager):
 
     Decorating a method with the mode set to ``None`` is useful whenever one
     wants ot let the context manager take care of skipping things from the outside:
+
+    Examples:
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase
         >>> class MyModule(TensorDictModuleBase):
@@ -392,31 +395,6 @@ except ImportError:
     from tensordict.utils import Buffer  # noqa
 
 
-def _auto_make_functional():
-    """Returns ``True`` if TensorDictModuleBase subclasses are automatically made functional with the old API."""
-    global AUTO_MAKE_FUNCTIONAL
-    return AUTO_MAKE_FUNCTIONAL
-
-
-class _set_auto_make_functional(_DecoratorContextManager):
-    """Controls if TensorDictModule subclasses should be made functional automatically with the old API."""
-
-    def __init__(self, mode):
-        self.mode = mode
-
-    def clone(self):
-        return type(self)(self.mode)
-
-    def __enter__(self):
-        global AUTO_MAKE_FUNCTIONAL
-        self._saved_mode = AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self.mode
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global AUTO_MAKE_FUNCTIONAL
-        AUTO_MAKE_FUNCTIONAL = self._saved_mode
-
-
 def _dispatch_td_nn_modules():
     """Returns ``True`` if @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
     global DISPATCH_TDNN_MODULES
@@ -440,3 +418,31 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
     def __exit__(self, exc_type, exc_val, exc_tb):
         global DISPATCH_TDNN_MODULES
         DISPATCH_TDNN_MODULES = self._saved_mode
+
+
+# Reproduce StrEnum for python<3.11
+
+
+class StrEnum(str, Enum):  # noqa
+    def __new__(cls, *values):
+        if len(values) > 3:
+            raise TypeError("too many arguments for str(): %r" % (values,))
+        if len(values) == 1:
+            # it must be a string
+            if not isinstance(values[0], str):
+                raise TypeError("%r is not a string" % (values[0],))
+        if len(values) >= 2:
+            # check that encoding argument is a string
+            if not isinstance(values[1], str):
+                raise TypeError("encoding must be a string, not %r" % (values[1],))
+        if len(values) == 3:
+            # check that errors argument is a string
+            if not isinstance(values[2], str):
+                raise TypeError("errors must be a string, not %r" % (values[2]))
+        value = str(*values)
+        member = str.__new__(cls, value)
+        member._value_ = value
+        return member
+
+    def _generate_next_value_(name, start, count, last_values):
+        return name.lower()

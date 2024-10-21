@@ -705,11 +705,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
             if _is_lis_of_list_of_bools(index):
                 index = torch.tensor(index, device=tensor.device)
                 if index.dtype is torch.bool:
-                    warnings.warn(
+                    raise RuntimeError(
                         "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated in v0.6 as this functionality is not supported "
-                        f"by PyTorch. (follows error: {err})",
-                        category=DeprecationWarning,
+                        "not supported by PyTorch.",
                     )
                 return tensor[index]
             raise err
@@ -1541,14 +1539,27 @@ def assert_close(
             continue
         elif not isinstance(input1, torch.Tensor):
             continue
-        mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
+        if input1.is_nested:
+            input1v = input1.values()
+            input2v = input2.values()
+            mse = (input1v.to(torch.float) - input2v.to(torch.float)).pow(2).sum()
+            input1o = input1.offsets()
+            input2o = input2.offsets()
+            mse = mse + (input1o.to(torch.float) - input2o.to(torch.float)).pow(2).sum()
+        else:
+            mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
         local_msg = f"key {key} does not match, got mse = {mse:4.4f}"
         new_msg = ",\t".join([local_msg, msg]) if len(msg) else local_msg
-        torch.testing.assert_close(
-            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
-        )
+        if input1.is_nested:
+            torch.testing.assert_close(
+                input1v, input2v, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
+            )
+        else:
+            torch.testing.assert_close(
+                input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
+            )
         local_msg = f"key {key} matches"
         msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
 
@@ -2507,9 +2518,9 @@ _lock_warn = assume_constant_result(_lock_warn)
 
 
 def _check_inbuild():
-    if not strtobool(os.environ.get("TORCHDYNAMO_INLINE_INBUILT_NN_MODULES", "0")):
+    if not torch._dynamo.config.inline_inbuilt_nn_modules:
         raise RuntimeError(
-            "to_module requires TORCHDYNAMO_INLINE_INBUILT_NN_MODULES to be set."
+            "to_module requires torch._dynamo.config.inline_inbuilt_nn_modules to be set to True."
         )
 
 
@@ -2520,6 +2531,7 @@ if sys.version_info >= (3, 10):
 else:
 
     def _zip_strict(*iterables):
+        iterables = tuple(tuple(it) for it in iterables)
         lengths = {len(it) for it in iterables}
         if len(lengths) > 1:
             raise ValueError("lengths of iterables differ.")
@@ -2566,8 +2578,9 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
 def parse_tensor_dict_string(s: str):
     """Parse a TensorDict repr to a TensorDict.
 
-    .. note:: This functions is intended to be used for debugging, to reproduce a tensordict
-      given its printed version, and should not be used in real applications.
+    .. note::
+        This functions is intended to be used for debugging, to reproduce a tensordict
+        given its printed version, and should not be used in real applications.
 
     """
     from tensordict import TensorDict
@@ -2648,3 +2661,36 @@ def parse_tensor_dict_string(s: str):
         raise ValueError("Device not found in the string")
     tensor_dict = TensorDict(fields, batch_size=torch.Size(batch_size), device=device)
     return tensor_dict
+
+
+def _rebuild_njt_from_njt(x, values, offsets, lengths):
+    from torch._subclasses.fake_tensor import FakeTensor
+    from torch._subclasses.functional_tensor import FunctionalTensor
+    from torch.nested._internal.nested_tensor import (
+        _tensor_symint_registry,
+        NestedTensor,
+    )
+    from torch.nested._internal.ops import extract_kwargs
+
+    kwargs = extract_kwargs(x)
+    kwargs["offsets"] = offsets
+    if x._lengths is not None:
+        kwargs["lengths"] = lengths
+        ragged_source = x._lengths
+    else:
+        ragged_source = x._offsets
+    new_thing = kwargs.get("lengths", kwargs.get("offsets"))
+    if isinstance(new_thing, (FakeTensor, FunctionalTensor)):
+        from torch._subclasses.functional_tensor import mb_unwrap_functional_tensor
+
+        # Temporary hack until we have the union find
+        tgt = mb_unwrap_functional_tensor(new_thing)
+        src = mb_unwrap_functional_tensor(ragged_source)
+        tgt.nested_int_memo = src.nested_int_memo
+    else:
+        _tensor_symint_registry[new_thing] = _tensor_symint_registry[ragged_source]
+
+    return NestedTensor(
+        values,
+        **kwargs,
+    )

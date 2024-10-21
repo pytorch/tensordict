@@ -32,10 +32,12 @@ jobs:
       matrix:
         include:
           - repository: pytorch/tensordict
+            pre-script: ""
+            env-script: .github/scripts/version_script.bat
             post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py
             package-name: tensordict
-    name: pytorch/tensordict
+    name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_windows.yml@main
     with:
       repository: ${{ matrix.repository }}
@@ -43,7 +45,9 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
+      pre-script: ${{ matrix.pre-script }}
+      env-script: ${{ matrix.env-script }}
+      post-script: ${{ matrix.post-script }}
       package-name: ${{ matrix.package-name }}
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
-      env-script: .github/scripts/version_script.bat

@@ -27,7 +27,6 @@ from typing import (
     Tuple,
     Type,
 )
-from warnings import warn
 
 import numpy as np
 
@@ -1360,9 +1359,10 @@ class LazyStackedTensorDict(TensorDictBase):
             default (Any, optiona): the default value to return in case the key
                 isn't in all sub-tensordicts.
 
-                .. note:: In case the default is a tensor, this method will attempt
-                  the construction of a nestedtensor with it. Otherwise, the default
-                  value will be returned.
+                .. note::
+                    In case the default is a tensor, this method will attempt
+                    the construction of a nestedtensor with it. Otherwise, the default
+                    value will be returned.
 
         Keyword Args:
             layout (torch.layout, optional): the layout for the nested tensor.
@@ -1908,18 +1908,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
                 for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others))
             ]
-        if all(r is None for r in results):
-            if filter_empty is None:
-                warn(
-                    "Your resulting tensordict has no leaves but you did not specify filter_empty=True. "
-                    "This now returns None (filter_empty=True). "
-                    "To silence this warning, set filter_empty to the desired value in your call to `apply`. "
-                    "This warning will be removed in v0.6.",
-                    category=DeprecationWarning,
-                )
-                return
-            elif filter_empty:
-                return
+        if all(r is None for r in results) and filter_empty in (None, True):
+            return
         if not inplace:
             out = type(self)(
                 *results,
@@ -4002,7 +3992,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> T:

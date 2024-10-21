@@ -32,9 +32,9 @@ class MemoryMappedTensor(torch.Tensor):
     any copy.
 
     .. note::
-      When used within RPC settings, the filepath should be accessible to both nodes.
-      If it isn't the behaviour of passing a MemoryMappedTensor from one worker
-      to another is undefined.
+        When used within RPC settings, the filepath should be accessible to both nodes.
+        If it isn't the behaviour of passing a MemoryMappedTensor from one worker
+        to another is undefined.
 
     MemoryMappedTensor supports multiple construction methods.
 

@@ -20,7 +20,7 @@ import weakref
 from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from copy import copy, deepcopy
+from copy import copy
 from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
@@ -66,6 +66,7 @@ from tensordict.utils import (
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
+    _rebuild_njt_from_njt,
     _set_max_batch_size,
     _shape,
     _split_tensordict,
@@ -101,6 +102,10 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
+try:
+    from torch import _foreach_copy_
+except ImportError:
+    _foreach_copy_ = None
 
 try:
     from torch.nn.parameter import Buffer
@@ -192,8 +197,6 @@ class _RecordDeviceTransfer:
 
 _device_recorder = _RecordDeviceTransfer()
 
-_TENSOR_COLLECTION_MEMO = {}
-
 
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
@@ -206,6 +209,7 @@ class TensorDictBase(MutableMapping):
     _cache: bool = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
+    _stream: torch.cuda.Stream | None = None
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -864,6 +868,24 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    def auto_device_(self) -> T:
+        """Automatically sets the device, if it is unique.
+
+        Returns: self with the edited ``device`` attribute.
+
+        """
+        devices = {
+            value.device
+            for value in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            if value.device is not None
+        }
+        if len(devices) == 1:
+            self.clear_device_()
+            self._set_device(list(devices)[0])
+        else:
+            self.clear_device_()
+        return self
+
     @classmethod
     @abc.abstractmethod
     def from_dict(
@@ -1019,11 +1041,13 @@ class TensorDictBase(MutableMapping):
 
         Accepted classes currently include lists, tuples, named tuples and dict.
 
-        .. note:: for dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
+        .. note::
+            For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
             instances.
 
-        .. note:: Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-            NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+        .. note::
+            Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+            Note that this transformation is surjective: transforming back the tensordict to a pytree will not
             recover the original types.
 
         Examples:
@@ -1167,15 +1191,16 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, the state-dict from the
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
+
                 .. note::
-                  This is particularly useful when state-dict hooks have to be
-                  used.
+                    This is particularly useful when state-dict hooks have to be used.
 
         Examples:
             >>> from torch import nn
             >>> module = nn.TransformerDecoder(
             ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
-            ...     num_layers=1)
+            ...     num_layers=1
+            ... )
             >>> params = TensorDict.from_module(module)
             >>> print(params["layers", "0", "linear1"])
             TensorDict(
@@ -1185,6 +1210,7 @@ class TensorDictBase(MutableMapping):
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
+
         """
         ...
 
@@ -1214,13 +1240,15 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, the state-dict from the
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
+
                 .. note::
-                  This is particularly useful when state-dict hooks have to be
-                  used.
+                    This is particularly useful when state-dict hooks have to be used.
+
             lazy_stack (bool, optional): whether parameters should be densly or
                 lazily stacked. Defaults to ``False`` (dense stack).
 
-                .. note:: ``lazy_stack`` and ``as_module`` are exclusive features.
+                .. note::
+                    ``lazy_stack`` and ``as_module`` are exclusive features.
 
                 .. warning::
                     There is a crucial difference between lazy and non-lazy outputs
@@ -1242,6 +1270,7 @@ class TensorDictBase(MutableMapping):
                     or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
                     to be executed. In general, ``lazy_stack`` should be reserved
                     to very few use cases.
+
             expand_identical (bool, optional): if ``True`` and the same parameter (same
                 identity) is being stacked to itself, an expanded version of this parameter
                 will be returned instead. This argument is ignored when ``lazy_stack=True``.
@@ -1494,6 +1523,78 @@ class TensorDictBase(MutableMapping):
     def grad(self):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
+
+    def data_ptr(self, *, storage: bool = False):
+        """Returns the data_ptr of the tensordict leaves.
+
+        This can be useful to check if two tensordicts share the same ``data_ptr()``.
+
+        Keyword Args:
+            storage (bool, optional): if ``True``, `tensor.untyped_storage().data_ptr()` will be called
+                instead. Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+            >>> assert (td0.data_ptr() == td.data_ptr()).all()
+
+        .. note:: :class:`~tensordict.LazyStackedTensorDict` instances will be displayed as nested tensordicts to
+            reflect the true ``data_ptr()`` of their leaves:
+
+                >>> td0 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td1 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+                >>> td = TensorDict.lazy_stack([td0, td1])
+                >>> td.data_ptr()
+                TensorDict(
+                    fields={
+                        0: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False),
+                        1: TensorDict(
+                            fields={
+                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([]),
+                            device=cpu,
+                            is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False)
+
+        """
+        if storage:
+
+            def func(x):
+                return x.untyped_storage().data_ptr()
+
+        else:
+
+            def func(x):
+                return x.data_ptr()
+
+        from tensordict import TensorDict
+
+        return TensorDict(
+            {
+                key: func(val)
+                for key, val in self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            },
+            device=torch.device("cpu"),
+        )
+
+    @grad.setter
+    def grad(self, grad):
+        def set_grad(x, grad):
+            if x.grad is None:
+                x.grad = grad
+            else:
+                x.grad.copy_(grad)
+
+        self._fast_apply(set_grad, grad)
 
     def zero_grad(self, set_to_none: bool = True) -> T:
         """Zeros all the gradients of the TensorDict recursively.
@@ -2195,6 +2296,140 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    def cat_tensors(
+        self,
+        *keys: NestedKey,
+        out_key: NestedKey,
+        dim: int = 0,
+        keep_entries: bool = False,
+    ) -> T:
+        """Concatenates entries into a new entry and possibly remove the original values.
+
+        Args:
+            keys (sequence of NestedKey): entries to concatenate.
+
+        Keyword Argument:
+            out_key (NestedKey): new key name for the concatenated inputs.
+            keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
+                Defaults to ``False``.
+            dim (int, optional): the dimension along which the concatenation must occur.
+                Defaults to ``0``.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(a=torch.zeros(1), b=torch.ones(1))
+            >>> td.cat_tensors("a", "b", out_key="c")
+            >>> assert "a" not in td
+            >>> assert (td["c"] == torch.tensor([0, 1])).all()
+
+        """
+        if keep_entries:
+            entries = [self.get(key) for key in keys]
+        else:
+            entries = [self.pop(key) for key in keys]
+        return self.set(out_key, torch.cat(entries, dim=dim))
+
+    def stack_tensors(
+        self,
+        *keys: NestedKey,
+        out_key: NestedKey,
+        dim: int = 0,
+        keep_entries: bool = False,
+    ) -> T:
+        """Stacks entries into a new entry and possibly remove the original values.
+
+        Args:
+            keys (sequence of NestedKey): entries to stack.
+
+        Keyword Argument:
+            out_key (NestedKey): new key name for the stacked inputs.
+            keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
+                Defaults to ``False``.
+            dim (int, optional): the dimension along which the stack must occur.
+                Defaults to ``0``.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+            >>> td.stack_tensors("a", "b", out_key="c")
+            >>> assert "a" not in td
+            >>> assert (td["c"] == torch.tensor([0, 1])).all()
+
+        """
+        if keep_entries:
+            entries = [self.get(key) for key in keys]
+        else:
+            entries = [self.pop(key) for key in keys]
+        return self.set(out_key, torch.stack(entries, dim=dim))
+
+    def cat_from_tensordict(
+        self,
+        dim: int = 0,
+        *,
+        sorted: bool | List[NestedKey] | None = None,
+        out: torch.Tensor | None = None,
+    ) -> torch.Tensor:  # noqa: D417
+        """Concatenates all entries of a tensordict in a single tensor.
+
+        Args:
+            dim (int, optional): the dimension along which the entries should be concatenated.
+
+        Keyword Args:
+            sorted (bool or list of NestedKeys): if ``True``, the entries will be concatenated in alphabetical order.
+                If ``False`` (default), the dict order will be used. Alternatively, a list of key names can be provided
+                and the tensors will be concatenated accordingly. This incurs some overhead as the list of keys will
+                be checked against the list of leaf names in the tensordict.
+            out (torch.Tensor, optional): an optional destination tensor for the cat operation.
+
+        """
+        if sorted in (None, False):
+            tensors = list(self.values(True, True))
+        elif sorted in (True,):
+            tensors = list(self.values(True, True, sort=True))
+        else:
+            keys = unravel_key_list(sorted)
+            if set(keys) != set(self.keys(True, True)):
+                raise RuntimeError(
+                    "The provided set of keys differs from the tensordict list of keys."
+                )
+            tensors = [self.get(key) for key in keys]
+        return torch.cat(tensors, dim, out=out)
+
+    def stack_from_tensordict(
+        self,
+        dim: int = 0,
+        *,
+        sorted: bool | List[NestedKey] | None = None,
+        out: torch.Tensor | None = None,
+    ) -> torch.Tensor:  # noqa: D417
+        """Stacks all entries of a tensordict in a single tensor.
+
+        Args:
+            dim (int, optional): the dimension along which the entries should be stacked.
+
+        Keyword Args:
+            sorted (bool or list of NestedKeys): if ``True``, the entries will be stacked in alphabetical order.
+                If ``False`` (default), the dict order will be used. Alternatively, a list of key names can be provided
+                and the tensors will be stacked accordingly. This incurs some overhead as the list of keys will
+                be checked against the list of leaf names in the tensordict.
+            out (torch.Tensor, optional): an optional destination tensor for the stack operation.
+
+        """
+        if sorted in (None, False):
+            tensors = list(self.values(True, True))
+        elif sorted in (True,):
+            tensors = list(self.values(True, True, sort=True))
+        else:
+            keys = unravel_key_list(sorted)
+            if set(keys) != set(self.keys(True, True)):
+                raise RuntimeError(
+                    "The provided set of keys differs from the tensordict list of keys."
+                )
+            tensors = [self.get(key) for key in keys]
+        return torch.stack(tensors, dim, out=out)
 
     @classmethod
     def stack(cls, input, dim=0, *, out=None):
@@ -2900,6 +3135,99 @@ class TensorDictBase(MutableMapping):
                 value.clear_device_()
         return self
 
+    def _set_device(self, device: torch.device) -> T:
+        self._device = device
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                value._set_device(device=device)
+        return self
+
+    @cache  # noqa: B019
+    def param_count(self, *, count_duplicates: bool = True) -> int:
+        """Counts the number of parameters (total number of indexable items), accounting for tensors only.
+
+        Keyword Args:
+            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
+                If ``False``, only strictly identical tensors will be discarded (same views but different
+                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
+                to be a single copy).
+
+        """
+        vals = self._values_list(True, True)
+        total = 0
+        if not count_duplicates:
+            vals = set(vals)
+        for v in vals:
+            total += v.numel()
+        return total
+
+    @cache  # noqa: B019
+    def bytes(self, *, count_duplicates: bool = True) -> int:
+        """Counts the number of bytes of the contained tensors.
+
+        Keyword Args:
+            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
+                If ``False``, only strictly identical tensors will be discarded (same views but different
+                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
+                to be a single copy).
+
+        """
+        set_of_tensors = set() if not count_duplicates else []
+
+        def add(tensor):
+            if count_duplicates:
+                set_of_tensors.append(tensor)
+            else:
+                set_of_tensors.add(tensor)
+
+        def count_bytes(tensor):
+            if tensor.is_nested:
+                if not tensor.layout == torch.jagged:
+                    raise RuntimeError(
+                        "NTs that are not jagged are not supported by the bytes method. Please use the jagged layout instead "
+                        "or raise and issue on https://github.com/pytorch/tensordict/issues instead."
+                    )
+                attrs, ctx = tensor.__tensor_flatten__()
+                for attr in attrs:
+                    t = getattr(tensor, attr)
+                    count_bytes(t)
+                return
+            if isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, MemoryMappedTensor):
+                    add(tensor)
+                    return
+                if type(tensor) is not torch.Tensor:
+                    try:
+                        attrs, ctx = tensor.__tensor_flatten__()
+                        for attr in attrs:
+                            t = getattr(tensor, attr)
+                            count_bytes(t)
+                        return
+                    except AttributeError:
+                        warnings.warn(
+                            "The sub-tensor doesn't ot have a __tensor_flatten__ attribute, making it "
+                            "impossible to count the bytes it contains. Falling back on regular count.",
+                            category=UserWarning,
+                        )
+                        count_bytes(torch.as_tensor(tensor))
+                        return
+
+                grad = getattr(tensor, "grad", None)
+                if grad is not None:
+                    count_bytes(grad)
+                    count_bytes(tensor.data)
+                else:
+                    add(tensor)
+                return
+
+        vals = self._values_list(True, True)
+        for v in vals:
+            count_bytes(v)
+        total = 0
+        for tensor in set_of_tensors:
+            total += tensor.numel() * tensor.dtype.itemsize
+        return total
+
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
@@ -3350,24 +3678,44 @@ class TensorDictBase(MutableMapping):
             if getattr(value, "is_nested", False):
                 if value.layout is torch.jagged:
                     # Get the values
-                    values = value.values()
+                    values = value._values
                     shape = [v if isinstance(v, int) else -1 for v in values.shape]
                     # Get the offsets
-                    offsets = value.offsets()
+                    offsets = value._offsets
+                    # Get the lengths
+                    lengths = value._lengths
+
                     # Now we're saving the two tensors
                     # We will rely on the fact that the writing order is preserved in python dict
                     # (since python 3.7). Later, we will read the NJT then the NJT offset in that order
                     # to do the allocation.
-                    flat_key_values[_prefix_last_key(total_key, "<NJT>")] = values
+                    flat_key_values[_prefix_last_key(total_key, "<NJT>")] = value
+                    flat_size.append(0)
+                    flat_key_values[_prefix_last_key(total_key, "<NJT_VALUES>")] = (
+                        values
+                    )
                     add_single_value(
                         values,
-                        _prefix_last_key(key, "<NJT>"),
+                        _prefix_last_key(key, "<NJT_VALUES>"),
                         metadata_dict,
                         values.dtype,
                         shape,
-                        # values.device,
                         flat_size,
                     )
+                    # Lengths
+                    if lengths is not None:
+                        flat_key_values[
+                            _prefix_last_key(total_key, "<NJT_LENGTHS>")
+                        ] = lengths
+                        add_single_value(
+                            lengths,
+                            _prefix_last_key(key, "<NJT_LENGTHS>"),
+                            metadata_dict,
+                            lengths.dtype,
+                            lengths.shape,
+                            flat_size,
+                        )
+                    # Offsets
                     flat_key_values[_prefix_last_key(total_key, "<NJT_OFFSETS>")] = (
                         offsets
                     )
@@ -3377,9 +3725,9 @@ class TensorDictBase(MutableMapping):
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
-                        # offsets.device,
                         flat_size,
                     )
+
                 else:
                     raise NotImplementedError(
                         "NST is not supported, please use layout=torch.jagged when building the nested tensor."
@@ -3452,7 +3800,8 @@ class TensorDictBase(MutableMapping):
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
 
-        .. note:: If the tensordict is already consolidated, all arguments are ignored and ``self``
+        .. note::
+            If the tensordict is already consolidated, all arguments are ignored and ``self``
             is returned. Call :meth:`~.contiguous` to re-consolidate.
 
         Examples:
@@ -3547,16 +3896,20 @@ class TensorDictBase(MutableMapping):
         if num_threads > 0:
 
             def assign(
+                *,
                 k,
                 v,
                 start,
                 stop,
                 njts,
-                njts_offsets,
                 storage=storage,
                 non_blocking=non_blocking,
             ):
+                """Reads a slice of the storage and assigns the resulting tensor in flat_dict."""
                 # v may need padding
+                if k[-1].startswith("<NJT>"):
+                    njts[k] = v
+                    return
                 v_pad = v.view(-1).view(torch.uint8)
                 exp_length = stop - start
                 pad = exp_length - v_pad.numel()
@@ -3570,14 +3923,9 @@ class TensorDictBase(MutableMapping):
                 if pad:
                     new_v = new_v[: v.numel()]
                 new_v = new_v.view(shape)
-                if k[-1].startswith("<NJT>"):
-                    njts[k] = new_v
-                elif k[-1].startswith("<NJT_OFFSETS>"):
-                    njts_offsets[k] = new_v
                 flat_dict[k] = new_v
 
             njts = {}
-            njts_offsets = {}
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
@@ -3585,12 +3933,11 @@ class TensorDictBase(MutableMapping):
                     r.append(
                         executor.submit(
                             assign,
-                            k,
-                            v,
-                            offsets[i],
-                            offsets[i + 1],
-                            njts,
-                            njts_offsets,
+                            k=k,
+                            v=v,
+                            start=offsets[i],
+                            stop=offsets[i + 1],
+                            njts=njts,
                         )
                     )
                 if not return_early:
@@ -3603,23 +3950,30 @@ class TensorDictBase(MutableMapping):
             else:
                 for i, (k, v) in enumerate(flat_dict.items()):
                     assign(
-                        k,
-                        v,
-                        offsets[i],
-                        offsets[i + 1],
-                        njts,
-                        njts_offsets,
+                        k=k,
+                        v=v,
+                        start=offsets[i],
+                        stop=offsets[i + 1],
+                        njts=njts,
                     )
-            for njt_key, njt_val in njts.items():
+            for njt_key, njt in njts.items():
+                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
+                njt_key_values = njt_key[:-1] + (
+                    njt_key[-1].replace("<NJT>", "<NJT_VALUES>"),
+                )
                 njt_key_offset = njt_key[:-1] + (
                     njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
                 )
-                val = torch.nested.nested_tensor_from_jagged(
-                    njt_val, flat_dict[njt_key_offset]
+                njt_key_lengths = njt_key[:-1] + (
+                    njt_key[-1].replace("<NJT>", "<NJT_LENGTHS>"),
+                )
+                val = _rebuild_njt_from_njt(
+                    njt,
+                    values=flat_dict.pop(njt_key_values),
+                    offsets=flat_dict.pop(njt_key_offset),
+                    lengths=flat_dict.pop(njt_key_lengths, None),
                 )
                 del flat_dict[njt_key]
-                del flat_dict[njt_key_offset]
-                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
                 flat_dict[newkey] = val
 
             if non_blocking and device.type != "cuda":
@@ -3639,6 +3993,8 @@ class TensorDictBase(MutableMapping):
 
             items = []
             for v in flat_dict.values():
+                if v.is_nested:
+                    continue
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
                 stride = v.stride()
@@ -3657,19 +4013,31 @@ class TensorDictBase(MutableMapping):
                     flat_dict[k] = view_old_as_new(v, oldv)
                 elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
-                    _nested_values = view_old_as_new(v, oldv)
+                    nt = oldv
+                    assert not v.numel()
+                    nt_lengths = None
+                    del flat_dict[k]
+                elif k[-1].startswith("<NJT_VALUES>"):
+                    nt_vaues = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                elif k[-1].startswith("<NJT_LENGTHS>"):
+                    nt_lengths = view_old_as_new(v, oldv)
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_OFFSETS>"):
                     newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
                     nt_offsets = view_old_as_new(v, oldv)
                     del flat_dict[k]
-                    flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
-                        _nested_values, nt_offsets
+
+                    val = _rebuild_njt_from_njt(
+                        nt, values=nt_vaues, offsets=nt_offsets, lengths=nt_lengths
                     )
+
+                    flat_dict[newk] = val
+
                     # delete the nested value to make sure that if there was an
                     # ordering mismatch we wouldn't be looking at the value key of
                     # another nested tensor.
-                    del _nested_values
+                    del nt, nt_vaues, nt_offsets, nt_lengths
                 else:
                     flat_dict[k] = view_old_as_new(v, oldv)
 
@@ -3825,7 +4193,8 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a shape and possibly a dtype.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
         Writing an existing entry will result in an error.
@@ -3855,10 +4224,12 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a storage, a shape and possibly a dtype.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
-        .. note:: If the storage has a filename associated, it must match the new filename for the file.
+        .. note::
+            If the storage has a filename associated, it must match the new filename for the file.
             If it has not a filename associated but the tensordict has an associated path, this will result in an
             exception.
 
@@ -3884,7 +4255,8 @@ class TensorDictBase(MutableMapping):
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a tensor.
 
-        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+        .. warning::
+            This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
             will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
 
         This method always copies the storage content if ``copy_data`` is ``True`` (i.e., the storage is not shared).
@@ -4059,7 +4431,8 @@ class TensorDictBase(MutableMapping):
             A new ``TensorDict`` instance with data stored as memory-mapped tensors if ``return_early=False``,
             otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
-        .. note:: This is the recommended method to write a set of large buffers
+        .. note::
+            This is the recommended method to write a set of large buffers
             on disk, as :meth:`~.memmap_()` will copy the information, which can
             be slow for large content.
 
@@ -4167,11 +4540,14 @@ class TensorDictBase(MutableMapping):
 
         This method also allows loading nested tensordicts.
 
+        Examples:
             >>> nested = TensorDict.load_memmap("./saved_td/nested")
             >>> assert nested["e"] == 0
 
         A tensordict can also be loaded on "meta" device or, alternatively,
-        as a fake tensor:
+        as a fake tensor.
+
+        Examples:
             >>> import tempfile
             >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
             >>> with tempfile.TemporaryDirectory() as path:
@@ -4605,7 +4981,9 @@ class TensorDictBase(MutableMapping):
             key (str, tuple of str): key to be queried. If tuple of str it is
                 equivalent to chained calls of getattr.
             default: default value if the key is not found in the tensordict.
-                .. warning:: Currently, if a key is not present in the tensordict and no default
+
+                .. warning::
+                    Currently, if a key is not present in the tensordict and no default
                     is passed, a `KeyError` is raised. From v0.7, this behaviour will be changed
                     and a `None` value will be returned instead. To adopt the new behaviour,
                     set the environment variable `export TD_GET_DEFAULTS_TO_NONE='1'` or call
@@ -4894,6 +5272,14 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
+
+        if not _is_tensor_collection(type(input_dict_or_td)):
+            from tensordict import TensorDict
+
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -4910,6 +5296,17 @@ class TensorDictBase(MutableMapping):
                         dest.copy_(source, non_blocking=non_blocking)
 
         else:
+            # Fastest route using _foreach_copy_
+            keys, vals = self._items_list(True, True)
+            new_keys, other_val = input_dict_or_td._items_list(
+                True, True, sorting_keys=keys, default="intersection"
+            )
+            if len(new_keys) and _foreach_copy_ is not None:
+                if len(other_val) != len(vals):
+                    vals = dict(zip(keys, vals))
+                    vals = [vals[k] for k in new_keys]
+                _foreach_copy_(vals, other_val, non_blocking=non_blocking)
+                return self
             named = False
 
             def inplace_update(dest, source):
@@ -4917,12 +5314,6 @@ class TensorDictBase(MutableMapping):
                     return None
                 dest.copy_(source, non_blocking=non_blocking)
 
-        if not _is_tensor_collection(type(input_dict_or_td)):
-            from tensordict import TensorDict
-
-            input_dict_or_td = TensorDict.from_dict(
-                input_dict_or_td, batch_dims=self.batch_dims
-            )
         self._apply_nest(
             inplace_update,
             input_dict_or_td,
@@ -5355,7 +5746,10 @@ class TensorDictBase(MutableMapping):
             leaves_only=leaves_only,
             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
-        keys, vals = zip(*items)
+        keys_vals = tuple(zip(*items))
+        if not keys_vals:
+            return (), ()
+        keys, vals = keys_vals
         if sorting_keys is None:
             return list(keys), list(vals)
         if default is None:
@@ -5376,7 +5770,9 @@ class TensorDictBase(MutableMapping):
                 )
             return sorting_keys, new_vals
         if isinstance(default, str) and default == "intersection":
-            new_keys = list(set(sorting_keys).intersection(keys))
+            new_keys = [
+                key for key in sorting_keys if key in set(keys)
+            ]  # intersection does not keep the sorting
         else:
             new_keys = list(set(sorting_keys).union(keys))
         if is_dynamo_compiling():
@@ -5409,7 +5805,8 @@ class TensorDictBase(MutableMapping):
     ):
         """Returns a generator of tensordict keys.
 
-        .. warning:: TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
+        .. warning::
+            TensorDict ``keys()`` method returns a lazy view of the keys. If the ``keys``
             are queried but not iterated over and then the tensordict is modified, iterating over
             the keys later will return the new configuration of the keys.
 
@@ -6258,7 +6655,8 @@ class TensorDictBase(MutableMapping):
                     >>> td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
-                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                .. warning::
+                    If the operation executed on the tensordict requires multiple keys to be accessed for
                     a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
                     to provide silently wrong results.
                     For instance:
@@ -6413,7 +6811,8 @@ class TensorDictBase(MutableMapping):
                     >>> td.apply(lambda x: x+1, out=td)
                     >>> assert (td==1).all()
 
-                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                .. warning::
+                    If the operation executed on the tensordict requires multiple keys to be accessed for
                     a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
                     to provide silently wrong results.
                     For instance:
@@ -6745,6 +7144,14 @@ class TensorDictBase(MutableMapping):
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
+        .. note::
+            This method is particularly useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
         Args:
             fn (callable): function to apply to the tensordict.
                 Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
@@ -6788,6 +7195,7 @@ class TensorDictBase(MutableMapping):
                 is provided, a random integer will be used as seed.
                 To work with unseeded workers, a pool should be created separately
                 and passed to :meth:`map` directly.
+
                 .. note::
                   Caution should be taken when providing a low-valued seed as
                   this can cause autocorrelation between experiments, example:
@@ -6804,6 +7212,7 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
+
             max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
@@ -6837,14 +7246,6 @@ class TensorDictBase(MutableMapping):
             ...     print(data["y"][:, :10])
             ...
             tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
-
-        .. note:: This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
-
         """
         from torch import multiprocessing as mp
 
@@ -6924,6 +7325,18 @@ class TensorDictBase(MutableMapping):
         The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
         The function must be serializable.
 
+        .. note::
+            This method is particularly useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
+        .. note::
+            This function be used to represent a dataset and load from it,
+            in a dataloader-like fashion.
+
         Args:
             fn (callable): function to apply to the tensordict.
                 Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
@@ -6964,6 +7377,7 @@ class TensorDictBase(MutableMapping):
                 is provided, a random integer will be used as seed.
                 To work with unseeded workers, a pool should be created separately
                 and passed to :meth:`map` directly.
+
                 .. note::
                   Caution should be taken when providing a low-valued seed as
                   this can cause autocorrelation between experiments, example:
@@ -6980,6 +7394,7 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
+
             max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
@@ -6992,7 +7407,8 @@ class TensorDictBase(MutableMapping):
                 so a gain of processing time at init time may have a negative
                 impact on the total runtime. Defaults to ``True``.
 
-                .. note:: The default value of ``index_with_generator`` differs for ``map_iter``
+                .. note::
+                    The default value of ``index_with_generator`` differs for ``map_iter``
                     and ``map`` and the former assumes that it is prohibitively expensive to
                     store a split version of the TensorDict in memory.
 
@@ -7020,16 +7436,6 @@ class TensorDictBase(MutableMapping):
             ...         break
             ...
             tensor([[1., 1., 1., 1., 1.]])
-
-        .. note:: This method is particularly useful when working with large
-            datasets stored on disk (e.g. memory-mapped tensordicts) where
-            chunks will be zero-copied slices of the original data which can
-            be passed to the processes with virtually zero-cost. This allows
-            to tread very large datasets (eg. over a Tb big) to be processed
-            at little cost.
-
-        .. note:: This function be used to represent a dataset and load from it,
-            in a dataloader-like fashion.
 
         """
         from torch import multiprocessing as mp
@@ -7188,6 +7594,28 @@ class TensorDictBase(MutableMapping):
                 else:
                     out = torch.cat(imaplist, dim)
             return out
+
+    # Stream
+    def record_stream(self, stream: torch.cuda.Stream):
+        """Marks the tensordict as having been used by this stream.
+
+        When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
+        queued on stream at the time of deallocation is complete.
+
+        See :meth:`~torch.Tensor.record_stream` for more information.`
+
+        """
+        if self._stream is not None and self._stream != stream:
+            raise RuntimeError(
+                "A stream is already associated with this TensorDict instance."
+            )
+        self._stream = stream
+
+        def record(tensor):
+            tensor.record_stream(stream)
+
+        self._fast_apply(record, filter_empty=True)
+        return self
 
     # point-wise arithmetic ops
     def __add__(self, other: TensorDictBase | torch.Tensor) -> T:
@@ -7781,6 +8209,52 @@ class TensorDictBase(MutableMapping):
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
+    def _clone_recurse(self) -> TensorDictBase:  # noqa: D417
+        keys, vals = self._items_list(True, True)
+        foreach_vals = {}
+        iter_vals = {}
+        for key, val in zip(keys, vals):
+            if (
+                type(val) is torch.Tensor
+                and not val.requires_grad
+                and val.dtype not in (torch.bool,)
+            ):
+                foreach_vals[key] = val
+            else:
+                iter_vals[key] = val
+        if foreach_vals:
+            foreach_vals = dict(
+                _zip_strict(
+                    foreach_vals.keys(),
+                    torch._foreach_add(tuple(foreach_vals.values()), 0),
+                )
+            )
+        if iter_vals:
+            iter_vals = dict(
+                _zip_strict(
+                    iter_vals.keys(),
+                    (
+                        val.clone() if hasattr(val, "clone") else val
+                        for val in iter_vals.values()
+                    ),
+                )
+            )
+
+        items = foreach_vals
+        items.update(iter_vals)
+        result = self._fast_apply(
+            lambda name, val: items.pop(name, None),
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=False,
+            filter_empty=True,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
+
     def add(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -7838,9 +8312,9 @@ class TensorDictBase(MutableMapping):
     def add_(self, other: TensorDictBase | float, *, alpha: float | None = None):
         """In-place version of :meth:`~.add`.
 
-        .. note:: inplace ``add`` does not support ``default`` keyword argument.
+        .. note::
+            In-place ``add`` does not support ``default`` keyword argument.
         """
-        torch.Tensor.add_
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
@@ -7877,7 +8351,9 @@ class TensorDictBase(MutableMapping):
             end_val = end._values_list(True, True)
         else:
             end_val = end
-        if _is_tensor_collection(type(weight)):
+        if isinstance(weight, (float, torch.Tensor)):
+            weight_val = weight
+        elif _is_tensor_collection(type(weight)):
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
@@ -7897,7 +8373,9 @@ class TensorDictBase(MutableMapping):
             end_val = end._values_list(True, True)
         else:
             end_val = end
-        if _is_tensor_collection(type(weight)):
+        if isinstance(weight, (float, torch.Tensor)):
+            weight_val = weight
+        elif _is_tensor_collection(type(weight)):
             weight_val = weight._values_list(True, True)
         else:
             weight_val = weight
@@ -8075,7 +8553,9 @@ class TensorDictBase(MutableMapping):
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
         """In-place version of :meth:`~.sub`.
 
-        .. note:: inplace ``sub`` does not support ``default`` keyword argument.
+        .. note::
+            In-place ``sub`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8092,7 +8572,9 @@ class TensorDictBase(MutableMapping):
     def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.mul`.
 
-        .. note:: inplace ``mul`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``mul`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8157,7 +8639,9 @@ class TensorDictBase(MutableMapping):
     def maximum_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.maximum`.
 
-        .. note:: inplace ``maximum`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``maximum`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8217,7 +8701,9 @@ class TensorDictBase(MutableMapping):
     def minimum_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.minimum`.
 
-        .. note:: inplace ``minimum`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``minimum`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8277,7 +8763,9 @@ class TensorDictBase(MutableMapping):
     def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.clamp_max`.
 
-        .. note:: inplace ``clamp_max`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``clamp_max`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8337,7 +8825,9 @@ class TensorDictBase(MutableMapping):
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.clamp_min`.
 
-        .. note:: inplace ``clamp_min`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``clamp_min`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8396,7 +8886,9 @@ class TensorDictBase(MutableMapping):
     def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.pow`.
 
-        .. note:: inplace ``pow`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``pow`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8461,7 +8953,9 @@ class TensorDictBase(MutableMapping):
     def div_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.div`.
 
-        .. note:: inplace ``div`` does not support ``default`` keyword argument.
+        .. note::
+            Inplace ``div`` does not support ``default`` keyword argument.
+
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -8592,16 +9086,23 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T: ...
 
-    def _check_batch_size(self) -> None:
+    def _check_batch_size(self, *, raise_exception: bool = True) -> None | bool:
         batch_dims = self.batch_dims
+        val = True
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                value._check_batch_size()
-            if _shape(value)[:batch_dims] != self.batch_size:
-                raise RuntimeError(
-                    f"batch_size are incongruent, got value with shape {_shape(value)}, "
-                    f"-- expected {self.batch_size}"
-                )
+                val &= value._check_batch_size(raise_exception=raise_exception)
+                if not val:
+                    return False
+            val &= _shape(value)[:batch_dims] == self.batch_size
+            if not val:
+                if raise_exception:
+                    raise RuntimeError(
+                        f"batch_size are incongruent, got value with shape {_shape(value)}, "
+                        f"-- expected {self.batch_size}"
+                    )
+                return False
+        return val
 
     @abc.abstractmethod
     def _check_is_shared(self) -> bool: ...
@@ -8616,7 +9117,7 @@ class TensorDictBase(MutableMapping):
                 )
 
     @abc.abstractmethod
-    def _check_device(self) -> None: ...
+    def _check_device(self, *, raise_exception: bool = True) -> None | bool: ...
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
@@ -8728,7 +9229,8 @@ class TensorDictBase(MutableMapping):
         Returns:
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.
 
-        .. note:: To select keys in a tensordict and return a version of this tensordict
+        .. note::
+            To select keys in a tensordict and return a version of this tensordict
             deprived of these keys, see the :meth:`~.split_keys` method.
 
         Examples:
@@ -8882,7 +9384,8 @@ class TensorDictBase(MutableMapping):
                 TensorDict will be copied too. Otherwise only the TensorDict
                 tree structure will be copied. Defaults to ``True``.
 
-        .. note:: Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
+        .. note::
+            Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
             original lock attribute. This design choice is made such that a clone can be created to be modified,
             which is the most frequent usage.
 
@@ -9661,9 +10164,11 @@ class TensorDictBase(MutableMapping):
                 the same tree structure as ``self``, even if some sub-tensordicts
                 contain no leaves.
 
-        .. note:: ``None`` non-tensor values will be ignored and not returned.
+        .. note::
+            ``None`` non-tensor values will be ignored and not returned.
 
-        .. note:: the method does not check for duplicates in the provided lists.
+        .. note::
+            The method does not check for duplicates in the provided lists.
 
         Examples:
             >>> td = TensorDict(
@@ -9956,15 +10461,19 @@ class TensorDictBase(MutableMapping):
             other (TensorDictBase, optional): TensorDict instance whose dtype
                 and device are the desired dtype and device for all tensors
                 in this TensorDict.
-                .. note:: Since :class:`~tensordict.TensorDictBase` instances do not have
+
+                .. note::
+                    Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
+
             non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
                 controlled via the ``num_threads`` argument.
 
-                .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
+                .. note::
+                    Calling ``tensordict.pin_memory().to("cuda")`` will usually
                     be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
                     the pin_memory is called asynchronously in the second case.
                     Multithreaded ``pin_memory`` will usually be beneficial if the tensors
@@ -9984,7 +10493,8 @@ class TensorDictBase(MutableMapping):
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
-        .. note:: if the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
+        .. note::
+            If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
             Each new tensor will be a view on the consolidated storage cast to the desired device.
 
         Examples:
@@ -10011,16 +10521,19 @@ class TensorDictBase(MutableMapping):
         if device is not None and dtype is None and device == self.device:
             return result
 
+        if self.is_consolidated() and dtype is None:
+            return self._to_consolidated(
+                device=device,
+                pin_memory=non_blocking_pin,
+                num_threads=num_threads,
+                non_blocking=non_blocking,
+            )
+
         if non_blocking is None:
             sub_non_blocking = True
             non_blocking = False
         else:
             sub_non_blocking = non_blocking
-
-        if self.is_consolidated() and dtype is None:
-            return self._to_consolidated(
-                device=device, pin_memory=non_blocking_pin, num_threads=num_threads
-            )
 
         if convert_to_format is not None:
 
@@ -10071,7 +10584,7 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads):
+    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10082,9 +10595,52 @@ class TensorDictBase(MutableMapping):
         untyped_storage = storage_cast.untyped_storage()
 
         def set_(x):
+            if x.is_nested:
+                from torch._subclasses.fake_tensor import FakeTensor
+                from torch._subclasses.functional_tensor import FunctionalTensor
+                from torch.nested._internal.nested_tensor import (
+                    _tensor_symint_registry,
+                    NestedTensor,
+                )
+                from torch.nested._internal.ops import extract_kwargs
+
+                if x.layout != torch.jagged:
+                    raise RuntimeError(
+                        "to(device) with nested tensors that do not have a jagged layout is not implemented yet. "
+                        "Please raise an issue on GitHub."
+                    )
+                kwargs = extract_kwargs(x)
+                values = x._values
+                lengths = x._lengths
+                offsets = x._offsets
+                kwargs["offsets"] = set_(offsets)
+                if lengths is not None:
+                    kwargs["lengths"] = set_(lengths)
+                    ragged_source = lengths
+                else:
+                    ragged_source = offsets
+                new_thing = kwargs.get("lengths", kwargs.get("offsets"))
+                if isinstance(new_thing, (FakeTensor, FunctionalTensor)):
+                    from torch._subclasses.functional_tensor import (
+                        mb_unwrap_functional_tensor,
+                    )
+
+                    # Temporary hack until we have the union find
+                    tgt = mb_unwrap_functional_tensor(new_thing)
+                    src = mb_unwrap_functional_tensor(ragged_source)
+                    tgt.nested_int_memo = src.nested_int_memo
+                else:
+                    _tensor_symint_registry[new_thing] = _tensor_symint_registry[
+                        ragged_source
+                    ]
+
+                return NestedTensor(
+                    set_(values),
+                    **kwargs,
+                )
             storage_offset = x.storage_offset()
             stride = x.stride()
-            return torch.empty_like(x, device=device).set_(
+            return x.new_empty(0, device=device).set_(
                 untyped_storage,
                 size=x.shape,
                 stride=stride,
@@ -10096,7 +10652,26 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
-            result._consolidated["metadata"] = deepcopy(self._consolidated["metadata"])
+            # faster than deepcopy
+            def copy_dict(d):
+                return {
+                    k: v if not isinstance(v, dict) else copy_dict(v)
+                    for k, v in d.items()
+                }
+
+            result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+        if non_blocking in (False, None):
+            if device.type == "cuda" and non_blocking is False:
+                # sending to CUDA force sync
+                cuda_device = device
+            elif storage.device.type == "cuda":
+                # sending from cuda: need sync unless intentionally not asked for
+                cuda_device = storage.device.type
+            else:
+                cuda_device = None
+            if cuda_device is not None:
+                torch.cuda.current_stream(cuda_device).synchronize()
+
         return result
 
     def _sync_all(self):
@@ -10259,16 +10834,7 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    out = _TENSOR_COLLECTION_MEMO.get(datatype)
-    if out is None:
-        if issubclass(datatype, TensorDictBase):
-            out = True
-        elif _is_tensorclass(datatype):
-            out = True
-        else:
-            out = False
-        _TENSOR_COLLECTION_MEMO[datatype] = out
-    return out
+    return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
 
 
 def is_tensor_collection(datatype: type | Any) -> bool:
