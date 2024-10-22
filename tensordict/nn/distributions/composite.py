@@ -118,10 +118,9 @@ class CompositeDistribution(d.Distribution):
             dist = dist_class(**dist_params, **kwargs)
             dists[write_name] = dist
         self.dists = dists
+        self.aggregate_probabilities = aggregate_probabilities
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
-
-        self.aggregate_probabilities = aggregate_probabilities
 
     @property
     def aggregate_probabilities(self):
@@ -247,8 +246,8 @@ class CompositeDistribution(d.Distribution):
         slp = 0.0
         for name, dist in self.dists.items():
             lp = dist.log_prob(sample.get(name))
-            if lp.ndim > sample.ndim:
-                lp = lp.flatten(sample.ndim, -1).sum(-1)
+            if lp.ndim > len(self.batch_shape):
+                lp = lp.flatten(len(self.batch_shape), -1).sum(-1)
             slp = slp + lp
         return slp
 
@@ -263,8 +262,8 @@ class CompositeDistribution(d.Distribution):
         d = {}
         for name, dist in self.dists.items():
             d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
-            if lp.ndim > sample.ndim:
-                lp = lp.flatten(sample.ndim, -1).sum(-1)
+            if lp.ndim > len(self.batch_shape):
+                lp = lp.flatten(len(self.batch_shape), -1).sum(-1)
             slp = slp + lp
         if include_sum:
             d[self.log_prob_key] = slp
