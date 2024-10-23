@@ -918,8 +918,9 @@ def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: 
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
-        tc.__dict__.update({"_tensordict": tensordict,
-                            "_non_tensordict": non_tensordict})
+        tc.__dict__.update(
+            {"_tensordict": tensordict, "_non_tensordict": non_tensordict}
+        )
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
         if hasattr(cls, "__post_init__"):
@@ -1143,11 +1144,15 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False, force_wrap=False):
+def _wrap_td_method(
+    funcname, *, copy_non_tensor=False, no_wrap=False, force_wrap=False
+):
     def deliver_result(self, result, kwargs):
         if result is None:
             return
-        if (force_wrap or isinstance(result, TensorDictBase)) and kwargs.get("out") is not result:
+        if (force_wrap or isinstance(result, TensorDictBase)) and kwargs.get(
+            "out"
+        ) is not result:
             if not is_dynamo_compiling():
                 non_tensordict = super(type(self), self).__getattribute__(
                     "_non_tensordict"

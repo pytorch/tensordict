@@ -138,7 +138,7 @@ def _make_td(cls, state):
 
 def _reduce_td(data: TensorDict):
     consolidated = getattr(data, "_consolidated", None)
-    if consolidated and consolidated["metadata"] is not None:
+    if isinstance(consolidated, dict):
         storage = consolidated["storage"]
         storge_metadata = consolidated["metadata"]
         return (

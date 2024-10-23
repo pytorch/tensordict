@@ -2721,38 +2721,20 @@ def view_and_pad(tensor: torch.Tensor, need_padding: bool) -> torch.Tensor:
     return result
 
 
-def view_old_as_new(v: torch.Tensor, oldv: torch.Tensor) -> torch.Tensor:
+def view_old_as_new(
+    v: torch.Tensor, oldv: torch.Tensor, set_on_tensor=False
+) -> torch.Tensor:
+    if set_on_tensor:
+        oldv.set_(
+            v.untyped_storage(),
+            storage_offset=v.storage_offset(),
+            stride=v.stride(),
+            size=oldv.size(),
+        )
+        return oldv
     if oldv is None:
         return v
     v = v.view(oldv.dtype)
     if v.numel() > oldv.numel():
         return v[: oldv.numel()].view(oldv.shape)
     return v.view(oldv.shape)
-
-
-@torch.compiler.disable()
-def view_cat_split(
-    td, items, storage, need_padding, non_blocking, device, flat_size, set_on_tensor
-):
-    items_flat = [view_and_pad(v, need_padding) for v in items if v is not None]
-    if non_blocking and device.type != "cuda":
-        # sync if needed
-        td._sync_all()
-    torch.cat(items_flat, out=storage)
-    # TODO: breaks with NJT
-    result = [
-        view_old_as_new(v, oldv)
-        for (v, oldv) in zip(storage.split(flat_size), items, strict=True)
-    ]
-    if set_on_tensor:
-        for t_dest, t_src in zip(result, items):
-            if t_src is None:
-                # njt is decomposed
-                continue
-            t_src.set_(
-                t_dest.untyped_storage(),
-                storage_offset=t_dest.storage_offset(),
-                stride=t_dest.stride(),
-                size=t_dest.size(),
-            )
-    return result
