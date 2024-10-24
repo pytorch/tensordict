@@ -983,7 +983,11 @@ class TensorDict(TensorDictBase):
                 return dim
             if isinstance(dim, tuple):
                 if tuple_ok:
-                    return tuple(_d for d in dim for _d in proc_dim(d, batch_dims, tuple_ok=False))
+                    return tuple(
+                        _d
+                        for d in dim
+                        for _d in proc_dim(d, batch_dims, tuple_ok=False)
+                    )
                 return dim
             if dim >= batch_dims or dim < -batch_dims:
                 raise RuntimeError(
