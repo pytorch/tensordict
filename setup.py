@@ -66,10 +66,10 @@ def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
-        return "torch>=2.5.0.dev"
+        return "torch>=2.6.0.dev"
     if is_local:
         return "torch"
-    return "torch>=2.4.0"
+    return "torch>=2.5.0"
 
 
 def _get_packages():
@@ -198,7 +198,6 @@ def _main(argv):
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

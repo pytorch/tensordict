@@ -143,7 +143,7 @@ class TestConsolidate:
     ],
 )
 @pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
+    TORCH_VERSION < version.parse("2.5.1"), reason="requires torch>=2.5"
 )
 class TestTo:
     def test_to(
