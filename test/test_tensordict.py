@@ -4749,6 +4749,103 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         assert_allclose_td(td.cpu().detach(), tdfuture.result())
 
+    @pytest.mark.parametrize(
+        "dim, keepdim, return_indices",
+        [
+            [None, False, False],
+            [0, False, False],
+            [0, True, False],
+            [0, False, True],
+            [0, True, True],
+            [1, False, False],
+            [1, True, False],
+            [1, False, True],
+            [1, True, True],
+            [-1, False, False],
+            [-1, True, False],
+            [-1, False, True],
+            [-1, True, True],
+        ],
+    )
+    def test_min_max_cummin_cummax(self, td_name, device, dim, keepdim, return_indices):
+        import tensordict.return_types as return_types
+
+        td = getattr(self, td_name)(device)
+        # min
+        if dim is not None:
+            kwargs = {"dim": dim, "keepdim": keepdim, "return_indices": return_indices}
+        else:
+            kwargs = {}
+        r = td.min(**kwargs)
+        if not return_indices and dim is not None:
+            assert_allclose_td(r, td.amin(dim=dim, keepdim=keepdim))
+        if return_indices:
+            assert is_tensorclass(r)
+            assert isinstance(r, return_types.min)
+            assert not r.vals.is_empty()
+            assert not r.indices.is_empty()
+        else:
+            assert not is_tensorclass(r)
+        if dim is None:
+            assert r.batch_size == ()
+        elif keepdim:
+            s = list(td.batch_size)
+            s[dim] = 1
+            assert r.batch_size == tuple(s)
+        else:
+            s = list(td.batch_size)
+            s.pop(dim)
+            assert r.batch_size == tuple(s)
+
+        r = td.max(**kwargs)
+        if not return_indices and dim is not None:
+            assert_allclose_td(r, td.amax(dim=dim, keepdim=keepdim))
+        if return_indices:
+            assert is_tensorclass(r)
+            assert isinstance(r, return_types.max)
+            assert not r.vals.is_empty()
+            assert not r.indices.is_empty()
+        else:
+            assert not is_tensorclass(r)
+        if dim is None:
+            assert r.batch_size == ()
+        elif keepdim:
+            s = list(td.batch_size)
+            s[dim] = 1
+            assert r.batch_size == tuple(s)
+        else:
+            s = list(td.batch_size)
+            s.pop(dim)
+            assert r.batch_size == tuple(s)
+        if dim is None:
+            return
+        kwargs.pop("keepdim")
+        r = td.cummin(**kwargs)
+        if return_indices:
+            assert is_tensorclass(r)
+            assert isinstance(r, return_types.cummin)
+            assert not r.vals.is_empty()
+            assert not r.indices.is_empty()
+        else:
+            assert not is_tensorclass(r)
+        if dim is None:
+            assert r.batch_size == ()
+        else:
+            assert r.batch_size == td.batch_size
+
+        r = td.cummax(**kwargs)
+        if return_indices:
+            assert is_tensorclass(r)
+            assert isinstance(r, return_types.cummax)
+            assert not r.vals.is_empty()
+            assert not r.indices.is_empty()
+        else:
+            assert not is_tensorclass(r)
+        if dim is None:
+            assert r.batch_size == ()
+        else:
+            assert r.batch_size == td.batch_size
+
     @pytest.mark.parametrize("inplace", [False, True])
     def test_named_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
