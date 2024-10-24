@@ -569,7 +569,7 @@ def _tensorclass(cls: T, *, frozen) -> T:
             setattr(cls, method_name, getattr(TensorDict, method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name, force_wrap=True))
+            setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
@@ -1144,15 +1144,11 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(
-    funcname, *, copy_non_tensor=False, no_wrap=False, force_wrap=False
-):
+def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
     def deliver_result(self, result, kwargs):
         if result is None:
             return
-        if (force_wrap or isinstance(result, TensorDictBase)) and kwargs.get(
-            "out"
-        ) is not result:
+        if isinstance(result, TensorDictBase) and kwargs.get("out") is not result:
             if not is_dynamo_compiling():
                 non_tensordict = super(type(self), self).__getattribute__(
                     "_non_tensordict"
@@ -1429,10 +1425,16 @@ def _len(self) -> int:
     return len(self._tensordict)
 
 
-def _to_dict(self) -> dict:
-    td_dict = self._tensordict.to_dict()
+def _to_dict(self, *, retain_none: bool = True) -> dict:
+    td_dict = self._tensordict.to_dict(retain_none=retain_none)
     if self._non_tensordict:
-        td_dict.update(self._non_tensordict)
+        if retain_none:
+            td_dict.update(self._non_tensordict)
+        else:
+            td_dict.update(
+                {k: v for k, v in self._non_tensordict.items() if v is not None}
+            )
+
     return td_dict
 
 
@@ -1500,20 +1502,36 @@ def _from_dict_instance(
     return out
 
 
-def _to_tensordict(self) -> TensorDict:
+def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
     """Convert the tensorclass into a regular TensorDict.
 
     Makes a copy of all entries. Memmap and shared memory tensors are converted to
     regular tensors.
 
+    Args:
+        retain_none (bool): if ``True``, the ``None`` values will be written in the
+            tensordict. Otherwise they will be discrarded. Default: ``True``.
+
+            .. note:: from v0.8, the default value will be switched to ``False``.
+
     Returns:
         A new TensorDict object containing the same values as the tensorclass.
 
     """
-    td = self._tensordict.to_tensordict()
+    td = self._tensordict.to_tensordict(retain_none=retain_none)
     for key, val in self._non_tensordict.items():
-        # if val is None:
-        #     continue
+        if val is None:
+            if retain_none is None:
+                retain_none = True
+                warnings.warn(
+                    "retain_none was not specified and a None value was encountered in the tensorclass. "
+                    "As of now, the None will be written in the tensordict but this default behaviour will change"
+                    "in v0.8. To disable this warning, specify the value of retain_none."
+                )
+            if retain_none:
+                pass
+            else:
+                continue
         td.set_non_tensor(key, val)
     return td
 
@@ -2675,11 +2693,11 @@ class NonTensorData:
             names=kwargs.get("names"),
         )
 
-    def to_dict(self):
+    def to_dict(self, *, retain_none: bool = True):
         # override to_dict to return just the data
         return self.data
 
-    def to_tensordict(self):
+    def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
     @classmethod
@@ -2953,10 +2971,10 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]:
         return self.tolist()
 
-    def to_tensordict(self):
+    def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
     def _memmap_(

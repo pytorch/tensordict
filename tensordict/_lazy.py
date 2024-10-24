@@ -317,7 +317,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return False
 
     @_fails_exclusive_keys
-    def to_dict(self) -> dict[str, Any]: ...
+    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]: ...
 
     def _reduce_get_metadata(self):
         metadata = {}
@@ -3417,7 +3417,7 @@ class _CustomOpTensorDict(TensorDictBase):
     ) -> _CustomOpTensorDict:
         if inplace:
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
-        return self.to_tensordict()._select(
+        return self.to_tensordict(retain_none=True)._select(
             *keys, inplace=False, strict=strict, set_shared=set_shared
         )
 
