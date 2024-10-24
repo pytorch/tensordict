@@ -956,6 +956,9 @@ class TensorDict(TensorDictBase):
         keepdim=NO_DEFAULT,
         tuple_ok=True,
         further_reduce: bool,
+        values_only: bool = True,
+        call_on_nested: bool = True,
+        batch_size=None,
         **kwargs,
     ):
         if further_reduce:
@@ -1015,9 +1018,16 @@ class TensorDict(TensorDictBase):
                 result = getattr(val, reduction_name)(
                     **kwargs,
                 )
+                if isinstance(result, tuple):
+                    if values_only:
+                        result = result.values
+                    else:
+                        return TensorDict.from_namedtuple(result)
                 return result
 
-            if dim not in (None, NO_DEFAULT):
+            if batch_size is not None:
+                pass
+            elif dim not in (None, NO_DEFAULT):
                 if not keepdim:
                     if isinstance(dim, tuple):
                         batch_size = [
@@ -1043,7 +1053,7 @@ class TensorDict(TensorDictBase):
 
             return self._fast_apply(
                 reduction,
-                call_on_nested=True,
+                call_on_nested=call_on_nested,
                 batch_size=torch.Size(batch_size),
                 device=self.device,
                 names=names,

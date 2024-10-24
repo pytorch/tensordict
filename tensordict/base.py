@@ -115,7 +115,7 @@ except ImportError:
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key)` is a valid usage.
-class _NoDefault(enum.IntEnum):
+class _NoDefault(enum.Enum):
     ZERO = 0
 
 
@@ -574,6 +574,232 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
         )
+
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the minimum values of all elements in the input tensordict.
+
+        Same as :meth:`~.min` with ``return_indices=False``.
+        """
+        return self.min(dim=dim, keepdim=keepdim, reduce=reduce, return_indices=False)
+
+    def min(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool | None = None,
+        return_indices: bool = True,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the minimum values of all elements in the input tensordict.
+
+        Args:
+            dim (int, optional): if ``None``, returns a dimensionless
+                tensordict containing the min value of all leaves (if this can be computed).
+                If integer, `min` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool): whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
+            return_argmins (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
+                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="min",
+            dim=dim,
+            keepdim=keepdim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=not return_indices,
+            call_on_nested=False,
+        )
+        if dim is not NO_DEFAULT and return_indices:
+            # Split the tensordict
+            from .return_types import min
+
+            values_dict = {}
+            indices_dict = {}
+            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                if key[-1] == "values":
+                    values_dict[key] = key[:-1]
+                else:
+                    indices_dict[key] = key[:-1]
+            return min(
+                *result.split_keys(values_dict, indices_dict),
+                batch_size=result.batch_size,
+            )
+        return result
+
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool | None = None,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the maximum values of all elements in the input tensordict.
+
+        Same as :meth:`~.max` with ``return_indices=False``.
+        """
+        return self.max(dim=dim, keepdim=keepdim, reduce=reduce, return_indices=False)
+
+    def max(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool | None = None,
+        return_indices: bool = True,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the maximum values of all elements in the input tensordict.
+
+        Args:
+            dim (int, optional): if ``None``, returns a dimensionless
+                tensordict containing the max value of all leaves (if this can be computed).
+                If integer, `max` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool): whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
+            return_argmins (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
+                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="max",
+            dim=dim,
+            keepdim=keepdim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=not return_indices,
+            call_on_nested=False,
+        )
+        if dim is not NO_DEFAULT and return_indices:
+            # Split the tensordict
+            from .return_types import max
+
+            values_dict = {}
+            indices_dict = {}
+            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                if key[-1] == "values":
+                    values_dict[key] = key[:-1]
+                else:
+                    indices_dict[key] = key[:-1]
+            return max(
+                *result.split_keys(values_dict, indices_dict),
+                batch_size=result.batch_size,
+            )
+        return result
+
+    def cummin(
+        self,
+        dim: int,
+        *,
+        reduce: bool | None = None,
+        return_indices: bool = True,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the cumulative minimum values of all elements in the input tensordict.
+
+        Args:
+            dim (int): integer representing the dimension along which to perform the cummin operation.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
+            return_argmins (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
+                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="cummin",
+            dim=dim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=not return_indices,
+            call_on_nested=False,
+            batch_size=self.batch_size,
+        )
+        if dim is not NO_DEFAULT and return_indices:
+            # Split the tensordict
+            from .return_types import cummin
+
+            values_dict = {}
+            indices_dict = {}
+            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                if key[-1] == "values":
+                    values_dict[key] = key[:-1]
+                else:
+                    indices_dict[key] = key[:-1]
+            return cummin(
+                *result.split_keys(values_dict, indices_dict),
+                batch_size=result.batch_size,
+            )
+        return result
+
+    def cummax(
+        self,
+        dim: int,
+        *,
+        reduce: bool | None = None,
+        return_indices: bool = True,
+    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+        """Returns the cumulative maximum values of all elements in the input tensordict.
+
+        Args:
+            dim (int): integer representing the dimension along which to perform the cummax operation.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
+            return_argmins (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
+                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
+                with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="cummax",
+            dim=dim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=not return_indices,
+            call_on_nested=False,
+            batch_size=self.batch_size,
+        )
+        if dim is not NO_DEFAULT and return_indices:
+            # Split the tensordict
+            from .return_types import cummax
+
+            values_dict = {}
+            indices_dict = {}
+            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                if key[-1] == "values":
+                    values_dict[key] = key[:-1]
+                else:
+                    indices_dict[key] = key[:-1]
+            return cummax(
+                *result.split_keys(values_dict, indices_dict),
+                batch_size=result.batch_size,
+            )
+        return result
 
     def mean(
         self,
@@ -4840,7 +5066,9 @@ class TensorDictBase(MutableMapping):
 
     def filter_empty_(self):
         """Filters out all empty tensordicts in-place."""
-        for key, val in list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS)):
+        for key, val in reversed(
+            list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True))
+        ):
             if _is_tensor_collection(type(val)) and val.is_empty():
                 del self[key]
         return self
@@ -9581,6 +9809,15 @@ class TensorDictBase(MutableMapping):
         def namedtuple_to_dict(namedtuple_obj):
             if is_namedtuple(namedtuple_obj):
                 namedtuple_obj = namedtuple_obj._asdict()
+
+            else:
+                from torch.return_types import cummax, cummin, max, min
+
+                if isinstance(namedtuple_obj, (min, cummin, max, cummax)):
+                    namedtuple_obj = {
+                        "values": namedtuple_obj.values,
+                        "indices": namedtuple_obj.indices,
+                    }
             for key, value in namedtuple_obj.items():
                 if is_namedtuple(value):
                     namedtuple_obj[key] = namedtuple_to_dict(value)
@@ -10156,6 +10393,7 @@ class TensorDictBase(MutableMapping):
         the arguments provided.
 
         Args:
+            key_sets (sequence of Dict[in_key, out_key] or list of keys): the various splits.
             inplace (bool, optional): if ``True``, the keys are removed from ``self``
                 in-place. Defaults to ``False``.
             strict (bool, optional): if ``True``, an exception is raised when a key
@@ -10195,10 +10433,12 @@ class TensorDictBase(MutableMapping):
             keys_to_del = set()
         for key_set in key_sets:
             outs.append(self.empty(recurse=reproduce_struct))
+            if not isinstance(key_set, dict):
+                key_set = {key: key for key in key_set}
             for key in key_set:
                 val = last_out.pop(key, default)
                 if val is not None:
-                    outs[-1].set(key, val)
+                    outs[-1].set(key_set[key], val)
                 if inplace:
                     keys_to_del.add(key)
         if inplace:
