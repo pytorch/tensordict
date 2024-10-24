@@ -35,13 +35,13 @@ from tensordict.utils import (
     _LOCK_ERROR,
     BufferLegacy,
     erase_cache,
+    implement_for,
     IndexType,
     is_batchedtensor,
     lock_blocked,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
-
 
 try:
     from functorch import dim as ftdim
@@ -1160,6 +1160,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_apply_on_data
     def apply_(self, fn: Callable, *others, **kwargs) -> T: ...
 
+    @implement_for("torch", "2.1")
     def _apply(self, fn, recurse=True):
         self._param_td._erase_cache()
         param_td = self._param_td
@@ -1167,6 +1168,26 @@ class TensorDictParams(TensorDictBase, nn.Module):
         # Keep a list of buffers to update .data only
         bufs = dict(self._buffers)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
+        for key, val in bufs.items():
+            val.data = self._buffers[key].data
+            self._buffers[key] = val
+        # Check device and shape
+        cbs = out._check_batch_size(raise_exception=False)
+        if not cbs:
+            out.auto_batch_size_()
+        cd = out._check_device(raise_exception=False)
+        if not cd:
+            out.auto_device_()
+        return out
+
+    @implement_for("torch", None, "2.1")
+    def _apply(self, fn):  # noqa: F811
+        self._param_td._erase_cache()
+        param_td = self._param_td
+        self._param_td = param_td.copy()
+        # Keep a list of buffers to update .data only
+        bufs = dict(self._buffers)
+        out: TensorDictBase = super()._apply(fn)
         for key, val in bufs.items():
             val.data = self._buffers[key].data
             self._buffers[key] = val
