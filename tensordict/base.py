@@ -586,7 +586,15 @@ class TensorDictBase(MutableMapping):
 
         Same as :meth:`~.min` with ``return_indices=False``.
         """
-        return self.min(dim=dim, keepdim=keepdim, reduce=reduce, return_indices=False)
+        return self._cast_reduction(
+            reduction_name="amin",
+            dim=dim,
+            keepdim=keepdim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=True,
+            call_on_nested=False,
+        )
 
     def min(
         self,
@@ -652,7 +660,15 @@ class TensorDictBase(MutableMapping):
 
         Same as :meth:`~.max` with ``return_indices=False``.
         """
-        return self.max(dim=dim, keepdim=keepdim, reduce=reduce, return_indices=False)
+        return self._cast_reduction(
+            reduction_name="amax",
+            dim=dim,
+            keepdim=keepdim,
+            further_reduce=reduce,
+            tuple_ok=False,
+            values_only=True,
+            call_on_nested=False,
+        )
 
     def max(
         self,
