@@ -1027,7 +1027,7 @@ class TensorDict(TensorDictBase):
 
             if batch_size is not None:
                 pass
-            elif dim not in (None, NO_DEFAULT):
+            elif dim is not None and dim is not NO_DEFAULT:
                 if not keepdim:
                     if isinstance(dim, tuple):
                         batch_size = [

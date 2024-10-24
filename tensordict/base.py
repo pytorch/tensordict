@@ -115,12 +115,12 @@ except ImportError:
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key)` is a valid usage.
-class _NoDefault(enum.Enum):
+class _NoDefault(enum.IntEnum):
     ZERO = 0
 
 
 NO_DEFAULT = _NoDefault.ZERO
-
+assert not NO_DEFAULT
 T = TypeVar("T", bound="TensorDictBase")
 
 

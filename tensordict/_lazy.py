@@ -1826,7 +1826,8 @@ class LazyStackedTensorDict(TensorDictBase):
             arg for arg in (batch_size, device, names, constructor_kwargs)
         ):
             raise ValueError(
-                "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
+                "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True. Got args "
+                f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
         if out is not None:
             if not isinstance(out, LazyStackedTensorDict):
