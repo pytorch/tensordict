@@ -2694,3 +2694,47 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
         values,
         **kwargs,
     )
+
+
+@torch.library.custom_op("tensordict::_to_escape_compile", mutates_args=())
+def _to_escape_compile(
+    storage: torch.Tensor, device: torch.device, pin_memory: bool
+) -> torch.Tensor:
+    if pin_memory:
+        storage = storage.pin_memory()
+    storage_cast = storage.to(device, non_blocking=True)
+    return storage_cast
+
+
+@_to_escape_compile.register_fake
+def _(storage: torch.Tensor, device: torch.device, pin_memory: bool) -> torch.Tensor:
+    return torch.empty_like(storage, device=device)
+
+
+def view_and_pad(tensor: torch.Tensor, need_padding: bool) -> torch.Tensor:
+    result = tensor.view(-1).view(torch.uint8)
+    # result must always have a multiple of 8 elements
+    if need_padding:
+        pad = result.numel() % 8
+        if pad != 0:
+            result = torch.cat([result, result.new_zeros(8 - pad)])
+    return result
+
+
+def view_old_as_new(
+    v: torch.Tensor, oldv: torch.Tensor, set_on_tensor=False
+) -> torch.Tensor:
+    if set_on_tensor:
+        oldv.set_(
+            v.untyped_storage(),
+            storage_offset=v.storage_offset(),
+            stride=v.stride(),
+            size=oldv.size(),
+        )
+        return oldv
+    if oldv is None:
+        return v
+    v = v.view(oldv.dtype)
+    if v.numel() > oldv.numel():
+        return v[: oldv.numel()].view(oldv.shape)
+    return v.view(oldv.shape)

@@ -430,7 +430,15 @@ class TestGeneric:
             ), td_c.to_dict()
 
         assert td_c["d"] == "a string!"
-        storage = td_c._consolidated["storage"]
+        storage = td_c.consolidated_storage()
+        print(
+            storage.untyped_storage().data_ptr(),
+            td_c["b", "c"].untyped_storage().data_ptr(),
+        )
+        print(
+            storage.untyped_storage().data_ptr(), td_c["a"].untyped_storage().data_ptr()
+        )
+        assert isinstance(storage, torch.Tensor)
         storage *= 0
         if not nested:
             assert (td.to(td_c.device) != td_c).any(), td_c.to_dict()
