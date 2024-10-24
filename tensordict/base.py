@@ -5570,30 +5570,27 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
 
         """
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
+        if sort:
+            yield from sorted(
+                self.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf),
+                key=lambda item: (
+                    item[0] if isinstance(item[0], str) else ".".join(item[0])
+                ),
+            )
+        else:
 
-        def _items():
-            if include_nested and leaves_only:
+            if is_leaf is None:
+                is_leaf = _default_is_leaf
+
+
+            if include_nested:
                 # check the conditions once only
                 for k in self.keys():
                     val = self._get_str(k, NO_DEFAULT)
-                    if not is_leaf(type(val)):
-                        yield from (
-                            (_unravel_key_to_tuple((k, _key)), _val)
-                            for _key, _val in val.items(
-                                include_nested=include_nested,
-                                leaves_only=leaves_only,
-                                is_leaf=is_leaf,
-                            )
-                        )
-                    else:
+                    cls = type(val)
+                    if not leaves_only or is_leaf(cls):
                         yield k, val
-            elif include_nested:
-                for k in self.keys():
-                    val = self._get_str(k, NO_DEFAULT)
-                    yield k, val
-                    if not is_leaf(type(val)):
+                    if _is_tensor_collection(cls):
                         yield from (
                             (_unravel_key_to_tuple((k, _key)), _val)
                             for _key, _val in val.items(
@@ -5610,16 +5607,6 @@ class TensorDictBase(MutableMapping):
             else:
                 for k in self.keys():
                     yield k, self._get_str(k, NO_DEFAULT)
-
-        if sort:
-            yield from sorted(
-                _items(),
-                key=lambda item: (
-                    item[0] if isinstance(item[0], str) else ".".join(item[0])
-                ),
-            )
-        else:
-            yield from _items()
 
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
@@ -5657,27 +5644,23 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
 
         """
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
 
-        def _values():
+        if sort:
+            for k, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
+                yield value
+        else:
+
+            if is_leaf is None:
+                is_leaf = _default_is_leaf
+
             # check the conditions once only
-            if include_nested and leaves_only:
+            if include_nested:
                 for k in self.keys():
                     val = self._get_str(k, NO_DEFAULT)
-                    if not is_leaf(type(val)):
-                        yield from val.values(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
-                        )
-                    else:
+                    cls = type(val)
+                    if not leaves_only or is_leaf(cls):
                         yield val
-            elif include_nested:
-                for k in self.keys():
-                    val = self._get_str(k, NO_DEFAULT)
-                    yield val
-                    if not is_leaf(type(val)):
+                    if include_nested and _is_tensor_collection(cls):
                         yield from val.values(
                             include_nested=include_nested,
                             leaves_only=leaves_only,
@@ -5692,11 +5675,6 @@ class TensorDictBase(MutableMapping):
                 for k in self.keys(sort=sort):
                     yield self._get_str(k, NO_DEFAULT)
 
-        if not sort or not include_nested:
-            yield from _values()
-        else:
-            for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
-                yield value
 
     @cache  # noqa: B019
     def _values_list(
