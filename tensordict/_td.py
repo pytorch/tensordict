@@ -978,6 +978,8 @@ class TensorDict(TensorDictBase):
                     agglomerate, keepdim=keepdim, dim=dim
                 )
 
+        # IMPORTANT: do not directly access batch_dims (or any other property)
+        # via self.batch_dims otherwise a reference cycle is introduced
         def proc_dim(dim, batch_dims, tuple_ok=True):
             if dim is None:
                 return dim
