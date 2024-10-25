@@ -17,6 +17,8 @@ from tensordict.nn.distributions import (
     OneHotCategorical,
     rand_one_hot,
     TruncatedNormal,
+    Ordinal,
+    OneHotOrdinal,
 )
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import (

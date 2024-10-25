@@ -12,7 +12,7 @@ from tensordict.nn.distributions.continuous import (
     NormalParamExtractor,
     NormalParamWrapper,
 )
-from tensordict.nn.distributions.discrete import OneHotCategorical, rand_one_hot
+from tensordict.nn.distributions.discrete import OneHotCategorical, rand_one_hot, Ordinal, OneHotOrdinal
 from tensordict.nn.distributions.truncated_normal import TruncatedNormal
 
 distributions_maps = {
