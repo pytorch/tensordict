@@ -5571,38 +5571,39 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
 
         """
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
+        if sort:
+            yield from sorted(
+                self.items(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=is_leaf,
+                ),
+                key=lambda item: (
+                    item[0] if isinstance(item[0], str) else ".".join(item[0])
+                ),
+            )
+        else:
 
-        def _items():
-            if include_nested and leaves_only:
+            if is_leaf is None:
+                is_leaf = _default_is_leaf
+
+            if include_nested:
                 # check the conditions once only
                 for k in self.keys():
                     val = self._get_str(k, NO_DEFAULT)
-                    if not is_leaf(type(val)):
-                        yield from (
-                            (_unravel_key_to_tuple((k, _key)), _val)
-                            for _key, _val in val.items(
-                                include_nested=include_nested,
-                                leaves_only=leaves_only,
-                                is_leaf=is_leaf,
-                            )
-                        )
-                    else:
+                    cls = type(val)
+                    if not leaves_only or is_leaf(cls):
                         yield k, val
-            elif include_nested:
-                for k in self.keys():
-                    val = self._get_str(k, NO_DEFAULT)
-                    yield k, val
-                    if not is_leaf(type(val)):
-                        yield from (
-                            (_unravel_key_to_tuple((k, _key)), _val)
-                            for _key, _val in val.items(
-                                include_nested=include_nested,
-                                leaves_only=leaves_only,
-                                is_leaf=is_leaf,
+                    if _is_tensor_collection(cls):
+                        if not is_non_tensor(cls):
+                            yield from (
+                                (_unravel_key_to_tuple((k, _key)), _val)
+                                for _key, _val in val.items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
                             )
-                        )
             elif leaves_only:
                 for k in self.keys():
                     val = self._get_str(k, NO_DEFAULT)
@@ -5611,16 +5612,6 @@ class TensorDictBase(MutableMapping):
             else:
                 for k in self.keys():
                     yield k, self._get_str(k, NO_DEFAULT)
-
-        if sort:
-            yield from sorted(
-                _items(),
-                key=lambda item: (
-                    item[0] if isinstance(item[0], str) else ".".join(item[0])
-                ),
-            )
-        else:
-            yield from _items()
 
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
@@ -5658,32 +5649,28 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
 
         """
-        if is_leaf is None:
-            is_leaf = _default_is_leaf
+        if sort:
+            for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
+                yield value
+        else:
 
-        def _values():
+            if is_leaf is None:
+                is_leaf = _default_is_leaf
+
             # check the conditions once only
-            if include_nested and leaves_only:
+            if include_nested:
                 for k in self.keys():
                     val = self._get_str(k, NO_DEFAULT)
-                    if not is_leaf(type(val)):
-                        yield from val.values(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
-                        )
-                    else:
+                    cls = type(val)
+                    if not leaves_only or is_leaf(cls):
                         yield val
-            elif include_nested:
-                for k in self.keys():
-                    val = self._get_str(k, NO_DEFAULT)
-                    yield val
-                    if not is_leaf(type(val)):
-                        yield from val.values(
-                            include_nested=include_nested,
-                            leaves_only=leaves_only,
-                            is_leaf=is_leaf,
-                        )
+                    if include_nested and _is_tensor_collection(cls):
+                        if not is_non_tensor(cls):
+                            yield from val.values(
+                                include_nested=include_nested,
+                                leaves_only=leaves_only,
+                                is_leaf=is_leaf,
+                            )
             elif leaves_only:
                 for k in self.keys(sort=sort):
                     val = self._get_str(k, NO_DEFAULT)
@@ -5692,12 +5679,6 @@ class TensorDictBase(MutableMapping):
             else:
                 for k in self.keys(sort=sort):
                     yield self._get_str(k, NO_DEFAULT)
-
-        if not sort or not include_nested:
-            yield from _values()
-        else:
-            for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
-                yield value
 
     @cache  # noqa: B019
     def _values_list(
@@ -9351,8 +9332,15 @@ class TensorDictBase(MutableMapping):
             if lock:
                 result.lock_()
 
-    def to_tensordict(self) -> T:
+    def to_tensordict(self, *, retain_none: bool | None = None) -> T:
         """Returns a regular TensorDict instance from the TensorDictBase.
+
+        Args:
+            retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
+                will be written in the tensordict.
+                Otherwise they will be discarded. Default: ``True``.
+
+                .. note:: from v0.8, the default value will be switched to ``False``.
 
         Returns:
             a new TensorDict object containing the same values.
@@ -9365,7 +9353,11 @@ class TensorDictBase(MutableMapping):
                 key: (
                     value.clone()
                     if not _is_tensor_collection(type(value))
-                    else value if is_non_tensor(value) else value.to_tensordict()
+                    else (
+                        value
+                        if is_non_tensor(value)
+                        else value.to_tensordict(retain_none=retain_none)
+                    )
                 )
                 for key, value in self.items(is_leaf=_is_leaf_nontensor)
             },
@@ -9468,12 +9460,27 @@ class TensorDictBase(MutableMapping):
 
         return self._fast_apply(as_tensor, propagate_lock=True)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Returns a dictionary with key-value pairs matching those of the tensordict."""
-        return {
-            key: value.to_dict() if _is_tensor_collection(type(value)) else value
-            for key, value in self.items()
-        }
+    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]:
+        """Returns a dictionary with key-value pairs matching those of the tensordict.
+
+        Args:
+            retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
+                will be written in the dictionary.
+                Otherwise, they will be discarded. Default: ``True``.
+
+        """
+        result = {}
+        for key, value in self.items():
+            if _is_tensor_collection(type(value)):
+                if (
+                    not retain_none
+                    and _is_non_tensor(type(value))
+                    and value.data is None
+                ):
+                    continue
+                value = value.to_dict(retain_none=retain_none)
+            result[key] = value
+        return result
 
     def numpy(self):
         """Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
@@ -9501,7 +9508,7 @@ class TensorDictBase(MutableMapping):
             {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
 
         """
-        as_dict = self.to_dict()
+        as_dict = self.to_dict(retain_none=False)
 
         def to_numpy(x):
             if isinstance(x, torch.Tensor):
@@ -9542,7 +9549,7 @@ class TensorDictBase(MutableMapping):
             )
             return cls(**dictionary)
 
-        return dict_to_namedtuple(self.to_dict())
+        return dict_to_namedtuple(self.to_dict(retain_none=False))
 
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False):

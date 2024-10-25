@@ -4216,7 +4216,7 @@ class _TensorDictKeysView:
                 if self.leaves_only:
                     for key in self._keys():
                         target_class = self.tensordict.entry_class(key)
-                        if _is_tensor_collection(target_class):
+                        if not self.is_leaf(target_class):
                             continue
                         yield key
                 else:
@@ -4245,9 +4245,11 @@ class _TensorDictKeysView:
                 # For lazy stacks
                 value = value[0]
                 cls = type(value)
+            is_tc = _is_tensor_collection(cls)
+            if self.include_nested and is_tc:
+                if not is_non_tensor(cls):
+                    yield from self._iter_helper(value, prefix=full_key)
             is_leaf = self.is_leaf(cls)
-            if self.include_nested and not is_leaf:
-                yield from self._iter_helper(value, prefix=full_key)
             if not self.leaves_only or is_leaf:
                 yield full_key
 
