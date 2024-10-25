@@ -30,6 +30,7 @@ from tensordict.nn.distributions import (
     NormalParamExtractor,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.discrete import Ordinal, OneHotOrdinal, _generate_ordinal_logits
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
@@ -2445,6 +2446,101 @@ class TestCompositeDist:
                 sample_clone.get("cont_log_prob").sum(-1)
                 + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
             )
+
+
+class TestOrdinal:
+    @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
+    @pytest.mark.parametrize("device", ("cpu", "meta"))
+    @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
+    def test_correct_sampling_shape(self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str) -> None:
+        logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
+
+        sampler = Ordinal(scores=logits)
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+        log_probs = sampler.log_prob(actions)  # type: ignore[no-untyped-call]
+
+        expected_log_prob_shape = logit_shape[:-1]
+        expected_action_shape = logit_shape[:-1]
+
+        assert actions.size() == torch.Size(expected_action_shape)
+        assert log_probs.size() == torch.Size(expected_log_prob_shape)
+
+    @pytest.mark.parametrize("num_categories", [1, 10, 20])
+    def test_correct_range(self, num_categories: int) -> None:
+        seq_size = 10
+        batch_size = 100
+        logits = torch.ones((batch_size, seq_size, num_categories))
+
+        sampler = Ordinal(scores=logits)
+
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+
+        assert actions.min() >= 0
+        assert actions.max() < num_categories
+
+    @pytest.mark.parametrize("distribution", [Ordinal, OneHotOrdinal])
+    def test_bounded_gradients(self, distribution: type) -> None:
+        logits = torch.tensor(
+            [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]], requires_grad=True, dtype=torch.float32
+        )
+
+        sampler = distribution(logits=logits)
+
+        actions = sampler.sample()
+        log_probs = sampler.log_prob(actions)
+
+        dummy_objective = log_probs.sum()
+        dummy_objective.backward()
+
+        assert logits.grad is not None
+        assert not torch.isnan(logits.grad).any()
+
+    def test_generate_ordinal_logits_numerical(self) -> None:
+        logits = torch.ones((3, 4))
+
+        ordinal_logits = _generate_ordinal_logits(scores=logits)
+
+        expected_ordinal_logits = torch.tensor(
+            [
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+            ]
+        )
+
+        torch.testing.assert_close(ordinal_logits, expected_ordinal_logits, atol=1e-4, rtol=1e-6)
+
+
+class TestOneHotOrdinal:
+    @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
+    @pytest.mark.parametrize("device", ("cpu", "meta"))
+    @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
+    def test_correct_sampling_shape(self, logit_shape: tuple[int, ...], dtype: torch.dtype,
+                                                    device: str) -> None:
+        logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
+
+        sampler = OneHotOrdinal(scores=logits)
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+        log_probs = sampler.log_prob(actions)  # type: ignore[no-untyped-call]
+        expected_log_prob_shape = logit_shape[:-1]
+
+        expected_action_shape = logit_shape
+
+        assert actions.size() == torch.Size(expected_action_shape)
+        assert log_probs.size() == torch.Size(expected_log_prob_shape)
+
+    @pytest.mark.parametrize("num_categories", [1, 10, 20])
+    def test__OneHotOrdinal__correct_range(self, num_categories: int) -> None:
+        seq_size = 10
+        batch_size = 100
+        logits = torch.ones((batch_size, seq_size, num_categories))
+
+        sampler = OneHotOrdinal(scores=logits)
+
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+
+        assert torch.all(actions.sum(-1))
+        assert actions.shape[-1] == num_categories
 
 
 class TestAddStateIndependentNormalScale:
