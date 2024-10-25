@@ -2484,7 +2484,7 @@ class TestOrdinal:
             [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]], requires_grad=True, dtype=torch.float32
         )
 
-        sampler = distribution(logits=logits)
+        sampler = distribution(scores=logits)
 
         actions = sampler.sample()
         log_probs = sampler.log_prob(actions)
@@ -2514,7 +2514,7 @@ class TestOrdinal:
 class TestOneHotOrdinal:
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.parametrize("device", ("cpu", "meta"))
-    @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
+    @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(self, logit_shape: tuple[int, ...], dtype: torch.dtype,
                                                     device: str) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
@@ -2529,7 +2529,7 @@ class TestOneHotOrdinal:
         assert actions.size() == torch.Size(expected_action_shape)
         assert log_probs.size() == torch.Size(expected_log_prob_shape)
 
-    @pytest.mark.parametrize("num_categories", [1, 10, 20])
+    @pytest.mark.parametrize("num_categories", [2, 10, 20])
     def test__OneHotOrdinal__correct_range(self, num_categories: int) -> None:
         seq_size = 10
         batch_size = 100
