@@ -1511,16 +1511,12 @@ def assert_close(
         return True
 
     try:
-        set1 = set(
-            actual.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
-        )
-        set2 = set(
-            expected.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
-        )
-    except ValueError:
-        # Persistent tensordicts do not work with is_leaf
         set1 = set(actual.keys())
         set2 = set(expected.keys())
+    except ValueError:
+        # Persistent tensordicts do not work with is_leaf
+        set1 = set(actual.keys(is_leaf=lambda cls: issubclass(cls, torch.Tensor)))
+        set2 = set(expected.keys(is_leaf=lambda cls: issubclass(cls, torch.Tensor)))
     if not (len(set1.difference(set2)) == 0 and len(set2) == len(set1)):
         raise KeyError(
             "actual and expected tensordict keys mismatch, "

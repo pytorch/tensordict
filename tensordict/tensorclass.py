@@ -861,7 +861,7 @@ def _get_type_hints(cls, with_locals=False):
         cls._type_hints = None
 
 
-def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
+def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
     """Tensor class wrapper to instantiate a new tensor class object.
 
     Args:
@@ -869,7 +869,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
 
     """
-    if not isinstance(tensordict, TensorDictBase):
+    if safe and not isinstance(tensordict, TensorDictBase):
         raise RuntimeError(
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
@@ -894,10 +894,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         exp_keys = set(cls.__expected_keys__)
         if non_tensordict is not None:
             nontensor_keys = set(non_tensordict.keys())
+            total_keys = tensor_keys.union(nontensor_keys)
         else:
             nontensor_keys = set()
             non_tensordict = {}
-        total_keys = tensor_keys.union(nontensor_keys)
+            total_keys = tensor_keys
     for key in nontensor_keys:
         if key not in tensor_keys:
             continue
@@ -921,11 +922,12 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
-        tc.__dict__["_tensordict"] = tensordict
-        tc.__dict__["_non_tensordict"] = non_tensordict
+        tc.__dict__.update(
+            {"_tensordict": tensordict, "_non_tensordict": non_tensordict}
+        )
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
-        if hasattr(tc, "__post_init__"):
+        if hasattr(cls, "__post_init__"):
             tc.__post_init__()
         return tc
     else:
@@ -1147,6 +1149,23 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 
 def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
+    def deliver_result(self, result, kwargs):
+        if result is None:
+            return
+        if isinstance(result, TensorDictBase) and kwargs.get("out") is not result:
+            if not is_dynamo_compiling():
+                non_tensordict = super(type(self), self).__getattribute__(
+                    "_non_tensordict"
+                )
+            else:
+                non_tensordict = self._non_tensordict
+            non_tensordict = dict(non_tensordict)
+            if copy_non_tensor and non_tensordict:
+                # use tree_map to copy
+                non_tensordict = tree_map(lambda x: x, non_tensordict)
+            return self._from_tensordict(result, non_tensordict, safe=False)
+        return result
+
     def wrapped_func(self, *args, **kwargs):
         if not is_dynamo_compiling():
             td = super(type(self), self).__getattribute__("_tensordict")
@@ -1158,34 +1177,12 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
         if no_wrap:
             return result
 
-        def check_out(kwargs, result):
-            out = kwargs.get("out")
-            if out is result:
-                # No need to transform output
-                return True
-            return False
-
         if result is td:
             return self
 
-        def deliver_result(result):
-            if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
-                if not is_dynamo_compiling():
-                    non_tensordict = super(type(self), self).__getattribute__(
-                        "_non_tensordict"
-                    )
-                else:
-                    non_tensordict = self._non_tensordict
-                non_tensordict = dict(non_tensordict)
-                if copy_non_tensor:
-                    # use tree_map to copy
-                    non_tensordict = tree_map(lambda x: x, non_tensordict)
-                return self._from_tensordict(result, non_tensordict)
-            return result
-
         if isinstance(result, tuple):
-            return tuple(deliver_result(r) for r in result)
-        return deliver_result(result)
+            return tuple(deliver_result(self, r, kwargs) for r in result)
+        return deliver_result(self, result, kwargs)
 
     return wrapped_func
 
@@ -1432,10 +1429,16 @@ def _len(self) -> int:
     return len(self._tensordict)
 
 
-def _to_dict(self) -> dict:
-    td_dict = self._tensordict.to_dict()
+def _to_dict(self, *, retain_none: bool = True) -> dict:
+    td_dict = self._tensordict.to_dict(retain_none=retain_none)
     if self._non_tensordict:
-        td_dict.update(self._non_tensordict)
+        if retain_none:
+            td_dict.update(self._non_tensordict)
+        else:
+            td_dict.update(
+                {k: v for k, v in self._non_tensordict.items() if v is not None}
+            )
+
     return td_dict
 
 
@@ -1503,20 +1506,36 @@ def _from_dict_instance(
     return out
 
 
-def _to_tensordict(self) -> TensorDict:
+def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
     """Convert the tensorclass into a regular TensorDict.
 
     Makes a copy of all entries. Memmap and shared memory tensors are converted to
     regular tensors.
 
+    Args:
+        retain_none (bool): if ``True``, the ``None`` values will be written in the
+            tensordict. Otherwise they will be discrarded. Default: ``True``.
+
+            .. note:: from v0.8, the default value will be switched to ``False``.
+
     Returns:
         A new TensorDict object containing the same values as the tensorclass.
 
     """
-    td = self._tensordict.to_tensordict()
+    td = self._tensordict.to_tensordict(retain_none=retain_none)
     for key, val in self._non_tensordict.items():
-        # if val is None:
-        #     continue
+        if val is None:
+            if retain_none is None:
+                retain_none = True
+                warnings.warn(
+                    "retain_none was not specified and a None value was encountered in the tensorclass. "
+                    "As of now, the None will be written in the tensordict but this default behaviour will change"
+                    "in v0.8. To disable this warning, specify the value of retain_none."
+                )
+            if retain_none:
+                pass
+            else:
+                continue
         td.set_non_tensor(key, val)
     return td
 
@@ -2678,11 +2697,11 @@ class NonTensorData:
             names=kwargs.get("names"),
         )
 
-    def to_dict(self):
+    def to_dict(self, *, retain_none: bool = True):
         # override to_dict to return just the data
         return self.data
 
-    def to_tensordict(self):
+    def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
     @classmethod
@@ -2956,10 +2975,10 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]:
         return self.tolist()
 
-    def to_tensordict(self):
+    def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
     def _memmap_(
