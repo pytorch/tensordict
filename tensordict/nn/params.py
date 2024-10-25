@@ -642,7 +642,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         return TensorDictParams(td)
 
     @_fallback
-    def to_tensordict(self): ...
+    def to_tensordict(self, *, retain_none: bool | None = None): ...
 
     @_fallback
     def to_h5(

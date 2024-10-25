@@ -228,7 +228,7 @@ class TestGeneric:
             ),
         ):
             td_stack.batch_size = [2]
-        td_stack.to_tensordict().batch_size = [2]
+        td_stack.to_tensordict(retain_none=True).batch_size = [2]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         subtd = td._get_sub_tensordict((slice(None), torch.tensor([1, 2])))
@@ -239,7 +239,7 @@ class TestGeneric:
             ),
         ):
             subtd.batch_size = [3, 2]
-        subtd.to_tensordict().batch_size = [3, 2]
+        subtd.to_tensordict(retain_none=True).batch_size = [3, 2]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         with set_lazy_legacy(True):
@@ -251,7 +251,7 @@ class TestGeneric:
                 ),
             ):
                 td_u.batch_size = [1]
-            td_u.to_tensordict().batch_size = [1]
+            td_u.to_tensordict(retain_none=True).batch_size = [1]
 
     @pytest.mark.parametrize("count_duplicates", [False, True])
     def test_bytes(self, count_duplicates, device_fixture):
@@ -828,7 +828,7 @@ class TestGeneric:
         for i in range(16):
             other_td = TensorDict({"a": torch.randn(10), "b": torch.ones(1)}, [])
             if td_type == "unsqueeze":
-                other_td = other_td.unsqueeze(-1).to_tensordict()
+                other_td = other_td.unsqueeze(-1).to_tensordict(retain_none=True)
             if update:
                 subtd = td._get_sub_tensordict(i)
                 subtd.update(other_td, inplace=True, non_blocking=False)
@@ -3234,7 +3234,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("inplace", [False, True])
     def test_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
-        td_c = td.to_tensordict()
+        td_c = td.to_tensordict(retain_none=True)
         if inplace and td_name == "td_params":
             with pytest.raises(ValueError, match="Failed to update"):
                 td.apply(lambda x: x + 1, inplace=inplace)
@@ -3254,7 +3254,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name in ("td_h5",):
             pytest.skip("Cannot test assignment in persistent tensordict.")
         td = getattr(self, td_name)(device)
-        td_c = td.to_tensordict()
+        td_c = td.to_tensordict(retain_none=True)
         if td_name in ("td_params",):
             td.data.zero_()
         else:
@@ -3368,7 +3368,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
-        td_c = td.to_tensordict()
+        td_c = td.to_tensordict(retain_none=True)
         if inplace and td_name == "td_params":
             td_set = td.data
         else:
@@ -3386,12 +3386,13 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply_out(self, td_name, device):
         td = getattr(self, td_name)(device)
         if not isinstance(td, LazyStackedTensorDict):
-            td_c = td.to_tensordict()
+            td_c = td.to_tensordict(retain_none=True)
         else:
             td_c = td.clone()
         td.apply(lambda x: x + 1, out=td_c)
         assert_allclose_td(
-            td.filter_non_tensor_data().data + 1, td_c.filter_non_tensor_data()
+            td.filter_non_tensor_data().data + 1,
+            td_c.filter_non_tensor_data().filter_empty_(),
         )
 
     def test_as_tensor(self, td_name, device):
@@ -3437,7 +3438,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        sub_td = td[:, :2].to_tensordict()
+        sub_td = td[:, :2].to_tensordict(retain_none=True)
         sub_td.zero_()
         sub_dict = sub_td.to_dict()
         if td_name == "td_params":
@@ -3849,15 +3850,15 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert (td == td.to_tensordict()).all()
-        td0 = td.to_tensordict().zero_()
+        assert (td == td.to_tensordict(retain_none=True)).all()
+        td0 = td.to_tensordict(retain_none=True).zero_()
         assert (td != td0).any()
 
     def test_equal_dict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         assert (td == td.to_dict()).all()
-        td0 = td.to_tensordict().zero_().to_dict()
+        td0 = td.to_tensordict(retain_none=True).zero_().to_dict()
         assert (td != td0).any()
 
     def test_equal_float(self, td_name, device):
@@ -3886,7 +3887,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td
         td_set.zero_()
         assert (td == 0).all()
-        td0 = td.to_tensordict().zero_()
+        td0 = td.to_tensordict(retain_none=True).zero_()
         assert (td0 != 1).all()
 
     def test_equal_other(self, td_name, device):
@@ -3903,7 +3904,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td
         td_set.zero_()
         assert (td == torch.zeros([], dtype=torch.int, device=device)).all()
-        td0 = td.to_tensordict().zero_()
+        td0 = td.to_tensordict(retain_none=True).zero_()
         assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
 
     def test_exclude(self, td_name, device):
@@ -4092,7 +4093,7 @@ class TestTensorDicts(TestTensorDictsBase):
         shape = td.shape[:3]
         td_flat = td.flatten(0, 2)
         td_unflat = td_flat.unflatten(0, shape)
-        assert (td.to_tensordict() == td_unflat).all()
+        assert (td.to_tensordict(retain_none=True) == td_unflat).all()
         assert td.batch_size == td_unflat.batch_size
 
     @pytest.mark.parametrize("start_dim", [0, 1, -2, -3])
@@ -4129,7 +4130,7 @@ class TestTensorDicts(TestTensorDictsBase):
         shape = td.shape[1:4]
         td_flat = td.flatten(1, 3)
         td_unflat = td_flat.unflatten(1, shape)
-        assert (td.to_tensordict() == td_unflat).all()
+        assert (td.to_tensordict(retain_none=True) == td_unflat).all()
         assert td.batch_size == td_unflat.batch_size
 
     def test_from_empty(self, td_name, device):
@@ -4183,7 +4184,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         actual_td = td[actual_index]
         expected_td = td[expected_index]
-        other_expected_td = td.to_tensordict()[expected_index]
+        other_expected_td = td.to_tensordict(retain_none=False)[expected_index]
         assert expected_td.shape == _getitem_batch_size(
             td.batch_size, convert_ellipsis_to_idx(actual_index, td.batch_size)
         )
@@ -4245,9 +4246,12 @@ class TestTensorDicts(TestTensorDictsBase):
         # Fixed by 451
         # if td_name == "td_h5":
         #     with pytest.raises(TypeError, match="can't process None"):
-        #         assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+        #         assert (tdnone.to_tensordict(retain_none=True) == td.to_tensordict(retain_none=True)[idx]).all()
         #     return
-        assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+        assert (
+            tdnone.to_tensordict(retain_none=True)
+            == td.to_tensordict(retain_none=True)[idx]
+        ).all()
 
     def test_indexed_properties(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -4459,7 +4463,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td.lock_()
         td_clone = td.clone()
         assert not td_clone.is_locked
-        td_clone = td.to_tensordict()
+        td_clone = td.to_tensordict(retain_none=True)
         assert not td_clone.is_locked
         assert td.is_locked
         if td_name == "td_h5":
@@ -4752,7 +4756,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("inplace", [False, True])
     def test_named_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
-        td_c = td.to_tensordict()
+        td_c = td.to_tensordict(retain_none=True)
 
         def named_plus(name, x):
             if "a" in name:
@@ -4916,7 +4920,7 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(
             RuntimeError, match="Found more than one unique shape in the tensors"
         ):
-            td_stack.to_tensordict()
+            td_stack.to_tensordict(retain_none=True)
         # cloning is type-preserving: we can do that operation
         td_stack.clone()
 
@@ -5684,7 +5688,7 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.mark.skip("cannot index tensor with desired index")
             return
 
-        td_clone = td[idx].to_tensordict().zero_()
+        td_clone = td[idx].to_tensordict(retain_none=True).zero_()
         if td_name == "td_params":
             td.data[idx] = td_clone
         else:
@@ -5762,7 +5766,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td.data
         else:
             td_set = td
-        td_set[:1] = td[:1].to_tensordict().zero_()
+        td_set[:1] = td[:1].to_tensordict(retain_none=True).zero_()
         assert (td[:1] == 0).all()
 
         # with broadcast
@@ -5778,7 +5782,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td.data
         else:
             td_set = td
-        td_set[:1] = td[0].to_tensordict().zero_()
+        td_set[:1] = td[0].to_tensordict(retain_none=True).zero_()
         assert (td[:1] == 0).all()
 
         td = getattr(self, td_name)(device)
@@ -5793,7 +5797,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td.data
         else:
             td_set = td
-        td_set[:1, 0] = td[0, 0].to_tensordict().zero_()
+        td_set[:1, 0] = td[0, 0].to_tensordict(retain_none=True).zero_()
         assert (td[:1, 0] == 0).all()
 
         td = getattr(self, td_name)(device)
@@ -5808,7 +5812,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_set = td.data
         else:
             td_set = td
-        td_set[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
+        td_set[:1, :, 0] = td[0, :, 0].to_tensordict(retain_none=True).zero_()
         assert (td[:1, :, 0] == 0).all()
 
     def test_setitem_string(self, td_name, device):
@@ -6294,7 +6298,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_to_tensordict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td2 = td.to_tensordict()
+        td2 = td.to_tensordict(retain_none=True)
         assert (td2 == td).all()
 
     @set_lazy_legacy(True)
@@ -6664,10 +6668,10 @@ class TestTensorDicts(TestTensorDictsBase):
             )
 
         sub_td = td._get_sub_tensordict(index)
-        assert sub_td.shape == td.to_tensordict()[index].shape
+        assert sub_td.shape == td.to_tensordict(retain_none=True)[index].shape
         assert sub_td.shape == td[index].shape, (td, index)
         td0 = td[index]
-        td0 = td0.to_tensordict()
+        td0 = td0.to_tensordict(retain_none=True)
         td0 = td0.apply(lambda x: x * 0 + 2)
         assert sub_td.shape == td0.shape
         if td_name == "td_params":
@@ -6801,7 +6805,7 @@ class TestTensorDicts(TestTensorDictsBase):
         # test with other empty td
         mask = torch.zeros(td.shape, dtype=torch.bool, device=td.device).bernoulli_()
         if td_name in ("td_h5",):
-            td_full = td.to_tensordict()
+            td_full = td.to_tensordict(retain_none=True)
         else:
             td_full = td
         td_empty = td_full.empty()
@@ -7381,7 +7385,7 @@ class TestTensorDictsRequiresGrad:
 
     def td_reset_bs(self, device):
         td = self.td(device)
-        td = td.unsqueeze(-1).to_tensordict()
+        td = td.unsqueeze(-1).to_tensordict(retain_none=True)
         td.batch_size = torch.Size([3, 1])
         return td
 
@@ -8129,7 +8133,7 @@ class TestLazyStackedTensorDict:
         inner = LazyStackedTensorDict.lazy_stack([td_leaf_1] * 4, 0)
         middle = LazyStackedTensorDict.lazy_stack([inner] * 3, 0)
         outer = LazyStackedTensorDict.lazy_stack([middle] * 2, 0)
-        outer_dense = outer.to_tensordict()
+        outer_dense = outer.to_tensordict(retain_none=True)
         pos1 = self._idx_list[pos1]
         pos2 = self._idx_list[pos2]
         pos3 = self._idx_list[pos3]
@@ -8582,13 +8586,13 @@ class TestLazyStackedTensorDict:
             RuntimeError,
             match="Found more than one unique shape in the tensors to be stacked",
         ):
-            td_a.update(td_b.to_tensordict())
+            td_a.update(td_b.to_tensordict(retain_none=True))
         td_a.update_(td_b)
         with pytest.raises(
             RuntimeError,
             match="Found more than one unique shape in the tensors to be stacked",
         ):
-            td_a.update_(td_b.to_tensordict())
+            td_a.update_(td_b.to_tensordict(retain_none=True))
 
     def test_stack_with_heterogeneous_stacks(self):
         # tests that we can stack several stacks in a dense manner
@@ -8867,7 +8871,7 @@ class TestSnapshot:
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
-        td_plain = td.to_tensordict()
+        td_plain = td.to_tensordict(retain_none=True)
         # we want to delete refs to MemoryMappedTensors
         assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del td
@@ -8896,7 +8900,7 @@ class TestSnapshot:
         tensordict.memmap_()
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
-        td_plain = tensordict.to_tensordict()
+        td_plain = tensordict.to_tensordict(retain_none=True)
         assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del tensordict
 
@@ -10149,8 +10153,12 @@ class TestMap:
             assert input.shape == input_h5.shape
             input = input_h5
         if has_out:
-            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
-            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
+            output_generator = torch.zeros_like(
+                self.selectfn(input.to_tensordict(retain_none=True))
+            )
+            output_split = torch.zeros_like(
+                self.selectfn(input.to_tensordict(retain_none=True))
+            )
         else:
             output_generator = None
             output_split = None
