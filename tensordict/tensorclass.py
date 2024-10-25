@@ -47,6 +47,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_tensorclass,
     _LOCK_ERROR,
     _td_fields,
+    _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
     _zip_strict,
     DeviceType,
@@ -495,6 +496,8 @@ def _tensorclass(cls: T, *, frozen) -> T:
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
     cls = dataclass(cls, frozen=frozen)
+    _TENSORCLASS_MEMO[cls] = True
+
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
 
     for attr in expected_keys:

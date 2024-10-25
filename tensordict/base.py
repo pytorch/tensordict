@@ -10841,8 +10841,20 @@ def _register_tensor_class(cls):
     _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
-def _is_tensor_collection(datatype):
-    return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
+_TENSOR_COLLECTION_MEMO = {}
+
+
+def _is_tensor_collection(datatype: type) -> bool:
+    is_dynamo = is_dynamo_compiling()
+    out = None
+    if not is_dynamo:
+        out = _TENSOR_COLLECTION_MEMO.get(datatype)
+
+    if out is None:
+        out = issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
+        if not is_dynamo:
+            _TENSOR_COLLECTION_MEMO[datatype] = out
+    return out
 
 
 def is_tensor_collection(datatype: type | Any) -> bool:

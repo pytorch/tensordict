@@ -54,7 +54,6 @@ from tensordict.utils import (
     _index_preserve_data_ptr,
     _infer_size_impl,
     _is_shared,
-    _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
     _NON_STR_KEY_ERR,
@@ -612,7 +611,7 @@ class TensorDict(TensorDictBase):
                 return TensorDict._new_unsafe(_swap, batch_size=[])
 
     def __ne__(self, other: object) -> T | bool:
-        if _is_tensorclass(other):
+        if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
@@ -636,7 +635,7 @@ class TensorDict(TensorDictBase):
         return True
 
     def __xor__(self, other: object) -> T | bool:
-        if _is_tensorclass(other):
+        if is_tensorclass(other):
             return other ^ self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
@@ -660,7 +659,7 @@ class TensorDict(TensorDictBase):
         return True
 
     def __or__(self, other: object) -> T | bool:
-        if _is_tensorclass(other):
+        if is_tensorclass(other):
             return other | self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)

@@ -854,8 +854,16 @@ def is_tensorclass(obj: type | Any) -> bool:
     return _is_tensorclass(cls)
 
 
+_TENSORCLASS_MEMO = {}
+
+
 def _is_tensorclass(cls: type) -> bool:
-    return getattr(cls, "_is_tensorclass", False)
+    out = _TENSORCLASS_MEMO.get(cls, None)
+    if out is None:
+        out = getattr(cls, "_is_tensorclass", False)
+        if not is_dynamo_compiling():
+            _TENSORCLASS_MEMO[cls] = out
+    return out
 
 
 class implement_for:
@@ -2353,8 +2361,19 @@ def is_non_tensor(data):
     return getattr(type(data), "_is_non_tensor", False)
 
 
+_NON_TENSOR_MEMO = {}
+
+
 def _is_non_tensor(cls: type):
-    return getattr(cls, "_is_non_tensor", False)
+    out = None
+    is_dynamo = is_dynamo_compiling()
+    if not is_dynamo:
+        out = _NON_TENSOR_MEMO.get(cls)
+    if out is None:
+        out = getattr(cls, "_is_non_tensor", False)
+        if not is_dynamo:
+            _NON_TENSOR_MEMO[cls] = out
+    return out
 
 
 class KeyDependentDefaultDict(collections.defaultdict):
