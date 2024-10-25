@@ -15,10 +15,10 @@ from tensordict.nn.distributions import (
     CompositeDistribution,
     NormalParamExtractor,
     OneHotCategorical,
+    OneHotOrdinal,
+    Ordinal,
     rand_one_hot,
     TruncatedNormal,
-    Ordinal,
-    OneHotOrdinal,
 )
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import (

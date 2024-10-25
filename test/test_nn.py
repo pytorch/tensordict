@@ -30,7 +30,11 @@ from tensordict.nn.distributions import (
     NormalParamExtractor,
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
-from tensordict.nn.distributions.discrete import Ordinal, OneHotOrdinal, _generate_ordinal_logits
+from tensordict.nn.distributions.discrete import (
+    _generate_ordinal_logits,
+    OneHotOrdinal,
+    Ordinal,
+)
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
@@ -2452,7 +2456,9 @@ class TestOrdinal:
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.parametrize("device", ("cpu", "meta"))
     @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
-    def test_correct_sampling_shape(self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str) -> None:
+    def test_correct_sampling_shape(
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
+    ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 
         sampler = Ordinal(scores=logits)
@@ -2481,7 +2487,9 @@ class TestOrdinal:
     @pytest.mark.parametrize("distribution", [Ordinal, OneHotOrdinal])
     def test_bounded_gradients(self, distribution: type) -> None:
         logits = torch.tensor(
-            [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]], requires_grad=True, dtype=torch.float32
+            [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]],
+            requires_grad=True,
+            dtype=torch.float32,
         )
 
         sampler = distribution(scores=logits)
@@ -2508,15 +2516,18 @@ class TestOrdinal:
             ]
         )
 
-        torch.testing.assert_close(ordinal_logits, expected_ordinal_logits, atol=1e-4, rtol=1e-6)
+        torch.testing.assert_close(
+            ordinal_logits, expected_ordinal_logits, atol=1e-4, rtol=1e-6
+        )
 
 
 class TestOneHotOrdinal:
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.parametrize("device", ("cpu", "meta"))
     @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
-    def test_correct_sampling_shape(self, logit_shape: tuple[int, ...], dtype: torch.dtype,
-                                                    device: str) -> None:
+    def test_correct_sampling_shape(
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
+    ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 
         sampler = OneHotOrdinal(scores=logits)

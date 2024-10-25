@@ -91,8 +91,8 @@ class OneHotCategorical(D.Categorical):
 
 
 class Ordinal(D.Categorical):
-    """
-    A discrete distribution for learning to sample from finite ordered sets.
+    """A discrete distribution for learning to sample from finite ordered sets.
+
     It is defined in contrast with the `Categorical` distribution, which does
     not impose any notion of proximity or ordering over its support's atoms.
     The `Ordinal` distribution explicitly encodes those concepts, which is
@@ -103,8 +103,10 @@ class Ordinal(D.Categorical):
         This class is mostly useful when you want to learn a distribution over
         a finite set which is obtained by discretising a continuous set.
     """
+
     def __init__(self, scores: torch.Tensor):
-        """
+        """A discrete distribution for learning to sample from finite ordered sets.
+
         Args:
             scores: a tensor of shape [..., N] where N is the size of the set which supports the distributions.
             Typically, the output of a neural network parametrising the distribution.
@@ -115,8 +117,10 @@ class Ordinal(D.Categorical):
 
 class OneHotOrdinal(OneHotCategorical):
     """The one-hot version of the :class:`~.Ordinal` distribution."""
+
     def __init__(self, scores: torch.Tensor):
-        """
+        """The one-hot version of the :class:`~.Ordinal` distribution.
+
         Args:
             scores: a tensor of shape [..., N] where N is the size of the set which supports the distributions.
             Typically, the output of a neural network parametrising the distribution.
@@ -136,7 +140,8 @@ def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
 
     # Total log-probability for being "smaller than k"
     smaller_than_log_probs = (
-        complementary_log_probs.flip(dims=[-1]).cumsum(dim=-1).flip(dims=[-1]) - complementary_log_probs
+        complementary_log_probs.flip(dims=[-1]).cumsum(dim=-1).flip(dims=[-1])
+        - complementary_log_probs
     )
 
     return larger_than_log_probs + smaller_than_log_probs
