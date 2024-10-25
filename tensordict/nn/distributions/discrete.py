@@ -9,6 +9,7 @@ from typing import Sequence
 
 import torch
 from torch import distributions as D
+from torch.nn import functional as F
 
 __all__ = [
     "OneHotCategorical",
@@ -87,3 +88,55 @@ class OneHotCategorical(D.Categorical):
         out = d.rsample(sample_shape)
         out.data.copy_((out == out.max(-1)[0].unsqueeze(-1)).to(out.dtype))
         return out
+
+
+class Ordinal(D.Categorical):
+    """
+    A discrete distribution for learning to sample from finite ordered sets.
+    It is defined in contrast with the `Categorical` distribution, which does
+    not impose any notion of proximity or ordering over its support's atoms.
+    The `Ordinal` distribution explicitly encodes those concepts, which is
+    useful for learning discrete sampling from continuous sets. See §5 of
+    [Tang & Agrawal, 2020](https://arxiv.org/pdf/1901.10500.pdf) for details.
+
+    Notes:
+        This class is mostly useful when you want to learn a distribution over
+        a finite set which is obtained by discretising a continuous set.
+    """
+    def __init__(self, scores: torch.Tensor):
+        """
+        Args:
+            scores: a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
+        """
+        logits = _generate_ordinal_logits(scores)
+        super().__init__(logits=logits)
+
+
+class OneHotOrdinal(OneHotCategorical):
+    """The one-hot version of the :class:`~.Ordinal` distribution."""
+    def __init__(self, scores: torch.Tensor):
+        """
+        Args:
+            scores: a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
+        """
+        logits = _generate_ordinal_logits(scores)
+        super().__init__(logits=logits)
+
+
+def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
+    """Implements Eq. 4 of [Tang & Agrawal, 2020](https://arxiv.org/pdf/1901.10500.pdf)."""
+    # Assigns Bernoulli-like probabilities for each class in the set
+    log_probs = F.logsigmoid(scores)
+    complementary_log_probs = F.logsigmoid(-scores)
+
+    # Total log-probability for being "larger than k"
+    larger_than_log_probs = log_probs.cumsum(dim=-1)
+
+    # Total log-probability for being "smaller than k"
+    smaller_than_log_probs = (
+        complementary_log_probs.flip(dims=[-1]).cumsum(dim=-1).flip(dims=[-1]) - complementary_log_probs
+    )
+
+    return larger_than_log_probs + smaller_than_log_probs
