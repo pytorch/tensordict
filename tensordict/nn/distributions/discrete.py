@@ -97,26 +97,34 @@ class Ordinal(D.Categorical):
     not impose any notion of proximity or ordering over its support's atoms.
     The `Ordinal` distribution explicitly encodes those concepts, which is
     useful for learning discrete sampling from continuous sets. See §5 of
-    [Tang & Agrawal, 2020](https://arxiv.org/pdf/1901.10500.pdf) for details.
+    `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
 
-    Notes:
+    .. note::
         This class is mostly useful when you want to learn a distribution over
         a finite set which is obtained by discretising a continuous set.
+    Args:
+        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
     """
 
     def __init__(self, scores: torch.Tensor):
         """A discrete distribution for learning to sample from finite ordered sets.
 
         Args:
-            scores: a tensor of shape [..., N] where N is the size of the set which supports the distributions.
-            Typically, the output of a neural network parametrising the distribution.
+            scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+                Typically, the output of a neural network parametrising the distribution.
         """
         logits = _generate_ordinal_logits(scores)
         super().__init__(logits=logits)
 
 
 class OneHotOrdinal(OneHotCategorical):
-    """The one-hot version of the :class:`~.Ordinal` distribution."""
+    """The one-hot version of the :class:`~tensordict.nn.distributions.Ordinal` distribution.
+    
+    Args:
+        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
+    """
 
     def __init__(self, scores: torch.Tensor):
         """The one-hot version of the :class:`~.Ordinal` distribution.
@@ -130,7 +138,7 @@ class OneHotOrdinal(OneHotCategorical):
 
 
 def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
-    """Implements Eq. 4 of [Tang & Agrawal, 2020](https://arxiv.org/pdf/1901.10500.pdf)."""
+    """Implements Eq. 4 of `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`__."""
     # Assigns Bernoulli-like probabilities for each class in the set
     log_probs = F.logsigmoid(scores)
     complementary_log_probs = F.logsigmoid(-scores)
