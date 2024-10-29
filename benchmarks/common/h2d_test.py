@@ -31,7 +31,7 @@ class NJT:
             _offsets=njt_tensor._offsets,
             _lengths=njt_tensor._lengths,
             njt_shape=njt_tensor.size(0),
-        )
+        ).clone()
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -148,6 +148,7 @@ class TestConsolidate:
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.5.1"), reason="requires torch>=2.5"
 )
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestTo:
     def test_to(
         self, benchmark, consolidated, td, default_device, compile_mode, num_threads
