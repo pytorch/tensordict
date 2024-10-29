@@ -82,7 +82,7 @@ try:
             is_batchedtensor,
         )
     except ImportError:
-        from functorch._C import (  # @manual=fbcode//functorch:_C  # noqa
+        from functorch._C import (  # @manual=fbcode//caffe2/functorch:_C  # noqa
             get_unwrapped,
             is_batchedtensor,
         )
