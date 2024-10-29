@@ -121,7 +121,7 @@ try:
             is_batchedtensor,
         )
     except ImportError:
-        from functorch._C import is_batchedtensor  # @manual=fbcode//functorch:_C
+        from functorch._C import is_batchedtensor  # @manual=fbcode//caffe2/functorch:_C
 
     _has_functorch = True
 except ImportError:
