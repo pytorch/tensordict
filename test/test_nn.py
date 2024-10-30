@@ -2331,7 +2331,7 @@ class TestCompositeDist:
                     },
                 }
             },
-            [3],
+            batch_size=3,
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
@@ -2392,6 +2392,82 @@ class TestCompositeDist:
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
+    @pytest.mark.parametrize("map_names", [True, False])
+    def test_prob_module_nested(self, interaction, map_names):
+        params = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "params": {
+                            "cont": {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                            ("nested", "cont"): {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                        }
+                    },
+                    batch_size=3,
+                ),
+                "done": torch.ones(1),
+            }
+        )
+        in_keys = [("agents", "params")]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
+        distribution_kwargs = {
+            "distribution_map": distribution_map,
+            "log_prob_key": ("agents", "sample_log_prob"),
+        }
+        if map_names:
+            distribution_kwargs.update(
+                {
+                    "name_map": {
+                        "cont": ("sample", "agents", "cont"),
+                        ("nested", "cont"): ("sample", "agents", "nested", "cont"),
+                    }
+                }
+            )
+            out_keys = list(distribution_kwargs["name_map"].values())
+        module = ProbabilisticTensorDictModule(
+            in_keys=in_keys,
+            out_keys=None,
+            distribution_class=CompositeDistribution,
+            distribution_kwargs=distribution_kwargs,
+            default_interaction_type=interaction,
+            return_log_prob=True,
+            log_prob_key=("agents", "sample_log_prob"),
+        )
+        # loosely checks that the log-prob keys have been added
+        assert module.out_keys[-2:] != out_keys
+
+        sample = module(params)
+        key_logprob0 = (
+            ("sample", "agents", "cont_log_prob") if map_names else "cont_log_prob"
+        )
+        key_logprob1 = (
+            ("sample", "agents", "nested", "cont_log_prob")
+            if map_names
+            else ("nested", "cont_log_prob")
+        )
+        assert key_logprob0 in sample
+        assert key_logprob1 in sample
+        assert all(key in sample for key in module.out_keys)
+
+        lp = sample.get(module.log_prob_key)
+        torch.testing.assert_close(
+            lp,
+            sample.get(key_logprob0).sum(-1) + sample.get(key_logprob1).sum(-1),
+        )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
     @pytest.mark.parametrize("return_log_prob", [True, False])
     def test_prob_module_seq(self, interaction, return_log_prob):
         params = TensorDict(
@@ -2407,7 +2483,7 @@ class TestCompositeDist:
                     },
                 }
             },
-            [3],
+            batch_size=3,
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
@@ -2445,6 +2521,60 @@ class TestCompositeDist:
                 sample_clone.get("cont_log_prob").sum(-1)
                 + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
             )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    def test_prob_module_seq_nested(self, interaction):
+        params = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "params": {
+                            "cont": {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                            ("nested", "cont"): {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                        }
+                    },
+                    batch_size=3,
+                ),
+                "done": torch.ones(1),
+            }
+        )
+        in_keys = [("agents", "params")]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
+        log_prob_key = ("agents", "sample_log_prob")
+        backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
+        module = ProbabilisticTensorDictSequential(
+            backbone,
+            ProbabilisticTensorDictModule(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={"distribution_map": distribution_map},
+                default_interaction_type=interaction,
+                return_log_prob=True,
+                log_prob_key=log_prob_key,
+            ),
+        )
+        sample = module(params)
+        assert "cont_log_prob" in sample.keys()
+        assert ("nested", "cont_log_prob") in sample.keys(True)
+        lp = sample[log_prob_key]
+        torch.testing.assert_close(
+            lp,
+            sample.get("cont_log_prob").sum(-1)
+            + sample.get(("nested", "cont_log_prob")).sum(-1),
+        )
 
 
 class TestAddStateIndependentNormalScale:
