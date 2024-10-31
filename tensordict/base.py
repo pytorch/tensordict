@@ -10650,6 +10650,7 @@ class TensorDictBase(MutableMapping):
         device: Optional[Union[int, device]] = ...,
         dtype: Optional[Union[torch.device, str]] = ...,
         non_blocking: bool = ...,
+        inplace: bool = False,
     ) -> T: ...
 
     @overload
@@ -10751,6 +10752,9 @@ class TensorDictBase(MutableMapping):
                 ``max(1, torch.get_num_threads())`` threads will be spawn.
                 ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
+            inplace (bool, optional): if ``True``, the data will be written in-place in the same tensordict.
+                This can be significantly faster whenever building a tensordict is CPU-overhead bound.
+                Defaults to ``False``.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
@@ -10779,6 +10783,7 @@ class TensorDictBase(MutableMapping):
             batch_size,
             non_blocking_pin,
             num_threads,
+            inplace,
         ) = _parse_to(*args, **kwargs)
         result = self
 
@@ -10791,6 +10796,7 @@ class TensorDictBase(MutableMapping):
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
+                inplace=inplace,
             )
 
         if non_blocking is None:
@@ -10822,11 +10828,13 @@ class TensorDictBase(MutableMapping):
                 if num_threads is None:
                     num_threads = max(1, torch.get_num_threads() // 2)
                 result = self._to_cuda_with_pin_mem(
-                    num_threads=num_threads, to=to, device=device
+                    num_threads=num_threads, to=to, device=device, inplace=inplace
                 )
             else:
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
+                apply_kwargs["out"] = self if inplace else None
+                apply_kwargs["checked"] = False
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
@@ -10848,7 +10856,9 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
+    def _to_consolidated(
+        self, *, device, pin_memory, num_threads, non_blocking, inplace
+    ):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10911,8 +10921,17 @@ class TensorDictBase(MutableMapping):
                 storage_offset=storage_offset,
             )
 
+        if inplace:
+            out = self
+        else:
+            out = None
+
         result = self._fast_apply(
-            set_, device=torch.device(device), num_threads=num_threads
+            set_,
+            device=torch.device(device),
+            num_threads=num_threads,
+            out=out,
+            checked=True,
         )
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
