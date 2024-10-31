@@ -150,7 +150,7 @@ class TestConsolidate:
     ],
 )
 @pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.1"), reason="requires torch>=2.5"
+    TORCH_VERSION < version.parse("2.5.2"), reason="requires torch>=2.5"
 )
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestTo:
