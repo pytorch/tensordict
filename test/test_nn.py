@@ -2331,7 +2331,7 @@ class TestCompositeDist:
                     },
                 }
             },
-            batch_size=3,
+            batch_size=(3,),
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
@@ -2483,7 +2483,7 @@ class TestCompositeDist:
                     },
                 }
             },
-            batch_size=3,
+            batch_size=(3,),
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
