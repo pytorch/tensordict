@@ -51,7 +51,7 @@ def _make_njt():
 def _njt_td():
     return TensorDict(
         # {str(i): {str(j): _make_njt() for j in range(32)} for i in range(32)},
-        {str(i): _make_njt() for i in range(8)},
+        {str(i): _make_njt() for i in range(32)},
         device="cpu",
     )
 
@@ -95,15 +95,19 @@ def default_device():
     TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
 )
 class TestConsolidate:
-    def test_consolidate(self, benchmark, td, compile_mode, num_threads):
+    def test_consolidate(
+        self, benchmark, td, compile_mode, num_threads, default_device
+    ):
         tensordict_logger.info(f"td size {td.bytes() / 1024 / 1024:.2f} Mb")
+
+        # td = td.to(default_device)
 
         def consolidate(td, num_threads):
             return td.consolidate(num_threads=num_threads)
 
         if compile_mode:
             consolidate = torch.compile(
-                consolidate, mode=compile_mode, dynamic=True, fullgraph=True
+                consolidate, mode=compile_mode, dynamic=False, fullgraph=True
             )
 
         t0 = time.time()
