@@ -42,7 +42,12 @@ from tensordict.functional import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
+from tensordict.tensorclass import (
+    NonTensorData,
+    NonTensorStack,
+    tensorclass,
+    TensorClass,
+)
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
