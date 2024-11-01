@@ -1152,7 +1152,7 @@ class TensorDict(TensorDictBase):
     ) -> None:
         if constructor_kwargs:
             raise RuntimeError(
-                f"constructor_kwargs not supported for class {type(self)}."
+                f"constructor_kwargs not supported for class {type(self).__name__}."
             )
         # Rebuilds a tensordict from the futures of its leaves
         if inplace:
@@ -1201,7 +1201,7 @@ class TensorDict(TensorDictBase):
                     return
                 result.set(key, item_trsf, inplace=inplace)
 
-        elif isinstance(result, TensorDict) and checked and (inplace is not True):
+        elif checked and isinstance(result, TensorDict) and (inplace is not True):
 
             def setter(
                 item_trsf,
@@ -1329,9 +1329,18 @@ class TensorDict(TensorDictBase):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                raise RuntimeError(
-                    "device and out.device must be equal when both are provided."
-                )
+                if checked:
+                    raise RuntimeError(
+                        f"device and out.device must be equal when both are provided. Got device={device} and out.device={out.device}."
+                    )
+                else:
+                    device = torch.device(device)
+                    out._device = device
+                    for node in out.values(True, True, is_leaf=_is_tensor_collection):
+                        if is_tensorclass(node):
+                            node._tensordict._device = device
+                        else:
+                            node._device = device
         else:
 
             def make_result(names=names, batch_size=batch_size):
@@ -3594,9 +3603,13 @@ class _SubTensorDict(TensorDictBase):
             batch_size,
             pin_memory,
             num_threads,
+            inplace,
         ) = _parse_to(*args, **kwargs)
         result = self
-
+        if inplace:
+            raise TypeError(
+                "Cannot send a _SubTensorDict instance to device/dtype inplace."
+            )
         if device is not None and dtype is None and device == self.device:
             return result
         return self.to_tensordict().to(*args, **kwargs)
@@ -4093,7 +4106,7 @@ class _SubTensorDict(TensorDictBase):
         except Exception:
             raise RuntimeError(
                 f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
                 f" on github!"
             )
         return td._cast_reduction(

@@ -1707,7 +1707,7 @@ def _set_str(
 ):
     if is_non_tensor(self):
         if key != "data":
-            raise KeyError(f"only 'data' keys are supported for {type(self)}.")
+            raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
             value = value.data
         self._non_tensordict[key] = value
@@ -1737,7 +1737,7 @@ def _set_at_str(
 ):
     if is_non_tensor(self):
         if key != "data":
-            raise KeyError(f"only 'data' keys are supported for {type(self)}.")
+            raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
             value = value.data
         self._non_tensordict[key] = value
