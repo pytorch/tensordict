@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      docker-image: pytorch/manylinux-builder
+      docker-image: pytorch/manylinux-builder:cuda12.4-main
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
       gpu-arch-type: cuda
@@ -84,7 +84,7 @@ jobs:
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      docker-image: pytorch/manylinux-builder
+      docker-image: pytorch/manylinux-builder:cuda12.4-main
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
       gpu-arch-type: cuda
