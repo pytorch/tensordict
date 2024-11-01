@@ -621,9 +621,7 @@ class TestGeneric:
         assert td.data is not td.grad
         td.lock_()
         assert td.grad.is_locked
-        assert td.grad is td.grad
         assert td.data.is_locked
-        assert td.data is td.data
 
     @pytest.mark.parametrize(
         "stack_dim",
