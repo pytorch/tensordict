@@ -19,6 +19,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  test-cpu:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.12xlarge
+      repository: pytorch/tensordict
+      timeout: 90
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+        export TORCH_VERSION=nightly
+        export ARCH=x86_64
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        ## setup_env.sh
+        bash .github/unittest/linux/scripts/setup_env.sh
+        bash .github/unittest/linux/scripts/install.sh
+        bash .github/unittest/linux/scripts/run_test.sh
+        bash .github/unittest/linux/scripts/post_process.sh
+
   test-gpu:
     strategy:
       matrix:
@@ -40,32 +67,6 @@ jobs:
         export TORCH_VERSION=nightly
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
-        export ARCH=x86_64
-
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-
-        ## setup_env.sh
-        bash .github/unittest/linux/scripts/setup_env.sh
-        bash .github/unittest/linux/scripts/install.sh
-        bash .github/unittest/linux/scripts/run_test.sh
-        bash .github/unittest/linux/scripts/post_process.sh
-
-  test-cpu:
-    strategy:
-      matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12"]
-      fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
-    with:
-      runner: linux.12xlarge
-      repository: pytorch/tensordict
-      timeout: 90
-      script: |
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        export CU_VERSION="cpu"
-        export TORCH_VERSION=nightly
         export ARCH=x86_64
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
