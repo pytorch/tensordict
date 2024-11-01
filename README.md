@@ -1,3 +1,5 @@
+TEST
+
 <!--- BADGES: START --->
 <!---
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.github.io/tensordict/)
