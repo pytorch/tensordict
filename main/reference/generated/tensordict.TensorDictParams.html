@@ -6349,6 +6349,9 @@ of threads to be used for <code class="docutils literal notranslate"><span class
 <code class="docutils literal notranslate"><span class="pre">max(1,</span> <span class="pre">torch.get_num_threads())</span></code> threads will be spawn.
 <code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> will cancel any
 multithreading for the <cite>pin_memory()</cite> calls.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the data will be written in-place in the same tensordict.
+This can be significantly faster whenever building a tensordict is CPU-overhead bound.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>

@@ -279,6 +279,7 @@ Here is an example:
     :template: td_template.rst
 
     tensorclass
+    TensorClass
     NonTensorData
     NonTensorStack
 
