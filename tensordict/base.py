@@ -10666,7 +10666,13 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T: ...
 
     def _to_cuda_with_pin_mem(
-        self, *, num_threads, device="cuda", non_blocking=None, to: Callable
+        self,
+        *,
+        num_threads,
+        device="cuda",
+        non_blocking=None,
+        to: Callable,
+        inplace: bool = False,
     ):
         if self.is_empty():
             return self.to(device)
@@ -10701,6 +10707,8 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
             device=device,
+            out=self if inplace else None,
+            checked=True,
         )
         return result
 

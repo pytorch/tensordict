@@ -69,13 +69,13 @@ T = TypeVar("T", bound="TensorDictBase")
 class TensorClass:
     def __init__(
         self,
-        # *args,
+        *args,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool | None = None,
         lock: bool = False,
-        # **kwargs,
+        **kwargs,
     ) -> None: ...
     @property
     def is_meta(self) -> bool: ...
