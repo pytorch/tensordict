@@ -82,7 +82,7 @@ try:
             is_batchedtensor,
         )
     except ImportError:
-        from functorch._C import (  # @manual=fbcode//functorch:_C  # noqa
+        from functorch._C import (  # @manual=fbcode//caffe2/functorch:_C  # noqa
             get_unwrapped,
             is_batchedtensor,
         )
@@ -1356,6 +1356,7 @@ def _parse_to(*args, **kwargs):
     non_blocking_pin = kwargs.pop("non_blocking_pin", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
+    inplace = kwargs.pop("inplace", False)
     if not is_dynamo_compiling():
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
@@ -1397,6 +1398,7 @@ def _parse_to(*args, **kwargs):
         batch_size,
         non_blocking_pin,
         num_threads,
+        inplace,
     )
 
 

@@ -476,7 +476,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> _PersistentTDKeysView:
         if is_leaf not in (None, _default_is_leaf, _is_leaf_nontensor):
             raise ValueError(
-                f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
+                f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self).__name__}."
             )
         return _PersistentTDKeysView(
             tensordict=self,
@@ -1026,7 +1026,11 @@ class PersistentTensorDict(TensorDictBase):
             batch_size,
             non_blocking_pin,
             num_threads,
+            inplace,
         ) = _parse_to(*args, **kwargs)
+        if inplace:
+            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
+
         if non_blocking_pin:
             raise RuntimeError(
                 f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
@@ -1181,7 +1185,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def _set_non_tensor(self, key: NestedKey, value: Any):
         raise NotImplementedError(
-            f"set_non_tensor is not compatible with the tensordict type {type(self)}."
+            f"set_non_tensor is not compatible with the tensordict type {type(self).__name__}."
         )
 
     def _set_str(

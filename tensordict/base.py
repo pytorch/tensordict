@@ -6014,17 +6014,32 @@ class TensorDictBase(MutableMapping):
             vals = [source.get(key, default) for key in new_keys]
             return new_keys, vals
 
-    @cache  # noqa: B019
     def _grad(self):
-        result = self._fast_apply(
-            lambda x: x.grad, propagate_lock=True, filter_empty=True
+        # We can't cache this because zero_grad can be called outside (eg from optimizer) and we want the tensors
+        # to clear out when that is done.
+        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        grads = [val.grad for val in vals]
+        items = dict(zip(keys, grads))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            propagate_lock=True,
+            filter_empty=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
-        return result
 
-    @cache  # noqa: B019
     def _data(self):
-        result = self._fast_apply(lambda x: x.data, propagate_lock=True)
-        return result
+        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        data = [val.data for val in vals]
+        items = dict(zip(keys, data))
+        return self._fast_apply(
+            lambda name, val: items.get(name),
+            named=True,
+            nested_keys=True,
+            propagate_lock=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
 
     @abc.abstractmethod
     def keys(
@@ -10656,6 +10671,7 @@ class TensorDictBase(MutableMapping):
         device: Optional[Union[int, device]] = ...,
         dtype: Optional[Union[torch.device, str]] = ...,
         non_blocking: bool = ...,
+        inplace: bool = False,
     ) -> T: ...
 
     @overload
@@ -10671,10 +10687,16 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T: ...
 
     def _to_cuda_with_pin_mem(
-        self, *, num_threads, device="cuda", non_blocking=None, to: Callable
+        self,
+        *,
+        num_threads,
+        device="cuda",
+        non_blocking=None,
+        to: Callable,
+        inplace: bool = False,
     ):
         if self.is_empty():
-            return self.to(device)
+            return self.to(device, inplace=inplace)
         keys, vals = self._items_list(
             leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
@@ -10706,6 +10728,8 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=True,
             device=device,
+            out=self if inplace else None,
+            checked=True,
         )
         return result
 
@@ -10757,6 +10781,9 @@ class TensorDictBase(MutableMapping):
                 ``max(1, torch.get_num_threads())`` threads will be spawn.
                 ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
+            inplace (bool, optional): if ``True``, the data will be written in-place in the same tensordict.
+                This can be significantly faster whenever building a tensordict is CPU-overhead bound.
+                Defaults to ``False``.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
@@ -10785,6 +10812,7 @@ class TensorDictBase(MutableMapping):
             batch_size,
             non_blocking_pin,
             num_threads,
+            inplace,
         ) = _parse_to(*args, **kwargs)
         result = self
 
@@ -10797,6 +10825,7 @@ class TensorDictBase(MutableMapping):
                 pin_memory=non_blocking_pin,
                 num_threads=num_threads,
                 non_blocking=non_blocking,
+                inplace=inplace,
             )
 
         if non_blocking is None:
@@ -10828,11 +10857,13 @@ class TensorDictBase(MutableMapping):
                 if num_threads is None:
                     num_threads = max(1, torch.get_num_threads() // 2)
                 result = self._to_cuda_with_pin_mem(
-                    num_threads=num_threads, to=to, device=device
+                    num_threads=num_threads, to=to, device=device, inplace=inplace
                 )
             else:
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
+                apply_kwargs["out"] = self if inplace else None
+                apply_kwargs["checked"] = False
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
@@ -10854,7 +10885,9 @@ class TensorDictBase(MutableMapping):
             self._sync_all()
         return result
 
-    def _to_consolidated(self, *, device, pin_memory, num_threads, non_blocking):
+    def _to_consolidated(
+        self, *, device, pin_memory, num_threads, non_blocking, inplace
+    ):
         if num_threads is None:
             # unspecified num_threads should mean 0
             num_threads = 0
@@ -10917,8 +10950,17 @@ class TensorDictBase(MutableMapping):
                 storage_offset=storage_offset,
             )
 
+        if inplace:
+            out = self
+        else:
+            out = None
+
         result = self._fast_apply(
-            set_, device=torch.device(device), num_threads=num_threads
+            set_,
+            device=torch.device(device),
+            num_threads=num_threads,
+            out=out,
+            checked=True,
         )
         result._consolidated = {"storage": storage_cast}
         if "metadata" in self._consolidated:
