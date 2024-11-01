@@ -49,7 +49,7 @@ jobs:
   test-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.4"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -58,16 +58,13 @@ jobs:
       repository: pytorch/tensordict
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 90
       script: |
-        # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
-        # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
         export TORCH_VERSION=nightly
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
-        export ARCH=x86_64
+        # export ARCH=x86_64
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
@@ -81,7 +78,7 @@ jobs:
   test-stable-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.4"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -92,15 +89,11 @@ jobs:
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
       script: |
-        # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
-        # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
         export TORCH_VERSION=stable
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
-        export ARCH=x86_64
+        # export ARCH=x86_64
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
