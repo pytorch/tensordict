@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
