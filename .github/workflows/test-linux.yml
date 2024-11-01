@@ -25,7 +25,7 @@ jobs:
       matrix:
         python_version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@29dc85d0951099819f5237feb6084ad7e8b16d1d
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
@@ -52,8 +52,9 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.4"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@29dc85d0951099819f5237feb6084ad7e8b16d1d
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
+      docker-image: pytorch/manylinux-builder
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
       gpu-arch-type: cuda
@@ -81,8 +82,9 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.4"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@29dc85d0951099819f5237feb6084ad7e8b16d1d
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
+      docker-image: pytorch/manylinux-builder
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
       gpu-arch-type: cuda
@@ -109,7 +111,7 @@ jobs:
       matrix:
         python_version: ["3.9", "3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@29dc85d0951099819f5237feb6084ad7e8b16d1d
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
