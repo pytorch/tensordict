@@ -10675,7 +10675,7 @@ class TensorDictBase(MutableMapping):
         inplace: bool = False,
     ):
         if self.is_empty():
-            return self.to(device)
+            return self.to(device, inplace=inplace)
         keys, vals = self._items_list(
             leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
