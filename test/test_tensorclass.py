@@ -2056,8 +2056,26 @@ class TestNesting:
 
     def test_to(self):
         td = self.get_nested()
-        td = td.to("cpu:1")
-        assert isinstance(td.get("c")[0], self.TensorClass)
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu:1")
+        td_device = td.to(device)
+        assert isinstance(td_device.get("c")[0], self.TensorClass)
+        assert td_device is not td
+        assert td_device.device == device
+
+        td_device = td.to(device, inplace=True)
+        assert td_device is td
+        assert td_device.device == device
+
+        td_cpu = td_device.to("cpu", inplace=True)
+        assert td_cpu.device == torch.device("cpu")
+
+        td_double = td.to(torch.float64, inplace=True)
+        assert td_double is td
+        assert td_double.dtype == torch.double
+        assert td_double.device == torch.device("cpu")
 
 
 def test_decorator():

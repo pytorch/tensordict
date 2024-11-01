@@ -2583,10 +2583,20 @@ class TestGeneric:
         assert tensordict["a"].device == device
         assert tensordict["b"].device == device
 
-        tensordict = TensorDict({"a": torch.randn(3, 4)}, [])
+        tensordict = TensorDict(
+            {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 4)}}, []
+        )
         tensordict = tensordict.to(device)
         assert tensordict.device == device
         assert tensordict["a"].device == device
+
+        tensordict_cpu = tensordict.to("cpu", inplace=True)
+        assert tensordict_cpu.device == torch.device("cpu")
+        for v in tensordict_cpu.values(True, True):
+            assert v.device == torch.device("cpu")
+        assert tensordict_cpu is tensordict
+        assert tensordict_cpu["b"] is tensordict["b"]
+        assert tensordict_cpu["b"].device == torch.device("cpu")
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
@@ -2852,6 +2862,17 @@ class TestGeneric:
         assert ("a", "b") in t.keys(include_nested=True)
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
+
+    def test_zero_grad_module(self):
+        x = torch.randn(3, 3)
+        linear = nn.Linear(3, 4)
+        y = linear(x)
+        y.sum().backward()
+        p = TensorDict.from_module(linear).lock_()
+        assert not p.grad.is_empty()
+        linear.zero_grad(set_to_none=True)
+        assert p.grad is None
+        assert linear.weight.grad is None
 
 
 class TestPointwiseOps:
@@ -3607,7 +3628,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "permute_td",
             "nested_stacked_td",
         ):
-            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to "):
                 td_dtype_device = td.to(
                     torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
                 )
@@ -3626,7 +3647,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "permute_td",
             "nested_stacked_td",
         ):
-            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to "):
                 td.to(batch_size=torch.Size([]))
         else:
             td_batchsize = td.to(batch_size=torch.Size([]))
@@ -6356,6 +6377,38 @@ class TestTensorDicts(TestTensorDictsBase):
 
         with pytest.raises(KeyError, match=err_msg):
             td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
+
+    def test_to_device_dtype_inplace(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if torch.cuda.is_available():
+            dest = torch.device("cuda:0")
+        elif torch.mps.is_available():
+            dest = torch.device("mps:0")
+        else:
+            dest = torch.device("cpu")
+
+        if td_name in ("sub_td", "sub_td2"):
+            cm = pytest.raises(
+                TypeError,
+                match="Cannot send a _SubTensorDict instance to device/dtype inplace",
+            )
+        elif td_name in ("permute_td", "unsqueezed_td", "squeezed_td", "td_h5"):
+            cm = pytest.raises(TypeError, match="Cannot use inplace=True with")
+        elif td.is_locked:
+            cm = pytest.raises(RuntimeError, match="Cannot modify locked TensorDict.")
+        else:
+            cm = contextlib.nullcontext()
+        with cm:
+            td.to(torch.float32, inplace=True)
+            assert td.dtype == torch.float32, td
+
+        with cm:
+            td.to(dest, inplace=True)
+            assert td.device == dest
+            for v in td.values(
+                True, True, is_leaf=tensordict_base._is_tensor_collection
+            ):
+                assert v.device == dest
 
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
@@ -9612,14 +9665,27 @@ class TestNamedDims(TestTensorDictsBase):
         "non_blocking_pin", [False] if not torch.cuda.is_available() else [False, True]
     )
     @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
-    def test_to(self, device, non_blocking_pin, num_threads):
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_to(self, device, non_blocking_pin, num_threads, inplace):
         td = TensorDict(
             {"": TensorDict({}, [3, 4, 1, 6])},
             batch_size=[3, 4, 1, 6],
             names=["a", "b", "c", "d"],
         )
-        tdt = td.to(device, non_blocking_pin=non_blocking_pin, num_threads=num_threads)
+        tdt = td.to(
+            device,
+            non_blocking_pin=non_blocking_pin,
+            num_threads=num_threads,
+            inplace=inplace,
+        )
         assert tdt.names == ["a", "b", "c", "d"]
+        assert tdt.device == device
+        for v in tdt.values(True, True):
+            assert v.device == device
+        if inplace:
+            assert tdt is td
+        else:
+            assert tdt is not td
 
     def test_unbind(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])

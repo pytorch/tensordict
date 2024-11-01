@@ -2279,7 +2279,7 @@ class LazyStackedTensorDict(TensorDictBase):
         except Exception:
             raise RuntimeError(
                 f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
                 f" on github!"
             )
         return td._cast_reduction(
@@ -3253,7 +3253,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _erase_names(self):
         raise RuntimeError(
-            f"Cannot erase names of a {type(self)}. "
+            f"Cannot erase names of a {type(self).__name__}. "
             f"Erase source TensorDict's names instead."
         )
 
@@ -3379,7 +3379,7 @@ class _CustomOpTensorDict(TensorDictBase):
         dim: int,
     ) -> T:
         raise RuntimeError(
-            f"stacking tensordicts is not allowed for type {type(self)}"
+            f"stacking tensordicts is not allowed for type {type(self).__name__}"
             f"consider calling 'to_tensordict()` first"
         )
 
@@ -3480,9 +3480,13 @@ class _CustomOpTensorDict(TensorDictBase):
             batch_size,
             pin_memory,
             num_threads,
+            inplace,
         ) = _parse_to(*args, **kwargs)
+        if inplace:
+            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
+
         if batch_size is not None:
-            raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
+            raise TypeError(f"Cannot pass batch-size to {type(self).__name__}.to().")
         result = self
 
         if device is not None and dtype is None and device == self.device:
@@ -3757,7 +3761,7 @@ class _CustomOpTensorDict(TensorDictBase):
         except Exception:
             raise RuntimeError(
                 f"{reduction_name} requires this object to be cast to a regular TensorDict. "
-                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f"If you need {type(self).__name__} to support {reduction_name}, help us by filing an issue"
                 f" on github!"
             )
         return td._cast_reduction(
