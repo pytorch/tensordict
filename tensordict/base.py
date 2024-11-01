@@ -5764,17 +5764,32 @@ class TensorDictBase(MutableMapping):
             vals = [source.get(key, default) for key in new_keys]
             return new_keys, vals
 
-    @cache  # noqa: B019
     def _grad(self):
-        result = self._fast_apply(
-            lambda x: x.grad, propagate_lock=True, filter_empty=True
+        # We can't cache this because zero_grad can be called outside (eg from optimizer) and we want the tensors
+        # to clear out when that is done.
+        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        grads = [val.grad for val in vals]
+        items = dict(zip(keys, grads))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            propagate_lock=True,
+            filter_empty=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
-        return result
 
-    @cache  # noqa: B019
     def _data(self):
-        result = self._fast_apply(lambda x: x.data, propagate_lock=True)
-        return result
+        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        data = [val.data for val in vals]
+        items = dict(zip(keys, data))
+        return self._fast_apply(
+            lambda name, val: items.get(name),
+            named=True,
+            nested_keys=True,
+            propagate_lock=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
 
     @abc.abstractmethod
     def keys(

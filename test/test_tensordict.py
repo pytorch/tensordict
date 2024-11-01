@@ -2853,6 +2853,17 @@ class TestGeneric:
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
 
+    def test_zero_grad_module(self):
+        x = torch.randn(3, 3)
+        linear = nn.Linear(3, 4)
+        y = linear(x)
+        y.sum().backward()
+        p = TensorDict.from_module(linear).lock_()
+        assert not p.grad.is_empty()
+        linear.zero_grad(set_to_none=True)
+        assert p.grad is None
+        assert linear.weight.grad is None
+
 
 class TestPointwiseOps:
     @property
