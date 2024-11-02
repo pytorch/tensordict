@@ -185,6 +185,11 @@ class TestTo:
     def test_to_njt(
         self, benchmark, consolidated, njt_td, default_device, compile_mode, num_threads
     ):
+        if compile_mode:
+            pytest.skip(
+                "Compiling NJTs consolidation currently triggers a RuntimeError."
+            )
+
         tensordict_logger.info(f"njtd size {njt_td.bytes() / 1024 / 1024 :.2f} Mb")
         pin_mem = default_device.type == "cuda"
         if consolidated is True:
