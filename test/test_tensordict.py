@@ -6392,6 +6392,8 @@ class TestTensorDicts(TestTensorDictsBase):
             )
         elif td_name in ("permute_td", "unsqueezed_td", "squeezed_td", "td_h5"):
             cm = pytest.raises(TypeError, match="Cannot use inplace=True with")
+        elif td_name in ("memmap_td",) and dest.type == "cpu":
+            cm = contextlib.nullcontext()
         elif td.is_locked:
             cm = pytest.raises(RuntimeError, match="Cannot modify locked TensorDict.")
         else:
