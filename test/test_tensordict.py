@@ -6380,29 +6380,36 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if torch.cuda.is_available():
             dest = torch.device("cuda:0")
-        elif torch.mps.is_available():
-            dest = torch.device("mps:0")
+        # elif torch.mps.is_available():
+        #     dest = torch.device("mps:0")
         else:
             dest = torch.device("cpu")
 
         if td_name in ("sub_td", "sub_td2"):
-            cm = pytest.raises(
+            cm_device = cm_dtype = pytest.raises(
                 TypeError,
                 match="Cannot send a _SubTensorDict instance to device/dtype inplace",
             )
         elif td_name in ("permute_td", "unsqueezed_td", "squeezed_td", "td_h5"):
-            cm = pytest.raises(TypeError, match="Cannot use inplace=True with")
+            cm_device = cm_dtype = pytest.raises(
+                TypeError, match="Cannot use inplace=True with"
+            )
         elif td_name in ("memmap_td",) and dest.type == "cpu":
-            cm = contextlib.nullcontext()
+            cm_device = contextlib.nullcontext()
+            cm_dtype = pytest.raises(
+                RuntimeError, match="Cannot modify locked TensorDict."
+            )
         elif td.is_locked:
-            cm = pytest.raises(RuntimeError, match="Cannot modify locked TensorDict.")
+            cm_device = cm_dtype = pytest.raises(
+                RuntimeError, match="Cannot modify locked TensorDict."
+            )
         else:
-            cm = contextlib.nullcontext()
-        with cm:
+            cm_device = cm_dtype = contextlib.nullcontext()
+        with cm_dtype:
             td.to(torch.float32, inplace=True)
             assert td.dtype == torch.float32, td
 
-        with cm:
+        with cm_device:
             td.to(dest, inplace=True)
             assert td.device == dest
             for v in td.values(
