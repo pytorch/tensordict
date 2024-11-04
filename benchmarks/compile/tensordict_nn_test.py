@@ -21,7 +21,14 @@ sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-torch.set_default_device(DEVICE)
+
+@pytest.fixture(scope="function", autouse=True)
+def auto_device():
+    device = torch.get_default_device()
+    torch.set_default_device(DEVICE)
+    yield
+    torch.set_default_device(device)
+
 
 compile = functools.partial(torch.compile, fullgraph=True)
 compile_overhead = functools.partial(
@@ -32,7 +39,10 @@ compile_overhead = functools.partial(
 @pytest.fixture(scope="function", autouse=True)
 def reset_dynamo():
     # Start a fresh compile for each parameter of the test case
-    torch._dynamo.reset()
+    try:
+        torch.compiler.reset()
+    except AttributeError:
+        torch._dynamo.reset()
     gc.collect()
     yield
 

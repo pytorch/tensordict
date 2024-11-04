@@ -3860,8 +3860,9 @@ class TensorDictBase(MutableMapping):
                     pad = 8 - pad
             else:
                 pad = 0
-            flat_size.append(n + pad)
-            stop = start + flat_size[-1]
+            flat_size.append(sum([n, pad]))
+            # Using sum to tell dynamo to use sym_sum
+            stop = sum([start, flat_size[-1]])
             if requires_metadata:
                 metadata_dict["leaves"][key] = (
                     _DTYPE2STRDTYPE[dtype],
@@ -4136,6 +4137,8 @@ class TensorDictBase(MutableMapping):
                 return v[: oldv.numel()].view(oldv.shape)
             return v.view(oldv.shape)
 
+        if num_threads is None:
+            num_threads = 0
         if num_threads > 0:
 
             def assign(
@@ -4241,7 +4244,10 @@ class TensorDictBase(MutableMapping):
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
                 stride = v.stride()
-                if (stride and stride[-1] != 1) or v.storage_offset():
+                if is_dynamo_compiling():
+                    if not v.is_contiguous():
+                        v = v.clone(memory_format=torch.contiguous_format)
+                elif (stride and stride[-1] != 1) or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
