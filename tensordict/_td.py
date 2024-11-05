@@ -1312,7 +1312,7 @@ class TensorDict(TensorDictBase):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
-        is_leaf: Callable = None,
+        is_leaf: Callable | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
@@ -1329,7 +1329,7 @@ class TensorDict(TensorDictBase):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                if checked:
+                if not checked:
                     raise RuntimeError(
                         f"device and out.device must be equal when both are provided. Got device={device} and out.device={out.device}."
                     )
