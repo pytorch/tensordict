@@ -10586,6 +10586,8 @@ class TensorDictBase(MutableMapping):
             else:
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
+                apply_kwargs["out"] = self if inplace else None
+                apply_kwargs["checked"] = True
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
@@ -10595,7 +10597,19 @@ class TensorDictBase(MutableMapping):
                         to_pinmem, propagate_lock=True, **apply_kwargs
                     )
                 else:
-                    result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                    # result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                    keys, tensors = self._items_list(True, True)
+                    tensors = [to(t) for t in tensors]
+                    items = dict(zip(keys, tensors))
+                    result = self._fast_apply(
+                        lambda name, val: items.get(name, val),
+                        named=True,
+                        nested_keys=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                        propagate_lock=True,
+                        **apply_kwargs,
+                    )
+
         if batch_size is not None:
             result.batch_size = batch_size
         if (
