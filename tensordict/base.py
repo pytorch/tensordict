@@ -10863,7 +10863,7 @@ class TensorDictBase(MutableMapping):
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
                 apply_kwargs["out"] = self if inplace else None
-                apply_kwargs["checked"] = False
+                apply_kwargs["checked"] = True
                 if non_blocking_pin:
 
                     def to_pinmem(tensor, _to=to):
