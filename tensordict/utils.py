@@ -1615,13 +1615,21 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
             # we know td is lazy stacked and the key is a leaf
             # so we can get the shape and escape the error
             temp_td = td
-            from tensordict import LazyStackedTensorDict, TensorDictBase
+            from tensordict import (
+                is_tensor_collection,
+                LazyStackedTensorDict,
+                TensorDictBase,
+            )
 
             while isinstance(
                 temp_td, LazyStackedTensorDict
-            ):  # we need to grab the het tensor from the inner nesting level
+            ):  # we need to grab the heterogeneous tensor from the inner nesting level
                 temp_td = temp_td.tensordicts[0]
             tensor = temp_td.get(key)
+            if is_tensor_collection(tensor):
+                tensor = td.get(key)
+                strs.append(_make_repr(key, tensor, td, sep=sep))
+                continue
 
             if isinstance(tensor, TensorDictBase):
                 substr = _td_fields(tensor)

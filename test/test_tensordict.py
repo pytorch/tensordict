@@ -7168,6 +7168,43 @@ class TestTensorDictRepr:
     is_shared={is_shared})"""
         assert repr(nested_td) == expected
 
+    def test_repr_nested_lazy(self, device, dtype):
+        nested_td0 = self.nested_td(device, dtype)
+        nested_td1 = torch.cat([nested_td0, nested_td0], 1)
+        nested_td1["my_nested_td", "another"] = nested_td1["my_nested_td", "a"]
+        lazy_nested_td = TensorDict.lazy_stack([nested_td0, nested_td1], dim=1)
+
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        tensor_class = "Tensor"
+        tensor_device = device if device else nested_td0[:, 0]["b"].device
+        if tensor_device.type == "cuda":
+            is_shared_tensor = True
+        else:
+            is_shared_tensor = is_shared
+        expected = f"""LazyStackedTensorDict(
+    fields={{
+        b: {tensor_class}(shape=torch.Size([4, 2, -1, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        my_nested_td: LazyStackedTensorDict(
+            fields={{
+                a: {tensor_class}(shape=torch.Size([4, 2, -1, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+            exclusive_fields={{
+                1 ->
+                    another: Tensor(shape=torch.Size([4, 6, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+            batch_size=torch.Size([4, 2, -1, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared},
+            stack_dim=1)}},
+    exclusive_fields={{
+    }},
+    batch_size=torch.Size([4, 2, -1, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared},
+    stack_dim=1)"""
+        assert repr(lazy_nested_td) == expected
+
     def test_repr_nested_update(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
         nested_td["my_nested_td"].rename_key_("a", "z")
