@@ -74,7 +74,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
     for i in range(len(pad_size)):
         new_batch_size[i // 2] += pad_size[i]
 
-    reverse_pad = pad_size[::-1]
+    reverse_pad = list(pad_size[::-1])
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
