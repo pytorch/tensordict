@@ -3432,8 +3432,8 @@ class TensorClass(metaclass=_TensorClassMeta):
         >>> Foo(integer=1).integer
         tensor(1)
 
-    .. warning:: Per se, TensorClass is not decorated as a tensorclass, but subclassed will be.
-        The reason for this is that we cannot anticipate if the frozen argument will be set, and if it is, it may
+    .. warning:: TensorClass itself is not decorated as a tensorclass, but subclasses will be.
+        This is because we cannot anticipate if the frozen argument will be set, and if it is, it may
         conflict with the parent class (a subclass cannot be frozen if the parent class isn't).
 
     """
