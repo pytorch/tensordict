@@ -373,8 +373,9 @@ class _tensorclass_dec:
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
         clz = _tensorclass(cls, frozen=self.frozen)
-        clz.autocast = self.autocast
-        clz.nocast = self.nocast
+        clz._autocast = self.autocast
+        clz._nocast = self.nocast
+        clz._frozen = self.frozen
         return clz
 
 
@@ -1647,7 +1648,7 @@ def _set(
         def _is_castable(datatype):
             return issubclass(datatype, (int, float, np.ndarray))
 
-        if cls.autocast:
+        if cls._autocast:
             type_hints = cls._type_hints
             if type_hints is not None:
                 target_cls = type_hints.get(key, _AnyType)
@@ -1693,7 +1694,7 @@ def _set(
             issubclass(value_type, torch.Tensor)
             or _is_tensor_collection(value_type)
             or (
-                not cls.nocast
+                not cls._nocast
                 and issubclass(value_type, (int, float, bool, np.ndarray))
             )
         ):
@@ -3338,14 +3339,45 @@ def _update_shared_nontensor(nontensor, val):
 
 
 class _TensorClassMeta(abc.ABCMeta):
-    def __new__(mcs, name, bases, namespace, **kwargs):
+    def __new__(
+        mcs, name, bases, namespace, autocast=None, nocast=None, frozen=None, **kwargs
+    ):
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
         # Apply the dataclass decorator to the class
-        cls = _tensorclass(cls, frozen=False)
+        if frozen is None and hasattr(cls, "_frozen"):
+            frozen = cls._frozen
+        if nocast is None and hasattr(cls, "_nocast"):
+            nocast = cls._nocast
+        if autocast is None and hasattr(cls, "_autocast"):
+            autocast = cls._autocast
+
+        if name == "TensorClass" and "tensordict.tensorclass" in namespace.get(
+            "__module__", ""
+        ):
+            pass
+        else:
+            cls = tensorclass(
+                frozen=bool(frozen), nocast=bool(nocast), autocast=bool(autocast)
+            )(cls)
 
         return cls
+
+    def __getitem__(cls, item):
+        if not isinstance(item, tuple):
+            item = (item,)
+        name = "_".join(item)
+        cls_name = f"TensorClass_{name}"
+        bases = (cls,)
+        class_dict = {}
+        return cls.__class__.__new__(
+            cls.__class__,
+            cls_name,
+            bases,
+            class_dict,
+            **{_item: True for _item in item},
+        )
 
 
 class TensorClass(metaclass=_TensorClassMeta):
@@ -3372,6 +3404,41 @@ class TensorClass(metaclass=_TensorClassMeta):
             device=None,
             is_shared=False)
 
+    You can pass keyword arguments in two ways: using brackets or keyword arguments.
+
+    Examples:
+        >>> class Foo(TensorClass["autocast"]):
+        ...     integer: int
+        >>> Foo(integer=torch.ones(())).integer
+        1
+        >>> class Foo(TensorClass, autocast=True):  # equivalent
+        ...     integer: int
+        >>> Foo(integer=torch.ones(())).integer
+        1
+        >>> class Foo(TensorClass["nocast"]):
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass["nocast", "frozen"]):  # multiple keywords can be used
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass, nocast=True):  # equivalent
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass):
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        tensor(1)
+
+    .. warning:: Per se, TensorClass is not decorated as a tensorclass, but subclassed will be.
+        The reason for this is that we cannot anticipate if the frozen argument will be set, and if it is, it may
+        conflict with the parent class (a subclass cannot be frozen if the parent class isn't).
+
     """
 
+    _autocast: bool = False
+    _nocast: bool = False
+    _frozen: bool = False
     ...

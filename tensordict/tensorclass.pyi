@@ -67,6 +67,9 @@ T = TypeVar("T", bound="TensorDictBase")
 
 @dataclasses.dataclass
 class TensorClass:
+    _autocast: bool = False
+    _nocast: bool = False
+    _frozen: bool = False
     def __init__(
         self,
         *args,
