@@ -1473,7 +1473,13 @@ class LazyStackedTensorDict(TensorDictBase):
                     else:
                         raise NotImplementedError
             else:
-                tensor = self._get_str(key).densify(layout=layout)
+                tensor = self._get_str(key, None)
+                if tensor is not None:
+                    tensor = tensor.densify(layout=layout)
+                else:
+                    from tensordict import NonTensorData
+
+                    tensor = NonTensorData(None)
             result._set_str(key, tensor, validated=True, inplace=False)
         return result
 

@@ -56,6 +56,7 @@ from tensordict.utils import (
     _is_shared,
     _KEY_ERROR,
     _LOCK_ERROR,
+    _mismatch_keys,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
@@ -5114,28 +5115,3 @@ def memmap(
         return_early=return_early,
         share_non_tensor=share_non_tensor,
     )
-
-
-def _mismatch_keys(keys1, keys2):
-    keys1 = sorted(
-        keys1,
-        key=lambda key: "".join(key) if isinstance(key, tuple) else key,
-    )
-    keys2 = sorted(
-        keys2,
-        key=lambda key: "".join(key) if isinstance(key, tuple) else key,
-    )
-    if set(keys1) - set(keys2):
-        sub1 = rf"The first TD has keys {set(keys1) - set(keys2)} that the second does not have."
-    else:
-        sub1 = None
-    if set(keys2) - set(keys1):
-        sub2 = rf"The second TD has keys {set(keys2) - set(keys1)} that the first does not have."
-    else:
-        sub2 = None
-    main = [r"keys in tensordicts mismatch."]
-    if sub1 is not None:
-        main.append(sub1)
-    if sub2 is not None:
-        main.append(sub2)
-    raise KeyError(r" ".join(main))
