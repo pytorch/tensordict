@@ -351,28 +351,42 @@ def is_non_tensor(obj):
 
 
 class _tensorclass_dec:
-    def __new__(cls, autocast: bool = False, frozen: bool = False):
+    def __new__(
+        cls, autocast: bool = False, frozen: bool = False, nocast: bool = False
+    ):
         if not isinstance(autocast, bool):
             clz = autocast
             self = super().__new__(cls)
-            self.__init__(autocast=False, frozen=False)
+            self.__init__(autocast=False, frozen=False, nocast=False)
             return self.__call__(clz)
         return super().__new__(cls)
 
-    def __init__(self, autocast: bool = False, frozen: bool = False):
+    def __init__(
+        self, autocast: bool = False, frozen: bool = False, nocast: bool = False
+    ):
+        if autocast and nocast:
+            raise ValueError("autocast is exclusive with nocast.")
         self.autocast = autocast
         self.frozen = frozen
+        self.nocast = nocast
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
         clz = _tensorclass(cls, frozen=self.frozen)
-        clz.autocast = self.autocast
+        clz._autocast = self.autocast
+        clz._nocast = self.nocast
+        clz._frozen = self.frozen
         return clz
 
 
 @dataclass_transform()
 def tensorclass(
-    cls: T = None, /, *, autocast: bool = False, frozen: bool = False
+    cls: T = None,
+    /,
+    *,
+    autocast: bool = False,
+    frozen: bool = False,
+    nocast: bool = False,
 ) -> T | None:
     """A decorator to create :obj:`tensorclass` classes.
 
@@ -381,30 +395,44 @@ def tensorclass(
     indexing, item assignment, reshaping, casting to device or storage and many
     others.
 
-    Args:
+    Keyword Args:
         autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
-            Defaults to ``False``.
+            Thie argument is exclusive with ``autocast`` (both cannot be true at the same time). Defaults to ``False``.
         frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
             provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
             the class constructor. Defaults to ``False``.
+        nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
+            will not be cast to a tensor type. Thie argument is exclusive with ``autocast`` (both cannot be true
+            at the same time). Defaults to ``False``.
 
     tensorclass can be used with or without arguments:
+
     Examples:
         >>> @tensorclass
         ... class X:
-        ...     y: torch.Tensor
-        >>> X(1).y
-        1
+        ...     y: int
+        >>> X(torch.ones(())).y
+        tensor(1.)
         >>> @tensorclass(autocast=False)
         ... class X:
-        ...     y: torch.Tensor
-        >>> X(1).y
-        1
+        ...     y: int
+        >>> X(torch.ones(())).y
+        tensor(1.)
         >>> @tensorclass(autocast=True)
         ... class X:
-        ...     y: torch.Tensor
+        ...     y: int
+        >>> X(torch.ones(())).y
+        1
+        >>> @tensorclass(nocast=True)
+        ... class X:
+        ...     y: Any
         >>> X(1).y
-        torch.tensor(1)
+        1
+        >>> @tensorclass(nocast=False)
+        ... class X:
+        ...     y: Any
+        >>> X(1).y
+        tensor(1)
 
     Examples:
         >>> from tensordict import tensorclass
@@ -456,7 +484,7 @@ def tensorclass(
     """
 
     def wrap(cls):
-        return _tensorclass_dec(autocast, frozen)(cls)
+        return _tensorclass_dec(autocast, frozen, nocast)(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
     if cls is None:
@@ -1620,7 +1648,7 @@ def _set(
         def _is_castable(datatype):
             return issubclass(datatype, (int, float, np.ndarray))
 
-        if cls.autocast:
+        if cls._autocast:
             type_hints = cls._type_hints
             if type_hints is not None:
                 target_cls = type_hints.get(key, _AnyType)
@@ -1665,7 +1693,10 @@ def _set(
         elif (
             issubclass(value_type, torch.Tensor)
             or _is_tensor_collection(value_type)
-            or issubclass(value_type, (int, float, bool, np.ndarray))
+            or (
+                not cls._nocast
+                and issubclass(value_type, (int, float, bool, np.ndarray))
+            )
         ):
             return set_tensor()
         else:
@@ -3308,14 +3339,45 @@ def _update_shared_nontensor(nontensor, val):
 
 
 class _TensorClassMeta(abc.ABCMeta):
-    def __new__(mcs, name, bases, namespace, **kwargs):
+    def __new__(
+        mcs, name, bases, namespace, autocast=None, nocast=None, frozen=None, **kwargs
+    ):
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
         # Apply the dataclass decorator to the class
-        cls = _tensorclass(cls, frozen=False)
+        if frozen is None and hasattr(cls, "_frozen"):
+            frozen = cls._frozen
+        if nocast is None and hasattr(cls, "_nocast"):
+            nocast = cls._nocast
+        if autocast is None and hasattr(cls, "_autocast"):
+            autocast = cls._autocast
+
+        if name == "TensorClass" and "tensordict.tensorclass" in namespace.get(
+            "__module__", ""
+        ):
+            pass
+        else:
+            cls = tensorclass(
+                frozen=bool(frozen), nocast=bool(nocast), autocast=bool(autocast)
+            )(cls)
 
         return cls
+
+    def __getitem__(cls, item):
+        if not isinstance(item, tuple):
+            item = (item,)
+        name = "_".join(item)
+        cls_name = f"TensorClass_{name}"
+        bases = (cls,)
+        class_dict = {}
+        return cls.__class__.__new__(
+            cls.__class__,
+            cls_name,
+            bases,
+            class_dict,
+            **{_item: True for _item in item},
+        )
 
 
 class TensorClass(metaclass=_TensorClassMeta):
@@ -3342,6 +3404,41 @@ class TensorClass(metaclass=_TensorClassMeta):
             device=None,
             is_shared=False)
 
+    You can pass keyword arguments in two ways: using brackets or keyword arguments.
+
+    Examples:
+        >>> class Foo(TensorClass["autocast"]):
+        ...     integer: int
+        >>> Foo(integer=torch.ones(())).integer
+        1
+        >>> class Foo(TensorClass, autocast=True):  # equivalent
+        ...     integer: int
+        >>> Foo(integer=torch.ones(())).integer
+        1
+        >>> class Foo(TensorClass["nocast"]):
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass["nocast", "frozen"]):  # multiple keywords can be used
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass, nocast=True):  # equivalent
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        1
+        >>> class Foo(TensorClass):
+        ...     integer: int
+        >>> Foo(integer=1).integer
+        tensor(1)
+
+    .. warning:: TensorClass itself is not decorated as a tensorclass, but subclasses will be.
+        This is because we cannot anticipate if the frozen argument will be set, and if it is, it may
+        conflict with the parent class (a subclass cannot be frozen if the parent class isn't).
+
     """
 
+    _autocast: bool = False
+    _nocast: bool = False
+    _frozen: bool = False
     ...

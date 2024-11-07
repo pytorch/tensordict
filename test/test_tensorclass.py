@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 import tensordict.utils
 import torch
+from tensordict import TensorClass
 
 try:
     import torchsnapshot
@@ -2155,6 +2156,54 @@ class AutoCastTensor:
     anything: Any
 
 
+class TestNoCasting:
+    def test_nocast_int(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(1).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(1).a, int)
+
+    def test_nocast_np(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(np.array([1])).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(np.array([1])).a, np.ndarray)
+
+    def test_nocast_bool(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(True).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(False).a, bool)
+
+    def test_exclusivity(self):
+        with pytest.raises(ValueError, match="exclusive"):
+
+            @tensorclass(nocast=True, autocast=True)
+            class X:
+                a: int  # type is irrelevant
+
+
 class TestAutoCasting:
     @tensorclass(autocast=True)
     class ClsAutoCast:
@@ -2450,6 +2499,85 @@ class TestPointWise:
         assert (x.add(1) == (x + 1)).all()
         assert (x.mul(2) == (x * 2)).all()
         assert (x.div(2) == (x / 2)).all()
+
+
+class TestSubClassing:
+    def test_subclassing(self):
+        class SubClass(TensorClass):
+            a: int
+
+        assert is_tensorclass(SubClass)
+        assert not SubClass._autocast
+        assert not SubClass._nocast
+        assert issubclass(SubClass, TensorClass)
+
+    def test_subclassing_autocast(self):
+        class SubClass(TensorClass, autocast=True):
+            a: int
+
+        assert is_tensorclass(SubClass)
+        assert SubClass._autocast
+        assert not SubClass._nocast
+        assert issubclass(SubClass, TensorClass)
+        assert isinstance(SubClass(torch.ones(())).a, int)
+
+        class SubClass(TensorClass["autocast"]):
+            a: int
+
+        assert not TensorClass._autocast
+        assert is_tensorclass(SubClass)
+        assert SubClass._autocast
+        assert not SubClass._nocast
+        assert issubclass(SubClass, TensorClass)
+        assert isinstance(SubClass(torch.ones(())).a, int)
+
+    def test_subclassing_nocast(self):
+        class SubClass(TensorClass, nocast=True):
+            a: int
+
+        assert is_tensorclass(SubClass)
+        assert not SubClass._autocast
+        assert SubClass._nocast
+        assert issubclass(SubClass, TensorClass)
+        assert isinstance(SubClass(1).a, int)
+
+        class SubClass(TensorClass["nocast"]):
+            a: int
+
+        assert not TensorClass._nocast
+        assert is_tensorclass(SubClass)
+        assert not SubClass._autocast
+        assert SubClass._nocast
+        assert issubclass(SubClass, TensorClass)
+        assert isinstance(SubClass(1).a, int)
+
+    def test_subclassing_mult(self):
+        class SubClass(TensorClass, nocast=True, frozen=True):
+            a: int
+
+        assert is_tensorclass(SubClass)
+        assert not SubClass._autocast
+        assert SubClass._nocast
+        assert SubClass._frozen
+        assert issubclass(SubClass, TensorClass)
+        s = SubClass(1)
+        assert isinstance(s.a, int)
+        with pytest.raises(RuntimeError):
+            s.a = 2
+
+        class SubClass(TensorClass["nocast", "frozen"]):
+            a: int
+
+        assert not TensorClass._nocast
+        assert not TensorClass._frozen
+        assert is_tensorclass(SubClass)
+        assert SubClass._nocast
+        assert SubClass._frozen
+        assert issubclass(SubClass, TensorClass)
+        s = SubClass(1)
+        assert isinstance(s.a, int)
+        with pytest.raises(RuntimeError):
+            s.a = 2
 
 
 if __name__ == "__main__":
