@@ -2218,19 +2218,19 @@ class TestAutoCasting:
         class T:
             X: torch.Tensor
 
-        assert not T.autocast
+        assert not T._autocast
 
         @tensorclass
         class T:
             X: torch.Tensor
 
-        assert not T.autocast
+        assert not T._autocast
 
         @tensorclass(autocast=True)
         class T:
             X: torch.Tensor
 
-        assert T.autocast
+        assert T._autocast
 
     def test_autocast_simple(self):
         obj = AutoCastTensor(
