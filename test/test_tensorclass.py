@@ -2155,6 +2155,54 @@ class AutoCastTensor:
     anything: Any
 
 
+class TestNoCasting:
+    def test_nocast_int(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(1).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(1).a, int)
+
+    def test_nocast_np(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(np.array([1])).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(np.array([1])).a, np.ndarray)
+
+    def test_nocast_bool(self):
+        @tensorclass(nocast=False)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(True).a, torch.Tensor)
+
+        @tensorclass(nocast=True)
+        class X:
+            a: int  # type is irrelevant
+
+        assert isinstance(X(False).a, bool)
+
+    def test_exclusivity(self):
+        with pytest.raises(ValueError, match="exclusive"):
+
+            @tensorclass(nocast=True, autocast=True)
+            class X:
+                a: int  # type is irrelevant
+
+
 class TestAutoCasting:
     @tensorclass(autocast=True)
     class ClsAutoCast:
