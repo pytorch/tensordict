@@ -10242,6 +10242,9 @@ class TestFCD(TestTensorDictsBase):
 
 @pytest.mark.slow
 @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
+@pytest.mark.filterwarnings(
+    "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
+)
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -10448,9 +10451,6 @@ class TestMap:
         )
         return td
 
-    @pytest.mark.filterwarnings(
-        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
-    )
     def test_map_non_tensor(self):
         gc.collect()
         # with NonTensorStack
