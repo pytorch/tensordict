@@ -397,7 +397,6 @@ except ImportError:
 
 def _dispatch_td_nn_modules():
     """Returns ``True`` if @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
-    global DISPATCH_TDNN_MODULES
     return DISPATCH_TDNN_MODULES
 
 
