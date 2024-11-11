@@ -10448,6 +10448,9 @@ class TestMap:
         )
         return td
 
+    @pytest.mark.filterwarnings(
+        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
+    )
     def test_map_non_tensor(self):
         gc.collect()
         # with NonTensorStack
