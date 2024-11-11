@@ -127,6 +127,9 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
+    ),
 ]
 
 mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
@@ -10242,9 +10245,6 @@ class TestFCD(TestTensorDictsBase):
 
 @pytest.mark.slow
 @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
-@pytest.mark.filterwarnings(
-    "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
-)
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
