@@ -10881,6 +10881,17 @@ class TestNonTensorData:
         assert data_memmap._is_memmap
 
     def test_memmap_stack_updates(self, tmpdir):
+        with pytest.warns(
+            UserWarning,
+            match="The content of the stacked NonTensorData objects matched in value but not identity",
+        ):
+            data = torch.stack(
+                [
+                    NonTensorData(data=torch.zeros(())),
+                    NonTensorData(data=torch.zeros(())),
+                ],
+                0,
+            )
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
         assert is_non_tensor(data)
         data = torch.stack([data] * 3)

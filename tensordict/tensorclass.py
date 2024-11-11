@@ -2748,20 +2748,23 @@ class NonTensorData:
         # checks have been performed previously, so we're sure the list is non-empty
         first = list_of_non_tensor[0]
 
-        def _check_equal(a, b):
-            try:
-                if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
-                    return (a == b).all() and a.shape == b.shape
-                if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
-                    return (a == b).all() and a.shape == b.shape
-                iseq = a == b
-            except Exception:
-                iseq = False
-            return iseq
-
-        if all(isinstance(data, NonTensorData) for data in list_of_non_tensor) and all(
-            _check_equal(data.data, first.data) for data in list_of_non_tensor[1:]
-        ):
+        ids = set()
+        firstdata = NO_DEFAULT
+        for data in list_of_non_tensor:
+            if not isinstance(data, NonTensorData):
+                return_stack = True
+                break
+            if firstdata is NO_DEFAULT:
+                firstdata = data.data
+            ids.add(id(data.data))
+            if len(ids) > 1:
+                if _check_equal(data.data, firstdata):
+                    continue
+                return_stack = True
+                break
+        else:
+            return_stack = False
+        if not return_stack:
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
             return NonTensorData(
@@ -3442,3 +3445,27 @@ class TensorClass(metaclass=_TensorClassMeta):
     _nocast: bool = False
     _frozen: bool = False
     ...
+
+
+# TODO: v0.8: remove this func entirely
+def _check_equal(a, b):
+    # A util to check that two non-tensor data match
+    #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
+    try:
+        if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+            iseq = (a == b).all() and a.shape == b.shape
+        elif isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+            iseq = (a == b).all() and a.shape == b.shape
+        else:
+            iseq = bool(a == b)
+    except Exception:
+        iseq = False
+    if iseq:
+        warnings.warn(
+            "The content of the stacked NonTensorData objects matched in value but not identity. "
+            "This will currently return a NonTensorData but in the future (v0.8) it will return "
+            "a NonTensorStack instead. "
+            "To obtain a non-tensor stack, use `TensorDict.lazy_stack` instead.",
+            category=UserWarning,
+        )
+    return iseq
