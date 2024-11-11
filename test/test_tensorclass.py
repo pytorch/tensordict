@@ -1909,18 +1909,8 @@ class TestTensorClass:
                 return self._z()
 
         obj = torch.ones(())
-        y0 = Y(
-            weakref.ref(obj),
-            batch_size=[
-                1,
-            ],
-        )
-        y1 = Y(
-            weakref.ref(obj),
-            batch_size=[
-                1,
-            ],
-        )
+        y0 = Y(weakref.ref(obj), batch_size=[1])
+        y1 = Y(weakref.ref(obj), batch_size=[1])
         y = torch.cat([y0, y1])
         assert y.z.shape == torch.Size(())
         y = torch.stack([y0, y1])

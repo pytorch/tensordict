@@ -2759,7 +2759,7 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
         tgt = mb_unwrap_functional_tensor(new_thing)
         src = mb_unwrap_functional_tensor(ragged_source)
         tgt.nested_int_memo = src.nested_int_memo
-    else:
+    elif new_thing is not None:
         _tensor_symint_registry[new_thing] = _tensor_symint_registry[ragged_source]
 
     return NestedTensor(
