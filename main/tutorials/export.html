@@ -430,7 +430,7 @@ parameters to be passed to the <code class="docutils literal notranslate"><span 
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.0000, 0.4033, 0.0000, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.4629,  0.0977, -0.2982,  0.4894]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.4629,  0.0977]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.8232, 1.3342]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[-0.4629,  0.0977]], grad_fn=&lt;SplitBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[1.3501, 1.1133, 1.1638, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[ 0.9725, -1.6192, -0.6006,  0.0195]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[ 0.9725, -1.6192]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.6663, 1.0123]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[ 0.9725, -1.6192]], grad_fn=&lt;SplitBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -504,8 +504,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="o">-</span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="o">*</span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  493.05 micro-seconds
-Time for exported module:  348.09 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  525.47 micro-seconds
+Time for exported module:  362.87 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -565,9 +565,39 @@ fx graph: class GraphModule(torch.nn.Module):
         return (relu, linear_1, getitem_2, getitem_3, getitem_2)
 </pre></div>
 </div>
+</section>
+</section>
+<section id="working-with-nested-keys">
+<h2>Working with nested keys<a class="headerlink" href="#working-with-nested-keys" title="Permalink to this heading">¶</a></h2>
+<p>Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
+nested entries is therefore an important feature to support.
+Because keyword arguments must be regualar strings, it is not possible for <a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a> to work
+directly with them. Instead, <code class="docutils literal notranslate"><span class="pre">dispatch</span></code> will unpack nested keys joined with a regular underscore (<cite>“_”</cite>), as the
+following example shows.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model_nested</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><span class="k">lambda</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;some&quot;</span><span class="p">,</span> <span class="s2">&quot;key&quot;</span><span class="p">)],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">]),</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><span class="k">lambda</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;some&quot;</span><span class="p">,</span> <span class="s2">&quot;output&quot;</span><span class="p">)]),</span>
+<span class="p">)</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">((</span><span class="s2">&quot;some&quot;</span><span class="p">,</span> <span class="s2">&quot;output&quot;</span><span class="p">))</span>
+
+<a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_nested_export</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model_nested</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;some_key&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;exported module with nested input:&quot;</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram.module" title="torch.export.ExportedProgram.module" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-method"><span class="n">model_nested_export</span><span class="o">.</span><span class="n">module</span></a><span class="p">())</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>exported module with nested input: GraphModule()
+
+
+
+def forward(self, some_key):
+    some_key, = fx_pytree.tree_flatten_spec(([], {&#39;some_key&#39;:some_key}), self._in_spec)
+    add = torch.ops.aten.add.Tensor(some_key, 1);  some_key = None
+    sub = torch.ops.aten.sub.Tensor(add, 1);  add = None
+    return pytree.tree_unflatten((sub,), self._out_spec)
+
+# To see more debug info, please use `graph_module.print_readable()`
+</pre></div>
+</div>
 <p>Note that the callable returned by <cite>module()</cite> is a pure python callable that can be in turn compiled using
 <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.</p>
-</section>
 </section>
 <section id="saving-the-exported-module">
 <h2>Saving the exported module<a class="headerlink" href="#saving-the-exported-module" title="Permalink to this heading">¶</a></h2>
@@ -606,7 +636,7 @@ distribution:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.4629,  0.0977]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[ 0.9725, -1.6192]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor, corresponding to the sample of the distribution.
@@ -766,7 +796,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.473 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.707 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
@@ -833,6 +863,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><a class="reference internal" href="#using-torch-export-with-a-tensordictmodule">Using <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> with a <code class="docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#working-with-nested-keys">Working with nested keys</a></li>
 <li><a class="reference internal" href="#saving-the-exported-module">Saving the exported module</a><ul>
 <li><a class="reference internal" href="#selecting-the-outputs">Selecting the outputs</a></li>
 <li><a class="reference internal" href="#controlling-the-sampling-strategy">Controlling the Sampling Strategy</a></li>
