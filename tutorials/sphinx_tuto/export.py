@@ -133,6 +133,25 @@ print(f"Time for exported module: {(time.time()-t0)*1e6: 4.2f} micro-seconds")
 print("fx graph:", model_export.graph_module.print_readable())
 
 ##################################################
+# Working with nested keys
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
+# nested entries is therefore an important feature to support.
+# Because keyword arguments must be regualar strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
+# directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
+# following example shows.
+
+model_nested = Seq(
+    Mod(lambda x: x + 1, in_keys=[("some", "key")], out_keys=["hidden"]),
+    Mod(lambda x: x - 1, in_keys=["hidden"], out_keys=[("some", "output")]),
+).select_out_keys(("some", "output"))
+
+model_nested_export = export(model_nested, args=(), kwargs={"some_key": x})
+print("exported module with nested input:", model_nested_export.module())
+
+
+##################################################
 # Note that the callable returned by `module()` is a pure python callable that can be in turn compiled using
 # :func:`~torch.compile`.
 #
