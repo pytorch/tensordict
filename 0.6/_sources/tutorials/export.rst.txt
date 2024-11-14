@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.1432, 0.0000, 0.5459, 0.0000]], grad_fn=<ReluBackward0>), tensor([[0.1562, 0.0887, 0.1229, 0.2296]], grad_fn=<AddmmBackward0>), tensor([[0.1562, 0.0887]], grad_fn=<SplitBackward0>), tensor([[1.0790, 1.1503]], grad_fn=<ClampMinBackward0>), tensor([[0.1562, 0.0887]], grad_fn=<SplitBackward0>))
+    (tensor([[0.0000, 0.2604, 0.0000, 0.0000]], grad_fn=<ReluBackward0>), tensor([[-0.1580, -0.5222, -0.3319,  0.5519]], grad_fn=<AddmmBackward0>), tensor([[-0.1580, -0.5222]], grad_fn=<SplitBackward0>), tensor([[0.8046, 1.3804]], grad_fn=<ClampMinBackward0>), tensor([[-0.1580, -0.5222]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  488.28 micro-seconds
-    Time for exported module:  350.00 micro-seconds
+    Time for TDModule:  469.45 micro-seconds
+    Time for exported module:  340.70 micro-seconds
 
 
 
@@ -346,7 +346,55 @@ and the FX graph:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-173
+.. GENERATED FROM PYTHON SOURCE LINES 136-144
+
+Working with nested keys
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
+nested entries is therefore an important feature to support.
+Because keyword arguments must be regualar strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
+directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
+following example shows.
+
+.. GENERATED FROM PYTHON SOURCE LINES 144-154
+
+.. code-block:: Python
+
+
+    model_nested = Seq(
+        Mod(lambda x: x + 1, in_keys=[("some", "key")], out_keys=["hidden"]),
+        Mod(lambda x: x - 1, in_keys=["hidden"], out_keys=[("some", "output")]),
+    ).select_out_keys(("some", "output"))
+
+    model_nested_export = export(model_nested, args=(), kwargs={"some_key": x})
+    print("exported module with nested input:", model_nested_export.module())
+
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    exported module with nested input: GraphModule()
+
+
+
+    def forward(self, some_key):
+        some_key, = fx_pytree.tree_flatten_spec(([], {'some_key':some_key}), self._in_spec)
+        add = torch.ops.aten.add.Tensor(some_key, 1);  some_key = None
+        sub = torch.ops.aten.sub.Tensor(add, 1);  add = None
+        return pytree.tree_unflatten((sub,), self._out_spec)
+    
+    # To see more debug info, please use `graph_module.print_readable()`
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 155-192
 
 Note that the callable returned by `module()` is a pure python callable that can be in turn compiled using
 :func:`~torch.compile`.
@@ -386,7 +434,7 @@ Let us test the model after selecting its output keys.
 When an `x` input is provided, we expect our model to output a single tensor corresponding to a sample of the
 distribution:
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-177
+.. GENERATED FROM PYTHON SOURCE LINES 192-196
 
 .. code-block:: Python
 
@@ -402,17 +450,17 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[0.1562, 0.0887]], grad_fn=<SplitBackward0>)
+    tensor([[-0.1580, -0.5222]], grad_fn=<SplitBackward0>)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-180
+.. GENERATED FROM PYTHON SOURCE LINES 197-199
 
 We see that the output is now a single tensor, corresponding to the sample of the distribution.
 We can create a new exported graph from this. Its computational graph should be simplified:
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-184
+.. GENERATED FROM PYTHON SOURCE LINES 199-203
 
 .. code-block:: Python
 
@@ -466,7 +514,7 @@ We can create a new exported graph from this. Its computational graph should be 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-207
+.. GENERATED FROM PYTHON SOURCE LINES 204-226
 
 Controlling the Sampling Strategy
 ---------------------------------
@@ -491,7 +539,7 @@ As we can see from the following example, ``torch.export`` respond correctly the
 a random sample, the output is different than if we ask for the mean:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-216
+.. GENERATED FROM PYTHON SOURCE LINES 226-235
 
 .. code-block:: Python
 
@@ -589,7 +637,7 @@ a random sample, the output is different than if we ask for the mean:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-229
+.. GENERATED FROM PYTHON SOURCE LINES 236-248
 
 This is all you need to know to use ``torch.export``. Please refer to the
 `official documentation <https://pytorch.org/docs/stable/export>`_ for more info.
@@ -607,7 +655,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.481 seconds)
+   **Total running time of the script:** (0 minutes 1.695 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
