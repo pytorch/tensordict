@@ -88,9 +88,8 @@ class TestInteractionType:
 
     @pytest.mark.parametrize("unsupported_type_str", ["foo"])
     def test_from_str_correct_raise(self, unsupported_type_str):
-        with pytest.raises(ValueError) as err:
+        with pytest.raises(ValueError, match=" is not a valid InteractionType"):
             InteractionType.from_str(unsupported_type_str)
-        assert unsupported_type_str in str(err) and "is unsupported" in str(err)
 
 
 class TestTDModule:
