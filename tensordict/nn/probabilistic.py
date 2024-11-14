@@ -79,13 +79,11 @@ class set_interaction_type(_DecoratorContextManager):
         self, type: InteractionType | str | None = InteractionType.DETERMINISTIC
     ) -> None:
         super().__init__()
-        if not isinstance(type, InteractionType):
+        if not isinstance(type, InteractionType) and type is not None:
             if isinstance(type, str):
                 type = InteractionType(type.lower())
             else:
-                raise TypeError(
-                    "Invalid type: only str or InteractionType are accepted."
-                )
+                raise ValueError(f"{type} is not a valid InteractionType")
         self.type = type
 
     def clone(self) -> set_interaction_type:
