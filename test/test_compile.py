@@ -16,6 +16,7 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    NonTensorData,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
     tensorclass,
@@ -665,7 +666,9 @@ class TestNN:
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
     def test_prob_module_with_kwargs(self, mode):
-        kwargs = TensorDictParams(TensorDict(scale=1.0), no_convert=True)
+        kwargs = TensorDictParams(
+            TensorDict(scale=1.0, validate_args=NonTensorData(False)), no_convert=True
+        )
         dist_cls = torch.distributions.Normal
         mod = Mod(torch.nn.Linear(3, 3), in_keys=["inp"], out_keys=["loc"])
         prob_mod = Seq(

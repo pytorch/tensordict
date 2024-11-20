@@ -20,6 +20,7 @@ from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import _set_skip_existing_None
+from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _zip_strict
 from torch import distributions as D, Tensor
@@ -638,5 +639,9 @@ def _dynamo_friendly_to_dict(data):
         return data
     if isinstance(data, TensorDictBase):
         # to_dict is recursive and we don't want that
-        return {data[key] for key in data.keys()}
+        items = dict(data.items())
+        for k, v in items.items():
+            if is_non_tensor(v):
+                items[k] = v.data
+        return items
     return data
