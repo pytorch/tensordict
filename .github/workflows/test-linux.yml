@@ -25,7 +25,7 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
@@ -56,7 +56,7 @@ jobs:
       matrix:
         python_version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
@@ -83,7 +83,7 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
@@ -115,7 +115,7 @@ jobs:
       matrix:
         python_version: ["3.9", "3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
