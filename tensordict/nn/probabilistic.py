@@ -8,10 +8,6 @@ from __future__ import annotations
 import re
 import warnings
 
-try:
-    from enum import StrEnum
-except ImportError:
-    from .utils import StrEnum
 from textwrap import indent
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +25,16 @@ from tensordict.utils import _zip_strict
 from torch import distributions as D, Tensor
 
 from torch.utils._contextlib import _DecoratorContextManager
+
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from .utils import StrEnum
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
@@ -350,11 +356,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 if isinstance(dist_key, tuple):
                     dist_key = dist_key[-1]
                 dist_kwargs[dist_key] = tensordict.get(td_key)
-            dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
+            dist = self.distribution_class(
+                **dist_kwargs, **_dynamo_friendly_to_dict(self.distribution_kwargs)
+            )
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
-                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_keys must match."
+                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_keys must match. "
                     f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith dist_keys={self.dist_keys}"
                 )
             elif re.search(r"missing.*required positional arguments", str(err)):
@@ -623,3 +631,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     ) -> TensorDictBase:
         tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
         return self.module[-1](tensordict_out, _requires_sample=self._requires_sample)
+
+
+def _dynamo_friendly_to_dict(data):
+    if not is_compiling():
+        return data
+    if isinstance(data, TensorDictBase):
+        items = list(data.items())
+        if not items:
+            return {}
+        return dict(items)
+    return data

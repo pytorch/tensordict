@@ -341,6 +341,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self._locked_tensordicts = []
         self._get_post_hook = []
 
+    def __iter__(self):
+        yield from self._param_td.__iter__()
+
     def register_get_post_hook(self, hook):
         """Register a hook to be called after any get operation on leaf tensors."""
         if not callable(hook):
