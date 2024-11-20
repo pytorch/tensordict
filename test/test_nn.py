@@ -157,7 +157,9 @@ class TestTDModule:
             return a + 1
 
         if kwargs:
-            module = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            module = TensorDictModule(
+                fn, in_keys=kwargs, out_keys=["a"], out_to_in_map=False
+            )
             td = TensorDict(
                 {
                     "1": torch.ones(1),
@@ -170,6 +172,76 @@ class TestTDModule:
             module = TensorDictModule(fn, in_keys=args, out_keys=["a"])
             td = TensorDict({"1": torch.ones(1)}, [])
         assert (module(td)["a"] == 2).all()
+
+    def test_unused_out_to_in_map(self):
+        def fn(x, y):
+            return x + y
+
+        with pytest.warns(
+            match="out_to_in_map is not None but is only used when in_key is a dictionary."
+        ):
+            _ = TensorDictModule(fn, in_keys=["x"], out_keys=["a"], out_to_in_map=False)
+
+    def test_input_keys_dict_reversed(self):
+        in_keys = {"x": "1", "y": "2"}
+
+        def fn(x, y):
+            return x + y
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=True
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+        assert (module(td)["a"] == 4).all()
+
+    def test_input_keys_match_reversed(self):
+        in_keys = {"1": "x", "2": "y"}
+        reversed_in_keys = {v: k for k, v in in_keys.items()}
+
+        def fn(x, y):
+            return y - x
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=False
+        )
+        reversed_module = TensorDictModule(
+            fn, in_keys=reversed_in_keys, out_keys=["a"], out_to_in_map=True
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+
+        assert module(td)["a"] == reversed_module(td)["a"] == torch.Tensor([2])
+
+    @pytest.mark.parametrize("out_to_in_map", [True, False])
+    def test_input_keys_wrong_mapping(self, out_to_in_map):
+        in_keys = {"1": "x", "2": "y"}
+        if not out_to_in_map:
+            in_keys = {v: k for k, v in in_keys.items()}
+
+        def fn(x, y):
+            return x + y
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=out_to_in_map
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+
+        with pytest.raises(TypeError, match="got an unexpected keyword argument '1'"):
+            module(td)
+
+    def test_input_keys_dict_deprecated_warning(self):
+        in_keys = {"1": "x", "2": "y"}
+
+        def fn(x, y):
+            return x + y
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="Using a dictionary in_keys without specifying out_to_in_map is deprecated.",
+        ):
+            _ = TensorDictModule(fn, in_keys=in_keys, out_keys=["a"])
 
     def test_reset(self):
         torch.manual_seed(0)
@@ -478,7 +550,10 @@ class TestTDModule:
 
     def test_vmap_kwargs(self):
         module = TensorDictModule(
-            lambda x, *, y: x + y, in_keys={"1": "x", "2": "y"}, out_keys=["z"]
+            lambda x, *, y: x + y,
+            in_keys={"1": "x", "2": "y"},
+            out_keys=["z"],
+            out_to_in_map=False,
         )
         td = TensorDict(
             {"1": torch.ones((10,)), "2": torch.ones((10,)) * 2}, batch_size=[10]
@@ -723,7 +798,9 @@ class TestTDSequence:
             return a + 1
 
         if kwargs:
-            module1 = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            module1 = TensorDictModule(
+                fn, in_keys=kwargs, out_keys=["a"], out_to_in_map=False
+            )
             td = TensorDict(
                 {
                     "input": torch.ones(1),
@@ -1176,7 +1253,10 @@ def test_input():
             module, in_keys=[("i", "i2")], out_keys=[(("o", "o2"), ("o3",))]
         )
         TensorDictModule(
-            module, in_keys={"i": "i1", (("i2",),): "i3"}, out_keys=[("o", "o2")]
+            module,
+            in_keys={"i": "i1", (("i2",),): "i3"},
+            out_keys=[("o", "o2")],
+            out_to_in_map=False,
         )
 
         # corner cases that should work
