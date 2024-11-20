@@ -637,8 +637,6 @@ def _dynamo_friendly_to_dict(data):
     if not is_compiling():
         return data
     if isinstance(data, TensorDictBase):
-        items = list(data.items())
-        if not items:
-            return {}
-        return dict(items)
+        # to_dict is recursive and we don't want that
+        return {data[key] for key in data.keys()}
     return data
