@@ -22,7 +22,7 @@ from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _zip_strict
+from tensordict.utils import _ContextManager, _zip_strict
 from torch import distributions as D, Tensor
 
 from torch.utils._contextlib import _DecoratorContextManager
@@ -66,12 +66,12 @@ class InteractionType(StrEnum):
         return cls(type_str.lower())
 
 
-_INTERACTION_TYPE: InteractionType | None = None
+_interaction_type = _ContextManager()
 
 
 def interaction_type() -> InteractionType | None:
     """Returns the current sampling type."""
-    return _INTERACTION_TYPE
+    return _interaction_type.get_mode()
 
 
 class set_interaction_type(_DecoratorContextManager):
@@ -98,13 +98,11 @@ class set_interaction_type(_DecoratorContextManager):
         return type(self)(self.type)
 
     def __enter__(self) -> None:
-        global _INTERACTION_TYPE
-        self.prev = _INTERACTION_TYPE
-        _INTERACTION_TYPE = self.type
+        self.prev = _interaction_type.get_mode()
+        _interaction_type.set_mode(self.type)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global _INTERACTION_TYPE
-        _INTERACTION_TYPE = self.prev
+        _interaction_type.set_mode(self.prev)
 
 
 class ProbabilisticTensorDictModule(TensorDictModuleBase):
