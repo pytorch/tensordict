@@ -24,6 +24,8 @@ from tensordict import (
 )
 from tensordict.nn import (
     CudaGraphModule,
+    InteractionType,
+    ProbabilisticTensorDictModule as Prob,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -661,6 +663,27 @@ class TestNN:
         mod(x=x, y=y)
         mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
+
+    def test_prob_module_with_kwargs(self, mode):
+        kwargs = TensorDictParams(TensorDict(scale=1.0), no_convert=True)
+        dist_cls = torch.distributions.Normal
+        mod = Mod(torch.nn.Linear(3, 3), in_keys=["inp"], out_keys=["loc"])
+        prob_mod = Seq(
+            mod,
+            Prob(
+                in_keys=["loc"],
+                out_keys=["sample"],
+                return_log_prob=True,
+                distribution_class=dist_cls,
+                distribution_kwargs=kwargs,
+                default_interaction_type=InteractionType.RANDOM,
+            ),
+        )
+        # check that the scale is in the buffers
+        assert len(list(prob_mod.buffers())) == 1
+        prob_mod(TensorDict(inp=torch.randn(3)))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        prob_mod_c(TensorDict(inp=torch.randn(3)))
 
 
 @pytest.mark.skipif(
