@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.7307, 0.0000, 0.0000, 1.7378]], grad_fn=<ReluBackward0>), tensor([[-1.1394,  0.1979,  0.3784, -1.2743]], grad_fn=<AddmmBackward0>), tensor([[-1.1394,  0.1979]], grad_fn=<SplitBackward0>), tensor([[1.2539, 0.3973]], grad_fn=<ClampMinBackward0>), tensor([[-1.1394,  0.1979]], grad_fn=<SplitBackward0>))
+    (tensor([[0.4123, 0.0000, 0.0000, 0.0000]], grad_fn=<ReluBackward0>), tensor([[ 0.3888, -0.2624, -0.2838, -0.3658]], grad_fn=<AddmmBackward0>), tensor([[ 0.3888, -0.2624]], grad_fn=<SplitBackward0>), tensor([[0.8313, 0.7861]], grad_fn=<ClampMinBackward0>), tensor([[ 0.3888, -0.2624]], grad_fn=<SplitBackward0>))
 
 
 
@@ -221,9 +221,9 @@ Let us look at the module:
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  module_2_module_weight = module_2_module_bias = None
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-        getitem = split[0]
-        getitem_1 = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+        getitem = chunk[0]
+        getitem_1 = chunk[1];  chunk = None
         add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  549.79 micro-seconds
-    Time for exported module:  373.36 micro-seconds
+    Time for TDModule:  492.81 micro-seconds
+    Time for exported module:  355.01 micro-seconds
 
 
 
@@ -298,9 +298,9 @@ and the FX graph:
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
         
              # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:129 in forward, code: loc, scale = tensor.chunk(2, -1)
-            split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-            getitem: "f32[1, 2]" = split[0]
-            getitem_1: "f32[1, 2]" = split[1];  split = None
+            chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+            getitem: "f32[1, 2]" = chunk[0]
+            getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
              # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
@@ -324,9 +324,9 @@ and the FX graph:
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
         
              # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:129 in forward, code: loc, scale = tensor.chunk(2, -1)
-            split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-            getitem: "f32[1, 2]" = split[0]
-            getitem_1: "f32[1, 2]" = split[1];  split = None
+            chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+            getitem: "f32[1, 2]" = chunk[0]
+            getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
              # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[-1.1394,  0.1979]], grad_fn=<SplitBackward0>)
+    tensor([[ 0.3888, -0.2624]], grad_fn=<SplitBackward0>)
 
 
 
@@ -498,15 +498,16 @@ We can create a new exported graph from this. Its computational graph should be 
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-        getitem = split[0]
-        getitem_1 = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+        getitem = chunk[0]
+        getitem_1 = chunk[1];  chunk = None
         add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0];  broadcast_tensors = None
+        getitem_2 = broadcast_tensors[0]
+        getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
         return pytree.tree_unflatten((getitem_2,), self._out_spec)
     
     # To see more debug info, please use `graph_module.print_readable()`
@@ -582,9 +583,9 @@ a random sample, the output is different than if we ask for the mean:
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-        getitem = split[0]
-        getitem_1 = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+        getitem = chunk[0]
+        getitem_1 = chunk[1];  chunk = None
         add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -593,8 +594,8 @@ a random sample, the output is different than if we ask for the mean:
         getitem_2 = broadcast_tensors[0]
         getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
         empty = torch.ops.aten.empty.memory_format([1, 2], dtype = torch.float32, device = device(type='cpu'), pin_memory = False)
-        normal_functional = torch.ops.aten.normal_functional.default(empty);  empty = None
-        mul = torch.ops.aten.mul.Tensor(normal_functional, getitem_3);  normal_functional = getitem_3 = None
+        normal_ = torch.ops.aten.normal_.default(empty);  empty = None
+        mul = torch.ops.aten.mul.Tensor(normal_, getitem_3);  normal_ = getitem_3 = None
         add_2 = torch.ops.aten.add.Tensor(getitem_2, mul);  getitem_2 = mul = None
         return pytree.tree_unflatten((add_2,), self._out_spec)
     
@@ -621,15 +622,16 @@ a random sample, the output is different than if we ask for the mean:
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-        getitem = split[0]
-        getitem_1 = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+        getitem = chunk[0]
+        getitem_1 = chunk[1];  chunk = None
         add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0];  broadcast_tensors = None
+        getitem_2 = broadcast_tensors[0]
+        getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
         return pytree.tree_unflatten((getitem_2,), self._out_spec)
     
     # To see more debug info, please use `graph_module.print_readable()`
@@ -655,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.717 seconds)
+   **Total running time of the script:** (0 minutes 1.598 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

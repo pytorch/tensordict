@@ -430,7 +430,7 @@ parameters to be passed to the <code class="docutils literal notranslate"><span 
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.7307, 0.0000, 0.0000, 1.7378]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-1.1394,  0.1979,  0.3784, -1.2743]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-1.1394,  0.1979]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.2539, 0.3973]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[-1.1394,  0.1979]], grad_fn=&lt;SplitBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.4123, 0.0000, 0.0000, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[ 0.3888, -0.2624, -0.2838, -0.3658]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[ 0.3888, -0.2624]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.8313, 0.7861]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[ 0.3888, -0.2624]], grad_fn=&lt;SplitBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -477,9 +477,9 @@ def forward(self, x):
     linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
     relu = torch.ops.aten.relu.default(linear);  linear = None
     linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  module_2_module_weight = module_2_module_bias = None
-    split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-    getitem = split[0]
-    getitem_1 = split[1];  split = None
+    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+    getitem = chunk[0]
+    getitem_1 = chunk[1];  chunk = None
     add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -504,8 +504,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="o">-</span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="o">*</span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  549.79 micro-seconds
-Time for exported module:  373.36 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  492.81 micro-seconds
+Time for exported module:  355.01 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -520,9 +520,9 @@ Time for exported module:  373.36 micro-seconds
         linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
 
          # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:129 in forward, code: loc, scale = tensor.chunk(2, -1)
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-        getitem: &quot;f32[1, 2]&quot; = split[0]
-        getitem_1: &quot;f32[1, 2]&quot; = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+        getitem: &quot;f32[1, 2]&quot; = chunk[0]
+        getitem_1: &quot;f32[1, 2]&quot; = chunk[1];  chunk = None
 
          # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
@@ -546,9 +546,9 @@ fx graph: class GraphModule(torch.nn.Module):
         linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
 
          # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:129 in forward, code: loc, scale = tensor.chunk(2, -1)
-        split = torch.ops.aten.split.Tensor(linear_1, 2, -1)
-        getitem: &quot;f32[1, 2]&quot; = split[0]
-        getitem_1: &quot;f32[1, 2]&quot; = split[1];  split = None
+        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
+        getitem: &quot;f32[1, 2]&quot; = chunk[0]
+        getitem_1: &quot;f32[1, 2]&quot; = chunk[1];  chunk = None
 
          # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
@@ -636,7 +636,7 @@ distribution:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-1.1394,  0.1979]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[ 0.3888, -0.2624]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor, corresponding to the sample of the distribution.
@@ -667,15 +667,16 @@ def forward(self, x):
     linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
     relu = torch.ops.aten.relu.default(linear);  linear = None
     linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-    split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-    getitem = split[0]
-    getitem_1 = split[1];  split = None
+    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+    getitem = chunk[0]
+    getitem_1 = chunk[1];  chunk = None
     add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
     clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
     broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0];  broadcast_tensors = None
+    getitem_2 = broadcast_tensors[0]
+    getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
     return pytree.tree_unflatten((getitem_2,), self._out_spec)
 
 # To see more debug info, please use `graph_module.print_readable()`
@@ -731,9 +732,9 @@ def forward(self, x):
     linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
     relu = torch.ops.aten.relu.default(linear);  linear = None
     linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-    split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-    getitem = split[0]
-    getitem_1 = split[1];  split = None
+    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+    getitem = chunk[0]
+    getitem_1 = chunk[1];  chunk = None
     add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -742,8 +743,8 @@ def forward(self, x):
     getitem_2 = broadcast_tensors[0]
     getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
     empty = torch.ops.aten.empty.memory_format([1, 2], dtype = torch.float32, device = device(type=&#39;cpu&#39;), pin_memory = False)
-    normal_functional = torch.ops.aten.normal_functional.default(empty);  empty = None
-    mul = torch.ops.aten.mul.Tensor(normal_functional, getitem_3);  normal_functional = getitem_3 = None
+    normal_ = torch.ops.aten.normal_.default(empty);  empty = None
+    mul = torch.ops.aten.mul.Tensor(normal_, getitem_3);  normal_ = getitem_3 = None
     add_2 = torch.ops.aten.add.Tensor(getitem_2, mul);  getitem_2 = mul = None
     return pytree.tree_unflatten((add_2,), self._out_spec)
 
@@ -770,15 +771,16 @@ def forward(self, x):
     linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
     relu = torch.ops.aten.relu.default(linear);  linear = None
     linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-    split = torch.ops.aten.split.Tensor(linear_1, 2, -1);  linear_1 = None
-    getitem = split[0]
-    getitem_1 = split[1];  split = None
+    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
+    getitem = chunk[0]
+    getitem_1 = chunk[1];  chunk = None
     add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
     clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
     broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0];  broadcast_tensors = None
+    getitem_2 = broadcast_tensors[0]
+    getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
     return pytree.tree_unflatten((getitem_2,), self._out_spec)
 
 # To see more debug info, please use `graph_module.print_readable()`
@@ -796,7 +798,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.717 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.598 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
