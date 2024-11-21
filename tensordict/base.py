@@ -3070,6 +3070,8 @@ class TensorDictBase(MutableMapping):
 
     # Cache functionality
     def _erase_cache(self):
+        if is_dynamo_compiling():
+            return
         self._cache = None
 
     # Dim names functionality

@@ -20,9 +20,9 @@ from typing import Any, Callable, cast, TypeVar
 import numpy as np
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
@@ -330,7 +330,7 @@ LAST_OP_MAPS["squeeze"] = _reverse_squeeze
 
 def _reverse_to_module(self, args, kwargs, out):
     try:
-        with out.unlock_() if not is_dynamo_compiling() else contextlib.nullcontext():
+        with out.unlock_() if not is_compiling() else contextlib.nullcontext():
             return self.to_module(*args, **kwargs, swap_dest=out)
     except AttributeError:
         # This is a bit unsafe but we assume that out won't have an unlock_() if it's not a TD

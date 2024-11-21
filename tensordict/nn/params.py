@@ -58,6 +58,12 @@ except ImportError:
     from tensordict.utils import Buffer
 
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
+
 def _apply_leaves(data, fn):
     if isinstance(data, TensorDict):
         with data.unlock_():
@@ -114,7 +120,7 @@ def _maybe_make_param_or_buffer(tensor):
     if (
         isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, (nn.Parameter, Buffer))
-        and tensor.dtype in (torch.float, torch.double, torch.half)
+        # and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
         if not tensor.requires_grad and not is_batchedtensor(tensor):
             # convert all non-parameters to buffers
@@ -267,8 +273,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     a :class:`torch.nn.Parameter` conversion.
 
     Args:
-        parameters (TensorDictBase): a tensordict to represent as parameters.
+        parameters (TensorDictBase or dict): a tensordict to represent as parameters.
             Values will be converted to parameters unless ``no_convert=True``.
+            If a dict is provided, it will be first wrapped to a :class:`~tensordict.TensorDict`
+            instance. Keyword arguments can be used instead.
 
     Keyword Args:
         no_convert (bool): if ``True``, no conversion to ``nn.Parameter`` will
@@ -281,6 +289,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
             also restricts the operations that can be done over the object (and
             can have significant performance impact when `unlock_()` is required).
             Defaults to ``False``.
+        **kwargs: Key-value pairs to populate the ``TensorDictParams``. Exclusive with
+            the :attr:`parameters` input.
 
     Examples:
         >>> from torch import nn
@@ -321,32 +331,93 @@ class TensorDictParams(TensorDictBase, nn.Module):
     """
 
     def __init__(
-        self, parameters: TensorDictBase, *, no_convert=False, lock: bool = False
+        self,
+        parameters: TensorDictBase | dict | None = None,
+        *,
+        no_convert=False,
+        lock: bool = False,
+        **kwargs,
     ):
         super().__init__()
-        if isinstance(parameters, TensorDictParams):
-            parameters = parameters._param_td
-        self._param_td = parameters
+        if parameters is None:
+            parameters = kwargs
+        elif kwargs:
+            raise TypeError(
+                f"parameters cannot be passed along with extra keyword arguments, but got {kwargs.keys()} extra args."
+            )
+
+        params = None
+        buffers = None
+        if isinstance(parameters, dict):
+            parameters = TensorDict(parameters)
+        elif isinstance(parameters, TensorDictParams):
+            params = dict(parameters._parameters)
+            buffers = dict(parameters._buffers)
+            parameters = parameters._param_td.copy().lock_()
+            no_convert = "skip"
+
         self.no_convert = no_convert
         if no_convert != "skip":
             if not no_convert:
                 func = _maybe_make_param
             else:
                 func = _maybe_make_param_or_buffer
-            self._param_td = _apply_leaves(self._param_td, lambda x: func(x))
+            self._param_td = _apply_leaves(parameters, lambda x: func(x))
+        else:
+            self._param_td = parameters
+
         self._lock_content = lock
         if lock:
             self._param_td.lock_()
-        self._reset_params()
+        self._reset_params(params=params, buffers=buffers)
         self._is_locked = False
         self._locked_tensordicts = []
         self._get_post_hook = []
 
     @classmethod
     def _new_unsafe(
-        cls, parameters: TensorDictBase, *, no_convert=False, lock: bool = False
+        cls,
+        parameters: TensorDictBase,
+        *,
+        no_convert=False,
+        lock: bool = False,
+        params: dict | None = None,
+        buffers: dict | None = None,
+        **kwargs,
     ):
-        return TensorDictParams(parameters, no_convert="skip", lock=lock)
+        if is_compiling():
+            return TensorDictParams(parameters, no_convert="skip", lock=lock)
+
+        self = TensorDictParams.__new__(cls)
+        nn.Module.__init__(self)
+
+        if parameters is None:
+            parameters = kwargs
+        elif kwargs:
+            raise TypeError(
+                f"parameters cannot be passed along with extra keyword arguments, but got {kwargs.keys()} extra args."
+            )
+
+        if isinstance(parameters, dict):
+            parameters = TensorDict._new_unsafe(parameters)
+        elif isinstance(parameters, TensorDictParams):
+            params = dict(parameters._parameters)
+            buffers = dict(parameters._buffers)
+            parameters = parameters._param_td
+            no_convert = "skip"
+
+        self._param_td = parameters
+        self.no_convert = no_convert
+        if no_convert != "skip":
+            raise RuntimeError("_new_unsafe requires no_convert to be set to 'skip'")
+        self._lock_content = lock
+        if lock:
+            self._param_td.lock_()
+        self._reset_params(params=params, buffers=buffers)
+        self._is_locked = False
+        self._locked_tensordicts = []
+        self._get_post_hook = []
+        return self
 
     def __iter__(self):
         yield from self._param_td.__iter__()
@@ -365,24 +436,35 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     val = new_val
         return val
 
-    def _reset_params(self):
+    def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
         parameters = self._param_td
-        param_keys = []
-        params = []
-        buffer_keys = []
-        buffers = []
-        for key, value in parameters.items(True, True):
-            # flatten key
-            if isinstance(key, tuple):
-                key = ".".join(key)
-            if isinstance(value, nn.Parameter):
-                param_keys.append(key)
-                params.append(value)
-            else:
-                buffer_keys.append(key)
-                buffers.append(value)
-        self.__dict__["_parameters"] = dict(zip(param_keys, params))
-        self.__dict__["_buffers"] = dict(zip(buffer_keys, buffers))
+
+        self._parameters.clear()
+        self._buffers.clear()
+
+        if (params is not None) ^ (buffers is not None):
+            raise RuntimeError("both params and buffers must either be None or not.")
+        elif params is None:
+            param_keys = []
+            params = []
+            buffer_keys = []
+            buffers = []
+            for key, value in parameters.items(True, True):
+                # flatten key
+                if isinstance(key, tuple):
+                    key = ".".join(key)
+                if isinstance(value, nn.Parameter):
+                    param_keys.append(key)
+                    params.append(value)
+                else:
+                    buffer_keys.append(key)
+                    buffers.append(value)
+
+            self._parameters.update(dict(zip(param_keys, params)))
+            self._buffers.update(dict(zip(buffer_keys, buffers)))
+        else:
+            self._parameters.update(params)
+            self._buffers.update(buffers)
 
     @classmethod
     def __torch_function__(
@@ -620,7 +702,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
         """
         if not recurse:
-            return TensorDictParams(self._param_td._clone(False), no_convert="skip")
+            return TensorDictParams._new_unsafe(
+                self._param_td._clone(False),
+                no_convert="skip",
+                params=dict(self._parameters),
+                buffers=dict(self._buffers),
+            )
 
         memo = {}
 
@@ -899,6 +986,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
         if not self._lock_content:
             return self._param_td._propagate_unlock()
+        return []
 
     unlock_ = TensorDict.unlock_
     lock_ = TensorDict.lock_
