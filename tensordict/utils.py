@@ -15,10 +15,12 @@ import os
 import re
 
 import sys
+import threading
 import time
 import warnings
 from collections import defaultdict
 from collections.abc import KeysView
+from contextlib import nullcontext
 from copy import copy
 from functools import wraps
 from importlib import import_module
@@ -2813,3 +2815,19 @@ def _mismatch_keys(keys1, keys2):
     if sub2 is not None:
         main.append(sub2)
     raise KeyError(r" ".join(main))
+
+
+class _ContextManager:
+    def __init__(self, default=None):
+        self._mode: Any | None = default
+        self._lock = threading.Lock()
+
+    def get_mode(self) -> Any | None:
+        cm = self._lock if not is_dynamo_compiling() else nullcontext()
+        with cm:
+            return self._mode
+
+    def set_mode(self, type: Any | None) -> None:
+        cm = self._lock if not is_dynamo_compiling() else nullcontext()
+        with cm:
+            self._mode = type

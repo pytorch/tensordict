@@ -12,8 +12,10 @@ from enum import Enum
 from typing import Any, Callable
 
 import torch
-from tensordict.utils import strtobool
+from tensordict.utils import _ContextManager, strtobool
 from torch import nn
+
+from torch.utils._contextlib import _DecoratorContextManager
 
 try:
     from torch.compiler import is_dynamo_compiling
@@ -21,13 +23,13 @@ except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
-DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
+_dispatch_tdnn_modules = _ContextManager(
+    default=strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
+)
 
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
-_SKIP_EXISTING = False
-
-from torch.utils._contextlib import _DecoratorContextManager
+_skip_existing = _ContextManager(default=False)
 
 
 def inv_softplus(bias: float | torch.Tensor) -> float | torch.Tensor:
@@ -300,10 +302,9 @@ class set_skip_existing(_DecoratorContextManager):
     def __enter__(self) -> None:
         if self.mode and is_dynamo_compiling():
             raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
-        global _SKIP_EXISTING
-        self.prev = _SKIP_EXISTING
+        self.prev = _skip_existing.get_mode()
         if self.mode is not None:
-            _SKIP_EXISTING = self.mode
+            _skip_existing.set_mode(self.mode)
         elif not self._called:
             raise RuntimeError(
                 f"It seems you are using {type(self).__name__} as a context manager with ``None`` input. "
@@ -311,8 +312,7 @@ class set_skip_existing(_DecoratorContextManager):
             )
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global _SKIP_EXISTING
-        _SKIP_EXISTING = self.prev
+        _skip_existing.set_mode(self.prev)
 
 
 class _set_skip_existing_None(set_skip_existing):
@@ -353,12 +353,11 @@ class _set_skip_existing_None(set_skip_existing):
                 return tensordict
             if is_dynamo_compiling():
                 return func(_self, tensordict, *args, **kwargs)
-            global _SKIP_EXISTING
-            self.prev = _SKIP_EXISTING
+            self.prev = _skip_existing.get_mode()
             try:
                 result = func(_self, tensordict, *args, **kwargs)
             finally:
-                _SKIP_EXISTING = self.prev
+                _skip_existing.set_mode(self.prev)
             return result
 
         return wrapper
@@ -375,7 +374,7 @@ class _set_skip_existing_None(set_skip_existing):
 
 def skip_existing():
     """Returns whether or not existing entries in a tensordict should be re-computed by a module."""
-    return _SKIP_EXISTING
+    return _skip_existing.get_mode()
 
 
 def _rebuild_buffer(data, requires_grad, backward_hooks):
@@ -397,7 +396,7 @@ except ImportError:
 
 def _dispatch_td_nn_modules():
     """Returns ``True`` if @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
-    return DISPATCH_TDNN_MODULES
+    return _dispatch_tdnn_modules.get_mode()
 
 
 class _set_dispatch_td_nn_modules(_DecoratorContextManager):
@@ -411,17 +410,15 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
         return type(self)(self.mode)
 
     def __enter__(self):
-        global DISPATCH_TDNN_MODULES
         # We want to avoid changing global variables because compile puts guards on them
-        if DISPATCH_TDNN_MODULES != self.mode:
-            self._saved_mode = DISPATCH_TDNN_MODULES
-            DISPATCH_TDNN_MODULES = self.mode
+        if _dispatch_tdnn_modules.get_mode() != self.mode:
+            self._saved_mode = _dispatch_tdnn_modules
+            _dispatch_tdnn_modules.set_mode(self.mode)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._saved_mode is None:
             return
-        global DISPATCH_TDNN_MODULES
-        DISPATCH_TDNN_MODULES = self._saved_mode
+        _dispatch_tdnn_modules.set_mode(self._saved_mode)
 
 
 # Reproduce StrEnum for python<3.11
