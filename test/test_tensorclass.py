@@ -584,7 +584,7 @@ class TestTensorClass:
         class MyClass:
             a: TensorDictBase
 
-        tc = MyClass.from_dict(d)
+        tc = MyClass.from_dict(d, auto_batch_size=True)
         assert isinstance(tc, MyClass)
         assert isinstance(tc.a, TensorDict)
         assert tc.batch_size == torch.Size([10])
@@ -2148,7 +2148,9 @@ def test_to_dict():
         my_tensor=torch.tensor([1, 2, 3]), my_str="hello", batch_size=[3]
     )
 
-    assert (test_class == TestClass.from_dict(test_class.to_dict())).all()
+    assert (
+        test_class == TestClass.from_dict(test_class.to_dict(), auto_batch_size=True)
+    ).all()
 
     # Currently we don't test non-tensor in __eq__ because __eq__ can break with arrays and such
     # test_class2 = TestClass(
@@ -2161,7 +2163,9 @@ def test_to_dict():
         my_tensor=torch.tensor([1, 2, 0]), my_str="hello", batch_size=[3]
     )
 
-    assert not (test_class == TestClass.from_dict(test_class3.to_dict())).all()
+    assert not (
+        test_class == TestClass.from_dict(test_class3.to_dict(), auto_batch_size=True)
+    ).all()
 
 
 @tensorclass(autocast=True)

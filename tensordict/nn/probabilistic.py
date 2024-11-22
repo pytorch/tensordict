@@ -634,8 +634,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict
-        tensordict_exec = self.get_dist_params(tensordict_exec, tensordict_out, **kwargs)
-        tensordict_exec = self.module[-1](tensordict_exec, _requires_sample=self._requires_sample)
+        tensordict_exec = self.get_dist_params(tensordict_exec, tensordict_out, **kwargs
+        )
+        tensordict_exec = self.module[-1](
+            tensordict_exec, _requires_sample=self._requires_sample
+        )
         if tensordict_out is not None:
             result = tensordict_out
             result.update(tensordict_exec, keys_to_update=self.out_keys)

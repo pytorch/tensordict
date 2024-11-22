@@ -121,7 +121,6 @@ def _rebuild_tensordict_files_consolidated(
             d[k] = from_metadata(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
-        print('cls_metadata', cls_metadata)
         result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()

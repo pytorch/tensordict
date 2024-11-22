@@ -437,7 +437,7 @@ def make_tensordict(
     input_dict: dict[str, CompatibleType] | None = None,
     batch_size: Sequence[int] | torch.Size | int | None = None,
     device: DeviceType | None = None,
-    auto_batch_size:bool|None=None,
+    auto_batch_size: bool | None = None,
     **kwargs: CompatibleType,  # source
 ) -> TensorDict:
     """Returns a TensorDict created from the keyword arguments or an input dictionary.
@@ -503,4 +503,6 @@ def make_tensordict(
     """
     if input_dict is not None:
         kwargs.update(input_dict)
-    return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device, auto_batch_size=auto_batch_size)
+    return TensorDict.from_dict(
+        kwargs, batch_size=batch_size, device=device, auto_batch_size=auto_batch_size
+    )

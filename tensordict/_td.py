@@ -2101,13 +2101,11 @@ class TensorDict(TensorDictBase):
                 # TODO: v0.7: remove the None
                 cur_value = self.get(key, None)
                 if cur_value is not None:
-                    print(type(cur_value))
                     input_dict[key] = cur_value.from_dict_instance(
                         value,
                         device=device,
                         auto_batch_size=False,
                     )
-                    print(type(cur_value), type(input_dict[key]))
                     continue
                 else:
                     # we don't know if another tensor of smaller size is coming
@@ -2142,10 +2140,7 @@ class TensorDict(TensorDictBase):
             elif auto_batch_size is None:
                 auto_batch_size = True
             if auto_batch_size:
-                print('self', self)
-                print('out', out)
                 _set_max_batch_size(out, batch_dims)
-                print('out', out)
         else:
             out.batch_size = batch_size
         return out
