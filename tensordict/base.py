@@ -1216,6 +1216,8 @@ class TensorDictBase(MutableMapping):
 
         By default, falls back on :meth:`~.from_dict`.
         """
+        kwargs.setdefault("auto_batch_size", True)
+        print('kwargs', kwargs)
         return cls.from_dict(*args, **kwargs)
 
     @abc.abstractmethod
@@ -1223,6 +1225,7 @@ class TensorDictBase(MutableMapping):
         self,
         input_dict,
         *others,
+            auto_batch_size: bool | None=None,
         batch_size=None,
         device=None,
         batch_dims=None,
@@ -9866,6 +9869,8 @@ class TensorDictBase(MutableMapping):
         - h5 objects through :meth:`~.from_h5`
 
         """
+        if is_tensor_collection(obj):
+            return obj
         if isinstance(obj, dict):
             return cls.from_dict(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):

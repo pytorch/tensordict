@@ -338,17 +338,17 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim_name=None,
         stack_dim=0,
     ):
-        if batch_size is not None:
-            batch_size = list(batch_size)
-            if stack_dim is None:
-                stack_dim = 0
-            n = batch_size.pop(stack_dim)
-            if n != len(input_dict):
-                raise ValueError(
-                    "The number of dicts and the corresponding batch-size must match, "
-                    f"got len(input_dict)={len(input_dict)} and batch_size[{stack_dim}]={n}."
-                )
-            batch_size = torch.Size(batch_size)
+        # if batch_size is not None:
+        #     batch_size = list(batch_size)
+        #     if stack_dim is None:
+        #         stack_dim = 0
+        #     n = batch_size.pop(stack_dim)
+        #     if n != len(input_dict):
+        #         raise ValueError(
+        #             "The number of dicts and the corresponding batch-size must match, "
+        #             f"got len(input_dict)={len(input_dict)} and batch_size[{stack_dim}]={n}."
+        #         )
+        #     batch_size = torch.Size(batch_size)
         return LazyStackedTensorDict(
             *(
                 TensorDict.from_dict(
@@ -357,6 +357,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     auto_batch_size=auto_batch_size,
                     device=device,
                     batch_dims=batch_dims,
+                    batch_size=batch_size,
                 )
                 for i in range(len(input_dict))
             ),
