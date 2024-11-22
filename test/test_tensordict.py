@@ -20,6 +20,7 @@ import uuid
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -948,6 +949,55 @@ class TestGeneric:
         assert td["a"] == 0
         td = TensorDict.fromkeys({"a", "b", "c"}, 1)
         assert td["a"] == 1
+
+    def test_from_any(self):
+        from dataclasses import dataclass
+
+        @dataclass
+        class MyClass:
+            a: int
+
+        pytree = (
+            [torch.randint(10, (3,)), torch.zeros(2)],
+            {
+                "tensor": torch.randn(
+                    2,
+                ),
+                "td": TensorDict({"one": 1}),
+                "tuple": (1, 2, 3),
+            },
+            {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+            {"dataclass": MyClass(a=0)},
+        )
+        if _has_h5py:
+            pytree = pytree + ({"h5py": TestTensorDictsBase.td_h5(device="cpu").file},)
+        td = TensorDict.from_any(pytree)
+        assert set(td.keys(True, True)) == {
+            ("0", "0"),
+            ("0", "1"),
+            ("1", "td", "one"),
+            ("1", "tensor"),
+            ("1", "tuple", "0"),
+            ("1", "tuple", "1"),
+            ("1", "tuple", "2"),
+            ("2", "named_tuple", "two"),
+            ("4", "h5py", "a"),
+            ("4", "h5py", "b"),
+            ("4", "h5py", "c"),
+            ("4", "h5py", "my_nested_td", "inner"),
+        }
+
+    def test_from_dataclass(self):
+        @dataclass
+        class MyClass:
+            a: int
+            b: Any
+
+        obj = MyClass(a=0, b=1)
+        obj_td = TensorDict.from_dataclass(obj)
+        obj_tc = TensorDict.from_dataclass(obj, as_tensorclass=True)
+        assert is_tensorclass(obj_tc)
+        assert not is_tensorclass(obj_td)
 
     @pytest.mark.parametrize("batch_size", [None, [3, 4]])
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])

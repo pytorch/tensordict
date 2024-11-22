@@ -1957,8 +1957,46 @@ class TensorDict(TensorDictBase):
 
     @classmethod
     def from_dict(
-        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+        cls,
+        input_dict,
+        *others,
+        auto_batch_size: bool | None = None,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        names=None,
     ):
+        if others:
+            if batch_size is not None:
+                raise TypeError(
+                    "conflicting batch size values. Please use the keyword argument only."
+                )
+            if device is not None:
+                raise TypeError(
+                    "conflicting device values. Please use the keyword argument only."
+                )
+            if batch_dims is not None:
+                raise TypeError(
+                    "conflicting batch_dims values. Please use the keyword argument only."
+                )
+            if names is not None:
+                raise TypeError(
+                    "conflicting names values. Please use the keyword argument only."
+                )
+            warn(
+                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead.",
+                category=DeprecationWarning,
+            )
+            batch_size, *others = others
+            if len(others):
+                device, *others = others
+                if len(others):
+                    batch_dims, *others = others
+                    if len(others):
+                        names, *others = others
+                        if len(others):
+                            raise TypeError("Too many positional arguments.")
+
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
@@ -1967,12 +2005,12 @@ class TensorDict(TensorDictBase):
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
         input_dict = dict(input_dict)
         for key, value in list(input_dict.items()):
-            if isinstance(value, (dict,)):
-                # we don't know if another tensor of smaller size is coming
-                # so we can't be sure that the batch-size will still be valid later
-                input_dict[key] = TensorDict.from_dict(
-                    value, batch_size=[], device=device, batch_dims=None
-                )
+            # we don't know if another tensor of smaller size is coming
+            # so we can't be sure that the batch-size will still be valid later
+            input_dict[key] = TensorDict.from_any(
+                value,
+                auto_batch_size=False,
+            )
         # regular __init__ breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,
@@ -1981,7 +2019,17 @@ class TensorDict(TensorDictBase):
             names=names,
         )
         if batch_size is None:
-            _set_max_batch_size(out, batch_dims)
+            if auto_batch_size is None:
+                warn(
+                    "The batch-size was not provided and auto_batch_size isn't set either. "
+                    "Currently, from_dict will call set auto_batch_size=True but this behaviour "
+                    "will be changed in v0.8 and auto_batch_size will be False onward. "
+                    "To silence this warning, pass auto_batch_size directly.",
+                    category=DeprecationWarning,
+                )
+                auto_batch_size = True
+            if auto_batch_size:
+                _set_max_batch_size(out, batch_dims)
         else:
             out.batch_size = batch_size
         return out
@@ -1998,8 +2046,46 @@ class TensorDict(TensorDictBase):
         )
 
     def from_dict_instance(
-        self, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+        self,
+        input_dict,
+        *others,
+        auto_batch_size: bool | None = None,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        names=None,
     ):
+        if others:
+            if batch_size is not None:
+                raise TypeError(
+                    "conflicting batch size values. Please use the keyword argument only."
+                )
+            if device is not None:
+                raise TypeError(
+                    "conflicting device values. Please use the keyword argument only."
+                )
+            if batch_dims is not None:
+                raise TypeError(
+                    "conflicting batch_dims values. Please use the keyword argument only."
+                )
+            if names is not None:
+                raise TypeError(
+                    "conflicting names values. Please use the keyword argument only."
+                )
+            warn(
+                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead.",
+                category=DeprecationWarning,
+            )
+            batch_size, *others = others
+            if len(others):
+                device, *others = others
+                if len(others):
+                    batch_dims, *others = others
+                    if len(others):
+                        names, *others = others
+                        if len(others):
+                            raise TypeError("Too many positional arguments.")
+
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
@@ -2014,14 +2100,24 @@ class TensorDict(TensorDictBase):
                 cur_value = self.get(key, None)
                 if cur_value is not None:
                     input_dict[key] = cur_value.from_dict_instance(
-                        value, batch_size=[], device=device, batch_dims=None
+                        value,
+                        device=device,
+                        auto_batch_size=auto_batch_size,
                     )
                     continue
                 # we don't know if another tensor of smaller size is coming
                 # so we can't be sure that the batch-size will still be valid later
                 input_dict[key] = TensorDict.from_dict(
-                    value, batch_size=[], device=device, batch_dims=None
+                    value,
+                    device=device,
+                    auto_batch_size=auto_batch_size,
                 )
+            else:
+                input_dict[key] = TensorDict.from_any(
+                    value,
+                    auto_batch_size=auto_batch_size,
+                )
+
         out = TensorDict.from_dict(
             input_dict,
             batch_size=batch_size_set,
@@ -2029,7 +2125,17 @@ class TensorDict(TensorDictBase):
             names=names,
         )
         if batch_size is None:
-            _set_max_batch_size(out, batch_dims)
+            if auto_batch_size is None:
+                warn(
+                    "The batch-size was not provided and auto_batch_size isn't set either. "
+                    "Currently, from_dict will call set auto_batch_size=True but this behaviour "
+                    "will be changed in v0.8 and auto_batch_size will be False onward. "
+                    "To silence this warning, pass auto_batch_size directly.",
+                    category=DeprecationWarning,
+                )
+                auto_batch_size = True
+            if auto_batch_size:
+                _set_max_batch_size(out, batch_dims)
         else:
             out.batch_size = batch_size
         return out
@@ -3857,7 +3963,14 @@ class _SubTensorDict(TensorDictBase):
 
     @classmethod
     def from_dict(
-        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+        cls,
+        input_dict,
+        *others,
+        auto_batch_size: bool = False,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        names=None,
     ):
         raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
@@ -4272,6 +4385,12 @@ class _TensorDictKeysView:
             return (
                 (key, tensordict._get_str(key, NO_DEFAULT))
                 for key in tensordict._source.keys()
+            )
+        from tensordict.persistent import PersistentTensorDict
+
+        if isinstance(tensordict, PersistentTensorDict):
+            return (
+                (key, tensordict._get_str(key, NO_DEFAULT)) for key in tensordict.keys()
             )
         raise NotImplementedError(type(tensordict))
 
@@ -4697,7 +4816,9 @@ def from_modules(
     )
 
 
-def from_dict(input_dict, batch_size=None, device=None, batch_dims=None, names=None):
+def from_dict(
+    input_dict, *others, batch_size=None, device=None, batch_dims=None, names=None
+):
     """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
 
     If ``batch_size`` is not specified, returns the maximum batch size possible.
@@ -4762,6 +4883,7 @@ def from_dict(input_dict, batch_size=None, device=None, batch_dims=None, names=N
     """
     return TensorDict.from_dict(
         input_dict,
+        *others,
         batch_size=batch_size,
         device=device,
         batch_dims=batch_dims,

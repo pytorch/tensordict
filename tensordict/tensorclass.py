@@ -237,6 +237,12 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
+    "from_any",
+    "from_dataclass",
+    "to_namedtuple",
+    "from_namedtuple",
+    "from_pytree",
+    "to_pytree",
     "gather",
     "isfinite",
     "isnan",
@@ -377,6 +383,100 @@ class _tensorclass_dec:
         clz._nocast = self.nocast
         clz._frozen = self.frozen
         return clz
+
+
+def from_dataclass(
+    obj: Any,
+    *,
+    auto_batch_size: bool = False,
+    frozen: bool = False,
+    autocast: bool = False,
+    nocast: bool = False,
+) -> Any:
+    """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
+
+    This function takes a dataclass instance or a dataclass type and converts it into a tensor-compatible class,
+    optionally applying various configurations such as auto-batching, immutability, and type casting.
+
+    Args:
+        obj (Any): The dataclass instance or type to be converted. If a type is provided, a new class is returned.
+
+    Keyword Args:
+        auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the resulting object. Defaults to ``False``.
+        frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
+        autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
+        nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
+
+    Returns:
+        A tensor-compatible class or instance derived from the provided dataclass.
+
+    Raises:
+        TypeError: If the provided input is not a dataclass instance or type.
+
+    Examples:
+        >>> from dataclasses import dataclass
+        >>> import torch
+        >>> from tensordict.tensorclass import from_dataclass
+        >>>
+        >>> @dataclass
+        >>> class X:
+        ...     a: int
+        ...     b: torch.Tensor
+        ...
+        >>> x = X(0, 0)
+        >>> x2 = from_dataclass(x)
+        >>> print(x2)
+        X(
+            a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> X2 = from_dataclass(X, autocast=True)
+        >>> print(X2(a=0, b=0))
+        X(
+            a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
+            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    .. notes:: If a dataclass type is provided, a new class is returned with the specified configurations.
+        If a dataclass instance is provided, a new instance of the tensor-compatible class is returned.
+        The `auto_batch_size`, `frozen`, `autocast`, and `nocast` options allow for flexible configuration of the resulting class or instance.
+
+    .. warning:: Whereas :meth:`~tensordict.TensorDict.from_dataclass` will return a :class:`~tensordict.TensorDict` instance
+            by default, this method will return a tensorclass instance or type.
+
+    """
+    from dataclasses import asdict, is_dataclass, make_dataclass
+
+    if isinstance(obj, type):
+        if is_tensorclass(obj):
+            return obj
+        cls = make_dataclass(
+            obj.__name__ + "_tc", fields=obj.__dataclass_fields__, bases=obj.__bases__
+        )
+        clz = _tensorclass(cls, frozen=frozen)
+        clz._type_hints = get_type_hints(obj)
+        clz._autocast = autocast
+        clz._nocast = nocast
+        clz._frozen = frozen
+        return clz
+
+    if not is_dataclass(obj):
+        raise TypeError(f"Expected a obj input, got a {type(obj)} input instead.")
+    name = obj.__class__.__name__ + "_tc"
+    clz = _tensorclass(
+        make_dataclass(name, fields=obj.__dataclass_fields__), frozen=frozen
+    )
+    clz._autocast = autocast
+    clz._nocast = nocast
+    clz._frozen = frozen
+    result = clz(**asdict(obj))
+    if auto_batch_size:
+        result = result.auto_batch_size_()
+    return result
 
 
 @dataclass_transform()
@@ -532,7 +632,8 @@ def _tensorclass(cls: T, *, frozen) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
-    cls = dataclass(cls, frozen=frozen)
+    if not dataclasses.is_dataclass(cls):
+        cls = dataclass(cls, frozen=frozen)
     _TENSORCLASS_MEMO[cls] = True
 
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
@@ -2483,7 +2584,6 @@ class NonTensorData:
                 data_inner = data.tolist()
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
-        # assert _tensordict.is_empty(), self._tensordict
 
         # TODO: this will probably fail with dynamo at some point, + it's terrible.
         #  Make sure it's patched properly at init time

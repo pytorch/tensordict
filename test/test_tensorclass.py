@@ -23,6 +23,7 @@ import pytest
 import tensordict.utils
 import torch
 from tensordict import TensorClass
+from tensordict.tensorclass import from_dataclass
 
 try:
     import torchsnapshot
@@ -92,6 +93,21 @@ class MyData2:
     X: torch.Tensor
     y: torch.Tensor
     z: list
+
+
+@dataclasses.dataclass
+class MyDataClass:
+    a: int
+    b: torch.Tensor
+    c: str
+
+
+try:
+    MyTensorClass_autocast = from_dataclass(MyDataClass, autocast=True)
+    MyTensorClass_nocast = from_dataclass(MyDataClass, nocast=True)
+    MyTensorClass = from_dataclass(MyDataClass)
+except Exception:
+    MyTensorClass_autocast = MyTensorClass_nocast = MyTensorClass = None
 
 
 class TestTensorClass:
@@ -516,6 +532,43 @@ class TestTensorClass:
 
         assert (a != c.clone().zero_()).any()
         assert (c != a.clone().zero_()).any()
+
+    def test_from_dataclass(self):
+        assert is_tensorclass(MyTensorClass_autocast)
+        assert MyTensorClass_nocast is not MyDataClass
+        assert MyTensorClass_autocast._autocast
+        x = MyTensorClass_autocast(a=0, b=0, c=0)
+        assert isinstance(x.a, int)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, str)
+
+        assert is_tensorclass(MyTensorClass_nocast)
+        assert MyTensorClass_nocast is not MyTensorClass_autocast
+        assert MyTensorClass_nocast._nocast
+
+        x = MyTensorClass_nocast(a=0, b=0, c=0)
+        assert is_tensorclass(MyTensorClass)
+        assert not MyTensorClass._autocast
+        assert not MyTensorClass._nocast
+        assert isinstance(x.a, int)
+        assert isinstance(x.b, int)
+        assert isinstance(x.c, int)
+
+        x = MyTensorClass(a=0, b=0, c=0)
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, torch.Tensor)
+
+        x = TensorDict.from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        assert isinstance(x, TensorDict)
+        assert isinstance(x["a"], torch.Tensor)
+        assert isinstance(x["b"], torch.Tensor)
+        assert isinstance(x["c"], torch.Tensor)
+        x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        assert is_tensorclass(x)
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, torch.Tensor)
 
     def test_from_dict(self):
         td = TensorDict(
