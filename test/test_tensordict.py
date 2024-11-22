@@ -972,7 +972,7 @@ class TestGeneric:
         if _has_h5py:
             pytree = pytree + ({"h5py": TestTensorDictsBase.td_h5(device="cpu").file},)
         td = TensorDict.from_any(pytree)
-        assert set(td.keys(True, True)) == {
+        expected = {
             ("0", "0"),
             ("0", "1"),
             ("1", "td", "one"),
@@ -981,11 +981,18 @@ class TestGeneric:
             ("1", "tuple", "1"),
             ("1", "tuple", "2"),
             ("2", "named_tuple", "two"),
-            ("4", "h5py", "a"),
-            ("4", "h5py", "b"),
-            ("4", "h5py", "c"),
-            ("4", "h5py", "my_nested_td", "inner"),
+            ("3", "dataclass", "a"),
         }
+        if _has_h5py:
+            expected = expected.union(
+                {
+                    ("4", "h5py", "a"),
+                    ("4", "h5py", "b"),
+                    ("4", "h5py", "c"),
+                    ("4", "h5py", "my_nested_td", "inner"),
+                }
+            )
+        assert set(td.keys(True, True)) == expected, set(td.keys(True, True)).symmetric_difference(expected)
 
     def test_from_dataclass(self):
         @dataclass
@@ -1017,7 +1024,7 @@ class TestGeneric:
                 )
             return
         data = TensorDict.from_dict(
-            data, batch_size=batch_size, batch_dims=batch_dims, device=device
+            data, batch_size=batch_size, batch_dims=batch_dims, device=device, auto_batch_size=True
         )
         assert data.device == device
         assert "a" in data.keys()
@@ -1051,7 +1058,7 @@ class TestGeneric:
         assert isinstance(td_dict["b"]["y"], int)
         assert isinstance(td_dict["b"]["z"], dict)
         assert isinstance(td_dict["b"]["z"]["y"], int)
-        td_recon = td.from_dict_instance(td_dict)
+        td_recon = td.from_dict_instance(td_dict, auto_batch_size=True)
         assert isinstance(td_recon["a"], torch.Tensor)
         assert isinstance(td_recon["b"], MyClass)
         assert isinstance(td_recon["b"].x, torch.Tensor)
@@ -6493,7 +6500,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert recursive_checker(td_dict)
         if td_name == "td_with_non_tensor":
             assert td_dict["data"]["non_tensor"] == "some text data"
-        assert (TensorDict.from_dict(td_dict) == td).all()
+        assert (TensorDict.from_dict(td_dict,auto_batch_size=False) == td).all()
 
     def test_to_namedtuple(self, td_name, device):
         def is_namedtuple(obj):
@@ -7821,7 +7828,7 @@ class TestMPInplace:
 
 class TestMakeTensorDict:
     def test_create_tensordict(self):
-        tensordict = make_tensordict(a=torch.zeros(3, 4))
+        tensordict = make_tensordict(a=torch.zeros(3, 4), auto_batch_size=True)
         assert (tensordict["a"] == torch.zeros(3, 4)).all()
 
     def test_nested(self):
@@ -7829,7 +7836,7 @@ class TestMakeTensorDict:
             "a": {"b": torch.randn(3, 4), "c": torch.randn(3, 4, 5)},
             "d": torch.randn(3),
         }
-        tensordict = make_tensordict(input_dict)
+        tensordict = make_tensordict(input_dict, auto_batch_size=True)
         assert tensordict.shape == torch.Size([3])
         assert tensordict["a"].shape == torch.Size([3, 4])
         input_tensordict = TensorDict(
@@ -7839,7 +7846,7 @@ class TestMakeTensorDict:
             },
             [],
         )
-        tensordict = make_tensordict(input_tensordict)
+        tensordict = make_tensordict(input_tensordict, auto_batch_size=True)
         assert tensordict.shape == torch.Size([3])
         assert tensordict["a"].shape == torch.Size([3, 4])
         input_dict = {
@@ -7847,30 +7854,30 @@ class TestMakeTensorDict:
             ("a", "c"): torch.randn(3, 4, 5),
             "d": torch.randn(3),
         }
-        tensordict = make_tensordict(input_dict)
+        tensordict = make_tensordict(input_dict, auto_batch_size=True)
         assert tensordict.shape == torch.Size([3])
         assert tensordict["a"].shape == torch.Size([3, 4])
 
     def test_tensordict_batch_size(self):
-        tensordict = make_tensordict()
+        tensordict = make_tensordict(auto_batch_size=True)
         assert tensordict.batch_size == torch.Size([])
 
-        tensordict = make_tensordict(a=torch.randn(3, 4))
+        tensordict = make_tensordict(a=torch.randn(3, 4), auto_batch_size=True)
         assert tensordict.batch_size == torch.Size([3, 4])
 
-        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(3, 4, 5))
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(3, 4, 5), auto_batch_size=True)
         assert tensordict.batch_size == torch.Size([3, 4])
 
-        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(3, 5))  # nested
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(3, 5), auto_batch_size=True)  # nested
         assert nested_tensordict.batch_size == torch.Size([3])
 
-        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(4, 5))  # nested
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(4, 5), auto_batch_size=True)  # nested
         assert nested_tensordict.batch_size == torch.Size([])
 
-        tensordict = make_tensordict(a=torch.randn(3, 4, 2), b=torch.randn(3, 4, 5))
+        tensordict = make_tensordict(a=torch.randn(3, 4, 2), b=torch.randn(3, 4, 5), auto_batch_size=True)
         assert tensordict.batch_size == torch.Size([3, 4])
 
-        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(1))
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(1), auto_batch_size=True)
         assert tensordict.batch_size == torch.Size([])
 
         tensordict = make_tensordict(
@@ -7886,7 +7893,7 @@ class TestMakeTensorDict:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_tensordict_device(self, device):
         tensordict = make_tensordict(
-            a=torch.randn(3, 4), b=torch.randn(3, 4), device=device
+            a=torch.randn(3, 4), b=torch.randn(3, 4), device=device, auto_batch_size=True
         )
         assert tensordict.device == device
         assert tensordict["a"].device == device
@@ -7897,6 +7904,7 @@ class TestMakeTensorDict:
             b=torch.randn(3, 4),
             c=torch.randn(3, 4, device="cpu"),
             device=device,
+            auto_batch_size=True,
         )
         assert tensordict.device == device
         assert tensordict["a"].device == device

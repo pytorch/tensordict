@@ -615,7 +615,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -639,7 +639,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other ^ self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -663,7 +663,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other | self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -687,7 +687,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -709,7 +709,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other <= self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -731,7 +731,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other < self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -753,7 +753,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other >= self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -775,7 +775,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other > self
         if isinstance(other, (dict,)):
-            other = self.from_dict_instance(other)
+            other = self.from_dict_instance(other, auto_batch_size=False)
         if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -2019,7 +2019,7 @@ class TensorDict(TensorDictBase):
             names=names,
         )
         if batch_size is None:
-            if auto_batch_size is None:
+            if auto_batch_size is None and batch_dims is None:
                 warn(
                     "The batch-size was not provided and auto_batch_size isn't set either. "
                     "Currently, from_dict will call set auto_batch_size=True but this behaviour "
@@ -2027,6 +2027,8 @@ class TensorDict(TensorDictBase):
                     "To silence this warning, pass auto_batch_size directly.",
                     category=DeprecationWarning,
                 )
+                auto_batch_size = True
+            elif auto_batch_size is None:
                 auto_batch_size = True
             if auto_batch_size:
                 _set_max_batch_size(out, batch_dims)
@@ -2099,23 +2101,26 @@ class TensorDict(TensorDictBase):
                 # TODO: v0.7: remove the None
                 cur_value = self.get(key, None)
                 if cur_value is not None:
+                    print(type(cur_value))
                     input_dict[key] = cur_value.from_dict_instance(
                         value,
                         device=device,
-                        auto_batch_size=auto_batch_size,
+                        auto_batch_size=False,
                     )
+                    print(type(cur_value), type(input_dict[key]))
                     continue
-                # we don't know if another tensor of smaller size is coming
-                # so we can't be sure that the batch-size will still be valid later
-                input_dict[key] = TensorDict.from_dict(
-                    value,
-                    device=device,
-                    auto_batch_size=auto_batch_size,
-                )
+                else:
+                    # we don't know if another tensor of smaller size is coming
+                    # so we can't be sure that the batch-size will still be valid later
+                    input_dict[key] = TensorDict.from_dict(
+                        value,
+                        device=device,
+                        auto_batch_size=False,
+                    )
             else:
                 input_dict[key] = TensorDict.from_any(
                     value,
-                    auto_batch_size=auto_batch_size,
+                    auto_batch_size=False,
                 )
 
         out = TensorDict.from_dict(
@@ -2125,7 +2130,7 @@ class TensorDict(TensorDictBase):
             names=names,
         )
         if batch_size is None:
-            if auto_batch_size is None:
+            if auto_batch_size is None and batch_dims is None:
                 warn(
                     "The batch-size was not provided and auto_batch_size isn't set either. "
                     "Currently, from_dict will call set auto_batch_size=True but this behaviour "
@@ -2134,8 +2139,13 @@ class TensorDict(TensorDictBase):
                     category=DeprecationWarning,
                 )
                 auto_batch_size = True
+            elif auto_batch_size is None:
+                auto_batch_size = True
             if auto_batch_size:
+                print('self', self)
+                print('out', out)
                 _set_max_batch_size(out, batch_dims)
+                print('out', out)
         else:
             out.batch_size = batch_size
         return out

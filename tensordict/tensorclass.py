@@ -27,6 +27,7 @@ from pathlib import Path
 from textwrap import indent
 
 from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
+from warnings import warn
 
 import numpy as np
 import orjson as json
@@ -632,8 +633,9 @@ def _tensorclass(cls: T, *, frozen) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
-    if not dataclasses.is_dataclass(cls):
-        cls = dataclass(cls, frozen=frozen)
+    # Breaks some tests, don't do that:
+    # if not dataclasses.is_dataclass(cls):
+    cls = dataclass(cls, frozen=frozen)
     _TENSORCLASS_MEMO[cls] = True
 
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
@@ -1367,7 +1369,7 @@ def _update(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = self.from_dict(input_dict_or_td)
+        input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -1579,7 +1581,7 @@ def _to_dict(self, *, retain_none: bool = True) -> dict:
     return td_dict
 
 
-def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
+def _from_dict(cls, input_dict, *, auto_batch_size:bool|None=None, batch_size=None, device=None, batch_dims=None):
     # we pass through a tensordict because keys could be passed as NestedKeys
     # We can't assume all keys are strings, otherwise calling cls(**kwargs)
     # would work ok
@@ -1593,7 +1595,7 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
             non_tensordict=input_dict,
         )
     td = TensorDict.from_dict(
-        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims
+        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims, auto_batch_size=auto_batch_size
     )
     non_tensordict = {}
 
@@ -1601,7 +1603,7 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
 
 
 def _from_dict_instance(
-    self, input_dict, batch_size=None, device=None, batch_dims=None
+    self, input_dict, *, auto_batch_size:bool|None=None, batch_size=None, device=None, batch_dims=None
 ):
     if batch_dims is not None and batch_size is not None:
         raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
@@ -1611,7 +1613,7 @@ def _from_dict_instance(
     # TODO: this is a bit slow and will be a bottleneck every time td[idx] = dict(subtd)
     # is called when there are non tensor data in it
     if not _is_tensor_collection(type(input_dict)):
-        input_tdict = TensorDict.from_dict(input_dict)
+        input_tdict = TensorDict.from_dict(input_dict, auto_batch_size=auto_batch_size)
     else:
         input_tdict = input_dict
     trsf_dict = {}
@@ -1639,7 +1641,19 @@ def _from_dict_instance(
     )
     # check that
     if batch_size is None:
-        out._tensordict.auto_batch_size_()
+        if auto_batch_size is None and batch_dims is None:
+            warn(
+                "The batch-size was not provided and auto_batch_size isn't set either. "
+                "Currently, from_dict will call set auto_batch_size=True but this behaviour "
+                "will be changed in v0.8 and auto_batch_size will be False onward. "
+                "To silence this warning, pass auto_batch_size directly.",
+                category=DeprecationWarning,
+            )
+            auto_batch_size = True
+        elif auto_batch_size is None:
+            auto_batch_size = True
+        if auto_batch_size:
+            out.auto_batch_size_()
     return out
 
 
