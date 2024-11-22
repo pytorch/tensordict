@@ -12,6 +12,7 @@ import contextlib
 import enum
 import gc
 import importlib
+import importlib.util
 import os.path
 import queue
 import uuid
@@ -111,6 +112,8 @@ try:
     from torch.nn.parameter import Buffer
 except ImportError:
     from tensordict.utils import Buffer
+
+_has_h5 = importlib.util.find_spec("h5py") is not None
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -1133,6 +1136,8 @@ class TensorDictBase(MutableMapping):
     def from_dict(
         cls,
         input_dict,
+        *,
+        auto_batch_size: bool | None = None,
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         batch_dims: int | None = None,
@@ -1148,6 +1153,10 @@ class TensorDictBase(MutableMapping):
         Args:
             input_dict (dictionary, optional): a dictionary to use as a data source
                 (nested keys compatible).
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
+                Defaults to ``False``.
             batch_size (iterable of int, optional): a batch size for the tensordict.
             device (torch.device or compatible type, optional): a device for the TensorDict.
             batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
@@ -1213,6 +1222,7 @@ class TensorDictBase(MutableMapping):
     def from_dict_instance(
         self,
         input_dict,
+        *others,
         batch_size=None,
         device=None,
         batch_dims=None,
@@ -9838,6 +9848,113 @@ class TensorDictBase(MutableMapping):
         return dict_to_namedtuple(self.to_dict(retain_none=False))
 
     @classmethod
+    def from_any(cls, obj, *, auto_batch_size: bool = False):
+        """Converts any object to a TensorDict, recursively.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
+                Defaults to ``False``.
+
+        Support includes:
+
+        - dataclasses through :meth:`~.from_dataclass` (dataclasses will be converted to TensorDict instances, not
+          tensorclasses).
+        - namedtuple through :meth:`~.from_namedtuple`
+        - dict through :meth:`~.from_dict`
+        - tuple through :meth:`~.from_tuple`
+        - numpy's structured arrays through :meth:`~.from_struct_array`
+        - h5 objects through :meth:`~.from_h5`
+
+        """
+        if isinstance(obj, dict):
+            return cls.from_dict(obj, auto_batch_size=auto_batch_size)
+        if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
+            return cls.from_struct_array(obj, auto_batch_size=auto_batch_size)
+        from dataclasses import is_dataclass
+
+        if is_dataclass(obj):
+            return cls.from_dataclass(obj, auto_batch_size=auto_batch_size)
+        if is_namedtuple(obj):
+            return cls.from_namedtuple(obj, auto_batch_size=auto_batch_size)
+        if isinstance(obj, tuple):
+            return cls.from_tuple(obj, auto_batch_size=auto_batch_size)
+        if isinstance(obj, list):
+            return cls.from_tuple(tuple(obj), auto_batch_size=auto_batch_size)
+        if _has_h5:
+            import h5py
+
+            if isinstance(obj, h5py.File):
+                from tensordict.persistent import PersistentTensorDict
+
+                obj = PersistentTensorDict(group=obj)
+                if auto_batch_size:
+                    obj.auto_batch_size_()
+                return obj
+        return obj
+
+    @classmethod
+    def from_tuple(cls, obj, *, auto_batch_size: bool = False):
+        from tensordict import TensorDict
+
+        result = TensorDict({str(i): cls.from_any(item) for i, item in enumerate(obj)})
+        if auto_batch_size:
+            result.auto_batch_size_()
+        return result
+
+    @classmethod
+    def from_dataclass(
+        cls, dataclass, *, auto_batch_size: bool = False, as_tensorclass: bool = False
+    ):
+        """Converts a dataclass into a TensorDict instance.
+
+        Args:
+            dataclass: The dataclass instance to be converted.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the
+                resulting TensorDict. Defaults to ``False``.
+            as_tensorclass (bool, optional): If ``True``, delegates the conversion to the free function
+                :func:`~tensordict.from_dataclass` and returns a tensor-compatible class
+                (:func:`~tensordict.tensorclass`) or instance instead of a ``TensorDict``. Defaults to ``False``.
+
+        Returns:
+            A TensorDict instance derived from the provided dataclass, unless `as_tensorclass` is True, in which case a tensor-compatible class or instance is returned.
+
+        Raises:
+            TypeError: If the provided input is not a dataclass instance.
+
+        .. warning:: This method is distinct from the free function `from_dataclass` and serves a different purpose.
+            While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
+
+        .. notes::
+
+            - This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
+            - Each key in the resulting TensorDict is initialized using the `cls.from_any` method.
+            - The `auto_batch_size` option allows for automatic batch size determination and application to the
+              resulting TensorDict.
+
+        """
+        if as_tensorclass:
+            from tensordict.tensorclass import from_dataclass
+
+            return from_dataclass(dataclass, auto_batch_size=auto_batch_size)
+        from dataclasses import fields, is_dataclass
+
+        from tensordict import TensorDict
+
+        if not is_dataclass(dataclass):
+            raise TypeError(
+                f"Expected a dataclass input, got a {type(dataclass)} input instead."
+            )
+        source = {}
+        for field in fields(dataclass):
+            source[field.name] = cls.from_any(getattr(dataclass, field.name))
+        result = TensorDict(source)
+        if auto_batch_size:
+            result.auto_batch_size_()
+        return result
+
+    @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False):
         """Converts a namedtuple to a TensorDict recursively.
 
@@ -9885,8 +10002,7 @@ class TensorDictBase(MutableMapping):
                         "indices": namedtuple_obj.indices,
                     }
             for key, value in namedtuple_obj.items():
-                if is_namedtuple(value):
-                    namedtuple_obj[key] = namedtuple_to_dict(value)
+                namedtuple_obj[key] = cls.from_any(value)
             return dict(namedtuple_obj)
 
         result = TensorDict(namedtuple_to_dict(named_tuple))
