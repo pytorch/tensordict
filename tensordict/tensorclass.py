@@ -1581,7 +1581,15 @@ def _to_dict(self, *, retain_none: bool = True) -> dict:
     return td_dict
 
 
-def _from_dict(cls, input_dict, *, auto_batch_size:bool|None=None, batch_size=None, device=None, batch_dims=None):
+def _from_dict(
+    cls,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
+):
     # we pass through a tensordict because keys could be passed as NestedKeys
     # We can't assume all keys are strings, otherwise calling cls(**kwargs)
     # would work ok
@@ -1595,7 +1603,11 @@ def _from_dict(cls, input_dict, *, auto_batch_size:bool|None=None, batch_size=No
             non_tensordict=input_dict,
         )
     td = TensorDict.from_dict(
-        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims, auto_batch_size=auto_batch_size
+        input_dict,
+        batch_size=batch_size,
+        device=device,
+        batch_dims=batch_dims,
+        auto_batch_size=auto_batch_size,
     )
     non_tensordict = {}
 
@@ -1603,7 +1615,13 @@ def _from_dict(cls, input_dict, *, auto_batch_size:bool|None=None, batch_size=No
 
 
 def _from_dict_instance(
-    self, input_dict, *, auto_batch_size:bool|None=None, batch_size=None, device=None, batch_dims=None
+    self,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
 ):
     if batch_dims is not None and batch_size is not None:
         raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
@@ -1773,7 +1791,7 @@ def _set(
 
             if isinstance(value, dict):
                 if _is_tensor_collection(target_cls):
-                    cast_val = target_cls.from_dict(value)
+                    cast_val = target_cls.from_dict(value, auto_batch_size=False)
                     self._tensordict.set(
                         key, cast_val, inplace=inplace, non_blocking=non_blocking
                     )
