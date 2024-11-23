@@ -20,6 +20,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import KeysView
 from copy import copy
+from dataclasses import _FIELDS, GenericAlias
 from functools import wraps
 from importlib import import_module
 from numbers import Number
@@ -2813,3 +2814,13 @@ def _mismatch_keys(keys1, keys2):
     if sub2 is not None:
         main.append(sub2)
     raise KeyError(r" ".join(main))
+
+
+def _is_dataclass(obj):
+    """Like dataclasses.is_dataclass but compatible with compile."""
+    cls = (
+        obj
+        if isinstance(obj, type) and not isinstance(obj, GenericAlias)
+        else type(obj)
+    )
+    return hasattr(cls, _FIELDS)
