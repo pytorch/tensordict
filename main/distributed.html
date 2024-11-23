@@ -471,7 +471,7 @@ check that the data has been written where needed:</p>
 <p>Although the call to <code class="xref py py-obj docutils literal notranslate"><span class="pre">rpc.rpc_sync</span></code> involved passing the entire tensordict,
 updating specific indices of this object and return it to the original worker,
 the execution of this snippet is extremely fast (even more so if the reference
-to the memory location is already passed beforehand, see <a class="reference external" href="https://github.com/pytorch/rl/blob/main/examples/distributed/distributed_replay_buffer.py">torchrl’s distributed
+to the memory location is already passed beforehand, see <a class="reference external" href="https://github.com/pytorch/rl/blob/main/examples/distributed/replay_buffers/distributed_replay_buffer.py">torchrl’s distributed
 replay buffer documentation</a> to learn more).</p>
 <p>The script contains additional RPC configuration steps that are beyond the
 purpose of this document.</p>

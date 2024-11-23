@@ -131,7 +131,7 @@ Although the call to :obj:`rpc.rpc_sync` involved passing the entire tensordict,
 updating specific indices of this object and return it to the original worker,
 the execution of this snippet is extremely fast (even more so if the reference
 to the memory location is already passed beforehand, see `torchrl's distributed
-replay buffer documentation <https://github.com/pytorch/rl/blob/main/examples/distributed/distributed_replay_buffer.py>`_ to learn more).
+replay buffer documentation <https://github.com/pytorch/rl/blob/main/examples/distributed/replay_buffers/distributed_replay_buffer.py>`_ to learn more).
 
 The script contains additional RPC configuration steps that are beyond the
 purpose of this document.

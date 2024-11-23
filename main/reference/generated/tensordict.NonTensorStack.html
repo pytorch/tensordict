@@ -36,6 +36,7 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="from_dataclass" href="tensordict.from_dataclass.html" />
     <link rel="prev" title="NonTensorData" href="tensordict.NonTensorData.html" />
   <!-- Google Analytics -->
   
@@ -1845,20 +1846,77 @@ model.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.from_any">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_any</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_any" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts any object to a TensorDict, recursively.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>auto_batch_size</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size will be computed automatically.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+<p>Support includes:</p>
+<ul class="simple">
+<li><p>dataclasses through <a class="reference internal" href="#tensordict.NonTensorStack.from_dataclass" title="tensordict.NonTensorStack.from_dataclass"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> (dataclasses will be converted to TensorDict instances, not
+tensorclasses).</p></li>
+<li><p>namedtuple through <a class="reference internal" href="#tensordict.NonTensorStack.from_namedtuple" title="tensordict.NonTensorStack.from_namedtuple"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_namedtuple()</span></code></a></p></li>
+<li><p>dict through <a class="reference internal" href="#tensordict.NonTensorStack.from_dict" title="tensordict.NonTensorStack.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a></p></li>
+<li><p>tuple through <code class="xref py py-meth docutils literal notranslate"><span class="pre">from_tuple()</span></code></p></li>
+<li><p>numpy’s structured arrays through <a class="reference internal" href="#tensordict.NonTensorStack.from_struct_array" title="tensordict.NonTensorStack.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a></p></li>
+<li><p>h5 objects through <a class="reference internal" href="#tensordict.NonTensorStack.from_h5" title="tensordict.NonTensorStack.from_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_h5()</span></code></a></p></li>
+</ul>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.from_dataclass">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dataclass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataclass</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_tensorclass</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_dataclass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a dataclass into a TensorDict instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dataclass</strong> – The dataclass instance to be converted.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>auto_batch_size</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, automatically determines and applies batch size to the
+resulting TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>as_tensorclass</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, delegates the conversion to the free function
+<a class="reference internal" href="tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> and returns a tensor-compatible class
+(<a class="reference internal" href="tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a>) or instance instead of a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A TensorDict instance derived from the provided dataclass, unless <cite>as_tensorclass</cite> is True, in which case a tensor-compatible class or instance is returned.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If the provided input is not a dataclass instance.</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is distinct from the free function <cite>from_dataclass</cite> and serves a different purpose.
+While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.NonTensorStack.from_dict">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_dim_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_dict" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">other</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_dim_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a TensorDict created from a dictionary or another <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> is not specified, returns the maximum batch size possible.</p>
 <p>This function works on nested dictionaries too, or can be used to determine the
 batch-size of a nested tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_dict</strong> (<em>dictionary</em><em>, </em><em>optional</em>) – a dictionary to use as a data source
-(nested keys compatible).</p></li>
+<dd class="field-odd"><p><strong>input_dict</strong> (<em>dictionary</em><em>, </em><em>optional</em>) – a dictionary to use as a data source
+(nested keys compatible).</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>auto_batch_size</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size will be computed automatically.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>batch_size</strong> (<em>iterable of int</em><em>, </em><em>optional</em>) – a batch size for the tensordict.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.5)"><em>torch.device</em></a><em> or </em><em>compatible type</em><em>, </em><em>optional</em>) – a device for the TensorDict.</p></li>
-<li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> (ie number of leading dimensions
+<li><p><strong>batch_dims</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.int" title="tensordict.NonTensorStack.int"><em>int</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> (ie number of leading dimensions
 to be considered for <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>). Exclusinve with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>.
 Note that this is the __maximum__ number of batch dims of the tensordict,
 a smaller number is tolerated.</p></li>
@@ -1913,7 +1971,7 @@ a smaller number is tolerated.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.NonTensorStack.from_dict_instance">
-<span class="sig-name descname"><span class="pre">from_dict_instance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_dict_instance" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">from_dict_instance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">others</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.NonTensorStack.from_dict_instance" title="Permalink to this definition">¶</a></dt>
 <dd><p>Instance method version of <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.from_dict" title="tensordict.TensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>.</p>
 <p>Unlike <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.from_dict" title="tensordict.TensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>, this method will
 attempt to keep the tensordict types within the existing tree (for
@@ -6358,6 +6416,8 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
             <footer>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="tensordict.from_dataclass.html" class="btn btn-neutral float-right" title="from_dataclass" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="tensordict.NonTensorData.html" class="btn btn-neutral" title="NonTensorData" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

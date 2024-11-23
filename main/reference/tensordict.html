@@ -392,7 +392,7 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_consolidated</span></code></a>(filename)</p></td>
 <td><p>Reconstructs a tensordict from a consolidated file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(input_dict[, batch_size, device, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(input_dict, *others[, batch_size, ...])</p></td>
 <td><p>Returns a TensorDict created from a dictionary or another <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_h5.html#tensordict.from_h5" title="tensordict.from_h5"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_h5</span></code></a>(filename[, mode])</p></td>
@@ -519,7 +519,7 @@ However, physical storage of PyTorch tensors should not be any different:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.is_tensor_collection.html#tensordict.is_tensor_collection" title="tensordict.is_tensor_collection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_tensor_collection</span></code></a>(datatype)</p></td>
 <td><p>Checks if a data object or a type is a tensor container from the tensordict lib.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.make_tensordict.html#tensordict.make_tensordict" title="tensordict.make_tensordict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tensordict</span></code></a>([input_dict, batch_size, device])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.make_tensordict.html#tensordict.make_tensordict" title="tensordict.make_tensordict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tensordict</span></code></a>([input_dict, batch_size, ...])</p></td>
 <td><p>Returns a TensorDict created from the keyword arguments or an input dictionary.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts" title="tensordict.merge_tensordicts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">merge_tensordicts</span></code></a>(*tensordicts[, callback_exist])</p></td>
