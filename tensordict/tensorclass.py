@@ -46,6 +46,7 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
@@ -450,7 +451,7 @@ def from_dataclass(
             by default, this method will return a tensorclass instance or type.
 
     """
-    from dataclasses import asdict, is_dataclass, make_dataclass
+    from dataclasses import asdict, make_dataclass
 
     if isinstance(obj, type):
         if is_tensorclass(obj):

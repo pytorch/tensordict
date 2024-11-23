@@ -10661,7 +10661,8 @@ class TestNonTensorData:
 
     def test_nontensor_dict(self, non_tensor_data):
         assert (
-            TensorDict.from_dict(non_tensor_data.to_dict()) == non_tensor_data
+            TensorDict.from_dict(non_tensor_data.to_dict(), auto_batch_size=True)
+            == non_tensor_data
         ).all()
 
     def test_nontensor_tensor(self):
@@ -11202,7 +11203,7 @@ def _to_float(td, td_name, tmpdir):
         td._source = td._source.float()
     elif td_name in ("td_h5",):
         td = PersistentTensorDict.from_dict(
-            td.float().to_dict(), filename=tmpdir + "/file.t"
+            td.float().to_dict(), filename=tmpdir + "/file.t", auto_batch_size=True
         )
     elif td_name in ("td_params",):
         td = TensorDictParams(td.data.float())
