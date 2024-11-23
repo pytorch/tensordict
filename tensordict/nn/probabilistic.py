@@ -283,7 +283,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         in_keys: NestedKey | List[NestedKey] | Dict[str, NestedKey],
         out_keys: NestedKey | List[NestedKey] | None = None,
         *,
-        default_interaction_mode: str | None = None,
         default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
@@ -332,10 +331,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             log_prob_key = "sample_log_prob"
         self.log_prob_key = log_prob_key
 
-        if default_interaction_mode is not None:
-            raise ValueError(
-                "default_interaction_mode is deprecated, use default_interaction_type instead."
-            )
         self.default_interaction_type = InteractionType(default_interaction_type)
 
         if isinstance(distribution_class, str):
@@ -356,7 +351,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             for dist_key, td_key in _zip_strict(self.dist_keys, self.in_keys):
                 if isinstance(dist_key, tuple):
                     dist_key = dist_key[-1]
-                dist_kwargs[dist_key] = tensordict.get(td_key)
+                dist_kwargs[dist_key] = tensordict.get(td_key, None)
             dist = self.distribution_class(
                 **dist_kwargs, **_dynamo_friendly_to_dict(self.distribution_kwargs)
             )
@@ -630,12 +625,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
-        if (tensordict_out is None and self._select_before_return) or (tensordict_out is not None):
+        if (tensordict_out is None and self._select_before_return) or (
+            tensordict_out is not None
+        ):
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict
-        tensordict_exec = self.get_dist_params(tensordict_exec, tensordict_out, **kwargs
-        )
+        tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
         tensordict_exec = self.module[-1](
             tensordict_exec, _requires_sample=self._requires_sample
         )
@@ -645,7 +641,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             result = tensordict_exec
             if self._select_before_return:
-                return tensordict.update(result.select(*self.out_keys))
+                return tensordict.update(result, keys_to_update=self.out_keys)
         return result
 
 

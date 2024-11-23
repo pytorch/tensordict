@@ -470,7 +470,9 @@ class TensorDictSequential(TensorDictModule):
         tensordict_out: TensorDictBase | None = None,
         **kwargs: Any,
     ) -> TensorDictBase:
-        if (tensordict_out is None and self._select_before_return) or (tensordict_out is not None):
+        if (tensordict_out is None and self._select_before_return) or (
+            tensordict_out is not None
+        ):
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict
