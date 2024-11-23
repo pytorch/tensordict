@@ -124,7 +124,6 @@ class _NoDefault(enum.IntEnum):
 
 
 NO_DEFAULT = _NoDefault.ZERO
-assert not NO_DEFAULT
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -4297,7 +4296,6 @@ class TensorDictBase(MutableMapping):
                 elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
                     nt = oldv
-                    assert not v.numel()
                     nt_lengths = None
                     del flat_dict[k]
                 elif k[-1].startswith("<NJT_VALUES>"):
@@ -9453,7 +9451,6 @@ class TensorDictBase(MutableMapping):
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
                 _device_recorder.record_transfer(device)
-            assert not non_blocking
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if is_tc is None:
