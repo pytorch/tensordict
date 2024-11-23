@@ -55,6 +55,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
+    _is_dataclass as is_dataclass,
     _is_non_tensor,
     _is_number,
     _is_tensorclass,
@@ -9452,6 +9453,7 @@ class TensorDictBase(MutableMapping):
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
                 _device_recorder.record_transfer(device)
+            assert not non_blocking
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if is_tc is None:
@@ -9874,16 +9876,15 @@ class TensorDictBase(MutableMapping):
             return cls.from_dict(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
             return cls.from_struct_array(obj, auto_batch_size=auto_batch_size)
-        from dataclasses import is_dataclass
 
-        if is_dataclass(obj):
-            return cls.from_dataclass(obj, auto_batch_size=auto_batch_size)
-        if is_namedtuple(obj):
-            return cls.from_namedtuple(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, tuple):
             return cls.from_tuple(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, list):
             return cls.from_tuple(tuple(obj), auto_batch_size=auto_batch_size)
+        if is_dataclass(obj):
+            return cls.from_dataclass(obj, auto_batch_size=auto_batch_size)
+        if is_namedtuple(obj):
+            return cls.from_namedtuple(obj, auto_batch_size=auto_batch_size)
         if _has_h5:
             import h5py
 
@@ -9942,7 +9943,7 @@ class TensorDictBase(MutableMapping):
             from tensordict.tensorclass import from_dataclass
 
             return from_dataclass(dataclass, auto_batch_size=auto_batch_size)
-        from dataclasses import fields, is_dataclass
+        from dataclasses import fields
 
         from tensordict import TensorDict
 
