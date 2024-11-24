@@ -9887,7 +9887,9 @@ class TensorDictBase(MutableMapping):
             if _is_list_tensor_compatible(obj)[0]:
                 return torch.tensor(obj)
             else:
-                return cls.from_tuple(tuple(obj), auto_batch_size=auto_batch_size)
+                from tensordict.tensorclass import NonTensorStack
+
+                return NonTensorStack.from_list(obj)
         if is_dataclass(obj):
             return cls.from_dataclass(obj, auto_batch_size=auto_batch_size)
         if _has_h5:
