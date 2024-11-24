@@ -18,6 +18,7 @@ import queue
 import uuid
 import warnings
 import weakref
+from collections import UserDict
 from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -9871,6 +9872,8 @@ class TensorDictBase(MutableMapping):
             return obj
         if isinstance(obj, dict):
             return cls.from_dict(obj, auto_batch_size=auto_batch_size)
+        if isinstance(obj, UserDict):
+            return cls.from_dict(dict(obj), auto_batch_size=auto_batch_size)
         if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
             return cls.from_struct_array(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, tuple):

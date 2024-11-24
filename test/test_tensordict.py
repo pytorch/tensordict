@@ -18,6 +18,7 @@ import re
 import sys
 import uuid
 import warnings
+from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -995,6 +996,13 @@ class TestGeneric:
         assert set(td.keys(True, True)) == expected, set(
             td.keys(True, True)
         ).symmetric_difference(expected)
+
+    def test_from_any_userdict(self):
+        class D(UserDict): ...
+
+        d = D(a=0)
+        assert TensorDict.from_any(d)["a"] == 0
+        assert isinstance(TensorDict.from_any(d)["a"], torch.Tensor)
 
     def test_from_dataclass(self):
         @dataclass
