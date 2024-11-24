@@ -18,6 +18,7 @@ import re
 import sys
 import uuid
 import warnings
+from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -995,6 +996,13 @@ class TestGeneric:
         assert set(td.keys(True, True)) == expected, set(
             td.keys(True, True)
         ).symmetric_difference(expected)
+
+    def test_from_any_userdict(self):
+        class D(UserDict): ...
+
+        d = D(a=0)
+        assert TensorDict.from_any(d)["a"] == 0
+        assert isinstance(TensorDict.from_any(d)["a"], torch.Tensor)
 
     def test_from_dataclass(self):
         @dataclass
@@ -10650,6 +10658,19 @@ class TestNonTensorData:
         assert not (non_tensor_data != non_tensor_data).get_non_tensor(
             ("nested", "bool")
         )
+
+    def test_from_list(self):
+        nd = NonTensorStack.from_list(
+            [[True, "b", torch.randn(())], ["another", 0, NonTensorData("final")]]
+        )
+        assert isinstance(nd, NonTensorStack)
+        assert nd.shape == (2, 3)
+        assert nd[0, 0].data
+        assert nd[0, 1].data == "b"
+        assert isinstance(nd[0, 2].data, torch.Tensor)
+        assert nd[1, 0].data == "another"
+        assert nd[1, 1].data == 0
+        assert nd[1, 2].data == "final"
 
     def test_non_tensor_call(self):
         td0 = TensorDict({"a": 0, "b": 0})
