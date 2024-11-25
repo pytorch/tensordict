@@ -207,12 +207,25 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     @classmethod
-    def from_dict(cls, input_dict, filename, batch_size=None, device=None, **kwargs):
+    def from_dict(
+        cls,
+        input_dict,
+        filename,
+        *others,
+        auto_batch_size: bool = False,
+        batch_size=None,
+        device=None,
+        **kwargs,
+    ):
         """Converts a dictionary or a TensorDict to a h5 file.
 
         Args:
             input_dict (dict, TensorDict or compatible): data to be stored as h5.
             filename (str or path): path to the h5 file.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
+                Defaults to ``False``.
             batch_size (tensordict batch-size, optional): if provided, batch size
                 of the tensordict. If not, the batch size will be gathered from the
                 input structure (if present) or determined automatically.
@@ -225,6 +238,19 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
+        if others:
+            if batch_size is not None:
+                raise TypeError(
+                    "conflicting batch size values. Please use the keyword argument only."
+                )
+            warnings.warn(
+                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead."
+            )
+            if len(others) == 2:
+                batch_size, device = others
+            else:
+                batch_size = others[0]
+
         import h5py
 
         file = h5py.File(filename, "w", locking=cls.LOCKING)

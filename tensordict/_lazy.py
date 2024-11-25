@@ -329,15 +329,38 @@ class LazyStackedTensorDict(TensorDictBase):
     @classmethod
     def from_dict(
         cls,
-        input_dict,
+        input_dict: List[Dict[NestedKey, Any]],
+        *other,
+        auto_batch_size: bool = False,
         batch_size=None,
         device=None,
         batch_dims=None,
         stack_dim_name=None,
         stack_dim=0,
     ):
+        # if batch_size is not None:
+        #     batch_size = list(batch_size)
+        #     if stack_dim is None:
+        #         stack_dim = 0
+        #     n = batch_size.pop(stack_dim)
+        #     if n != len(input_dict):
+        #         raise ValueError(
+        #             "The number of dicts and the corresponding batch-size must match, "
+        #             f"got len(input_dict)={len(input_dict)} and batch_size[{stack_dim}]={n}."
+        #         )
+        #     batch_size = torch.Size(batch_size)
         return LazyStackedTensorDict(
-            *(input_dict[str(i)] for i in range(len(input_dict))),
+            *(
+                TensorDict.from_dict(
+                    input_dict[str(i)],
+                    *other,
+                    auto_batch_size=auto_batch_size,
+                    device=device,
+                    batch_dims=batch_dims,
+                    batch_size=batch_size,
+                )
+                for i in range(len(input_dict))
+            ),
             stack_dim=stack_dim,
             stack_dim_name=stack_dim_name,
         )
