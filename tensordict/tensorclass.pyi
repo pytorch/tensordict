@@ -209,9 +209,16 @@ class TensorClass:
     def auto_batch_size_(self, batch_dims: int | None = None) -> T: ...
     def auto_device_(self) -> T: ...
     @classmethod
+    def from_dataclass(
+        cls, dataclass, *, auto_batch_size: bool = False, as_tensorclass: bool = False
+    ): ...
+    @classmethod
+    def from_any(cls, obj, *, auto_batch_size: bool = False): ...
+    @classmethod
     def from_dict(
         cls,
         input_dict,
+        *,
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         batch_dims: int | None = None,

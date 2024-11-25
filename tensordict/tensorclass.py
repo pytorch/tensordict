@@ -27,6 +27,7 @@ from pathlib import Path
 from textwrap import indent
 
 from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
+from warnings import warn
 
 import numpy as np
 import orjson as json
@@ -45,6 +46,7 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
@@ -192,6 +194,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "any",
     "apply",
     "apply_",
+    "as_tensor",
     "asin",
     "asin_",
     "atan",
@@ -237,6 +240,12 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
+    "from_any",
+    "from_dataclass",
+    "to_namedtuple",
+    "from_namedtuple",
+    "from_pytree",
+    "to_pytree",
     "gather",
     "isfinite",
     "isnan",
@@ -377,6 +386,100 @@ class _tensorclass_dec:
         clz._nocast = self.nocast
         clz._frozen = self.frozen
         return clz
+
+
+def from_dataclass(
+    obj: Any,
+    *,
+    auto_batch_size: bool = False,
+    frozen: bool = False,
+    autocast: bool = False,
+    nocast: bool = False,
+) -> Any:
+    """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
+
+    This function takes a dataclass instance or a dataclass type and converts it into a tensor-compatible class,
+    optionally applying various configurations such as auto-batching, immutability, and type casting.
+
+    Args:
+        obj (Any): The dataclass instance or type to be converted. If a type is provided, a new class is returned.
+
+    Keyword Args:
+        auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the resulting object. Defaults to ``False``.
+        frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
+        autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
+        nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
+
+    Returns:
+        A tensor-compatible class or instance derived from the provided dataclass.
+
+    Raises:
+        TypeError: If the provided input is not a dataclass instance or type.
+
+    Examples:
+        >>> from dataclasses import dataclass
+        >>> import torch
+        >>> from tensordict.tensorclass import from_dataclass
+        >>>
+        >>> @dataclass
+        >>> class X:
+        ...     a: int
+        ...     b: torch.Tensor
+        ...
+        >>> x = X(0, 0)
+        >>> x2 = from_dataclass(x)
+        >>> print(x2)
+        X(
+            a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> X2 = from_dataclass(X, autocast=True)
+        >>> print(X2(a=0, b=0))
+        X(
+            a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
+            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    .. notes:: If a dataclass type is provided, a new class is returned with the specified configurations.
+        If a dataclass instance is provided, a new instance of the tensor-compatible class is returned.
+        The `auto_batch_size`, `frozen`, `autocast`, and `nocast` options allow for flexible configuration of the resulting class or instance.
+
+    .. warning:: Whereas :meth:`~tensordict.TensorDict.from_dataclass` will return a :class:`~tensordict.TensorDict` instance
+            by default, this method will return a tensorclass instance or type.
+
+    """
+    from dataclasses import asdict, make_dataclass
+
+    if isinstance(obj, type):
+        if is_tensorclass(obj):
+            return obj
+        cls = make_dataclass(
+            obj.__name__ + "_tc", fields=obj.__dataclass_fields__, bases=obj.__bases__
+        )
+        clz = _tensorclass(cls, frozen=frozen)
+        clz._type_hints = get_type_hints(obj)
+        clz._autocast = autocast
+        clz._nocast = nocast
+        clz._frozen = frozen
+        return clz
+
+    if not is_dataclass(obj):
+        raise TypeError(f"Expected a obj input, got a {type(obj)} input instead.")
+    name = obj.__class__.__name__ + "_tc"
+    clz = _tensorclass(
+        make_dataclass(name, fields=obj.__dataclass_fields__), frozen=frozen
+    )
+    clz._autocast = autocast
+    clz._nocast = nocast
+    clz._frozen = frozen
+    result = clz(**asdict(obj))
+    if auto_batch_size:
+        result = result.auto_batch_size_()
+    return result
 
 
 @dataclass_transform()
@@ -532,6 +635,8 @@ def _tensorclass(cls: T, *, frozen) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
+    # Breaks some tests, don't do that:
+    # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
     _TENSORCLASS_MEMO[cls] = True
 
@@ -1266,7 +1371,7 @@ def _update(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = self.from_dict(input_dict_or_td)
+        input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -1478,7 +1583,15 @@ def _to_dict(self, *, retain_none: bool = True) -> dict:
     return td_dict
 
 
-def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
+def _from_dict(
+    cls,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
+):
     # we pass through a tensordict because keys could be passed as NestedKeys
     # We can't assume all keys are strings, otherwise calling cls(**kwargs)
     # would work ok
@@ -1492,7 +1605,11 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
             non_tensordict=input_dict,
         )
     td = TensorDict.from_dict(
-        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims
+        input_dict,
+        batch_size=batch_size,
+        device=device,
+        batch_dims=batch_dims,
+        auto_batch_size=auto_batch_size,
     )
     non_tensordict = {}
 
@@ -1500,7 +1617,13 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
 
 
 def _from_dict_instance(
-    self, input_dict, batch_size=None, device=None, batch_dims=None
+    self,
+    input_dict,
+    *,
+    auto_batch_size: bool | None = None,
+    batch_size=None,
+    device=None,
+    batch_dims=None,
 ):
     if batch_dims is not None and batch_size is not None:
         raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
@@ -1510,7 +1633,7 @@ def _from_dict_instance(
     # TODO: this is a bit slow and will be a bottleneck every time td[idx] = dict(subtd)
     # is called when there are non tensor data in it
     if not _is_tensor_collection(type(input_dict)):
-        input_tdict = TensorDict.from_dict(input_dict)
+        input_tdict = TensorDict.from_dict(input_dict, auto_batch_size=auto_batch_size)
     else:
         input_tdict = input_dict
     trsf_dict = {}
@@ -1538,7 +1661,19 @@ def _from_dict_instance(
     )
     # check that
     if batch_size is None:
-        out._tensordict.auto_batch_size_()
+        if auto_batch_size is None and batch_dims is None:
+            warn(
+                "The batch-size was not provided and auto_batch_size isn't set either. "
+                "Currently, from_dict will call set auto_batch_size=True but this behaviour "
+                "will be changed in v0.8 and auto_batch_size will be False onward. "
+                "To silence this warning, pass auto_batch_size directly.",
+                category=DeprecationWarning,
+            )
+            auto_batch_size = True
+        elif auto_batch_size is None:
+            auto_batch_size = True
+        if auto_batch_size:
+            out.auto_batch_size_()
     return out
 
 
@@ -1658,7 +1793,7 @@ def _set(
 
             if isinstance(value, dict):
                 if _is_tensor_collection(target_cls):
-                    cast_val = target_cls.from_dict(value)
+                    cast_val = target_cls.from_dict(value, auto_batch_size=False)
                     self._tensordict.set(
                         key, cast_val, inplace=inplace, non_blocking=non_blocking
                     )
@@ -2483,7 +2618,6 @@ class NonTensorData:
                 data_inner = data.tolist()
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
-        # assert _tensordict.is_empty(), self._tensordict
 
         # TODO: this will probably fail with dynamo at some point, + it's terrible.
         #  Make sure it's patched properly at init time
@@ -2980,6 +3114,18 @@ class NonTensorStack(LazyStackedTensorDict):
             *[ntd.maybe_to_stack() for ntd in self.tensordicts],
             stack_dim=self.stack_dim,
         )
+
+    @classmethod
+    def from_list(cls, non_tensors: List[Any]):
+        # Use local function because refers to cls
+        def _maybe_from_list(nontensor):
+            if isinstance(nontensor, list):
+                return cls.from_list(nontensor)
+            if is_non_tensor(nontensor):
+                return nontensor
+            return NonTensorData(nontensor)
+
+        return cls(*[_maybe_from_list(nontensor) for nontensor in non_tensors])
 
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):

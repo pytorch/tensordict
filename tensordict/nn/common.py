@@ -297,9 +297,11 @@ class dispatch:
                                 f"The key {expected_key} wasn't found in the keyword arguments "
                                 f"but is expected to execute that function."
                             )
+                batch_size = torch.Size([]) if not self.auto_batch_size else None
                 tensordict = make_tensordict(
                     tensordict_values,
-                    batch_size=torch.Size([]) if not self.auto_batch_size else None,
+                    batch_size=batch_size,
+                    auto_batch_size=self.auto_batch_size,
                 )
                 if _self is not None:
                     out = func(_self, tensordict, *args, **kwargs)
@@ -1001,7 +1003,7 @@ class TensorDictModule(TensorDictModuleBase):
                 tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
-                tensordict_out.set(_out_key, _tensor)
+                tensordict_out.set(_out_key, TensorDict.from_any(_tensor))
         return tensordict_out
 
     def _call_module(

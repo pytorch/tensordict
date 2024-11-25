@@ -43,6 +43,7 @@ from tensordict.functional import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import (
+    from_dataclass,
     NonTensorData,
     NonTensorStack,
     tensorclass,

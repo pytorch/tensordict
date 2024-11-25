@@ -22,6 +22,7 @@ from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
 from copy import copy
+from dataclasses import _FIELDS, GenericAlias
 from functools import wraps
 from importlib import import_module
 from numbers import Number
@@ -860,7 +861,7 @@ _TENSORCLASS_MEMO = {}
 
 
 def _is_tensorclass(cls: type) -> bool:
-    out = _TENSORCLASS_MEMO.get(cls, None)
+    out = _TENSORCLASS_MEMO.get(cls)
     if out is None:
         out = getattr(cls, "_is_tensorclass", False)
         if not is_dynamo_compiling():
@@ -2815,6 +2816,49 @@ def _mismatch_keys(keys1, keys2):
     if sub2 is not None:
         main.append(sub2)
     raise KeyError(r" ".join(main))
+
+
+def _is_dataclass(obj):
+    """Like dataclasses.is_dataclass but compatible with compile."""
+    cls = (
+        obj
+        if isinstance(obj, type) and not isinstance(obj, GenericAlias)
+        else type(obj)
+    )
+    return hasattr(cls, _FIELDS)
+
+
+def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
+    length_t = len(t)
+    dtypes = set()
+    sizes = set()
+    for i in t:
+        if isinstance(i, (float, int, torch.SymInt, Number)):
+            dtypes.add(type(i))
+            if len(dtypes) > 1:
+                return False, None, None
+            continue
+        elif isinstance(i, list):
+            is_compat, size_i, dtype = _is_list_tensor_compatible(i)
+            if not is_compat:
+                return False, None, None
+            if dtype is not None:
+                dtypes.add(dtype)
+            if len(dtypes) > 1:
+                return False, None, None
+            sizes.add(size_i)
+            if len(sizes) > 1:
+                return False, None, None
+            continue
+        return False, None
+    else:
+        if len(dtypes):
+            dtype = list(dtypes)[0]
+        else:
+            dtype = None
+        if len(sizes):
+            return True, (length_t, *list(sizes)[0]), dtype
+        return True, (length_t,), dtype
 
 
 class _ContextManager:
