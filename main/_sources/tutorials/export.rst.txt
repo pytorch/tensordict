@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.0374, 0.0000, 0.1834, 0.5909]], grad_fn=<ReluBackward0>), tensor([[ 0.2697,  0.3425, -0.6293,  0.4099]], grad_fn=<AddmmBackward0>), tensor([[0.2697, 0.3425]], grad_fn=<SplitBackward0>), tensor([[0.6526, 1.2764]], grad_fn=<ClampMinBackward0>), tensor([[0.2697, 0.3425]], grad_fn=<SplitBackward0>))
+    (tensor([[0.4934, 1.1764, 0.0000, 0.0000]], grad_fn=<ReluBackward0>), tensor([[ 0.3873, -0.0744,  0.2613,  0.7791]], grad_fn=<AddmmBackward0>), tensor([[ 0.3873, -0.0744]], grad_fn=<SplitBackward0>), tensor([[1.1720, 1.5546]], grad_fn=<ClampMinBackward0>), tensor([[ 0.3873, -0.0744]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  505.45 micro-seconds
-    Time for exported module:  344.99 micro-seconds
+    Time for TDModule:  533.34 micro-seconds
+    Time for exported module:  351.43 micro-seconds
 
 
 
@@ -302,7 +302,7 @@ and the FX graph:
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
-             # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -328,7 +328,7 @@ and the FX graph:
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
-             # File: /pytorch/tensordict/tensordict/nn/utils.py:68 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[0.2697, 0.3425]], grad_fn=<SplitBackward0>)
+    tensor([[ 0.3873, -0.0744]], grad_fn=<SplitBackward0>)
 
 
 
@@ -657,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.726 seconds)
+   **Total running time of the script:** (0 minutes 1.784 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
