@@ -282,6 +282,7 @@ Here is an example:
     TensorClass
     NonTensorData
     NonTensorStack
+    from_dataclass
 
 Auto-casting
 ------------

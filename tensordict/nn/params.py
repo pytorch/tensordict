@@ -120,7 +120,6 @@ def _maybe_make_param_or_buffer(tensor):
     if (
         isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, (nn.Parameter, Buffer))
-        # and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
         if not tensor.requires_grad and not is_batchedtensor(tensor):
             # convert all non-parameters to buffers
@@ -1016,7 +1015,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_carry_over
     def from_dict_instance(
-        self, input_dict, batch_size=None, device=None, batch_dims=None
+        self,
+        input_dict,
+        *,
+        auto_batch_size: bool = False,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
     ): ...
 
     @_carry_over
