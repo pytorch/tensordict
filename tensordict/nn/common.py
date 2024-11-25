@@ -301,7 +301,7 @@ class dispatch:
                 tensordict = make_tensordict(
                     tensordict_values,
                     batch_size=batch_size,
-                    auto_batch_size=False,
+                    auto_batch_size=self.auto_batch_size,
                 )
                 if _self is not None:
                     out = func(_self, tensordict, *args, **kwargs)
