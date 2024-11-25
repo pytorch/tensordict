@@ -9865,7 +9865,7 @@ class TestLock:
 
     @pytest.mark.skipif(
         not torch.cuda.is_available(),
-     # and not torch.backends.mps.is_available(),
+        # and not torch.backends.mps.is_available(),
         reason="a device is required.",
     )
     def test_cached_data_lock_device(self):
