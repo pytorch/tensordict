@@ -389,13 +389,13 @@ class TestTDModule:
             in_keys=[],
             out_keys=["out"],
         )
-        assert tdm(TensorDict({}))["out"] == [1, 2]
+        assert tdm(TensorDict())["out"] == [1, 2]
         tdm = TensorDictModule(
             lambda: "a string!",
             in_keys=[],
             out_keys=["out"],
         )
-        assert tdm(TensorDict({}))["out"] == "a string!"
+        assert tdm(TensorDict())["out"] == "a string!"
 
     @pytest.mark.parametrize(
         "out_keys",
