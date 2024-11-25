@@ -70,10 +70,7 @@ except ImportError:
 try:
     from torch.compiler import assume_constant_result, is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import (
-        assume_constant_result,
-        is_compiling,
-    )
+    from torch._dynamo import assume_constant_result, is_compiling
 
 if TYPE_CHECKING:
     from tensordict.tensordict import TensorDictBase
@@ -2825,7 +2822,8 @@ def _is_dataclass(obj):
         if isinstance(obj, type) and not isinstance(obj, GenericAlias)
         else type(obj)
     )
-    return hasattr(cls, _FIELDS)
+    # return hasattr(cls, _FIELDS)
+    return getattr(cls, _FIELDS, None) is not None
 
 
 def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
