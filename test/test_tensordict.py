@@ -959,7 +959,7 @@ class TestGeneric:
             a: int
 
         pytree = (
-            [torch.randint(10, (3,)), torch.zeros(2)],
+            [[-1, 0, 1], [2, 3, 4]],
             {
                 "tensor": torch.randn(
                     2,
@@ -974,8 +974,7 @@ class TestGeneric:
             pytree = pytree + ({"h5py": TestTensorDictsBase.td_h5(device="cpu").file},)
         td = TensorDict.from_any(pytree)
         expected = {
-            ("0", "0"),
-            ("0", "1"),
+            "0",
             ("1", "td", "one"),
             ("1", "tensor"),
             ("1", "tuple", "0"),
@@ -1001,8 +1000,8 @@ class TestGeneric:
         t = torch.randn(3, 4, 5)
         t = t.tolist()
         assert isinstance(TensorDict.from_any(t), torch.Tensor)
-        t[0].extend([0, 2])
-        assert isinstance(TensorDict.from_any(t), TensorDict)
+        t[0][1].extend([0, 2])
+        assert isinstance(TensorDict.from_any(t), NonTensorStack)
 
     def test_from_any_userdict(self):
         class D(UserDict): ...
