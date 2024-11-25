@@ -53,7 +53,8 @@ class TestTensorDictsBase:
     TYPES_DEVICES = []
     TYPES_DEVICES_NOLAZY = []
 
-    def td(self, device):
+    @classmethod
+    def td(cls, device):
         return TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5),
@@ -68,7 +69,8 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["td", device]]
         TYPES_DEVICES_NOLAZY += [["td", device]]
 
-    def nested_td(self, device):
+    @classmethod
+    def nested_td(cls, device):
         return TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5),
@@ -86,7 +88,8 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_td", device]]
         TYPES_DEVICES_NOLAZY += [["nested_td", device]]
 
-    def nested_tensorclass(self, device):
+    @classmethod
+    def nested_tensorclass(cls, device):
 
         nested_class = MyClass(
             X=torch.randn(4, 3, 2, 1),
@@ -119,8 +122,9 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_tensorclass", device]]
         TYPES_DEVICES_NOLAZY += [["nested_tensorclass", device]]
 
+    @classmethod
     @set_lazy_legacy(True)
-    def nested_stacked_td(self, device):
+    def nested_stacked_td(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5),
@@ -140,8 +144,9 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_stacked_td", device]]
         TYPES_DEVICES_NOLAZY += [["nested_stacked_td", device]]
 
+    @classmethod
     @set_lazy_legacy(True)
-    def stacked_td(self, device):
+    def stacked_td(cls, device):
         td1 = TensorDict(
             source={
                 "a": torch.randn(4, 3, 1, 5),
@@ -165,7 +170,8 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["stacked_td", device]]
 
-    def idx_td(self, device):
+    @classmethod
+    def idx_td(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(2, 4, 3, 2, 1, 5),
@@ -180,7 +186,8 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["idx_td", device]]
 
-    def sub_td(self, device):
+    @classmethod
+    def sub_td(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(2, 4, 3, 2, 1, 5),
@@ -195,7 +202,8 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["sub_td", device]]
 
-    def sub_td2(self, device):
+    @classmethod
+    def sub_td2(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(4, 2, 3, 2, 1, 5),
@@ -212,17 +220,19 @@ class TestTensorDictsBase:
 
     temp_path_memmap = tempfile.TemporaryDirectory()
 
-    def memmap_td(self, device):
-        path = pathlib.Path(self.temp_path_memmap.name)
+    @classmethod
+    def memmap_td(cls, device):
+        path = pathlib.Path(cls.temp_path_memmap.name)
         shutil.rmtree(path)
         path.mkdir()
-        return self.td(device).memmap_(path)
+        return cls.td(device).memmap_(path)
 
     TYPES_DEVICES += [["memmap_td", torch.device("cpu")]]
     TYPES_DEVICES_NOLAZY += [["memmap_td", torch.device("cpu")]]
 
+    @classmethod
     @set_lazy_legacy(True)
-    def permute_td(self, device):
+    def permute_td(cls, device):
         return TensorDict(
             source={
                 "a": torch.randn(3, 1, 4, 2, 5),
@@ -236,8 +246,9 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["permute_td", device]]
 
+    @classmethod
     @set_lazy_legacy(True)
-    def unsqueezed_td(self, device):
+    def unsqueezed_td(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 5),
@@ -252,8 +263,9 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["unsqueezed_td", device]]
 
+    @classmethod
     @set_lazy_legacy(True)
-    def squeezed_td(self, device):
+    def squeezed_td(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 1, 2, 1, 5),
@@ -268,7 +280,8 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["squeezed_td", device]]
 
-    def td_reset_bs(self, device):
+    @classmethod
+    def td_reset_bs(cls, device):
         td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5),
@@ -285,13 +298,14 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["td_reset_bs", device]]
         TYPES_DEVICES_NOLAZY += [["td_reset_bs", device]]
 
+    @classmethod
     def td_h5(
-        self,
+        cls,
         device,
     ):
         file = tempfile.NamedTemporaryFile()
         filename = file.name
-        nested_td = self.nested_td(device)
+        nested_td = cls.nested_td(device)
         td_h5 = PersistentTensorDict.from_dict(
             nested_td, filename=filename, device=device
         )
@@ -303,15 +317,17 @@ class TestTensorDictsBase:
             TYPES_DEVICES += [["td_h5", device]]
             TYPES_DEVICES_NOLAZY += [["td_h5", device]]
 
-    def td_params(self, device):
-        return TensorDictParams(self.td(device))
+    @classmethod
+    def td_params(cls, device):
+        return TensorDictParams(cls.td(device))
 
     for device in get_available_devices():
         TYPES_DEVICES += [["td_params", device]]
         TYPES_DEVICES_NOLAZY += [["td_params", device]]
 
-    def td_with_non_tensor(self, device):
-        td = self.td(device)
+    @classmethod
+    def td_with_non_tensor(cls, device):
+        td = cls.td(device)
         return td.set_non_tensor(
             ("data", "non_tensor"),
             # this is allowed since nested NonTensorData are automatically unwrapped

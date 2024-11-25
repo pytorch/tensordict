@@ -559,6 +559,25 @@ class TestTDModule:
         with pytest.raises(RuntimeError, match="Duplicated argument"):
             module(torch.zeros(1, 2), a_c=torch.ones(1, 2))
 
+    @pytest.mark.parametrize("auto_batch_size", [True, False])
+    def test_dispatch_auto_batch_size(self, auto_batch_size):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c"), "d"]
+            out_keys = ["b"]
+
+            @dispatch(auto_batch_size=auto_batch_size)
+            def forward(self, tensordict):
+                if auto_batch_size:
+                    assert tensordict.shape == (2, 3)
+                else:
+                    assert tensordict.shape == ()
+                tensordict["b"] = tensordict["a", "c"] + tensordict["d"]
+                return tensordict
+
+        module = MyModuleNest()
+        b = module(torch.zeros(2, 3), d=torch.ones(2, 3))
+        assert (b == 1).all()
+
     def test_dispatch_nested_extra_args(self):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c"), "d"]
@@ -889,6 +908,59 @@ class TestTDSequence:
 
         dist = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    @pytest.mark.parametrize("td_out", [True, False])
+    def test_probtdseq(self, return_log_prob, td_out):
+        mod = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: (x + 2, x), in_keys=["b"], out_keys=["d", "e"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "d", "scale": "e"},
+                out_keys=["f"],
+                distribution_class=Normal,
+                return_log_prob=return_log_prob,
+                default_interaction_type="random",
+            ),
+        )
+        inp = TensorDict({"a": 0.0, "b": 1.0})
+        inp_clone = inp.clone()
+        if td_out:
+            out = TensorDict()
+        else:
+            out = None
+        out2 = mod(inp, tensordict_out=out)
+        assert not mod._select_before_return
+        if td_out:
+            assert out is out2
+        else:
+            assert out2 is inp
+        assert set(out2.keys()) - {"a", "b"} == set(mod.out_keys), (
+            td_out,
+            return_log_prob,
+        )
+
+        inp = inp_clone.clone()
+        mod.select_out_keys("f")
+        if td_out:
+            out = TensorDict()
+        else:
+            out = None
+        out2 = mod(inp, tensordict_out=out)
+        assert mod._select_before_return
+        if td_out:
+            assert out is out2
+        else:
+            assert out2 is inp
+        expected = {"f"}
+        if td_out:
+            assert set(out2.keys()) == set(mod.out_keys) == expected
+        else:
+            assert (
+                set(out2.keys()) - set(inp_clone.keys())
+                == set(mod.out_keys)
+                == expected
+            )
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
