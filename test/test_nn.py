@@ -1896,6 +1896,51 @@ class TestTensorDictParams:
         assert (m.params == params).all()
         assert (params == m.params).all()
 
+    def test_constructors(self):
+        class MyModule(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_parameter(
+                    "param", nn.Parameter(torch.randn(3, requires_grad=True))
+                )
+                self.register_buffer("buf", torch.randn(3))
+                self.register_buffer("buf_int", torch.randint(3, ()))
+
+        td = TensorDict.from_module(MyModule())
+        assert not isinstance(td, TensorDictParams)
+        td = TensorDictParams(td)
+        assert isinstance(td, TensorDictParams)
+        assert isinstance(td["param"], nn.Parameter)
+        assert isinstance(td["buf"], nn.Parameter)
+        assert isinstance(td["buf_int"], Buffer)
+        td = TensorDict.from_module(MyModule())
+        assert not isinstance(td, TensorDictParams)
+        td = TensorDictParams(td, no_convert=True)
+        assert isinstance(td, TensorDictParams)
+        assert isinstance(td["param"], nn.Parameter)
+        assert isinstance(td["buf"], Buffer)
+        assert isinstance(td["buf_int"], Buffer)
+
+        td = TensorDict.from_module(MyModule(), as_module=True)
+        assert isinstance(td, TensorDictParams)
+        assert isinstance(td["param"], nn.Parameter)
+        assert isinstance(td["buf"], Buffer)
+        assert isinstance(td["buf_int"], Buffer)
+
+        tdparams = TensorDictParams(a=0, b=1.0)
+        assert isinstance(tdparams["a"], Buffer)
+        assert isinstance(tdparams["b"], nn.Parameter)
+
+        tdparams = TensorDictParams({"a": 0, "b": 1.0})
+        assert isinstance(tdparams["a"], Buffer)
+        assert isinstance(tdparams["b"], nn.Parameter)
+        tdparams_copy = tdparams.copy()
+
+        def assert_is_identical(a, b):
+            assert a is b
+
+        tdparams.apply(assert_is_identical, tdparams_copy, filter_empty=True)
+
     def test_td_params_cast(self):
         params = self._get_params()
         p = TensorDictParams(params)
