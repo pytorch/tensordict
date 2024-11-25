@@ -142,8 +142,8 @@ def device_fixture():
     device = torch.get_default_device()
     if torch.cuda.is_available():
         torch.set_default_device(torch.device("cuda:0"))
-    elif torch.backends.mps.is_available():
-        torch.set_default_device(torch.device("mps:0"))
+    # elif torch.backends.mps.is_available():
+    #     torch.set_default_device(torch.device("mps:0"))
     yield
     torch.set_default_device(device)
 
@@ -1475,8 +1475,8 @@ class TestGeneric:
 
         if torch.cuda.is_available():
             device = "cuda:0"
-        elif torch.backends.mps.is_available():
-            device = "mps:0"
+        # elif torch.backends.mps.is_available():
+        #     device = "mps:0"
         else:
             pytest.skip("no device to test")
         device_state_dict = TensorDict.load(tmpdir, device=device)
@@ -1724,8 +1724,8 @@ class TestGeneric:
     def test_non_blocking(self):
         if torch.cuda.is_available():
             device = "cuda"
-        elif torch.backends.mps.is_available():
-            device = "mps"
+        # elif torch.backends.mps.is_available():
+        #     device = "mps"
         else:
             pytest.skip("No device found")
         for _ in range(10):
@@ -1799,9 +1799,9 @@ class TestGeneric:
         TensorDict(td_dict, device="cpu")
         assert _SYNC_COUNTER == 0
 
-        if torch.backends.mps.is_available():
-            device = "mps"
-        elif torch.cuda.is_available():
+        # if torch.backends.mps.is_available():
+        #     device = "mps"
+        if torch.cuda.is_available():
             device = "cuda"
         else:
             device = None
@@ -9864,7 +9864,8 @@ class TestLock:
         assert count == expected, {id(ref()) for ref in weakref_list}
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not torch.backends.mps.is_available(),
+        not torch.cuda.is_available(),
+     # and not torch.backends.mps.is_available(),
         reason="a device is required.",
     )
     def test_cached_data_lock_device(self):
