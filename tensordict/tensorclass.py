@@ -194,6 +194,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "any",
     "apply",
     "apply_",
+    "as_tensor",
     "asin",
     "asin_",
     "atan",
@@ -3113,6 +3114,18 @@ class NonTensorStack(LazyStackedTensorDict):
             *[ntd.maybe_to_stack() for ntd in self.tensordicts],
             stack_dim=self.stack_dim,
         )
+
+    @classmethod
+    def from_list(cls, non_tensors: List[Any]):
+        # Use local function because refers to cls
+        def _maybe_from_list(nontensor):
+            if isinstance(nontensor, list):
+                return cls.from_list(nontensor)
+            if is_non_tensor(nontensor):
+                return nontensor
+            return NonTensorData(nontensor)
+
+        return cls(*[_maybe_from_list(nontensor) for nontensor in non_tensors])
 
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):
