@@ -997,6 +997,13 @@ class TestGeneric:
             td.keys(True, True)
         ).symmetric_difference(expected)
 
+    def test_from_any_list(self):
+        t = torch.randn(3, 4, 5)
+        t = t.tolist()
+        assert isinstance(TensorDict.from_any(t), torch.Tensor)
+        t[0].extend([0, 2])
+        assert isinstance(TensorDict.from_any(t), TensorDict)
+
     def test_from_any_userdict(self):
         class D(UserDict): ...
 
