@@ -107,12 +107,18 @@ def _get_args_dict(func, args, kwargs):
 
 
 def _maybe_make_param(tensor):
-    if (
-        isinstance(tensor, (Tensor, ftdim.Tensor))
-        and not isinstance(tensor, nn.Parameter)
-        and tensor.dtype in (torch.float, torch.double, torch.half)
+    if isinstance(tensor, (Tensor, ftdim.Tensor)) and not isinstance(
+        tensor, (nn.Parameter, Buffer, BufferLegacy)
     ):
-        tensor = nn.Parameter(tensor)
+        if tensor.dtype in (torch.float, torch.double, torch.half):
+            tensor = nn.Parameter(tensor)
+        elif not is_batchedtensor(tensor):
+            # convert all non-parameters to buffers
+            # dataptr = tensor.data.data_ptr()
+            tensor = Buffer(tensor)
+        else:
+            # We want to keep the grad_fn of tensors, e.g. param.expand(10) should point to the original param
+            tensor = BufferLegacy(tensor)
     return tensor
 
 
