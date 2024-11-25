@@ -111,10 +111,8 @@ def _maybe_make_param(tensor):
 
 
 def _maybe_make_param_or_buffer(tensor):
-    if (
-        isinstance(tensor, (Tensor, ftdim.Tensor))
-        and not isinstance(tensor, (nn.Parameter, Buffer))
-        and tensor.dtype in (torch.float, torch.double, torch.half)
+    if isinstance(tensor, (Tensor, ftdim.Tensor)) and not isinstance(
+        tensor, (nn.Parameter, Buffer)
     ):
         if not tensor.requires_grad and not is_batchedtensor(tensor):
             # convert all non-parameters to buffers
