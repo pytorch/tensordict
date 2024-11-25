@@ -609,7 +609,7 @@ class TensorDict(TensorDictBase):
                 _quick_set(_swap, swap_dest)
                 return swap_dest
             else:
-                return TensorDict._new_unsafe(_swap, batch_size=[])
+                return TensorDict._new_unsafe(_swap, batch_size=torch.Size(()))
 
     def __ne__(self, other: object) -> T | bool:
         if is_tensorclass(other):
