@@ -1003,7 +1003,7 @@ class TensorDictModule(TensorDictModuleBase):
                 tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
-                tensordict_out.set(_out_key, _tensor)
+                tensordict_out.set(_out_key, TensorDict.from_any(_tensor))
         return tensordict_out
 
     def _call_module(

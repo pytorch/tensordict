@@ -2824,3 +2824,36 @@ def _is_dataclass(obj):
         else type(obj)
     )
     return hasattr(cls, _FIELDS)
+
+
+def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
+    length_t = len(t)
+    dtypes = set()
+    sizes = set()
+    for i in t:
+        if isinstance(i, (float, int, torch.SymInt, Number)):
+            dtypes.add(type(i))
+            if len(dtypes) > 1:
+                return False, None, None
+            continue
+        elif isinstance(i, list):
+            is_compat, size_i, dtype = _is_list_tensor_compatible(i)
+            if not is_compat:
+                return False, None, None
+            if dtype is not None:
+                dtypes.add(dtype)
+            if len(dtypes) > 1:
+                return False, None, None
+            sizes.add(size_i)
+            if len(sizes) > 1:
+                return False, None, None
+            continue
+        return False, None
+    else:
+        if len(dtypes):
+            dtype = list(dtypes)[0]
+        else:
+            dtype = None
+        if len(sizes):
+            return True, (length_t, *list(sizes)[0]), dtype
+        return True, (length_t,), dtype

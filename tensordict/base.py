@@ -18,6 +18,7 @@ import queue
 import uuid
 import warnings
 import weakref
+from collections import UserDict
 from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -56,6 +57,7 @@ from tensordict.utils import (
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _is_dataclass as is_dataclass,
+    _is_list_tensor_compatible,
     _is_non_tensor,
     _is_number,
     _is_tensorclass,
@@ -9868,9 +9870,13 @@ class TensorDictBase(MutableMapping):
 
         """
         if is_tensor_collection(obj):
+            if is_non_tensor(obj):
+                return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
             return obj
         if isinstance(obj, dict):
             return cls.from_dict(obj, auto_batch_size=auto_batch_size)
+        if isinstance(obj, UserDict):
+            return cls.from_dict(dict(obj), auto_batch_size=auto_batch_size)
         if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
             return cls.from_struct_array(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, tuple):
@@ -9878,7 +9884,12 @@ class TensorDictBase(MutableMapping):
                 return cls.from_namedtuple(obj, auto_batch_size=auto_batch_size)
             return cls.from_tuple(obj, auto_batch_size=auto_batch_size)
         if isinstance(obj, list):
-            return cls.from_tuple(tuple(obj), auto_batch_size=auto_batch_size)
+            if _is_list_tensor_compatible(obj)[0]:
+                return torch.tensor(obj)
+            else:
+                from tensordict.tensorclass import NonTensorStack
+
+                return NonTensorStack.from_list(obj)
         if is_dataclass(obj):
             return cls.from_dataclass(obj, auto_batch_size=auto_batch_size)
         if _has_h5:

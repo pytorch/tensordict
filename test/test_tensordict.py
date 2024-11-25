@@ -18,6 +18,7 @@ import re
 import sys
 import uuid
 import warnings
+from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -141,8 +142,8 @@ def device_fixture():
     device = torch.get_default_device()
     if torch.cuda.is_available():
         torch.set_default_device(torch.device("cuda:0"))
-    elif torch.backends.mps.is_available():
-        torch.set_default_device(torch.device("mps:0"))
+    # elif torch.backends.mps.is_available():
+    #     torch.set_default_device(torch.device("mps:0"))
     yield
     torch.set_default_device(device)
 
@@ -996,6 +997,20 @@ class TestGeneric:
             td.keys(True, True)
         ).symmetric_difference(expected)
 
+    def test_from_any_list(self):
+        t = torch.randn(3, 4, 5)
+        t = t.tolist()
+        assert isinstance(TensorDict.from_any(t), torch.Tensor)
+        t[0].extend([0, 2])
+        assert isinstance(TensorDict.from_any(t), TensorDict)
+
+    def test_from_any_userdict(self):
+        class D(UserDict): ...
+
+        d = D(a=0)
+        assert TensorDict.from_any(d)["a"] == 0
+        assert isinstance(TensorDict.from_any(d)["a"], torch.Tensor)
+
     def test_from_dataclass(self):
         @dataclass
         class MyClass:
@@ -1460,8 +1475,8 @@ class TestGeneric:
 
         if torch.cuda.is_available():
             device = "cuda:0"
-        elif torch.backends.mps.is_available():
-            device = "mps:0"
+        # elif torch.backends.mps.is_available():
+        #     device = "mps:0"
         else:
             pytest.skip("no device to test")
         device_state_dict = TensorDict.load(tmpdir, device=device)
@@ -1709,8 +1724,8 @@ class TestGeneric:
     def test_non_blocking(self):
         if torch.cuda.is_available():
             device = "cuda"
-        elif torch.backends.mps.is_available():
-            device = "mps"
+        # elif torch.backends.mps.is_available():
+        #     device = "mps"
         else:
             pytest.skip("No device found")
         for _ in range(10):
@@ -1784,9 +1799,9 @@ class TestGeneric:
         TensorDict(td_dict, device="cpu")
         assert _SYNC_COUNTER == 0
 
-        if torch.backends.mps.is_available():
-            device = "mps"
-        elif torch.cuda.is_available():
+        # if torch.backends.mps.is_available():
+        #     device = "mps"
+        if torch.cuda.is_available():
             device = "cuda"
         else:
             device = None
@@ -9849,7 +9864,8 @@ class TestLock:
         assert count == expected, {id(ref()) for ref in weakref_list}
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not torch.backends.mps.is_available(),
+        not torch.cuda.is_available(),
+     # and not torch.backends.mps.is_available(),
         reason="a device is required.",
     )
     def test_cached_data_lock_device(self):
@@ -10650,6 +10666,19 @@ class TestNonTensorData:
         assert not (non_tensor_data != non_tensor_data).get_non_tensor(
             ("nested", "bool")
         )
+
+    def test_from_list(self):
+        nd = NonTensorStack.from_list(
+            [[True, "b", torch.randn(())], ["another", 0, NonTensorData("final")]]
+        )
+        assert isinstance(nd, NonTensorStack)
+        assert nd.shape == (2, 3)
+        assert nd[0, 0].data
+        assert nd[0, 1].data == "b"
+        assert isinstance(nd[0, 2].data, torch.Tensor)
+        assert nd[1, 0].data == "another"
+        assert nd[1, 1].data == 0
+        assert nd[1, 2].data == "final"
 
     def test_non_tensor_call(self):
         td0 = TensorDict({"a": 0, "b": 0})
