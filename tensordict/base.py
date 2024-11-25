@@ -9870,8 +9870,12 @@ class TensorDictBase(MutableMapping):
 
         """
         if is_tensor_collection(obj):
-            if is_non_tensor(obj):
-                return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
+            # Conversions from non-tensor data must be done manually
+            # if is_non_tensor(obj):
+            #     from tensordict.tensorclass import LazyStackedTensorDict
+            #     if isinstance(obj, LazyStackedTensorDict):
+            #         return obj
+            #     return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
             return obj
         if isinstance(obj, dict):
             return cls.from_dict(obj, auto_batch_size=auto_batch_size)
