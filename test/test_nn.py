@@ -2165,6 +2165,29 @@ class TestCompositeDist:
         sample = dist.sample((4,))
         assert sample.shape == torch.Size((4,) + params.shape)
 
+    def test_from_distributions(self):
+
+        # Values are not used to build the dists
+        params = TensorDict(
+            {
+                ("0", "loc"): None,
+                ("1", "nested", "loc"): None,
+                ("0", "scale"): None,
+                ("1", "nested", "scale"): None,
+            }
+        )
+        d0 = torch.distributions.Normal(0, 1)
+        d1 = torch.distributions.Normal(torch.zeros(1, 2), torch.ones(1, 2))
+
+        d = CompositeDistribution.from_distributions(
+            params, {"0": d0, ("1", "nested"): d1}
+        )
+        s = d.sample()
+        assert s["0"].shape == ()
+        assert s["1", "nested"].shape == (1, 2)
+        assert isinstance(s["0"], torch.Tensor)
+        assert isinstance(s["1", "nested"], torch.Tensor)
+
     def test_sample_named(self):
         params = TensorDict(
             {
