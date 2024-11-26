@@ -963,6 +963,31 @@ class TestTDSequence:
                 == expected
             )
 
+    def test_probtdseq_multdist(self):
+
+        tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
+        tdm1 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["y"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+        )
+        tdm2 = TensorDictModule(torch.nn.Linear(4, 5), in_keys=["y"], out_keys=["loc2"])
+        tdm3 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc2"},
+            out_keys=["z"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+        )
+
+        tdm = ProbabilisticTensorDictSequential(tdm0, tdm1, tdm2, tdm3)
+        dist = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
+        s = dist.sample()
+        assert isinstance(dist.log_prob(s), TensorDict)
+        v = tdm(TensorDict(x=torch.randn(10, 3)))
+        assert set(v.keys()) == {"x", "loc", "y", "loc2", "z"}
+        assert isinstance(tdm.log_prob(v), TensorDict)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)

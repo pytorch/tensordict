@@ -225,11 +225,6 @@ class CompositeDistribution(d.Distribution):
     def aggregate_probabilities(self):
         aggregate_probabilities = self._aggregate_probabilities
         if aggregate_probabilities is None:
-            warnings.warn(
-                "The default value of `aggregate_probabilities` will change from `False` to `True` in v0.7. "
-                "Please pass this value explicitly to avoid this warning.",
-                FutureWarning,
-            )
             aggregate_probabilities = self._aggregate_probabilities = False
         return aggregate_probabilities
 

@@ -11,6 +11,8 @@ import warnings
 from textwrap import indent
 from typing import Any, Dict, List, Optional
 
+import torch
+
 from tensordict._nestedkey import NestedKey
 
 from tensordict.nn import CompositeDistribution
@@ -367,9 +369,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 raise err
         return dist
 
-    def log_prob(self, tensordict):
+    def log_prob(
+        self, tensordict, *, dist: torch.distributions.Distribution | None = None
+    ):
         """Writes the log-probability of the distribution sample."""
-        dist = self.get_dist(tensordict)
+        if dist is None:
+            dist = self.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
             td = dist.log_prob(tensordict, aggregate_probabilities=False)
             return td.get(dist.log_prob_key)
@@ -560,6 +565,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
         super().__init__(*modules, partial_tolerant=partial_tolerant)
 
+    _dist_sample = ProbabilisticTensorDictModule._dist_sample
+
     @property
     def det_part(self):
         return self._det_part
@@ -584,17 +591,37 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get the distribution that results from passing the input tensordict through the sequence, and then using the resulting parameters."""
-        tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
-        return self.build_dist_from_params(tensordict_out)
+        td_copy = tensordict.copy()
+        dists = {}
+        for i, tdm in enumerate(self.module):
+            if isinstance(
+                tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
+            ):
+                dist = tdm.get_dist(td_copy)
+                if i < len(self.module) - 1:
+                    sample = tdm._dist_sample(dist, interaction_type=interaction_type())
+                    if isinstance(tdm, ProbabilisticTensorDictModule):
+                        if isinstance(sample, torch.Tensor):
+                            sample = [sample]
+                        for val, key in zip(sample, tdm.out_keys):
+                            td_copy.set(key, val)
+                    else:
+                        td_copy.update(sample)
+                dists[tdm.out_keys[0]] = dist
+            else:
+                td_copy = tdm(td_copy)
+        if len(dists) == 0:
+            raise RuntimeError(f"No distribution module found in {self}.")
+        elif len(dists) == 1:
+            return dist
+        return CompositeDistribution.from_distributions(td_copy, dists)
 
     def log_prob(
         self, tensordict, tensordict_out: TensorDictBase | None = None, **kwargs
     ):
-        tensordict_out = self.get_dist_params(
-            tensordict,
-            tensordict_out,
-            **kwargs,
-        )
+        dist = self.get_dist(tensordict)
+        if isinstance(dist, CompositeDistribution):
+            return dist.log_prob(tensordict)
         return self.module[-1].log_prob(tensordict_out)
 
     def build_dist_from_params(self, tensordict: TensorDictBase) -> D.Distribution:
