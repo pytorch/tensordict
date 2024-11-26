@@ -409,7 +409,8 @@ class CompositeDistribution(d.Distribution):
                 "The current default is ``True`` but from v0.9 it will be changed to ``False``. Please adapt your call to `log_prob_composite` accordingly.",
                 category=DeprecationWarning,
             )
-        slp = 0.0
+        if include_sum:
+            slp = 0.0
         d = {}
         for name, dist in self.dists.items():
             d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
