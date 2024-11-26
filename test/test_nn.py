@@ -71,6 +71,12 @@ pytestmark = [
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
     pytest.mark.filterwarnings("ignore:enable_nested_tensor is True"),
+    pytest.mark.filterwarnings(
+        "ignore:`include_sum` wasn't set when building the `CompositeDistribution`"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:`inplace` wasn't set when building the `CompositeDistribution`"
+    ),
 ]
 
 
@@ -2233,20 +2239,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-
-        sample = dist.rsample((4,))
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            lp = dist.log_prob(sample)
-
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2273,17 +2265,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2310,16 +2291,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2344,16 +2315,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
