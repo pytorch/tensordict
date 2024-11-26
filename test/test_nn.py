@@ -71,6 +71,12 @@ pytestmark = [
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
     pytest.mark.filterwarnings("ignore:enable_nested_tensor is True"),
+    pytest.mark.filterwarnings(
+        "ignore:`include_sum` wasn't set when building the `CompositeDistribution`"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:`inplace` wasn't set when building the `CompositeDistribution`"
+    ),
 ]
 
 
@@ -2159,6 +2165,29 @@ class TestCompositeDist:
         sample = dist.sample((4,))
         assert sample.shape == torch.Size((4,) + params.shape)
 
+    def test_from_distributions(self):
+
+        # Values are not used to build the dists
+        params = TensorDict(
+            {
+                ("0", "loc"): None,
+                ("1", "nested", "loc"): None,
+                ("0", "scale"): None,
+                ("1", "nested", "scale"): None,
+            }
+        )
+        d0 = torch.distributions.Normal(0, 1)
+        d1 = torch.distributions.Normal(torch.zeros(1, 2), torch.ones(1, 2))
+
+        d = CompositeDistribution.from_distributions(
+            params, {"0": d0, ("1", "nested"): d1}
+        )
+        s = d.sample()
+        assert s["0"].shape == ()
+        assert s["1", "nested"].shape == (1, 2)
+        assert isinstance(s["0"], torch.Tensor)
+        assert isinstance(s["1", "nested"], torch.Tensor)
+
     def test_sample_named(self):
         params = TensorDict(
             {
@@ -2233,20 +2262,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-
-        sample = dist.rsample((4,))
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            lp = dist.log_prob(sample)
-
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2273,17 +2288,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2310,16 +2314,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2344,16 +2338,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
