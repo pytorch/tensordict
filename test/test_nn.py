@@ -12,6 +12,7 @@ import weakref
 
 import pytest
 import torch
+
 from tensordict import NonTensorData, NonTensorStack, tensorclass, TensorDict
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
@@ -71,6 +72,12 @@ pytestmark = [
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
     pytest.mark.filterwarnings("ignore:enable_nested_tensor is True"),
+    pytest.mark.filterwarnings(
+        "ignore:`include_sum` wasn't set when building the `CompositeDistribution`"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:`inplace` wasn't set when building the `CompositeDistribution`"
+    ),
 ]
 
 
@@ -2233,20 +2240,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-
-        sample = dist.rsample((4,))
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            lp = dist.log_prob(sample)
-
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2262,7 +2255,9 @@ class TestCompositeDist:
         assert isinstance(lp, torch.Tensor)
         assert lp.requires_grad
 
-    def test_log_prob_composite(self):
+    @pytest.mark.parametrize("inplace", [None, True, False])
+    @pytest.mark.parametrize("include_sum", [None, True, False])
+    def test_log_prob_composite(self, inplace, include_sum):
         params = TensorDict(
             {
                 "cont": {
@@ -2273,17 +2268,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-            },
-            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2292,12 +2276,25 @@ class TestCompositeDist:
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
             aggregate_probabilities=False,
+            inplace=inplace,
+            include_sum=include_sum,
         )
+        if include_sum is None:
+            include_sum = True
+        if inplace is None:
+            inplace = True
         sample = dist.rsample((4,))
-        sample = dist.log_prob_composite(sample, include_sum=True)
-        assert sample.get("cont_log_prob").requires_grad
-        assert sample.get(("nested", "disc_log_prob")).requires_grad
-        assert "sample_log_prob" in sample.keys()
+        sample_lp = dist.log_prob_composite(sample)
+        assert sample_lp.get("cont_log_prob").requires_grad
+        assert sample_lp.get(("nested", "disc_log_prob")).requires_grad
+        if inplace:
+            assert sample_lp is sample
+        else:
+            assert sample_lp is not sample
+        if include_sum:
+            assert "sample_log_prob" in sample_lp.keys()
+        else:
+            assert "sample_log_prob" not in sample_lp.keys()
 
     def test_entropy(self):
         params = TensorDict(
@@ -2310,16 +2307,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2333,7 +2320,8 @@ class TestCompositeDist:
         assert isinstance(ent, torch.Tensor)
         assert ent.requires_grad
 
-    def test_entropy_composite(self):
+    @pytest.mark.parametrize("include_sum", [None, True, False])
+    def test_entropy_composite(self, include_sum):
         params = TensorDict(
             {
                 "cont": {
@@ -2344,16 +2332,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        # Capture the warning for upcoming changes in aggregate_probabilities
-        dist = CompositeDistribution(
-            params,
-            distribution_map={
-                "cont": distributions.Normal,
-                ("nested", "disc"): distributions.Categorical,
-            },
-        )
-        with pytest.warns(FutureWarning, match="aggregate_probabilities"):
-            dist.log_prob(dist.sample())
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2361,12 +2339,18 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.Categorical,
             },
             aggregate_probabilities=False,
+            include_sum=include_sum,
         )
+        if include_sum is None:
+            include_sum = True
         sample = dist.entropy()
         assert sample.shape == params.shape == dist._batch_shape
         assert sample.get("cont_entropy").requires_grad
         assert sample.get(("nested", "disc_entropy")).requires_grad
-        assert "entropy" in sample.keys()
+        if include_sum:
+            assert "entropy" in sample.keys()
+        else:
+            assert "entropy" not in sample.keys()
 
     def test_cdf(self):
         params = TensorDict(
