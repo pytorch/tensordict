@@ -1648,9 +1648,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.eval">
 <span class="sig-name descname"><span class="pre">eval</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.eval" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the module in evaluation mode.</p>
-<p>This has any effect only on certain modules. See documentations of
+<p>This has an effect only on certain modules. See the documentation of
 particular modules for details of their behaviors in training/evaluation
-mode, if they are affected, e.g. <code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">BatchNorm</span></code>,
+mode, i.e. whether they are affected, e.g. <code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">BatchNorm</span></code>,
 etc.</p>
 <p>This is equivalent with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train" title="(in PyTorch v2.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">self.train(False)</span></code></a>.</p>
 <p>See <a class="reference external" href="https://pytorch.org/docs/stable/notes/autograd.html#locally-disable-grad-doc" title="(in PyTorch v2.5)"><span>Locally disabling gradient computation</span></a> for a comparison between
@@ -1791,7 +1791,7 @@ the leaves will be expanded on a one-to-one basis.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.extra_repr">
 <span class="sig-name descname"><span class="pre">extra_repr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictParams.extra_repr" title="Permalink to this definition">¶</a></dt>
-<dd><p>Set the extra representation of the module.</p>
+<dd><p>Return the extra representation of the module.</p>
 <p>To print customized extra information, you should re-implement
 this method in your own modules. Both single-line and multi-line
 strings are acceptable.</p>
@@ -2679,7 +2679,7 @@ fully-qualified string.)</p>
 if you need to store extra state. This function is called when building the
 module’s <cite>state_dict()</cite>.</p>
 <p>Note that extra state should be picklable to ensure working serialization
-of the state_dict. We only provide provide backwards compatibility guarantees
+of the state_dict. We only provide backwards compatibility guarantees
 for serializing Tensors; other objects may break backwards compatibility if
 their serialized pickled form changes.</p>
 <dl class="field-list simple">
@@ -2781,7 +2781,7 @@ looks like this:</p>
 )
 </pre></div>
 </div>
-<p>(The diagram shows an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> <code class="docutils literal notranslate"><span class="pre">A</span></code>. <code class="docutils literal notranslate"><span class="pre">A</span></code> has a nested
+<p>(The diagram shows an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> <code class="docutils literal notranslate"><span class="pre">A</span></code>. <code class="docutils literal notranslate"><span class="pre">A</span></code> which has a nested
 submodule <code class="docutils literal notranslate"><span class="pre">net_b</span></code>, which itself has two submodules <code class="docutils literal notranslate"><span class="pre">net_c</span></code>
 and <code class="docutils literal notranslate"><span class="pre">linear</span></code>. <code class="docutils literal notranslate"><span class="pre">net_c</span></code> then has a submodule <code class="docutils literal notranslate"><span class="pre">conv</span></code>.)</p>
 <p>To check whether or not we have the <code class="docutils literal notranslate"><span class="pre">linear</span></code> submodule, we
@@ -2861,7 +2861,7 @@ fully-qualified string.)</p>
 <span class="sig-name descname"><span class="pre">ipu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.5)"><span class="pre">device</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.ipu" title="Permalink to this definition">¶</a></dt>
 <dd><p>Move all model parameters and buffers to the IPU.</p>
 <p>This also makes associated parameters and buffers different objects. So
-it should be called before constructing optimizer if the module will
+it should be called before constructing the optimizer if the module will
 live on IPU while being optimized.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -4199,7 +4199,7 @@ example, <code class="docutils literal notranslate"><span class="pre">l</span></
 <span class="sig-name descname"><span class="pre">mtia</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.5)"><span class="pre">device</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.mtia" title="Permalink to this definition">¶</a></dt>
 <dd><p>Move all model parameters and buffers to the MTIA.</p>
 <p>This also makes associated parameters and buffers different objects. So
-it should be called before constructing optimizer if the module will
+it should be called before constructing the optimizer if the module will
 live on MTIA while being optimized.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -6672,9 +6672,9 @@ Otherwise they will be discarded. Default: <code class="docutils literal notrans
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.train">
 <span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.train" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set the module in training mode.</p>
-<p>This has any effect only on certain modules. See documentations of
+<p>This has an effect only on certain modules. See the documentation of
 particular modules for details of their behaviors in training/evaluation
-mode, if they are affected, e.g. <code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">BatchNorm</span></code>,
+mode, i.e., whether they are affected, e.g. <code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">BatchNorm</span></code>,
 etc.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

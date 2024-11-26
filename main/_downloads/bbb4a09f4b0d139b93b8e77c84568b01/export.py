@@ -120,13 +120,13 @@ print("module:", model_export.module())
 
 t0 = time.time()
 model(x=x)
-print(f"Time for TDModule: {(time.time()-t0)*1e6: 4.2f} micro-seconds")
+print(f"Time for TDModule: {(time.time() - t0) * 1e6: 4.2f} micro-seconds")
 exported = model_export.module()
 
 # Exported version
 t0 = time.time()
 exported(x=x)
-print(f"Time for exported module: {(time.time()-t0)*1e6: 4.2f} micro-seconds")
+print(f"Time for exported module: {(time.time() - t0) * 1e6: 4.2f} micro-seconds")
 
 ##################################################
 # and the FX graph:

@@ -370,13 +370,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
     from torch.utils.benchmark import Timer
 
     print(
-        f"Regular: {Timer('block_notd(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"Regular: {Timer('block_notd(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
     print(
-        f"TDM: {Timer('block_tdm(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"TDM: {Timer('block_tdm(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
     print(
-        f"Sequential: {Timer('block_tds(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"Sequential: {Timer('block_tds(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
 
     print("Compiled versions")
@@ -384,19 +384,19 @@ executed, as they need to read and write from a tensordict. However, we can grea
     for _ in range(5):  # warmup
         block_notd_c(x)
     print(
-        f"Compiled regular: {Timer('block_notd_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"Compiled regular: {Timer('block_notd_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
     block_tdm_c = torch.compile(block_tdm, mode="reduce-overhead")
     for _ in range(5):  # warmup
         block_tdm_c(x=x)
     print(
-        f"Compiled TDM: {Timer('block_tdm_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"Compiled TDM: {Timer('block_tdm_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
     block_tds_c = torch.compile(block_tds, mode="reduce-overhead")
     for _ in range(5):  # warmup
         block_tds_c(x=x)
     print(
-        f"Compiled sequential: {Timer('block_tds_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+        f"Compiled sequential: {Timer('block_tds_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
     )
 
 
@@ -408,13 +408,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
  .. code-block:: none
 
     Without compile
-    Regular:  219.2846 us
-    TDM:  272.4051 us
-    Sequential:  434.3038 us
+    Regular:  217.4746 us
+    TDM:  274.4098 us
+    Sequential:  438.7544 us
     Compiled versions
-    Compiled regular:  325.2610 us
-    Compiled TDM:  374.1560 us
-    Compiled sequential:  385.9120 us
+    Compiled regular:  326.2020 us
+    Compiled TDM:  370.7780 us
+    Compiled sequential:  385.4080 us
 
 
 
@@ -546,7 +546,7 @@ In the next tutorial, we will be seeing how ``torch.export`` can be used to isol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 18.491 seconds)
+   **Total running time of the script:** (0 minutes 18.466 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:
