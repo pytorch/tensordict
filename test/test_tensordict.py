@@ -134,7 +134,7 @@ pytestmark = [
     ),
 ]
 
-mp_ctx = "fork" if (not torch.cuda.is_available() and not _IS_WINDOWS) else "spawn"
+mp_ctx = "spawn"
 
 
 @pytest.fixture

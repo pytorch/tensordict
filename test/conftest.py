@@ -3,11 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import multiprocessing
 import os
 import time
 from collections import defaultdict
 
 import pytest
+
+try:
+    multiprocessing.set_start_method("spawn")
+except Exception:
+    assert multiprocessing.get_start_method() == "spawn"
 
 CALL_TIMES = defaultdict(lambda: 0.0)
 

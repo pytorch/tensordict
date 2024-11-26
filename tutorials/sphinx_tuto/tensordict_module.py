@@ -213,13 +213,13 @@ block_tds = block
 from torch.utils.benchmark import Timer
 
 print(
-    f"Regular: {Timer('block_notd(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"Regular: {Timer('block_notd(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 print(
-    f"TDM: {Timer('block_tdm(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"TDM: {Timer('block_tdm(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 print(
-    f"Sequential: {Timer('block_tds(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"Sequential: {Timer('block_tds(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 
 print("Compiled versions")
@@ -227,19 +227,19 @@ block_notd_c = torch.compile(block_notd, mode="reduce-overhead")
 for _ in range(5):  # warmup
     block_notd_c(x)
 print(
-    f"Compiled regular: {Timer('block_notd_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"Compiled regular: {Timer('block_notd_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 block_tdm_c = torch.compile(block_tdm, mode="reduce-overhead")
 for _ in range(5):  # warmup
     block_tdm_c(x=x)
 print(
-    f"Compiled TDM: {Timer('block_tdm_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"Compiled TDM: {Timer('block_tdm_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 block_tds_c = torch.compile(block_tds, mode="reduce-overhead")
 for _ in range(5):  # warmup
     block_tds_c(x=x)
 print(
-    f"Compiled sequential: {Timer('block_tds_c(x=x)', globals=globals()).adaptive_autorange().median*1_000_000: 4.4f} us"
+    f"Compiled sequential: {Timer('block_tds_c(x=x)', globals=globals()).adaptive_autorange().median * 1_000_000: 4.4f} us"
 )
 
 ###############################################################################
