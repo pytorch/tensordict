@@ -221,17 +221,6 @@ class CompositeDistribution(d.Distribution):
         self.inplace = inplace
         return self
 
-    @property
-    def aggregate_probabilities(self):
-        aggregate_probabilities = self._aggregate_probabilities
-        if aggregate_probabilities is None:
-            aggregate_probabilities = self._aggregate_probabilities = False
-        return aggregate_probabilities
-
-    @aggregate_probabilities.setter
-    def aggregate_probabilities(self, value):
-        self._aggregate_probabilities = value
-
     def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
@@ -351,6 +340,8 @@ class CompositeDistribution(d.Distribution):
         """
         if aggregate_probabilities is None:
             aggregate_probabilities = self.aggregate_probabilities
+            if aggregate_probabilities is None:
+                aggregate_probabilities = False
         if not aggregate_probabilities:
             return self.log_prob_composite(
                 sample, include_sum=include_sum, inplace=inplace
@@ -461,6 +452,8 @@ class CompositeDistribution(d.Distribution):
         """
         if aggregate_probabilities is None:
             aggregate_probabilities = self.aggregate_probabilities
+            if aggregate_probabilities is None:
+                aggregate_probabilities = False
         if not aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=include_sum)
         se = 0.0
