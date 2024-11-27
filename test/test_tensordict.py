@@ -5564,6 +5564,32 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[("nested", "back")] == 0).all()
         assert "second" not in td.keys()
 
+    def test_repeat(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert (td.repeat(1, 1, 1, 1) == td).all()
+        assert (td.repeat(2, 1, 1, 1) == torch.cat([td] * 2, 0)).all()
+        assert (td.repeat(1, 2, 1, 1) == torch.cat([td] * 2, 1)).all()
+        assert (td.repeat(1, 1, 2, 1) == torch.cat([td] * 2, 2)).all()
+        assert (td.repeat(1, 1, 1, 2) == torch.cat([td] * 2, 3)).all()
+
+    def test_repeat_interleave(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        for d in [0, 1, 2, 3, -1, -2, -3, -4]:
+            t = torch.empty(td.shape)
+            t_shape = t.repeat_interleave(3, dim=d).shape
+            td_repeat = td.repeat_interleave(3, dim=d)
+            assert td_repeat.shape == t_shape
+            assert td_repeat.device == td.device
+            if d < 0:
+                d = td.ndim + d
+            a = td["a"]
+            a_repeat = td_repeat["a"]
+            torch.testing.assert_close(a.repeat_interleave(3, dim=d), a_repeat)
+
+        t = torch.empty(td.shape)
+        t_shape = t.repeat_interleave(3).shape
+        assert t_shape == td.repeat_interleave(3).shape
+
     def test_replace(self, td_name, device):
         td = getattr(self, td_name)(device)
         td_dict = td.to_dict()
@@ -10702,6 +10728,30 @@ class TestNonTensorData:
             [NonTensorData(t1), NonTensorData(t2)]
         )  # this triggers an exception
         assert all(isinstance(t, torch.Tensor) for t in stack.tolist())
+
+    def test_repeat(self):
+        stack = NonTensorStack(
+            NonTensorData("a", batch_size=(3,)),
+            NonTensorData("b", batch_size=(3,)),
+            stack_dim=1,
+        )
+        assert stack.shape == (3, 2)
+        r = stack.repeat(1, 2)
+        assert r.shape == (3, 4)
+        assert r[0].tolist() == ["a", "b", "a", "b"]
+        assert r[:, 0].tolist() == ["a", "a", "a"]
+        assert r[:, -1].tolist() == ["b", "b", "b"]
+
+    def test_repeat_interleave(self):
+        stack = NonTensorStack(
+            NonTensorData("a", batch_size=(3,)),
+            NonTensorData("b", batch_size=(3,)),
+            stack_dim=1,
+        )
+        assert stack.shape == (3, 2)
+        r = stack.repeat_interleave(3, dim=1)
+        assert isinstance(r, NonTensorStack)
+        assert r[0].tolist() == ["a", "a", "a", "b", "b", "b"]
 
     def test_set(self, non_tensor_data):
         non_tensor_data.set(("nested", "another_string"), "another string!")

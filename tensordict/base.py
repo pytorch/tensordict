@@ -2574,6 +2574,65 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @abc.abstractmethod
+    def repeat_interleave(
+        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+    ) -> TensorDictBase:
+        """Repeat elements of a TensorDict.
+
+        .. warning:: This is different from :meth:`~torch.Tensor.repeat` but similar to :func:`numpy.repeat`.
+
+        Args:
+            repeats (torch.Tensor or int): The number of repetitions for each element. `repeats` is broadcast to fit
+                the shape of the given axis.
+            dim (int, optional): The dimension along which to repeat values. By default, use the flattened input
+                array, and return a flat output array.
+
+        Keyword Args:
+            output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
+                will avoid stream synchronization needed to calculate output shape of the tensordict.
+
+        Returns:
+            Repeated TensorDict which has the same shape as input, except along the given axis.
+
+        """
+        ...
+
+    @overload
+    def repeat(self, repeats: torch.Size): ...
+
+    def repeat(self, *repeats: int) -> TensorDictBase:
+        """Repeats this tensor along the specified dimensions.
+
+        Unlike :meth:`~.expand()`, this function copies the tensor’s data.
+
+        .. warning:: :meth:`~.repeat` behaves differently from :func:`~numpy.repeat`, but is more similar to
+            :func:`numpy.tile`. For the operator similar to :func:`numpy.repeat`, see :meth:`~tensordict.TensorDictBase.repeat_interleave`.
+
+        Args:
+            repeat (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
+                each dimension.
+
+        """
+        if len(repeats) == 1 and not isinstance(repeats[0], int):
+            repeats = repeats[0]
+            if isinstance(repeats, torch.Size):
+                return self.repeat(*repeats[0])
+            if isinstance(repeats, torch.Tensor):
+                # This will cause cuda to sync, which may not be desirable
+                return self.repeat(*repeats.tolist())
+            raise ValueError(
+                f"repeats must be a sequence of integers, a tensor or a torch.Size object. Got {type(repeats)} instead."
+            )
+        if len(repeats) != self.ndimension():
+            raise ValueError(
+                f"The number of repeat elements must match the number of dimensions of the tensordict. Got {len(repeats)} but ndim={self.ndimension()}."
+            )
+        return self._repeat(*repeats)
+
+    @abc.abstractmethod
+    def _repeat(self, *repeats: int) -> TensorDictBase: ...
+
     def cat_tensors(
         self,
         *keys: NestedKey,

@@ -3041,6 +3041,62 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
+    def _repeat(self, *repeats: int) -> TensorDictBase:
+        repeats = list(repeats)
+        r_dim = repeats.pop(self.stack_dim)
+        tds = [td.repeat(*repeats) for td in self.tensordicts]
+        tds = [td for _ in range(r_dim) for td in tds]
+        return type(self)(
+            *tds,
+            stack_dim=self.stack_dim,
+            stack_dim_name=self._td_dim_name,
+            hook_in=self.hook_in,
+            hook_out=self.hook_out,
+        )
+
+    def repeat_interleave(
+        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+    ) -> TensorDictBase:
+        if self.ndim == 0:
+            return self.unsqueeze(0).repeat_interleave(
+                repeats=repeats, dim=dim, output_size=output_size
+            )
+        if dim is None:
+            if self.ndim > 1:
+                return self.reshape(-1).repeat_interleave(repeats, dim=0)
+            return self.repeat_interleave(repeats, dim=0)
+        dim_corrected = dim if dim >= 0 else self.ndim + dim
+        if not (dim_corrected >= 0):
+            raise ValueError(
+                f"dim {dim} is out of range for tensordict with shape {self.shape}."
+            )
+        if dim_corrected == self.stack_dim:
+            new_list_of_tds = [t for t in self.tensordicts for _ in range(repeats)]
+            result = type(self)(
+                *new_list_of_tds,
+                stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
+                hook_out=self.hook_out,
+                hook_in=self.hook_in,
+            )
+        else:
+            dim_corrected = (
+                dim_corrected if dim_corrected < self.stack_dim else dim_corrected - 1
+            )
+            result = type(self)(
+                *(
+                    td.repeat_interleave(
+                        repeats=repeats, dim=dim_corrected, output_size=output_size
+                    )
+                    for td in self.tensordicts
+                ),
+                stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
+                hook_in=self.hook_in,
+                hook_out=self.hook_out,
+            )
+        return result
+
     def _permute(
         self,
         *args,
@@ -3815,23 +3871,24 @@ class _CustomOpTensorDict(TensorDictBase):
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict
     _index_tensordict = TensorDict._index_tensordict
-    masked_select = TensorDict.masked_select
-    reshape = TensorDict.reshape
-    split = TensorDict.split
-    _to_module = TensorDict._to_module
 
     _apply_nest = TensorDict._apply_nest
+    _get_names_idx = TensorDict._get_names_idx
+    _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
     _multithread_apply_flat = TensorDict._multithread_apply_flat
     _multithread_rebuild = TensorDict._multithread_rebuild
-
     _remove_batch_dim = TensorDict._remove_batch_dim
-    _maybe_remove_batch_dim = TensorDict._maybe_remove_batch_dim
+    _to_module = TensorDict._to_module
+    _unbind = TensorDict._unbind
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand
-    _unbind = TensorDict._unbind
-    _get_names_idx = TensorDict._get_names_idx
     from_dict_instance = TensorDict.from_dict_instance
+    masked_select = TensorDict.masked_select
+    _repeat = TensorDict._repeat
+    repeat_interleave = TensorDict.repeat_interleave
+    reshape = TensorDict.reshape
+    split = TensorDict.split
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
