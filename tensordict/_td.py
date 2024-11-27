@@ -1790,6 +1790,46 @@ class TensorDict(TensorDictBase):
             propagate_lock=True,
         )
 
+    def repeat_interleave(
+        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+    ) -> T:
+        if self.ndim == 0:
+            return self.unsqueeze(0).repeat_interleave(
+                repeats=repeats, dim=dim, output_size=output_size
+            )
+        if dim is None:
+            if self.ndim > 1:
+                return self.reshape(-1).repeat_interleave(repeats, dim=0)
+            return self.repeat_interleave(repeats, dim=0)
+        dim_corrected = dim if dim >= 0 else self.ndim + dim
+        if not (dim_corrected >= 0):
+            raise ValueError(
+                f"dim {dim} is out of range for tensordict with shape {self.shape}."
+            )
+        new_batch_size = torch.Size(
+            [
+                s if i != dim_corrected else s * repeats
+                for i, s in enumerate(self.batch_size)
+            ]
+        )
+        return self._fast_apply(
+            lambda leaf: leaf.repeat_interleave(
+                repeats=repeats, dim=dim_corrected, output_size=output_size
+            ),
+            batch_size=new_batch_size,
+            call_on_nested=True,
+            propagate_lock=True,
+        )
+
+    def _repeat(self, *repeats: int) -> TensorDictBase:
+        new_batch_size = torch.Size([i * r for i, r in zip(self.batch_size, repeats)])
+        return self._fast_apply(
+            lambda leaf: leaf.repeat(*repeats, *((1,) * (leaf.ndim - self.ndim))),
+            batch_size=new_batch_size,
+            call_on_nested=True,
+            propagate_lock=True,
+        )
+
     def _transpose(self, dim0, dim1):
         def _transpose(tensor):
             return tensor.transpose(dim0, dim1)
@@ -4208,14 +4248,16 @@ class _SubTensorDict(TensorDictBase):
     __or__ = TensorDict.__or__
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
+    _to_module = TensorDict._to_module
+    _unbind = TensorDict._unbind
     all = TensorDict.all
     any = TensorDict.any
     masked_select = TensorDict.masked_select
     memmap_like = TensorDict.memmap_like
+    repeat_interleave = TensorDict.repeat_interleave
+    _repeat = TensorDict._repeat
     reshape = TensorDict.reshape
     split = TensorDict.split
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(
