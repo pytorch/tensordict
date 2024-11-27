@@ -2595,6 +2595,35 @@ class TensorDictBase(MutableMapping):
         Returns:
             Repeated TensorDict which has the same shape as input, except along the given axis.
 
+        Examples:
+            >>> import torch
+            >>>
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     {
+            ...         "a": torch.randn(3, 4, 5),
+            ...         "b": TensorDict({
+            ...             "c": torch.randn(3, 4, 10, 1),
+            ...             "a string": "a string!",
+            ...         }, batch_size=[3, 4, 10])
+            ...     }, batch_size=[3, 4],
+            ... )
+            >>> print(td.repeat_interleave(2, dim=0))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            a string: NonTensorData(data=a string!, batch_size=torch.Size([6, 4, 10]), device=None),
+                            c: Tensor(shape=torch.Size([6, 4, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([6, 4, 10]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([6, 4]),
+                device=None,
+                is_shared=False)
+
         """
         ...
 
@@ -2612,6 +2641,35 @@ class TensorDictBase(MutableMapping):
         Args:
             repeat (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
                 each dimension.
+
+        Examples:
+            >>> import torch
+            >>>
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     {
+            ...         "a": torch.randn(3, 4, 5),
+            ...         "b": TensorDict({
+            ...             "c": torch.randn(3, 4, 10, 1),
+            ...             "a string": "a string!",
+            ...         }, batch_size=[3, 4, 10])
+            ...     }, batch_size=[3, 4],
+            ... )
+            >>> print(td.repeat(1, 2))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 8, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            a string: NonTensorData(data=a string!, batch_size=torch.Size([3, 8, 10]), device=None),
+                            c: Tensor(shape=torch.Size([3, 8, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 8, 10]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 8]),
+                device=None,
+                is_shared=False)
 
         """
         if len(repeats) == 1 and not isinstance(repeats[0], int):
