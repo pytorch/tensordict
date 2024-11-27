@@ -2574,6 +2574,123 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @abc.abstractmethod
+    def repeat_interleave(
+        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+    ) -> TensorDictBase:
+        """Repeat elements of a TensorDict.
+
+        .. warning:: This is different from :meth:`~torch.Tensor.repeat` but similar to :func:`numpy.repeat`.
+
+        Args:
+            repeats (torch.Tensor or int): The number of repetitions for each element. `repeats` is broadcast to fit
+                the shape of the given axis.
+            dim (int, optional): The dimension along which to repeat values. By default, use the flattened input
+                array, and return a flat output array.
+
+        Keyword Args:
+            output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
+                will avoid stream synchronization needed to calculate output shape of the tensordict.
+
+        Returns:
+            Repeated TensorDict which has the same shape as input, except along the given axis.
+
+        Examples:
+            >>> import torch
+            >>>
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     {
+            ...         "a": torch.randn(3, 4, 5),
+            ...         "b": TensorDict({
+            ...             "c": torch.randn(3, 4, 10, 1),
+            ...             "a string": "a string!",
+            ...         }, batch_size=[3, 4, 10])
+            ...     }, batch_size=[3, 4],
+            ... )
+            >>> print(td.repeat_interleave(2, dim=0))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            a string: NonTensorData(data=a string!, batch_size=torch.Size([6, 4, 10]), device=None),
+                            c: Tensor(shape=torch.Size([6, 4, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([6, 4, 10]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([6, 4]),
+                device=None,
+                is_shared=False)
+
+        """
+        ...
+
+    @overload
+    def repeat(self, repeats: torch.Size): ...
+
+    def repeat(self, *repeats: int) -> TensorDictBase:
+        """Repeats this tensor along the specified dimensions.
+
+        Unlike :meth:`~.expand()`, this function copies the tensor’s data.
+
+        .. warning:: :meth:`~.repeat` behaves differently from :func:`~numpy.repeat`, but is more similar to
+            :func:`numpy.tile`. For the operator similar to :func:`numpy.repeat`, see :meth:`~tensordict.TensorDictBase.repeat_interleave`.
+
+        Args:
+            repeat (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
+                each dimension.
+
+        Examples:
+            >>> import torch
+            >>>
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     {
+            ...         "a": torch.randn(3, 4, 5),
+            ...         "b": TensorDict({
+            ...             "c": torch.randn(3, 4, 10, 1),
+            ...             "a string": "a string!",
+            ...         }, batch_size=[3, 4, 10])
+            ...     }, batch_size=[3, 4],
+            ... )
+            >>> print(td.repeat(1, 2))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 8, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            a string: NonTensorData(data=a string!, batch_size=torch.Size([3, 8, 10]), device=None),
+                            c: Tensor(shape=torch.Size([3, 8, 10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 8, 10]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 8]),
+                device=None,
+                is_shared=False)
+
+        """
+        if len(repeats) == 1 and not isinstance(repeats[0], int):
+            repeats = repeats[0]
+            if isinstance(repeats, torch.Size):
+                return self.repeat(*repeats[0])
+            if isinstance(repeats, torch.Tensor):
+                # This will cause cuda to sync, which may not be desirable
+                return self.repeat(*repeats.tolist())
+            raise ValueError(
+                f"repeats must be a sequence of integers, a tensor or a torch.Size object. Got {type(repeats)} instead."
+            )
+        if len(repeats) != self.ndimension():
+            raise ValueError(
+                f"The number of repeat elements must match the number of dimensions of the tensordict. Got {len(repeats)} but ndim={self.ndimension()}."
+            )
+        return self._repeat(*repeats)
+
+    @abc.abstractmethod
+    def _repeat(self, *repeats: int) -> TensorDictBase: ...
+
     def cat_tensors(
         self,
         *keys: NestedKey,

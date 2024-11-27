@@ -1412,25 +1412,27 @@ class PersistentTensorDict(TensorDictBase):
     __le__ = TensorDict.__le__
     __lt__ = TensorDict.__lt__
 
-    _cast_reduction = TensorDict._cast_reduction
     _apply_nest = TensorDict._apply_nest
-    _multithread_apply_flat = TensorDict._multithread_apply_flat
-    _multithread_rebuild = TensorDict._multithread_rebuild
-
+    _cast_reduction = TensorDict._cast_reduction
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict
+    _get_names_idx = TensorDict._get_names_idx
     _index_tensordict = TensorDict._index_tensordict
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
+    _to_module = TensorDict._to_module
+    _unbind = TensorDict._unbind
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand
+    from_dict_instance = TensorDict.from_dict_instance
     masked_select = TensorDict.masked_select
+    _repeat = TensorDict._repeat
+    _repeat = TensorDict._repeat
+    repeat_interleave = TensorDict.repeat_interleave
     reshape = TensorDict.reshape
     split = TensorDict.split
-    _to_module = TensorDict._to_module
-    _unbind = TensorDict._unbind
-    _get_names_idx = TensorDict._get_names_idx
-    from_dict_instance = TensorDict.from_dict_instance
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

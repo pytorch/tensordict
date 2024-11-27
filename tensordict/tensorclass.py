@@ -177,6 +177,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_maybe_remove_batch_dim",
     "_multithread_apply_flat",
     "_remove_batch_dim",
+    "_repeat",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
     "_set_tuple",
@@ -297,6 +298,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "reciprocal_",
     "refine_names",
     "rename_",  # TODO: must be specialized
+    "repeat",
+    "repeat_interleave",
     "replace",
     "requires_grad_",
     "reshape",
@@ -395,6 +398,7 @@ def from_dataclass(
     frozen: bool = False,
     autocast: bool = False,
     nocast: bool = False,
+    inplace: bool = False,
 ) -> Any:
     """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
 
@@ -409,6 +413,8 @@ def from_dataclass(
         frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
         autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
         nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
+        inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
+            Without effect if an instance is provided.
 
     Returns:
         A tensor-compatible class or instance derived from the provided dataclass.
@@ -457,9 +463,14 @@ def from_dataclass(
     if isinstance(obj, type):
         if is_tensorclass(obj):
             return obj
-        cls = make_dataclass(
-            obj.__name__ + "_tc", fields=obj.__dataclass_fields__, bases=obj.__bases__
-        )
+        if not inplace:
+            cls = make_dataclass(
+                obj.__name__ + "_tc",
+                fields=obj.__dataclass_fields__,
+                bases=obj.__bases__,
+            )
+        else:
+            cls = obj
         clz = _tensorclass(cls, frozen=frozen)
         clz._type_hints = get_type_hints(obj)
         clz._autocast = autocast
@@ -768,7 +779,11 @@ def _tensorclass(cls: T, *, frozen) -> T:
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
     _register_tensor_class(cls)
-    _register_td_node(cls)
+    try:
+        _register_td_node(cls)
+    except ValueError:
+        # The class may already be registered as a pytree node
+        pass
 
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
