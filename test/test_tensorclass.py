@@ -691,9 +691,7 @@ class TestTensorClass:
 
         assert (c_gather2 == c_gather).all()
 
-    def test_get(
-        self,
-    ):
+    def test_get(self):
         @tensorclass
         class MyDataNest:
             X: torch.Tensor
@@ -776,9 +774,7 @@ class TestTensorClass:
         assert data.y.v == "test_nested"
         assert data.y.batch_size == torch.Size(batch_size)
 
-    def test_indexing(
-        self,
-    ):
+    def test_indexing(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -836,9 +832,7 @@ class TestTensorClass:
         assert a.grad.x is not None
         assert a.grad.z is None
 
-    def test_kjt(
-        self,
-    ):
+    def test_kjt(self):
         try:
             from torchrec import KeyedJaggedTensor
         except ImportError:
@@ -887,9 +881,7 @@ class TestTensorClass:
         ).all()
         assert subdata.z == data.z == z
 
-    def test_len(
-        self,
-    ):
+    def test_len(self):
         myc = MyData(
             X=torch.rand(2, 3, 4),
             y=torch.rand(2, 3, 4, 5),
@@ -906,18 +898,14 @@ class TestTensorClass:
         )
         assert len(myc2) == 0
 
-    def test_multiprocessing(
-        self,
-    ):
+    def test_multiprocessing(self):
         with Pool(os.cpu_count()) as p:
             catted = torch.cat(p.map(_make_data, [(i, 2) for i in range(1, 9)]), dim=0)
 
         assert catted.batch_size == torch.Size([36])
         assert catted.z == "test_tensorclass"
 
-    def test_nested(
-        self,
-    ):
+    def test_nested(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -932,9 +920,7 @@ class TestTensorClass:
         assert isinstance(data.y, MyDataNested), type(data.y)
         assert data.z == data_nest.z == data.y.z == z
 
-    def test_nested_eq(
-        self,
-    ):
+    def test_nested_eq(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -995,9 +981,7 @@ class TestTensorClass:
         assert isinstance(data[0].y, type(data.y))
         assert data[0].y.X.shape == torch.Size([4, 5])
 
-    def test_nested_ne(
-        self,
-    ):
+    def test_nested_ne(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1018,9 +1002,7 @@ class TestTensorClass:
         assert not (data != data2).y.X.any()
         assert not (data != data2).y.z.any()
 
-    def test_permute(
-        self,
-    ):
+    def test_permute(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1041,9 +1023,7 @@ class TestTensorClass:
             assert isinstance(permuted_data._tensordict, _PermutedTensorDict)
         assert permuted_data.z == permuted_data.y.z == z
 
-    def test_pickle(
-        self,
-    ):
+    def test_pickle(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
             y=torch.zeros(3, 4, 5, dtype=torch.bool),
@@ -1067,9 +1047,7 @@ class TestTensorClass:
         assert isinstance(data2, MyData)
         assert data2.z == data.z
 
-    def test_post_init(
-        self,
-    ):
+    def test_post_init(self):
         @tensorclass
         class MyDataPostInit:
             X: torch.Tensor
@@ -1097,9 +1075,7 @@ class TestTensorClass:
                 TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
             )
 
-    def test_pre_allocate(
-        self,
-    ):
+    def test_pre_allocate(self):
         @tensorclass
         class M1:
             X: Any
@@ -1118,9 +1094,35 @@ class TestTensorClass:
         m1[0] = m2
         assert (m1[0].X.X.X == m2.X.X.X).all()
 
-    def test_reshape(
-        self,
-    ):
+    def test_repeat(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        X = torch.ones(3, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [3, 4]
+        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+        assert (data.repeat(2, 3) == torch.cat([torch.cat([data] * 2, 0)] * 3, 1)).all()
+
+    def test_repeat_interleave(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        X = torch.ones(3, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [3, 4]
+        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+        assert data.repeat_interleave(2, dim=1).shape == torch.Size((3, 8))
+
+    def test_reshape(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1140,9 +1142,7 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict, TensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
 
-    def test_set(
-        self,
-    ):
+    def test_set(self):
         @tensorclass
         class MyDataNest:
             X: torch.Tensor
@@ -1316,9 +1316,7 @@ class TestTensorClass:
         # ensure optional fields are writable
         data.k = torch.zeros(3, 4, 5)
 
-    def test_setitem(
-        self,
-    ):
+    def test_setitem(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
             y=torch.zeros(3, 4, 5),
@@ -1423,9 +1421,7 @@ class TestTensorClass:
         assert (data.X[:2] == 0).all()
         assert (data.y.X[:2] == 0).all()
 
-    def test_setitem_memmap(
-        self,
-    ):
+    def test_setitem_memmap(self):
         # regression test PR #203
         # We should be able to set tensors items with MemoryMappedTensors and viceversa
         @tensorclass
@@ -1454,9 +1450,7 @@ class TestTensorClass:
         assert (data2.x[2:] == 0).all()
         assert (data2.y[2:] == 0).all()
 
-    def test_setitem_other_cls(
-        self,
-    ):
+    def test_setitem_other_cls(self):
         @tensorclass
         class MyData1:
             x: torch.Tensor
@@ -1504,9 +1498,7 @@ class TestTensorClass:
         ):
             data_wrong_cls[2:] = data1[2:]
 
-    def test_signature(
-        self,
-    ):
+    def test_signature(self):
         sig = inspect.signature(MyData)
         assert list(sig.parameters) == ["X", "y", "z", "batch_size", "device", "names"]
 
@@ -1689,9 +1681,7 @@ class TestTensorClass:
         ):
             torch.stack([data1, data3], dim=0)
 
-    def test_statedict_errors(
-        self,
-    ):
+    def test_statedict_errors(self):
         @tensorclass
         class MyClass:
             x: torch.Tensor
@@ -1723,9 +1713,7 @@ class TestTensorClass:
         with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
             tc.load_state_dict(sd)
 
-    def test_tensorclass_get_at(
-        self,
-    ):
+    def test_tensorclass_get_at(self):
         @tensorclass
         class MyDataNest:
             X: torch.Tensor
@@ -1753,9 +1741,7 @@ class TestTensorClass:
         assert data.get_at(("y", "foo"), slice(2, 3), "working") == "working"
         assert data.get_at("foo", slice(2, 3), "working") == "working"
 
-    def test_tensorclass_set_at_(
-        self,
-    ):
+    def test_tensorclass_set_at_(self):
         @tensorclass
         class MyDataNest:
             X: torch.Tensor
@@ -1786,9 +1772,7 @@ class TestTensorClass:
         assert (data.get_at("X", slice(3, 5)) == 1).all()
         assert (data.get_at(("y", "X"), slice(3, 5)) == 1).all()
 
-    def test_to_tensordict(
-        self,
-    ):
+    def test_to_tensordict(self):
         @tensorclass
         class MyClass:
             x: torch.Tensor
@@ -1871,9 +1855,7 @@ class TestTensorClass:
         # load_state_dict outperforms snapshot in this case
         assert tc_dest.z == z
 
-    def test_type(
-        self,
-    ):
+    def test_type(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
             y=torch.zeros(3, 4, 5, dtype=torch.bool),
@@ -1886,9 +1868,7 @@ class TestTensorClass:
         # we get an instance of the user defined class, not a dynamically defined subclass
         assert type(data) is MyDataUndecorated
 
-    def test_unbind(
-        self,
-    ):
+    def test_unbind(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1909,9 +1889,7 @@ class TestTensorClass:
         assert unbind_tcs[0].batch_size == torch.Size([4])
         assert unbind_tcs[0].z == unbind_tcs[1].z == unbind_tcs[2].z == z
 
-    def test_unsqueeze(
-        self,
-    ):
+    def test_unsqueeze(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1929,9 +1907,7 @@ class TestTensorClass:
         assert unsqueeze_tc.y.X.shape == torch.Size([3, 1, 4, 5])
         assert unsqueeze_tc.z == unsqueeze_tc.y.z == z
 
-    def test_view(
-        self,
-    ):
+    def test_view(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor

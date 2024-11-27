@@ -583,7 +583,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             if provided, overrides the default ``aggregate_probabilities`` from the class.
         include_sum (bool, optional): (:class:`~tensordict.nn.CompositeDistribution` outputs only)
             Whether to include the summed log-probability in the output TensorDict.
-            Defaults to ``self.inplace`` which is set through the class constructor (``True`` by default).
+            Defaults to ``self.include_sum`` which is set through the class constructor (``True`` by default).
             Has no effect if ``aggregate_probabilities`` is set to ``True``.
 
             .. warning:: The default value of ``include_sum`` will switch to ``False`` in v0.9 in the constructor.
