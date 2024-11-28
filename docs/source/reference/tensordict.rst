@@ -32,6 +32,7 @@ or ``cat``.
 
     cat
     from_consolidated
+    from_any
     from_dict
     from_h5
     from_module
@@ -39,6 +40,7 @@ or ``cat``.
     from_namedtuple
     from_pytree
     from_struct_array
+    from_tuple
     fromkeys
     is_batchedtensor
     lazy_stack

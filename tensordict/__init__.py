@@ -9,13 +9,9 @@ from tensordict._nestedkey import NestedKey
 from tensordict._td import (
     cat,
     from_consolidated,
-    from_dict,
-    from_h5,
     from_module,
     from_modules,
-    from_namedtuple,
     from_pytree,
-    from_struct_array,
     fromkeys,
     is_tensor_collection,
     lazy_stack,
@@ -29,6 +25,12 @@ from tensordict._td import (
 )
 
 from tensordict.base import (
+    from_any,
+    from_dict,
+    from_h5,
+    from_namedtuple,
+    from_struct_array,
+    from_tuple,
     get_defaults_to_none,
     set_get_defaults_to_none,
     TensorDictBase,
