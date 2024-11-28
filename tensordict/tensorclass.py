@@ -395,10 +395,13 @@ def from_dataclass(
     obj: Any,
     *,
     auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    batch_size: torch.Size | None = None,
     frozen: bool = False,
     autocast: bool = False,
     nocast: bool = False,
     inplace: bool = False,
+    device: torch.device | None = None,
 ) -> Any:
     """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
 
@@ -410,11 +413,14 @@ def from_dataclass(
 
     Keyword Args:
         auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the resulting object. Defaults to ``False``.
+        batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output tensordict should have. Defaults to ``None`` (full batch-size at each level).
+        batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
         frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
         autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
         nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
+        device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
 
     Returns:
         A tensor-compatible class or instance derived from the provided dataclass.
@@ -487,9 +493,13 @@ def from_dataclass(
     clz._autocast = autocast
     clz._nocast = nocast
     clz._frozen = frozen
-    result = clz(**asdict(obj))
+    result = clz(**asdict(obj), batch_size=batch_size, device=device)
     if auto_batch_size:
-        result = result.auto_batch_size_()
+        if batch_size is not None:
+            raise TypeError(
+                TensorDictBase._CONFLICTING_BATCH_SIZES.format("from_dataclass")
+            )
+        result = result.auto_batch_size_(batch_dims=batch_dims)
     return result
 
 

@@ -191,19 +191,38 @@ class PersistentTensorDict(TensorDictBase):
         self._check_batch_size(self._batch_size)
 
     @classmethod
-    def from_h5(cls, filename, mode="r"):
+    def from_h5(cls, filename, *, mode="r", batch_size: torch.size | None = None):
         """Creates a PersistentTensorDict from a h5 file.
 
-        This function will automatically determine the batch-size for each nested
-        tensordict.
+        This function will automatically determine the batch-size for each nested tensordict (unless ``batch_size``
+        is provided).
 
         Args:
-            filename (str): the path to the h5 file.
-            mode (str, optional): reading mode. Defaults to ``"r"``.
+            filename (str): The path to the h5 file.
+
+        Keyword Args:
+            mode (str, optional): Reading mode. Defaults to ``"r"``.
+            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to None (batch-size automatically
+                determined).
+
+        Returns:
+            A PersistentTensorDict representation of the input h5 file.
+
+        Examples:
+            >>> ptd = PersistentTensorDict.from_h5("path/to/file.h5")
+            >>> print(ptd)
+            PersistentTensorDict(
+                fields={
+                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
         """
-        out = cls(filename=filename, mode=mode, batch_size=[])
-        # determine batch size
-        _set_max_batch_size(out)
+        out = cls(filename=filename, mode=mode, batch_size=batch_size)
+        if batch_size is None:
+            # determine batch size
+            _set_max_batch_size(out)
         return out
 
     @classmethod
