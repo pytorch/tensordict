@@ -392,26 +392,32 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_consolidated</span></code></a>(filename)</p></td>
 <td><p>Reconstructs a tensordict from a consolidated file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(input_dict, *others[, batch_size, ...])</p></td>
-<td><p>Returns a TensorDict created from a dictionary or another <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_any.html#tensordict.from_any" title="tensordict.from_any"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_any</span></code></a>(obj, *[, auto_batch_size, ...])</p></td>
+<td><p>Converts any object to a TensorDict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_h5.html#tensordict.from_h5" title="tensordict.from_h5"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_h5</span></code></a>(filename[, mode])</p></td>
-<td><p>Creates a PersistentTensorDict from a h5 file.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dict</span></code></a>(d, *[, auto_batch_size, ...])</p></td>
+<td><p>Converts a dictionary to a TensorDict.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_module</span></code></a>(module[, as_module, lock, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_h5.html#tensordict.from_h5" title="tensordict.from_h5"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_h5</span></code></a>(h5_file, *[, auto_batch_size, ...])</p></td>
+<td><p>Converts an HDF5 file to a TensorDict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_module</span></code></a>(module[, as_module, lock, ...])</p></td>
 <td><p>Copies the params and buffers of a module in a tensordict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_modules.html#tensordict.from_modules" title="tensordict.from_modules"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_modules</span></code></a>(*modules[, as_module, lock, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_modules.html#tensordict.from_modules" title="tensordict.from_modules"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_modules</span></code></a>(*modules[, as_module, lock, ...])</p></td>
 <td><p>Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_namedtuple.html#tensordict.from_namedtuple" title="tensordict.from_namedtuple"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_namedtuple</span></code></a>(named_tuple, *[, ...])</p></td>
-<td><p>Converts a namedtuple to a TensorDict recursively.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_namedtuple.html#tensordict.from_namedtuple" title="tensordict.from_namedtuple"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_namedtuple</span></code></a>(named_tuple, *[, ...])</p></td>
+<td><p>Converts a namedtuple to a TensorDict.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_pytree.html#tensordict.from_pytree" title="tensordict.from_pytree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_pytree</span></code></a>(pytree, *[, batch_size, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_pytree.html#tensordict.from_pytree" title="tensordict.from_pytree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_pytree</span></code></a>(pytree, *[, batch_size, ...])</p></td>
 <td><p>Converts a pytree to a TensorDict instance.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_struct_array.html#tensordict.from_struct_array" title="tensordict.from_struct_array"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_struct_array</span></code></a>(struct_array[, device])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_struct_array.html#tensordict.from_struct_array" title="tensordict.from_struct_array"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_struct_array</span></code></a>(struct_array, *[, ...])</p></td>
 <td><p>Converts a structured numpy array to a TensorDict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_tuple.html#tensordict.from_tuple" title="tensordict.from_tuple"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_tuple</span></code></a>(obj, *[, auto_batch_size, ...])</p></td>
+<td><p>Converts a tuple to a TensorDict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.fromkeys.html#tensordict.fromkeys" title="tensordict.fromkeys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromkeys</span></code></a>(keys[, value])</p></td>
 <td><p>Creates a tensordict from a list of keys and a single value.</p></td>
