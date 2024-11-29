@@ -295,6 +295,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         log_prob_key: Optional[NestedKey] = "sample_log_prob",
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
+        num_samples: int | torch.Size | None = None,
     ) -> None:
         super().__init__()
         distribution_kwargs = (
@@ -346,6 +347,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
+        if isinstance(num_samples, (int, torch.SymInt)):
+            num_samples = torch.Size((num_samples,))
+        self.num_samples = num_samples
         if self.return_log_prob and self.log_prob_key not in self.out_keys:
             self.out_keys.append(self.log_prob_key)
 
@@ -464,6 +468,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         dist = self.get_dist(tensordict)
         if _requires_sample:
             out_tensors = self._dist_sample(dist, interaction_type=interaction_type())
+            if self.num_samples is not None:
+                # TODO: capture contiguous error here
+                tensordict_out = tensordict_out.expand(
+                    self.num_samples + tensordict_out.shape
+                )
             if isinstance(out_tensors, TensorDictBase):
                 if self.return_log_prob:
                     kwargs = {}
@@ -571,10 +580,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 return dist.sample((self.n_empirical_estimate,)).mean(0)
 
         elif interaction_type is InteractionType.RANDOM:
+            num_samples = self.num_samples
+            if num_samples is None:
+                num_samples = torch.Size(())
             if dist.has_rsample:
-                return dist.rsample()
+                return dist.rsample(num_samples)
             else:
-                return dist.sample()
+                return dist.sample(num_samples)
         else:
             raise NotImplementedError(f"unknown interaction_type {interaction_type}")
 
@@ -858,6 +870,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
 
+    @property
+    def num_samples(self):
+        num_samples = ()
+        for tdm in self.module:
+            if isinstance(
+                tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
+            ):
+                num_samples = tdm.num_samples + num_samples
+        return num_samples
+
     def get_dist(
         self,
         tensordict: TensorDictBase,
@@ -902,6 +924,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 dist = tdm.get_dist(td_copy)
                 if i < len(self.module) - 1:
                     sample = tdm._dist_sample(dist, interaction_type=interaction_type())
+                    if tdm.num_samples not in ((), None):
+                        td_copy = td_copy.expand(tdm.num_samples + td_copy.shape)
                     if isinstance(tdm, ProbabilisticTensorDictModule):
                         if isinstance(sample, torch.Tensor):
                             sample = [sample]

@@ -1866,100 +1866,225 @@ def test_module_buffer():
         assert module.td.device.type == "cuda"
 
 
-@pytest.mark.parametrize(
-    "log_prob_key",
-    [
-        None,
-        "sample_log_prob",
-        ("nested", "sample_log_prob"),
-        ("data", "sample_log_prob"),
-    ],
-)
-def test_nested_keys_probabilistic_delta(log_prob_key):
-    policy_module = TensorDictModule(
-        nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
-    )
-    td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
+class TestProbabilisticTensorDictModule:
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_probabilistic_n_samples(self, return_log_prob):
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1},
+            return_log_prob=return_log_prob,
+            num_samples=2,
+            default_interaction_type="random",
+        )
+        # alone
+        td = TensorDict(loc=torch.randn(3, 4), batch_size=[3])
+        td = prob(td)
+        assert "sample" in td
+        assert td.shape == (2, 3)
+        assert td["sample"].shape == (2, 3, 4)
+        if return_log_prob:
+            assert "sample_log_prob" in td
 
-    module = ProbabilisticTensorDictModule(
-        in_keys=[("data", "param")],
-        out_keys=[("data", "action")],
-        distribution_class=Delta,
-        return_log_prob=True,
-        log_prob_key=log_prob_key,
-    )
-    td_out = module(policy_module(td))
-    assert td_out["data", "action"].shape == (3, 4, 1)
-    if log_prob_key:
-        assert td_out[log_prob_key].shape == (3, 4)
-    else:
-        assert td_out["sample_log_prob"].shape == (3, 4)
-
-    module = ProbabilisticTensorDictModule(
-        in_keys={"param": ("data", "param")},
-        out_keys=[("data", "action")],
-        distribution_class=Delta,
-        return_log_prob=True,
-        log_prob_key=log_prob_key,
-    )
-    td_out = module(policy_module(td))
-    assert td_out["data", "action"].shape == (3, 4, 1)
-    if log_prob_key:
-        assert td_out[log_prob_key].shape == (3, 4)
-    else:
-        assert td_out["sample_log_prob"].shape == (3, 4)
-
-
-@pytest.mark.parametrize(
-    "log_prob_key",
-    [
-        None,
-        "sample_log_prob",
-        ("nested", "sample_log_prob"),
-        ("data", "sample_log_prob"),
-    ],
-)
-def test_nested_keys_probabilistic_normal(log_prob_key):
-    loc_module = TensorDictModule(
-        nn.Linear(1, 1),
-        in_keys=[("data", "states")],
-        out_keys=[("data", "loc")],
-    )
-    scale_module = TensorDictModule(
-        nn.Linear(1, 1),
-        in_keys=[("data", "states")],
-        out_keys=[("data", "scale")],
-    )
-    td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
-
-    module = ProbabilisticTensorDictModule(
-        in_keys=[("data", "loc"), ("data", "scale")],
-        out_keys=[("data", "action")],
-        distribution_class=Normal,
-        return_log_prob=True,
-        log_prob_key=log_prob_key,
-    )
-    with pytest.warns(UserWarning, match="deterministic_sample"):
-        td_out = module(loc_module(scale_module(td)))
-        assert td_out["data", "action"].shape == (3, 4, 1)
-        if log_prob_key:
-            assert td_out[log_prob_key].shape == (3, 4, 1)
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("include_sum", [True, False])
+    @pytest.mark.parametrize("aggregate_probabilities", [True, False])
+    @pytest.mark.parametrize("return_composite", [True, False])
+    def test_probabilistic_seq_n_samples(
+        self,
+        return_log_prob,
+        return_composite,
+        include_sum,
+        aggregate_probabilities,
+        inplace,
+    ):
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1},
+            return_log_prob=return_log_prob,
+            num_samples=2,
+            default_interaction_type="random",
+        )
+        # in a sequence
+        seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+            prob,
+            inplace=inplace,
+            aggregate_probabilities=aggregate_probabilities,
+            include_sum=include_sum,
+            return_composite=return_composite,
+        )
+        td = TensorDict(x=torch.randn(3, 4), batch_size=[3])
+        if return_composite:
+            assert isinstance(seq.get_dist(td), CompositeDistribution)
         else:
-            assert td_out["sample_log_prob"].shape == (3, 4, 1)
+            assert isinstance(seq.get_dist(td), Normal)
+        td = seq(td)
+        assert "sample" in td
+        assert td.shape == (2, 3)
+        assert td["sample"].shape == (2, 3, 4)
+        if return_log_prob:
+            assert "sample_log_prob" in td
+
+        # log-prob from the sequence
+        log_prob = seq.log_prob(td)
+        if aggregate_probabilities or not return_composite:
+            assert isinstance(log_prob, torch.Tensor)
+        else:
+            assert isinstance(log_prob, TensorDict)
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("include_sum", [True, False])
+    @pytest.mark.parametrize("aggregate_probabilities", [True, False])
+    @pytest.mark.parametrize("return_composite", [True])
+    def test_intermediate_probabilistic_seq_n_samples(
+        self,
+        return_log_prob,
+        return_composite,
+        include_sum,
+        aggregate_probabilities,
+        inplace,
+    ):
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1},
+            return_log_prob=return_log_prob,
+            num_samples=2,
+            default_interaction_type="random",
+        )
+
+        # intermediate in a sequence
+        seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+            prob,
+            TensorDictModule(
+                lambda x: x + 1, in_keys=["sample"], out_keys=["new_sample"]
+            ),
+            inplace=inplace,
+            aggregate_probabilities=aggregate_probabilities,
+            include_sum=include_sum,
+            return_composite=return_composite,
+        )
+        td = TensorDict(x=torch.randn(3, 4), batch_size=[3])
+        assert isinstance(seq.get_dist(td), CompositeDistribution)
+        td = seq(td)
+        assert "sample" in td
+        assert td.shape == (2, 3)
+        assert td["sample"].shape == (2, 3, 4)
+        if return_log_prob:
+            assert "sample_log_prob" in td
+
+        # log-prob from the sequence
+        log_prob = seq.log_prob(td)
+        if aggregate_probabilities or not return_composite:
+            assert isinstance(log_prob, torch.Tensor)
+        else:
+            assert isinstance(log_prob, TensorDict)
+
+    @pytest.mark.parametrize(
+        "log_prob_key",
+        [
+            None,
+            "sample_log_prob",
+            ("nested", "sample_log_prob"),
+            ("data", "sample_log_prob"),
+        ],
+    )
+    def test_nested_keys_probabilistic_delta(self, log_prob_key):
+        policy_module = TensorDictModule(
+            nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
+        )
+        td = TensorDict(
+            {"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3]
+        )
 
         module = ProbabilisticTensorDictModule(
-            in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+            in_keys=[("data", "param")],
+            out_keys=[("data", "action")],
+            distribution_class=Delta,
+            return_log_prob=True,
+            log_prob_key=log_prob_key,
+        )
+        td_out = module(policy_module(td))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4)
+
+        module = ProbabilisticTensorDictModule(
+            in_keys={"param": ("data", "param")},
+            out_keys=[("data", "action")],
+            distribution_class=Delta,
+            return_log_prob=True,
+            log_prob_key=log_prob_key,
+        )
+        td_out = module(policy_module(td))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4)
+
+    @pytest.mark.parametrize(
+        "log_prob_key",
+        [
+            None,
+            "sample_log_prob",
+            ("nested", "sample_log_prob"),
+            ("data", "sample_log_prob"),
+        ],
+    )
+    def test_nested_keys_probabilistic_normal(self, log_prob_key):
+        loc_module = TensorDictModule(
+            nn.Linear(1, 1),
+            in_keys=[("data", "states")],
+            out_keys=[("data", "loc")],
+        )
+        scale_module = TensorDictModule(
+            nn.Linear(1, 1),
+            in_keys=[("data", "states")],
+            out_keys=[("data", "scale")],
+        )
+        td = TensorDict(
+            {"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3]
+        )
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=[("data", "loc"), ("data", "scale")],
             out_keys=[("data", "action")],
             distribution_class=Normal,
             return_log_prob=True,
             log_prob_key=log_prob_key,
         )
-        td_out = module(loc_module(scale_module(td)))
-        assert td_out["data", "action"].shape == (3, 4, 1)
-        if log_prob_key:
-            assert td_out[log_prob_key].shape == (3, 4, 1)
-        else:
-            assert td_out["sample_log_prob"].shape == (3, 4, 1)
+        with pytest.warns(UserWarning, match="deterministic_sample"):
+            td_out = module(loc_module(scale_module(td)))
+            assert td_out["data", "action"].shape == (3, 4, 1)
+            if log_prob_key:
+                assert td_out[log_prob_key].shape == (3, 4, 1)
+            else:
+                assert td_out["sample_log_prob"].shape == (3, 4, 1)
+
+            module = ProbabilisticTensorDictModule(
+                in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+                out_keys=[("data", "action")],
+                distribution_class=Normal,
+                return_log_prob=True,
+                log_prob_key=log_prob_key,
+            )
+            td_out = module(loc_module(scale_module(td)))
+            assert td_out["data", "action"].shape == (3, 4, 1)
+            if log_prob_key:
+                assert td_out[log_prob_key].shape == (3, 4, 1)
+            else:
+                assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
 
 class TestEnsembleModule:
