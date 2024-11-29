@@ -35,6 +35,10 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
 
 __all__ = ["TensorDictSequential"]
 
@@ -491,7 +495,15 @@ class TensorDictSequential(TensorDictModule):
             if self._select_before_return:
                 # We must also update any value that has been updated during the course of execution
                 # from the input data.
-                keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
+                if is_compiling():
+                    keys = [  # noqa: C416
+                        k
+                        for k in {k for k in self.out_keys}.union(  # noqa: C416
+                            {k for k in tensordict.keys(True, True)}  # noqa: C416
+                        )
+                    ]
+                else:
+                    keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
                 return tensordict.update(result, keys_to_update=keys)
         return result
 
