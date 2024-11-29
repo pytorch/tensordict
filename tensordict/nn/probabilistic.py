@@ -580,17 +580,23 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
 
 class ProbabilisticTensorDictSequential(TensorDictSequential):
-    """A sequence of :class:`~tensordict.nn.TensorDictModules` ending in a :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+    """A sequence of :class:`~tensordict.nn.TensorDictModules` containing at least one :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
 
-    This class extends :class:`~tensordict.nn.TensorDictSequential` by enforcing that the final module
-    in the sequence is an instance of :class:`~tensordict.nn.ProbabilisticTensorDictModule`. It also
-    exposes the :meth:`~.get_dist` method to recover the distribution object from the
-    :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+    This class extends :class:`~tensordict.nn.TensorDictSequential` and is typically configured with a sequence of
+    modules where the final module is an instance of :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+    However, it also supports configurations where one or more intermediate modules are instances of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule`, while the last module may or may not be probabilistic.
+    In all cases, it exposes the :meth:`~.get_dist` method to recover the distribution object from the
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule` instances in the sequence.
 
     Multiple probabilistic modules can co-exist in a single ``ProbabilisticTensorDictSequential``.
-    If `return_composite` if ``False`` (default), only the last one will produce a distribution and the others
-    will be executed as regular :class:`~tensordict.nn.TensorDictModule` instances. If ``True``,
-    intermediate distributions will be grouped in a single :class:`~tensordict.nn.CompositeDistribution`.
+    If `return_composite` is ``False`` (default), only the last one will produce a distribution and the others
+    will be executed as regular :class:`~tensordict.nn.TensorDictModule` instances.
+    However, if a `ProbabilisticTensorDictModule` is not the last module in the sequence and `return_composite=False`,
+    a `ValueError` will be raised when trying to query the module. If `return_composite=True`,
+    all intermediate `ProbabilisticTensorDictModule` instances will contribute to a single
+    :class:`~tensordict.nn.CompositeDistribution` instance.
+
     Resulting log-probabilities will be conditional probabilities if samples are interdependent:
     whenever
 
@@ -652,6 +658,125 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             :obj:`ProbabilisticTensorDictModule` or
             :obj:`ProbabilisticTensorDictSequential`.
 
+    Examples:
+        >>> from tensordict.nn import ProbabilisticTensorDictModule as Prob, ProbabilisticTensorDictSequential as Seq
+        >>> import torch
+        >>> # Typical usage: a single distribution is computed last in the sequence
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import ProbabilisticTensorDictModule as Prob, ProbabilisticTensorDictSequential as Seq, \
+        ...     TensorDictModule as Mod
+        >>> torch.manual_seed(0)
+        >>>
+        >>> module = Seq(
+        ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+        ...     Prob(in_keys=["loc"], out_keys=["sample"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ... )
+        >>> input = TensorDict(x=torch.ones(3))
+        >>> td = module(input.copy())
+        >>> print(td)
+        TensorDict(
+            fields={
+                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(module.get_dist(input))
+        Normal(loc: torch.Size([3]), scale: torch.Size([3]))
+        >>> print(module.log_prob(td))
+        tensor([-0.9189, -0.9189, -0.9189])
+        >>> # Intermediate distributions are ignored when return_composite=False
+        >>> module = Seq(
+        ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+        ...     Prob(in_keys=["loc"], out_keys=["sample0"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ...     Mod(lambda x: x + 1, in_keys=["sample0"], out_keys=["loc2"]),
+        ...     Prob(in_keys={"loc": "loc2"}, out_keys=["sample1"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ...     return_composite=False,
+        ... )
+        >>> td = module(TensorDict(x=torch.ones(3)))
+        >>> print(td)
+        TensorDict(
+            fields={
+                loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(module.get_dist(input))
+        Normal(loc: torch.Size([3]), scale: torch.Size([3]))
+        >>> print(module.log_prob(td))
+        tensor([-0.9189, -0.9189, -0.9189])
+        >>> # Intermediate distributions produce a CompositeDistribution when return_composite=True
+        >>> module = Seq(
+        ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+        ...     Prob(in_keys=["loc"], out_keys=["sample0"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ...     Mod(lambda x: x + 1, in_keys=["sample0"], out_keys=["loc2"]),
+        ...     Prob(in_keys={"loc": "loc2"}, out_keys=["sample1"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ...     return_composite=True,
+        ... )
+        >>> input = TensorDict(x=torch.ones(3))
+        >>> td = module(input.copy())
+        >>> print(td)
+        TensorDict(
+            fields={
+                loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(module.get_dist(input))
+        CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3])), 'sample1': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
+        >>> print(module.log_prob(td, aggregate_probabilities=False))
+        TensorDict(
+            fields={
+                sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample1_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> # Even a single intermediate distribution is wrapped in a CompositeDistribution when
+        >>> # return_composite=True
+        >>> module = Seq(
+        ...     Mod(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+        ...     Prob(in_keys=["loc"], out_keys=["sample0"], distribution_class=torch.distributions.Normal,
+        ...          distribution_kwargs={"scale": 1}),
+        ...     Mod(lambda x: x + 1, in_keys=["sample0"], out_keys=["y"]),
+        ...     return_composite=True,
+        ... )
+        >>> td = module(TensorDict(x=torch.ones(3)))
+        >>> print(td)
+        TensorDict(
+            fields={
+                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                y: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(module.get_dist(input))
+        CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
+        >>> print(module.log_prob(td, aggregate_probabilities=False, inplace=False, include_sum=False))
+        TensorDict(
+            fields={
+                sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
     """
 
     def __init__(
@@ -668,14 +793,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "ProbabilisticTensorDictSequential must consist of zero or more "
                 "TensorDictModules followed by a ProbabilisticTensorDictModule"
             )
-        if not isinstance(
+        if not return_composite and not isinstance(
             modules[-1],
             (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
         ):
             raise TypeError(
                 "The final module passed to ProbabilisticTensorDictSequential must be "
                 "an instance of ProbabilisticTensorDictModule or another "
-                "ProbabilisticTensorDictSequential"
+                "ProbabilisticTensorDictSequential (unless return_composite is set to ``True``)."
             )
         # if the modules not including the final probabilistic module return the sampled
         # key we wont be sampling it again, in that case
@@ -724,7 +849,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tds = self.det_part
         type = interaction_type()
         if type is None:
-            type = self.module[-1].default_interaction_type
+            for m in reversed(self.module):
+                if hasattr(m, "default_interaction_type"):
+                    type = m.default_interaction_type
+                    break
+            else:
+                raise ValueError("Could not find a default interaction in the modules.")
         with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
 
@@ -784,8 +914,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 td_copy = tdm(td_copy)
         if len(dists) == 0:
             raise RuntimeError(f"No distribution module found in {self}.")
-        elif len(dists) == 1:
-            return dist
+        # elif len(dists) == 1:
+        #     return dist
         return CompositeDistribution.from_distributions(
             td_copy,
             dists,
@@ -968,10 +1098,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict
-        tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
-        tensordict_exec = self.module[-1](
-            tensordict_exec, _requires_sample=self._requires_sample
-        )
+        if self.return_composite:
+            for m in self.module:
+                if isinstance(
+                    m, (ProbabilisticTensorDictModule, ProbabilisticTensorDictModule)
+                ):
+                    tensordict_exec = m(
+                        tensordict_exec, _requires_sample=self._requires_sample
+                    )
+                else:
+                    tensordict_exec = m(tensordict_exec, **kwargs)
+        else:
+            tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
+            tensordict_exec = self.module[-1](
+                tensordict_exec, _requires_sample=self._requires_sample
+            )
         if tensordict_out is not None:
             result = tensordict_out
             result.update(tensordict_exec, keys_to_update=self.out_keys)

@@ -489,7 +489,10 @@ class TensorDictSequential(TensorDictModule):
         else:
             result = tensordict_exec
             if self._select_before_return:
-                return tensordict.update(result.select(*self.out_keys))
+                # We must also update any value that has been updated during the course of execution
+                # from the input data.
+                keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
+                return tensordict.update(result, keys_to_update=keys)
         return result
 
     def __len__(self) -> int:

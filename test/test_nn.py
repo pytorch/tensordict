@@ -157,7 +157,9 @@ class TestTDModule:
             return a + 1
 
         if kwargs:
-            module = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            module = TensorDictModule(
+                fn, in_keys=kwargs, out_keys=["a"], out_to_in_map=False
+            )
             td = TensorDict(
                 {
                     "1": torch.ones(1),
@@ -170,6 +172,76 @@ class TestTDModule:
             module = TensorDictModule(fn, in_keys=args, out_keys=["a"])
             td = TensorDict({"1": torch.ones(1)}, [])
         assert (module(td)["a"] == 2).all()
+
+    def test_unused_out_to_in_map(self):
+        def fn(x, y):
+            return x + y
+
+        with pytest.warns(
+            match="out_to_in_map is not None but is only used when in_key is a dictionary."
+        ):
+            _ = TensorDictModule(fn, in_keys=["x"], out_keys=["a"], out_to_in_map=False)
+
+    def test_input_keys_dict_reversed(self):
+        in_keys = {"x": "1", "y": "2"}
+
+        def fn(x, y):
+            return x + y
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=True
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+        assert (module(td)["a"] == 4).all()
+
+    def test_input_keys_match_reversed(self):
+        in_keys = {"1": "x", "2": "y"}
+        reversed_in_keys = {v: k for k, v in in_keys.items()}
+
+        def fn(x, y):
+            return y - x
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=False
+        )
+        reversed_module = TensorDictModule(
+            fn, in_keys=reversed_in_keys, out_keys=["a"], out_to_in_map=True
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+
+        assert module(td)["a"] == reversed_module(td)["a"] == torch.Tensor([2])
+
+    @pytest.mark.parametrize("out_to_in_map", [True, False])
+    def test_input_keys_wrong_mapping(self, out_to_in_map):
+        in_keys = {"1": "x", "2": "y"}
+        if not out_to_in_map:
+            in_keys = {v: k for k, v in in_keys.items()}
+
+        def fn(x, y):
+            return x + y
+
+        module = TensorDictModule(
+            fn, in_keys=in_keys, out_keys=["a"], out_to_in_map=out_to_in_map
+        )
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+
+        with pytest.raises(TypeError, match="got an unexpected keyword argument '1'"):
+            module(td)
+
+    def test_input_keys_dict_deprecated_warning(self):
+        in_keys = {"1": "x", "2": "y"}
+
+        def fn(x, y):
+            return x + y
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="Using a dictionary in_keys without specifying out_to_in_map is deprecated.",
+        ):
+            _ = TensorDictModule(fn, in_keys=in_keys, out_keys=["a"])
 
     def test_reset(self):
         torch.manual_seed(0)
@@ -478,7 +550,10 @@ class TestTDModule:
 
     def test_vmap_kwargs(self):
         module = TensorDictModule(
-            lambda x, *, y: x + y, in_keys={"1": "x", "2": "y"}, out_keys=["z"]
+            lambda x, *, y: x + y,
+            in_keys={"1": "x", "2": "y"},
+            out_keys=["z"],
+            out_to_in_map=False,
         )
         td = TensorDict(
             {"1": torch.ones((10,)), "2": torch.ones((10,)) * 2}, batch_size=[10]
@@ -723,7 +798,9 @@ class TestTDSequence:
             return a + 1
 
         if kwargs:
-            module1 = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            module1 = TensorDictModule(
+                fn, in_keys=kwargs, out_keys=["a"], out_to_in_map=False
+            )
             td = TensorDict(
                 {
                     "input": torch.ones(1),
@@ -1028,6 +1105,64 @@ class TestTDSequence:
             else:
                 assert isinstance(tdm.log_prob(v), TensorDict)
 
+    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
+    @pytest.mark.parametrize("inplace", [None, False, True])
+    @pytest.mark.parametrize("include_sum", [None, False, True])
+    def test_probtdseq_intermediate_dist(
+        self, include_sum, aggregate_probabilities, inplace
+    ):
+        tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
+        tdm1 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["y"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+            default_interaction_type="random",
+        )
+        tdm2 = TensorDictModule(torch.nn.Linear(4, 5), in_keys=["y"], out_keys=["loc2"])
+        tdm = ProbabilisticTensorDictSequential(
+            tdm0,
+            tdm1,
+            tdm2,
+            include_sum=include_sum,
+            aggregate_probabilities=aggregate_probabilities,
+            inplace=inplace,
+            return_composite=True,
+        )
+        dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
+        assert isinstance(dist, CompositeDistribution)
+
+        s = dist.sample()
+        assert dist.aggregate_probabilities is aggregate_probabilities
+        assert dist.inplace is inplace
+        assert dist.include_sum is include_sum
+        if aggregate_probabilities in (None, False):
+            assert isinstance(dist.log_prob(s), TensorDict)
+        else:
+            assert isinstance(dist.log_prob(s), torch.Tensor)
+
+        v = tdm(TensorDict(x=torch.randn(10, 3)))
+        assert set(v.keys()) == {"x", "loc", "y", "loc2"}
+        if aggregate_probabilities is None:
+            cm0 = pytest.warns(
+                expected_warning=DeprecationWarning, match="aggregate_probabilities"
+            )
+        else:
+            cm0 = contextlib.nullcontext()
+        if include_sum is None:
+            cm1 = pytest.warns(expected_warning=DeprecationWarning, match="include_sum")
+        else:
+            cm1 = contextlib.nullcontext()
+        if inplace is None:
+            cm2 = pytest.warns(expected_warning=DeprecationWarning, match="inplace")
+        else:
+            cm2 = contextlib.nullcontext()
+        with cm0, cm1, cm2:
+            if aggregate_probabilities in (None, True):
+                assert isinstance(tdm.log_prob(v), torch.Tensor)
+            else:
+                assert isinstance(tdm.log_prob(v), TensorDict)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
@@ -1240,7 +1375,10 @@ def test_input():
             module, in_keys=[("i", "i2")], out_keys=[(("o", "o2"), ("o3",))]
         )
         TensorDictModule(
-            module, in_keys={"i": "i1", (("i2",),): "i3"}, out_keys=[("o", "o2")]
+            module,
+            in_keys={"i": "i1", (("i2",),): "i3"},
+            out_keys=[("o", "o2")],
+            out_to_in_map=False,
         )
 
         # corner cases that should work
