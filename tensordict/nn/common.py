@@ -773,11 +773,20 @@ class TensorDictModule(TensorDictModuleBase):
             order given by the in_keys iterable.
             If ``in_keys`` is a dictionary, its keys must correspond to the key
             to be read in the tensordict and its values must match the name of
-            the keyword argument in the function signature.
+            the keyword argument in the function signature. If `out_to_in_map` is ``True``,
+            the mapping gets inverted so that the keys correspond to the keyword
+            arguments in the function signature.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
 
     Keyword Args:
+        out_to_in_map (bool, optional): if ``True``, `in_keys` is read as if the keys are the arguments keys of
+            the :meth:`~.forward` method and the values are the keys in the input :class:`~tensordict.TensorDict`. If
+            ``False`` or ``None`` (default), keys are considered to be the input keys and values the method's arguments keys.
+
+            .. warning::
+                The default value of `out_to_in_map` will change from ``False`` to ``True`` in the v0.9 release.
+
         inplace (bool or string, optional): if ``True`` (default), the output of the module are written in the tensordict
             provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
             batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
@@ -865,11 +874,23 @@ class TensorDictModule(TensorDictModuleBase):
 
     Examples:
         >>> module = TensorDictModule(lambda x, *, y: x+y,
-        ...     in_keys={'1': 'x', '2': 'y'}, out_keys=['z'],
+        ...     in_keys={'1': 'x', '2': 'y'}, out_keys=['z'], out_to_in_map=False
         ...     )
         >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
         >>> td['z']
         tensor(3.)
+
+    If `out_to_in_map` is set to ``True``, then the `in_keys` mapping is reversed. This way,
+    one can use the same input key for different keyword arguments.
+
+    Examples:
+        >>> module = TensorDictModule(lambda x, *, y, z: x+y+z,
+        ...     in_keys={'x': '1', 'y': '2', z: '2'}, out_keys=['t'], out_to_in_map=True
+        ...     )
+        >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
+        >>> td['t']
+        tensor(5.)
+
 
     Functional calls to a tensordict module is easy:
 
@@ -923,17 +944,39 @@ class TensorDictModule(TensorDictModuleBase):
         in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
         out_keys: NestedKey | List[NestedKey],
         *,
+        out_to_in_map: bool | None = None,
         inplace: bool | str = True,
     ) -> None:
         super().__init__()
 
+        if out_to_in_map is not None and not isinstance(in_keys, dict):
+            warnings.warn(
+                "out_to_in_map is not None but is only used when in_key is a dictionary."
+            )
+
         if isinstance(in_keys, dict):
+            if out_to_in_map is None:
+                out_to_in_map = False
+                warnings.warn(
+                    "Using a dictionary in_keys without specifying out_to_in_map is deprecated. "
+                    "By default, out_to_in_map is `False` (`in_keys` keys as tensordict pointers, "
+                    "values as kwarg name), but from version>=0.9, default will be `True` "
+                    "(`in_keys` keys as func kwarg name, values as tensordict pointers). "
+                    "Please use explicit out_to_in_map to indicate the ordering of the input keys. ",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
             # write the kwargs and create a list instead
             _in_keys = []
             self._kwargs = []
             for key, value in in_keys.items():
-                self._kwargs.append(value)
-                _in_keys.append(key)
+                if out_to_in_map:  # arg: td_key
+                    self._kwargs.append(key)
+                    _in_keys.append(value)
+                else:  # td_key: arg
+                    self._kwargs.append(value)
+                    _in_keys.append(key)
             in_keys = _in_keys
         else:
             if isinstance(in_keys, (str, tuple)):
