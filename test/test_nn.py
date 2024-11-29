@@ -1041,6 +1041,128 @@ class TestTDSequence:
                 == expected
             )
 
+    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
+    @pytest.mark.parametrize("inplace", [None, False, True])
+    @pytest.mark.parametrize("include_sum", [None, False, True])
+    def test_probtdseq_multdist(self, include_sum, aggregate_probabilities, inplace):
+
+        tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
+        tdm1 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["y"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+            default_interaction_type="random",
+        )
+        tdm2 = TensorDictModule(torch.nn.Linear(4, 5), in_keys=["y"], out_keys=["loc2"])
+        tdm3 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc2"},
+            out_keys=["z"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+            default_interaction_type="random",
+        )
+
+        tdm = ProbabilisticTensorDictSequential(
+            tdm0,
+            tdm1,
+            tdm2,
+            tdm3,
+            include_sum=include_sum,
+            aggregate_probabilities=aggregate_probabilities,
+            inplace=inplace,
+            return_composite=True,
+        )
+        dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
+        s = dist.sample()
+        assert dist.aggregate_probabilities is aggregate_probabilities
+        assert dist.inplace is inplace
+        assert dist.include_sum is include_sum
+        if aggregate_probabilities in (None, False):
+            assert isinstance(dist.log_prob(s), TensorDict)
+        else:
+            assert isinstance(dist.log_prob(s), torch.Tensor)
+
+        v = tdm(TensorDict(x=torch.randn(10, 3)))
+        assert set(v.keys()) == {"x", "loc", "y", "loc2", "z"}
+        if aggregate_probabilities is None:
+            cm0 = pytest.warns(
+                expected_warning=DeprecationWarning, match="aggregate_probabilities"
+            )
+        else:
+            cm0 = contextlib.nullcontext()
+        if include_sum is None:
+            cm1 = pytest.warns(expected_warning=DeprecationWarning, match="include_sum")
+        else:
+            cm1 = contextlib.nullcontext()
+        if inplace is None:
+            cm2 = pytest.warns(expected_warning=DeprecationWarning, match="inplace")
+        else:
+            cm2 = contextlib.nullcontext()
+        with cm0, cm1, cm2:
+            if aggregate_probabilities in (None, True):
+                assert isinstance(tdm.log_prob(v), torch.Tensor)
+            else:
+                assert isinstance(tdm.log_prob(v), TensorDict)
+
+    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
+    @pytest.mark.parametrize("inplace", [None, False, True])
+    @pytest.mark.parametrize("include_sum", [None, False, True])
+    def test_probtdseq_intermediate_dist(
+        self, include_sum, aggregate_probabilities, inplace
+    ):
+        tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
+        tdm1 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["y"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"scale": 1},
+            default_interaction_type="random",
+        )
+        tdm2 = TensorDictModule(torch.nn.Linear(4, 5), in_keys=["y"], out_keys=["loc2"])
+        tdm = ProbabilisticTensorDictSequential(
+            tdm0,
+            tdm1,
+            tdm2,
+            include_sum=include_sum,
+            aggregate_probabilities=aggregate_probabilities,
+            inplace=inplace,
+            return_composite=True,
+        )
+        dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
+        assert isinstance(dist, CompositeDistribution)
+
+        s = dist.sample()
+        assert dist.aggregate_probabilities is aggregate_probabilities
+        assert dist.inplace is inplace
+        assert dist.include_sum is include_sum
+        if aggregate_probabilities in (None, False):
+            assert isinstance(dist.log_prob(s), TensorDict)
+        else:
+            assert isinstance(dist.log_prob(s), torch.Tensor)
+
+        v = tdm(TensorDict(x=torch.randn(10, 3)))
+        assert set(v.keys()) == {"x", "loc", "y", "loc2"}
+        if aggregate_probabilities is None:
+            cm0 = pytest.warns(
+                expected_warning=DeprecationWarning, match="aggregate_probabilities"
+            )
+        else:
+            cm0 = contextlib.nullcontext()
+        if include_sum is None:
+            cm1 = pytest.warns(expected_warning=DeprecationWarning, match="include_sum")
+        else:
+            cm1 = contextlib.nullcontext()
+        if inplace is None:
+            cm2 = pytest.warns(expected_warning=DeprecationWarning, match="inplace")
+        else:
+            cm2 = contextlib.nullcontext()
+        with cm0, cm1, cm2:
+            if aggregate_probabilities in (None, True):
+                assert isinstance(tdm.log_prob(v), torch.Tensor)
+            else:
+                assert isinstance(tdm.log_prob(v), TensorDict)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
@@ -2574,6 +2696,7 @@ class TestCompositeDist:
         assert all(key in sample for key in module.out_keys)
         sample_clone = sample.clone()
         lp = module.log_prob(sample_clone)
+        assert isinstance(lp, torch.Tensor)
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
@@ -2705,7 +2828,13 @@ class TestCompositeDist:
             assert "cont_log_prob" in sample.keys()
             assert ("nested", "cont_log_prob") in sample.keys(True)
         sample_clone = sample.clone()
+
+        dist = module.get_dist(sample_clone)
+        assert isinstance(dist, CompositeDistribution)
+
+        sample_clone = sample.clone()
         lp = module.log_prob(sample_clone)
+
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
