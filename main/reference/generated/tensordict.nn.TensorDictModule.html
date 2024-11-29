@@ -376,13 +376,24 @@ contains more than one element, the values will be passed in the
 order given by the in_keys iterable.
 If <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> is a dictionary, its keys must correspond to the key
 to be read in the tensordict and its values must match the name of
-the keyword argument in the function signature.</p></li>
+the keyword argument in the function signature. If <cite>out_to_in_map</cite> is <code class="docutils literal notranslate"><span class="pre">True</span></code>,
+the mapping gets inverted so that the keys correspond to the keyword
+arguments in the function signature.</p></li>
 <li><p><strong>out_keys</strong> (<em>iterable of str</em>) – keys to be written to the input tensordict. The length of out_keys must match the
 number of tensors returned by the embedded module. Using “_” as a key avoid writing tensor to output.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/string.html#module-string" title="(in Python v3.13)"><em>string</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), the output of the module are written in the tensordict
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out_to_in_map</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, <cite>in_keys</cite> is read as if the keys are the arguments keys of
+the <a class="reference internal" href="#tensordict.nn.TensorDictModule.forward" title="tensordict.nn.TensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method and the values are the keys in the input <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. If
+<code class="docutils literal notranslate"><span class="pre">False</span></code> or <code class="docutils literal notranslate"><span class="pre">None</span></code> (default), keys are considered to be the input keys and values the method’s arguments keys.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The default value of <cite>out_to_in_map</cite> will change from <code class="docutils literal notranslate"><span class="pre">False</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code> in the v0.9 release.</p>
+</div>
+</p></li>
+<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/string.html#module-string" title="(in Python v3.13)"><em>string</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), the output of the module are written in the tensordict
 provided to the <a class="reference internal" href="#tensordict.nn.TensorDictModule.forward" title="tensordict.nn.TensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, a new <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with and empty
 batch-size and no device is created. if <code class="docutils literal notranslate"><span class="pre">&quot;empty&quot;</span></code>, <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.empty" title="tensordict.TensorDict.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a> will be used to
 create the output tensordict.</p>
@@ -402,7 +413,8 @@ the <code class="docutils literal notranslate"><span class="pre">tensordict_out<
 <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass than <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, the output will still
 be a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p>
 </div>
-</p>
+</p></li>
+</ul>
 </dd>
 </dl>
 <p>Embedding a neural network in a TensorDictModule only requires to specify the input
@@ -471,11 +483,22 @@ be specified:</p>
 dispatching of values to specific keyword arguments.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="n">y</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="s1">&#39;y&#39;</span><span class="p">},</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="s1">&#39;y&#39;</span><span class="p">},</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">],</span> <span class="n">out_to_in_map</span><span class="o">=</span><span class="kc">False</span>
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()),</span> <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())</span><span class="o">*</span><span class="mi">2</span><span class="p">},</span> <span class="p">[]))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span>
 <span class="go">tensor(3.)</span>
+</pre></div>
+</div>
+<p>If <cite>out_to_in_map</cite> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, then the <cite>in_keys</cite> mapping is reversed. This way,
+one can use the same input key for different keyword arguments.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="n">y</span><span class="o">+</span><span class="n">z</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="s1">&#39;1&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="s1">&#39;2&#39;</span><span class="p">,</span> <span class="n">z</span><span class="p">:</span> <span class="s1">&#39;2&#39;</span><span class="p">},</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">],</span> <span class="n">out_to_in_map</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()),</span> <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())</span><span class="o">*</span><span class="mi">2</span><span class="p">},</span> <span class="p">[]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span>
+<span class="go">tensor(5.)</span>
 </pre></div>
 </div>
 <p>Functional calls to a tensordict module is easy:</p>
