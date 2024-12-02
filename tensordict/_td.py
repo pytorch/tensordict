@@ -936,7 +936,18 @@ class TensorDict(TensorDictBase):
                 agglomerate = list(
                     self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
                 )
-                agglomerate = torch.cat(agglomerate, dim=0)
+                if dim == "feature":
+                    agglomerate = [
+                        (
+                            val.flatten(self.ndim, -1)
+                            if val.ndim > self.ndim
+                            else val.unsqueeze(-1)
+                        )
+                        for val in agglomerate
+                    ]
+                    dim = -1
+                    keepdim = False
+                agglomerate = torch.cat(agglomerate, dim=-1)
                 return getattr(torch, reduction_name)(
                     agglomerate, keepdim=keepdim, dim=dim
                 )
@@ -963,11 +974,53 @@ class TensorDict(TensorDictBase):
                 return (batch_dims + dim,)
             return (dim,)
 
-        if dim is not NO_DEFAULT:
+        dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
+        if dim_needs_proc:
             dim = proc_dim(dim, self.batch_dims, tuple_ok=tuple_ok)
             if not tuple_ok:
                 dim = dim[0]
-        if dim is not NO_DEFAULT or keepdim:
+        if dim in ("feature",):
+            if keepdim:
+                raise TypeError("dim='feature' is incompatible with keepdim=True.")
+
+            ndim = self.ndim
+
+            def reduction(val):
+                if _is_tensor_collection(type(val)):
+                    local_dim = dim
+                else:
+                    if val.ndim > ndim:
+                        val = val.flatten(ndim, -1)
+                    else:
+                        val = val.unsqueeze(-1)
+                    local_dim = -1
+                result = getattr(val, reduction_name)(
+                    dim=local_dim,
+                    **kwargs,
+                )
+                if isinstance(result, tuple):
+                    if values_only:
+                        result = result.values
+                    else:
+                        return TensorDict.from_namedtuple(result)
+                return result
+
+            if self._has_names():
+                names = copy(self.names)
+            else:
+                names = None
+            if not call_on_nested:
+                raise RuntimeError(
+                    f"reduction {reduction_name} must be called with call_on_nested=True when dim='feature'."
+                )
+            return self._fast_apply(
+                reduction,
+                call_on_nested=call_on_nested,
+                device=self.device,
+                names=names,
+            )
+
+        elif dim is not NO_DEFAULT or keepdim:
             names = None
             if self._has_names():
                 names = copy(self.names)

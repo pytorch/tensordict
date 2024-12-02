@@ -2293,15 +2293,44 @@ class LazyStackedTensorDict(TensorDictBase):
         **kwargs,
     ):
         if further_reduce:
-            # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
-            agglomerate = [
-                val.contiguous().flatten()
-                for val in self._values_list(
-                    True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                )
-            ]
-            agglomerate = torch.cat(agglomerate, dim=0)
-            return getattr(torch, reduction_name)(agglomerate)
+            if dim is NO_DEFAULT:
+                # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
+                agglomerate = [
+                    val.contiguous().flatten()
+                    for val in self._values_list(
+                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                    )
+                ]
+                agglomerate = torch.cat(agglomerate, dim=-1)
+                return getattr(torch, reduction_name)(agglomerate)
+            elif dim == "feature":
+
+                def proc_val(val):
+                    val = val.contiguous()
+                    if val.ndim > self.ndim:
+                        val = val.flatten(self.ndim, -1)
+                    else:
+                        val = val.unsqueeze(-1)
+                    return val
+
+                agglomerate = [
+                    proc_val(val)
+                    for val in self.values(
+                        True,
+                        True,
+                    )
+                ]
+                dim = -1
+                cat_dim = -1
+                keepdim = False
+            else:
+                agglomerate = [
+                    val.contiguous().unsqueeze(self.stack_dim)
+                    for val in self.values(True, True)
+                ]
+                cat_dim = self.stack_dim
+            agglomerate = torch.cat(agglomerate, dim=cat_dim)
+            return getattr(torch, reduction_name)(agglomerate, dim=dim, keepdim=keepdim)
 
         try:
             td: TensorDict = self.to_tensordict()

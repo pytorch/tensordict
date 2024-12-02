@@ -2623,6 +2623,56 @@ class TestGeneric:
         ):
             td.record_stream(s0)
 
+    @pytest.mark.parametrize(
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+    )
+    def test_reduction_feature(self, reduction):
+        td = TensorDict(
+            a=torch.ones(3, 4, 5, 6),
+            b=TensorDict(
+                c=torch.ones(3, 4, 5, 6, 7),
+                d=torch.ones(3, 4, 5, 6),
+                e=torch.ones(3, 4, 5) if reduction not in ("std", "var") else None,
+                none=None,
+                batch_size=(3, 4, 5),
+            ),
+            f=torch.ones(3, 4) if reduction not in ("std", "var") else None,
+            none=None,
+            batch_size=(3, 4),
+        )
+        tdr = getattr(td, reduction)(dim="feature")
+        for k, v in td.items(True):
+            other = tdr[k]
+            if isinstance(v, TensorDict):
+                assert v.batch_size == other.batch_size
+            elif is_non_tensor(v):
+                assert v.data is None
+                assert other is None
+            elif isinstance(k, str):
+                assert other.shape == td.shape
+            else:
+                assert other.shape == td[k[:-1]].shape
+
+    @pytest.mark.parametrize(
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+    )
+    def test_reduction_feature_full(self, reduction):
+        td = TensorDict(
+            a=torch.ones(3, 4, 5, 6),
+            b=TensorDict(
+                c=torch.ones(3, 4, 5, 6, 7),
+                d=torch.ones(3, 4, 5, 6),
+                e=torch.ones(3, 4, 5) if reduction not in ("std", "var") else None,
+                none=None,
+                batch_size=(3, 4, 5),
+            ),
+            f=torch.ones(3, 4) if reduction not in ("std", "var") else None,
+            none=None,
+            batch_size=(3, 4),
+        )
+        reduced = getattr(td, reduction)(dim="feature", reduce=True)
+        assert reduced.shape == (3, 4)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
@@ -5528,6 +5578,29 @@ class TestTensorDicts(TestTensorDictsBase):
             [s if i != 2 else 1 for i, s in enumerate(td.shape)]
         )
         assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+    )
+    def test_reduction_feature(self, td_name, device, red, tmpdir):
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        if td_name in ("nested_tensorclass", "td_h5"):
+            td = td.apply(
+                lambda x: torch.stack(
+                    [
+                        x,
+                    ]
+                    * 3,
+                    -1,
+                )
+            )
+        tdr = getattr(td, red)(dim="feature")
+        assert tdr.batch_size == td.batch_size
+        assert is_tensor_collection(tdr)
+        tensor = getattr(td, red)(dim="feature", reduce=True)
+        assert tensor.shape == td.batch_size
+        assert isinstance(tensor, torch.Tensor)
 
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
@@ -8755,6 +8828,31 @@ class TestLazyStackedTensorDict:
 
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+    @pytest.mark.parametrize(
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
+    )
+    def test_reduction_feature_full(self, reduction):
+        td = TensorDict.lazy_stack(
+            [
+                TensorDict.lazy_stack(
+                    [
+                        TensorDict(
+                            a=torch.ones(3, 4),
+                            b=torch.zeros(3, 4, 5),
+                            batch_size=[3, 4],
+                        )
+                        for _ in range(2)
+                    ],
+                    1,
+                )
+                for _ in range(5)
+            ],
+            -1,
+        )
+        assert td.shape == (3, 2, 4, 5)
+        tensor = getattr(td, reduction)(dim="feature", reduce=True)
+        assert tensor.shape == td.shape
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
