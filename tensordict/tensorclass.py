@@ -2885,6 +2885,9 @@ class NonTensorData:
             device=self.device if device is NO_DEFAULT else device,
         )
 
+    def is_empty(self) -> bool:
+        return False
+
     def _apply_nest(self, *args, out=None, **kwargs):
         # kwargs["filter_empty"] = False
         if out is not None:
@@ -3151,6 +3154,9 @@ class NonTensorStack(LazyStackedTensorDict):
             return NonTensorData(nontensor)
 
         return cls(*[_maybe_from_list(nontensor) for nontensor in non_tensors])
+
+    def is_empty(self) -> bool:
+        return False
 
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):
