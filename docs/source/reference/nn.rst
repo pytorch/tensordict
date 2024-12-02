@@ -197,6 +197,7 @@ to build distributions from network outputs and get summary statistics or sample
     TensorDictSequential
     TensorDictModuleWrapper
     CudaGraphModule
+    WrapModule
 
 Ensembles
 ---------

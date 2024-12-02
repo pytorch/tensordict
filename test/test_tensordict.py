@@ -2296,6 +2296,7 @@ class TestGeneric:
         td_sep = td.separates("a", ("b", ("d",)), "e", ("unique", "val"), default=None)
         assert "unique" not in td
         assert "unique" in td_sep
+        td = TensorDict(a=0, b=TensorDict(c=0, d=0), unique=TensorDict(val=0))
         td_sep = td.separates(
             "a", ("b", ("d",)), "e", ("unique", "val"), default=None, filter_empty=False
         )

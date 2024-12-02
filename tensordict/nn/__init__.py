@@ -9,6 +9,7 @@ from tensordict.nn.common import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
+    WrapModule,
 )
 from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
