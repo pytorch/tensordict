@@ -2673,6 +2673,18 @@ class TestGeneric:
         reduced = getattr(td, reduction)(dim="feature", reduce=True)
         assert reduced.shape == (3, 4)
 
+        td = TensorDict(
+            a=torch.ones(3, 4, 5),
+            b=TensorDict(
+                c=torch.ones(3, 4, 5),
+                d=torch.ones(3, 4, 5),
+                batch_size=(3, 4, 5),
+            ),
+            batch_size=(3, 4),
+        )
+        assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
+        assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
