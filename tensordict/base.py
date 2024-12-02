@@ -34,6 +34,7 @@ from typing import (
     Generator,
     Iterator,
     List,
+    Literal,
     Optional,
     OrderedDict,
     overload,
@@ -824,7 +825,7 @@ class TensorDictBase(MutableMapping):
 
     def mean(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
@@ -833,11 +834,15 @@ class TensorDictBase(MutableMapping):
         """Returns the mean value of all elements in the input tensordict.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+            dim (int, tuple of int, str, optional): if ``None``, returns a dimensionless
                 tensordict containing the mean value of all leaves (if this can be computed).
                 If integer or tuple of integers, `mean` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -862,7 +867,7 @@ class TensorDictBase(MutableMapping):
 
     def nanmean(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
@@ -876,6 +881,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `mean` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -897,7 +906,7 @@ class TensorDictBase(MutableMapping):
 
     def prod(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
@@ -911,6 +920,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `prod` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -941,7 +954,7 @@ class TensorDictBase(MutableMapping):
 
     def sum(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
@@ -955,6 +968,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `sum` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -976,7 +993,7 @@ class TensorDictBase(MutableMapping):
 
     def nansum(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         dtype: torch.dtype | None = None,
@@ -990,6 +1007,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `sum` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -1011,7 +1032,7 @@ class TensorDictBase(MutableMapping):
 
     def std(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
@@ -1025,6 +1046,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `std` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
@@ -1045,7 +1070,7 @@ class TensorDictBase(MutableMapping):
 
     def var(
         self,
-        dim: int | Tuple[int] = NO_DEFAULT,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
         keepdim: bool = NO_DEFAULT,
         *,
         correction: int = 1,
@@ -1059,6 +1084,10 @@ class TensorDictBase(MutableMapping):
                 If integer or tuple of integers, `var` is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
                 shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
