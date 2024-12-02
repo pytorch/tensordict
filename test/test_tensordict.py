@@ -2279,6 +2279,29 @@ class TestGeneric:
         assert ("a", "b") in list(td_select.keys(True, True))
         assert ("a", "b") in td_select.keys(True, True)
 
+    def test_separates(self):
+        td = TensorDict(a=0, b=TensorDict(c=0, d=0))
+        td_sep = td.separates("a", ("b", ("d",)))
+        assert "a" in td_sep
+        assert "a" not in td
+        assert ("b", "d") in td_sep
+        assert ("b", "d") not in td
+        with pytest.raises(KeyError):
+            td = TensorDict(a=0, b=TensorDict(c=0, d=0))
+            td_sep = td.separates("a", ("b", ("d",)), "e")
+        td = TensorDict(a=0, b=TensorDict(c=0, d=0))
+        td_sep = td.separates("a", ("b", ("d",)), "e", default=None)
+        assert td_sep["e"] is None
+        td = TensorDict(a=0, b=TensorDict(c=0, d=0), unique=TensorDict(val=0))
+        td_sep = td.separates("a", ("b", ("d",)), "e", ("unique", "val"), default=None)
+        assert "unique" not in td
+        assert "unique" in td_sep
+        td_sep = td.separates(
+            "a", ("b", ("d",)), "e", ("unique", "val"), default=None, filter_empty=False
+        )
+        assert "unique" in td
+        assert "unique" in td_sep
+
     def test_set_nested_keys(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)

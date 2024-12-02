@@ -10925,6 +10925,7 @@ class TensorDictBase(MutableMapping):
         self,
         *key_sets,
         inplace=False,
+        default: Any = NO_DEFAULT,
         strict: bool = True,
         reproduce_struct: bool = False,
     ):
@@ -10937,6 +10938,8 @@ class TensorDictBase(MutableMapping):
             key_sets (sequence of Dict[in_key, out_key] or list of keys): the various splits.
             inplace (bool, optional): if ``True``, the keys are removed from ``self``
                 in-place. Defaults to ``False``.
+            default (Any, optional): the value to be returned when a key is missing.
+                If not specified and ``strict=True``, an exception is raised.
             strict (bool, optional): if ``True``, an exception is raised when a key
                 is missing. Defaults to ``True``.
             reproduce_struct (bool, optional): if ``True``, all tensordict returned have
@@ -10967,7 +10970,7 @@ class TensorDictBase(MutableMapping):
             last_out = self.copy()
         if strict:
             default = NO_DEFAULT
-        else:
+        elif default is NO_DEFAULT:
             default = None
         outs = []
         if inplace:
@@ -10988,7 +10991,7 @@ class TensorDictBase(MutableMapping):
             #  around this method
             for key in keys_to_del:
                 try:
-                    del self[key]
+                    self.pop(key, default=default)
                 except KeyError:
                     # We're good if strict is False
                     if strict:
@@ -10998,6 +11001,83 @@ class TensorDictBase(MutableMapping):
             last_out.filter_empty_()
         outs.append(last_out)
         return tuple(outs)
+
+    def separates(
+        self,
+        *keys: NestedKey,
+        default: Any = NO_DEFAULT,
+        strict: bool = True,
+        filter_empty: bool = True,
+    ) -> T:
+        """Separates the specified keys from the tensordict in-place.
+
+        .. seealso:: This method is equivalent to calling :meth:`~tensordict.TensorDictBase.split_keys` with
+            ``inplace=True`` on a single split.
+
+        .. seealso:: This method is equivalent to calling :meth:`~tensordict.TensorDictBase.exclude` except that it
+            returns the other split of the data.
+
+        Args:
+            keys (NestedKey): the keys to separate from the tensordict.
+            default (Any, optional): the value to be returned when a key is missing.
+                If not specified and ``strict=True``, an exception is raised. Otherwise, the default of any missing key
+                will be ``None`` unless specified otherwise.
+            strict (bool, optional): if ``True``, an exception is raised when a key
+                is missing. Defaults to ``True``.
+            filter_empty (bool, optional): if ``True``, empty tensordicts within ``self`` will be removed.
+                Defaults to ``True``.
+
+        Returns:
+            T: the separated tensordict.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     a=0,
+            ...     b=0,
+            ...     c=0,
+            ...     d=0,
+            ... )
+            >>> td_a_c = td.separates("a", "c")
+            >>> print(td_a_c)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> print(td)
+            TensorDict(
+                fields={
+                    b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        from tensordict import PersistentTensorDict
+
+        if isinstance(self, PersistentTensorDict):
+            last_out = self.to_tensordict()
+        else:
+            last_out = self
+        strict = strict and default is NO_DEFAULT
+        if strict:
+            default = NO_DEFAULT
+        else:
+            default = None
+        key_set = keys
+
+        # We want to keep the metadata such as batch-size etc so we call with recurse=True
+        out = self.empty(recurse=True)
+        for key in key_set:
+            val = last_out.pop(key, default)
+            out.set(key, val)
+        out.filter_empty_()
+        if filter_empty:
+            self.filter_empty_()
+        return out
 
     @abc.abstractmethod
     def _index_tensordict(
