@@ -1278,12 +1278,45 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
 
 
 class WrapModule(TensorDictModuleBase):
+    """A wrapper around any callable that processes TensorDict instances.
+
+    This wrapper is useful when building :class:`~tensordict.nn.TensorDictSequential` stacks and when a transform
+    requires the entire TensorDict instance to be visible.
+
+    Args:
+        func (Callable[[TensorDictBase], TensorDictBase]): A callable function that takes in a TensorDictBase instance
+            and returns a transformed TensorDictBase instance.
+
+    Keyword Args:
+        inplace (bool, optional): If ``True``, the input TensorDict will be modified in-place. Otherwise, a new TensorDict
+            will be returned (if the function does not modify it in-place and returns it). Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod, WrapModule
+        >>> seq = Seq(
+        ...     Mod(lambda x: x * 2, in_keys=["x"], out_keys=["y"]),
+        ...     WrapModule(lambda td: td.reshape(-1)),
+        ... )
+        >>> td = TensorDict(x=torch.ones(3, 4, 5), batch_size=[3, 4])
+        >>> td = Seq(td)
+        >>> assert td.shape == (12,)
+        >>> assert (td["y"] == 2).all()
+        >>> assert td["y"].shape == (12, 5)
+
+    """
+
     in_keys = []
     out_keys = []
 
-    def __init__(self, func):
-        self.func = func
+    def __init__(
+        self, func: Callable[[TensorDictBase], TensorDictBase], *, inplace: bool = False
+    ) -> None:
         super().__init__()
+        self.func = func
+        self.inplace = inplace
 
-    def forward(self, data):
-        return self.func(data)
+    def forward(self, data: TensorDictBase) -> TensorDictBase:
+        result = self.func(data)
+        if self.inplace and result is not data:
+            return data.update(result)
+        return result
