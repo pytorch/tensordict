@@ -410,6 +410,7 @@ class TestTDModule:
         )
 
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
+        assert tensordict_module.default_interaction_type is not None
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
@@ -450,6 +451,7 @@ class TestTDModule:
         )
 
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
+        assert tensordict_module.default_interaction_type is not None
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
@@ -513,6 +515,7 @@ class TestTDModule:
         tensordict_module = ProbabilisticTensorDictSequential(
             net, normal_params, prob_module
         )
+        assert tensordict_module.default_interaction_type is not None
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
@@ -962,6 +965,7 @@ class TestTDSequence:
         tdmodule = ProbabilisticTensorDictSequential(
             tdmodule1, dummy_tdmodule, tdmodule2, prob_module
         )
+        assert tdmodule.default_interaction_type is not None
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 4
@@ -1002,6 +1006,7 @@ class TestTDSequence:
                 default_interaction_type="random",
             ),
         )
+        assert mod.default_interaction_type is not None
         inp = TensorDict({"a": 0.0, "b": 1.0})
         inp_clone = inp.clone()
         if td_out:
@@ -1073,6 +1078,7 @@ class TestTDSequence:
             inplace=inplace,
             return_composite=True,
         )
+        assert tdm.default_interaction_type is not None
         dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
         s = dist.sample()
         assert dist.aggregate_probabilities is aggregate_probabilities
@@ -1129,6 +1135,7 @@ class TestTDSequence:
             inplace=inplace,
             return_composite=True,
         )
+        assert tdm.default_interaction_type is not None
         dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
         assert isinstance(dist, CompositeDistribution)
 

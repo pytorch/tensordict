@@ -948,6 +948,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             include_sum=self.include_sum,
         )
 
+    @property
+    def default_interaction_type(self):
+        """Returns the `default_interaction_type` of the module using an iterative heuristic.
+
+        This property iterates over all modules in reverse order, attempting to retrieve the
+        `default_interaction_type` attribute from any child module. The first non-None value
+        encountered is returned. If no such value is found, a default `interaction_type()` is returned.
+
+        """
+        for m in reversed(self.module):
+            interaction = getattr(m, "default_interaction_type", None)
+            if interaction is not None:
+                return interaction
+        return interaction_type()
+
     def log_prob(
         self,
         tensordict,
