@@ -628,6 +628,66 @@ class TensorDictBase(MutableMapping):
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
                 with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.min(dim=0)
+            min(
+                indices=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                vals=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.min()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.min(reduce=True)
+            tensor(-2.9953)
+
         """
         result = self._cast_reduction(
             reduction_name="min",
@@ -702,6 +762,66 @@ class TensorDictBase(MutableMapping):
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
                 with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.max(dim=0)
+            max(
+                indices=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                vals=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.max()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.max(reduce=True)
+            tensor(3.2942)
+
         """
         result = self._cast_reduction(
             reduction_name="max",
@@ -749,6 +869,61 @@ class TensorDictBase(MutableMapping):
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
                 with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.cummin(dim=0)
+            cummin(
+                indices=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                vals=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.cummin(reduce=True, dim=0)
+            torch.return_types.cummin(...)
+
         """
         result = self._cast_reduction(
             reduction_name="cummin",
@@ -759,6 +934,8 @@ class TensorDictBase(MutableMapping):
             call_on_nested=False,
             batch_size=self.batch_size,
         )
+        if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
+            return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
             from .return_types import cummin
@@ -796,6 +973,61 @@ class TensorDictBase(MutableMapping):
                 when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a tensorclass
                 with entries ``"values"`` and ``"indices"`` with idendical structure within. Defaults to ``True``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.cummax(dim=0)
+            cummax(
+                indices=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                vals=TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        b: TensorDict(
+                            fields={
+                                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([4]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False),
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.cummax(reduce=True, dim=0)
+            torch.return_types.cummax(...)
+
         """
         result = self._cast_reduction(
             reduction_name="cummax",
@@ -806,6 +1038,8 @@ class TensorDictBase(MutableMapping):
             call_on_nested=False,
             batch_size=self.batch_size,
         )
+        if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
+            return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
             from .return_types import cummax
@@ -853,6 +1087,82 @@ class TensorDictBase(MutableMapping):
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.mean(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.mean()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.mean(reduce=True)
+            tensor(-0.0547)
+            >>> td.mean(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.mean(reduce=True, dim="feature")
+            tensor([[1., 1., 1., 1.],
+                    [1., 1., 1., 1.],
+                    [1., 1., 1., 1.]])
+            >>> td.mean(reduce=True, dim=0)
+            tensor([[1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.]])
+
+
         """
         # if dim is NO_DEFAULT and not keepdim:
         #     dim = None
@@ -895,6 +1205,81 @@ class TensorDictBase(MutableMapping):
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.nanmean(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.nanmean()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.nanmean(reduce=True)
+            tensor(-0.0547)
+            >>> td.nanmean(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.nanmean(reduce=True, dim="feature")
+            tensor([[1., 1., 1., 1.],
+                    [1., 1., 1., 1.],
+                    [1., 1., 1., 1.]])
+            >>> td.nanmean(reduce=True, dim=0)
+            tensor([[1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.]])
+
         """
         return self._cast_reduction(
             reduction_name="nanmean",
@@ -933,6 +1318,81 @@ class TensorDictBase(MutableMapping):
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.prod(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.prod()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.prod(reduce=True)
+            tensor(-0.)
+            >>> td.prod(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.prod(reduce=True, dim="feature")
+            tensor([[1., 1., 1., 1.],
+                    [1., 1., 1., 1.],
+                    [1., 1., 1., 1.]])
+            >>> td.prod(reduce=True, dim=0)
+            tensor([[1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.],
+                    [1., 1., 1., 1., 1.]])
 
         """
         result = self._cast_reduction(
@@ -982,6 +1442,81 @@ class TensorDictBase(MutableMapping):
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.sum(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.sum()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.sum(reduce=True)
+            tensor(-0.)
+            >>> td.sum(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.sum(reduce=True, dim="feature")
+            tensor([[15., 15., 15., 15.],
+                    [15., 15., 15., 15.],
+                    [15., 15., 15., 15.]])
+            >>> td.sum(reduce=True, dim=0)
+            tensor([[9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.]])
+
         """
         return self._cast_reduction(
             reduction_name="sum",
@@ -1021,6 +1556,81 @@ class TensorDictBase(MutableMapping):
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.nansum(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.nansum()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.nansum(reduce=True)
+            tensor(-0.)
+            >>> td.nansum(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.nansum(reduce=True, dim="feature")
+            tensor([[15., 15., 15., 15.],
+                    [15., 15., 15., 15.],
+                    [15., 15., 15., 15.]])
+            >>> td.nansum(reduce=True, dim=0)
+            tensor([[9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.],
+                    [9., 9., 9., 9., 9.]])
+
         """
         return self._cast_reduction(
             reduction_name="nansum",
@@ -1059,6 +1669,81 @@ class TensorDictBase(MutableMapping):
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.std(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.std()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.std(reduce=True)
+            tensor(1.0006)
+            >>> td.std(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.std(reduce=True, dim="feature")
+            tensor([[0., 0., 0., 0.],
+                    [0., 0., 0., 0.],
+                    [0., 0., 0., 0.]])
+            >>> td.std(reduce=True, dim=0)
+            tensor([[0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.]])
+
         """
         return self._cast_reduction(
             reduction_name="std",
@@ -1096,6 +1781,81 @@ class TensorDictBase(MutableMapping):
             reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.var(dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.var()
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.var(reduce=True)
+            tensor(1.0006)
+            >>> td.var(dim="feature")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> td = TensorDict(
+            ...     a=torch.ones(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.ones(3, 4, 5),
+            ...         d=torch.ones(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.var(reduce=True, dim="feature")
+            tensor([[0., 0., 0., 0.],
+                    [0., 0., 0., 0.],
+                    [0., 0., 0., 0.]])
+            >>> td.var(reduce=True, dim=0)
+            tensor([[0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.]])
 
         """
         return self._cast_reduction(

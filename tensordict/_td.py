@@ -945,12 +945,18 @@ class TensorDict(TensorDictBase):
                         )
                         for val in agglomerate
                     ]
+                    cat_dim = -1
                     dim = -1
                     keepdim = False
-                agglomerate = torch.cat(agglomerate, dim=-1)
-                return getattr(torch, reduction_name)(
-                    agglomerate, keepdim=keepdim, dim=dim
-                )
+                elif isinstance(dim, tuple):
+                    cat_dim = dim[0]
+                else:
+                    cat_dim = dim
+                agglomerate = torch.cat(agglomerate, dim=cat_dim)
+                kwargs = {}
+                if keepdim is not NO_DEFAULT:
+                    kwargs["keepdim"] = keepdim
+                return getattr(torch, reduction_name)(agglomerate, dim=dim, **kwargs)
 
         # IMPORTANT: do not directly access batch_dims (or any other property)
         # via self.batch_dims otherwise a reference cycle is introduced
