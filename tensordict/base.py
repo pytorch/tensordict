@@ -8679,7 +8679,7 @@ class TensorDictBase(MutableMapping):
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
             propagate_lock=False,
-            filter_empty=True,
+            filter_empty=False,
             default=None,
         )
         if items:

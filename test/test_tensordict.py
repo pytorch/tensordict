@@ -340,6 +340,17 @@ class TestGeneric:
         assert (tensor[:, :4] == 0).all()
         assert (tensor[:, 4:] == 1).all()
 
+    @pytest.mark.parametrize("recurse", [True, False])
+    def test_clone_empty(self, recurse):
+        td = TensorDict()
+        assert td.clone(recurse=recurse) is not None
+        td = TensorDict(device="cpu")
+        assert td.clone(recurse=recurse) is not None
+        td = TensorDict(batch_size=[2])
+        assert td.clone(recurse=recurse) is not None
+        td = TensorDict(device="cpu", batch_size=[2])
+        assert td.clone(recurse=recurse) is not None
+
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("num_threads", [0, 1, 2])
