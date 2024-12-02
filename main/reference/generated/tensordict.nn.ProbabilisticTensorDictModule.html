@@ -360,40 +360,45 @@
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">ProbabilisticTensorDictModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule" title="Permalink to this definition">¶</a></dt>
 <dd><p>A probabilistic TD Module.</p>
-<p><cite>ProbabilisticTensorDictModule</cite> is a non-parametric module representing a
-probability distribution. It reads the distribution parameters from an input
-TensorDict using the specified <cite>in_keys</cite>. The output is sampled given some rule,
-specified by the input <code class="xref py py-obj docutils literal notranslate"><span class="pre">default_interaction_type</span></code> argument and the
-<code class="xref py py-obj docutils literal notranslate"><span class="pre">interaction_type()</span></code> global function.</p>
+<p><cite>ProbabilisticTensorDictModule</cite> is a non-parametric module representing a probability distribution.
+It reads the distribution parameters from an input TensorDict using the specified <cite>in_keys</cite>.
+The output is sampled given some rule, specified by the input <code class="xref py py-obj docutils literal notranslate"><span class="pre">default_interaction_type</span></code> argument and the
+<code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code> global function.</p>
 <p><a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> can be used to construct the distribution
-(through the <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dist()</span></code></a> method) and/or sampling from this distribution
-(through a regular <code class="xref py py-obj docutils literal notranslate"><span class="pre">__call__()</span></code> to the module).</p>
-<p>A <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> instance has two main features:
-- It reads and writes TensorDict objects
-- It uses a real mapping R^n -&gt; R^m to create a distribution in R^d from
-which values can be sampled or computed.</p>
-<p>When the <code class="xref py py-obj docutils literal notranslate"><span class="pre">__call__</span></code> / <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-obj docutils literal notranslate"><span class="pre">forward</span></code></a> method is called, a distribution is
+(through the <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code></a> method) and/or sampling from this distribution
+(through a regular <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> to the module).</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> instance has two main features:</p>
+<ul class="simple">
+<li><p>It reads and writes TensorDict objects</p></li>
+<li><dl class="simple">
+<dt>It uses a real mapping R^n -&gt; R^m to create a distribution in R^d from</dt><dd><p>which values can be sampled or computed.</p>
+</dd>
+</dl>
+</li>
+</ul>
+<p>When the <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method is called, a distribution is
 created, and a value computed (using the ‘mean’, ‘mode’, ‘median’ attribute or
 the ‘rsample’, ‘sample’ method). The sampling step is skipped if the supplied
 TensorDict has all of the desired key-value pairs already.</p>
-<p>By default, ProbabilisticTensorDictModule distribution class is a Delta
-distribution, making ProbabilisticTensorDictModule a simple wrapper around
+<p>By default, the <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> distribution class is a <code class="docutils literal notranslate"><span class="pre">Delta</span></code>
+distribution, making <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> a simple wrapper around
 a deterministic mapping function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>in_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – key(s) that will be read from the
-input TensorDict and used to build the distribution. Importantly, if it’s an
-list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
-the distribution class of interest, e.g. <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;loc&quot;</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;scale&quot;</span></code> for
-the Normal distribution and similar. If in_keys is a dictionary, the keys
-are the keys of the distribution and the values are the keys in the
+<li><p><strong>in_keys</strong> (<em>NestedKey</em><em> | </em><em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>NestedKey</em><em>]</em>) – key(s) that will be read from the input TensorDict
+and used to build the distribution.
+Importantly, if it’s a list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
+the distribution class of interest, e.g. <code class="docutils literal notranslate"><span class="pre">&quot;loc&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;scale&quot;</span></code> for
+the <code class="xref py py-class docutils literal notranslate"><span class="pre">Normal</span></code> distribution and similar.
+If in_keys is a dictionary, the keys are the keys of the distribution and the values are the keys in the
 tensordict that will get match to the corresponding distribution keys.</p></li>
-<li><p><strong>out_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em>) – keys where the sampled values will be
-written. Importantly, if these keys are found in the input TensorDict, the
-sampling step will be skipped.</p></li>
-<li><p><strong>default_interaction_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – <em>Deprecated</em> keyword-only argument.
-Please use default_interaction_type instead.</p></li>
+<li><p><strong>out_keys</strong> (<em>NestedKey</em><em> | </em><em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>None</em>) – key(s) where the sampled values will be written.
+Importantly, if these keys are found in the input TensorDict, the sampling step will be skipped.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
 <li><p><strong>default_interaction_type</strong> (<em>InteractionType</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
 the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
@@ -421,7 +426,7 @@ to get the value through a call to <code class="docutils literal notranslate"><s
 if the method exists.</p>
 </div>
 </p></li>
-<li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
+<li><p><strong>distribution_class</strong> (<em>Type</em><em> or </em><em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Distribution</em><em>]</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
 be used for sampling.
 Default is <a class="reference internal" href="tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="tensordict.nn.distributions.Delta"><code class="xref py py-class docutils literal notranslate"><span class="pre">Delta</span></code></a>.</p>
@@ -434,22 +439,29 @@ keywork arguments provided through this class’ <code class="docutils literal n
 keyword argument, making the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> optional in such cases.</p>
 </div>
 </p></li>
-<li><p><strong>distribution_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – keyword-only argument.
-Keyword-argument pairs to be passed to the distribution.</p></li>
-<li><p><strong>return_log_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>distribution_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
+Keyword-argument pairs to be passed to the distribution.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>if your kwargs contain tensors that you would like to transfer to device with the module, or
+tensors that should see their dtype modified when calling <cite>module.to(dtype)</cite>, you can wrap the kwargs
+in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> to do this automatically.</p>
+</div>
+</p></li>
+<li><p><strong>return_log_prob</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probability of the
 distribution sample will be written in the tensordict with the key
 <cite>log_prob_key</cite>. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>log_prob_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – key where to write the log_prob if return_log_prob = True.
 Defaults to <cite>‘sample_log_prob’</cite>.</p></li>
-<li><p><strong>cache_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>cache_dist</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 EXPERIMENTAL: if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the parameters of the
 distribution (i.e. the output of the module) will be written to the
 tensordict along with the sample. Those parameters can be used to re-compute
 the original distribution later on (e.g. to compute the divergence between
 the distribution used to sample the action and the updated distribution in
 PPO). Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>n_empirical_estimate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>n_empirical_estimate</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
 </ul>
@@ -547,12 +559,41 @@ registered hooks while the latter silently ignores them.</p>
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.get_dist">
 <span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.5)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="Permalink to this definition">¶</a></dt>
 <dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The input tensordict containing the distribution parameters.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance created from the input tensordict.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If the input tensordict does not match the distribution keywords.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.log_prob">
-<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.log_prob" title="Permalink to this definition">¶</a></dt>
-<dd><p>Writes the log-probability of the distribution sample.</p>
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.5)"><span class="pre">Distribution</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_probabilities</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_sum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.log_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the log-probability of the distribution sample.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The input tensordict containing the distribution parameters.</p></li>
+<li><p><strong>dist</strong> (<em>torch.distributions.Distribution</em><em>, </em><em>optional</em>) – The distribution instance. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the distribution will be computed using the <cite>get_dist</cite> method.</p></li>
+<li><p><strong>aggregate_probabilities</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to aggregate probabilities. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the value from the distribution will be used, if indicated, or <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to perform operations in-place. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the value from the distribution will be used, if indicated, or <code class="docutils literal notranslate"><span class="pre">True</span></code> otherwise.</p></li>
+<li><p><strong>include_sum</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to include the sum of probabilities. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the value from the distribution will be used, if indicated, or <code class="docutils literal notranslate"><span class="pre">True</span></code> otherwise.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tensor representing the log-probability of the distribution sample.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
