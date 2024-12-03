@@ -123,6 +123,8 @@ _METHOD_FROM_TD = [
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
+    "_check_batch_size",
+    "_check_device",
     "_check_dim_name",
     "_check_unlock",
     "_default_get",
@@ -181,6 +183,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
     "_set_tuple",
+    "_to_module",
     "abs",
     "abs_",
     "acos",
@@ -327,6 +330,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "tanh",
     "tanh_",
     "to",
+    "to_module",
     "transpose",
     "trunc",
     "trunc_",
