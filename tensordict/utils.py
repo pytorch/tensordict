@@ -22,7 +22,6 @@ from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
 from copy import copy
-from dataclasses import _FIELDS, GenericAlias
 from functools import wraps
 from importlib import import_module
 from numbers import Number
@@ -74,6 +73,18 @@ except ImportError:  # torch 2.0
 
 if TYPE_CHECKING:
     from tensordict.tensordict import TensorDictBase
+
+try:
+    from dataclasses import _FIELDS, GenericAlias
+except ImportError:
+    # python < 3.9
+    from dataclasses import _FIELDS
+
+    class GenericAlias:
+        """Placeholder."""
+
+        ...
+
 
 try:
     try:
