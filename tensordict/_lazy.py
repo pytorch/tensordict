@@ -2130,10 +2130,10 @@ class LazyStackedTensorDict(TensorDictBase):
             if index_key:
                 leaf = self._get_tuple(index_key, NO_DEFAULT)
                 if is_non_tensor(leaf):
-                    result = getattr(leaf, "data", NO_DEFAULT)
-                    if result is NO_DEFAULT:
+                    # Only lazy stacks of non tensors are actually tensordict instances
+                    if isinstance(leaf, TensorDictBase):
                         return leaf.tolist()
-                    return result
+                    return leaf.data
                 return leaf
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]

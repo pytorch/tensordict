@@ -6301,10 +6301,10 @@ class TensorDictBase(MutableMapping):
     def _get_tuple_maybe_non_tensor(self, key, default):
         result = self._get_tuple(key, default)
         if is_non_tensor(result):
-            result_data = getattr(result, "data", NO_DEFAULT)
-            if result_data is NO_DEFAULT:
+            # Only lazy stacks of non tensors are actually tensordict instances
+            if isinstance(result, TensorDictBase):
                 return result.tolist()
-            return result_data
+            return result.data
         return result
 
     def get_at(
