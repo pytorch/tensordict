@@ -692,20 +692,40 @@ def _tensorclass(cls: T, *, frozen) -> T:
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
     # cls.__getattribute__ = object.__getattribute__
+    # if "__getattr__" not in cls.__dict__:
     cls.__getattr__ = _getattr
-    cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
-    # cls.__getattr__ = _getattr
-    cls.__getitem__ = _getitem
-    cls.__getitems__ = _getitem
-    cls.__setitem__ = _setitem
+    if "__setattr__" not in cls.__dict__:
+        cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
+    if "__getitem__" not in cls.__dict__:
+        cls.__getitem__ = _getitem
+    if "__getitems__" not in cls.__dict__:
+        cls.__getitems__ = _getitem
+    if "__setitem__" not in cls.__dict__:
+        cls.__setitem__ = _setitem
     if not _is_non_tensor:
         cls.__repr__ = _repr
-    cls.__len__ = _len
+    if "__len__" not in cls.__dict__:
+        cls.__len__ = _len
+    #
     cls.__eq__ = _eq
     cls.__ne__ = _ne
     cls.__or__ = _or
     cls.__xor__ = _xor
     cls.__bool__ = _bool
+
+    # cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
+    # # cls.__getattr__ = _getattr
+    # cls.__getitem__ = _getitem
+    # cls.__getitems__ = _getitem
+    # cls.__setitem__ = _setitem
+    # if not _is_non_tensor:
+    #     cls.__repr__ = _repr
+    # cls.__len__ = _len
+    # cls.__eq__ = _eq
+    # cls.__ne__ = _ne
+    # cls.__or__ = _or
+    # cls.__xor__ = _xor
+    # cls.__bool__ = _bool
     if not hasattr(cls, "non_tensor_items"):
         cls.non_tensor_items = _non_tensor_items
     if not hasattr(cls, "set"):
@@ -2915,15 +2935,21 @@ class NonTensorData:
         return self
 
     @classmethod
-    def _stack_non_tensor(cls, list_of_non_tensor, dim=0):
+    def _stack_non_tensor(cls, list_of_non_tensor, dim=0, raise_if_non_unique=False):
         # checks have been performed previously, so we're sure the list is non-empty
         first = list_of_non_tensor[0]
 
         ids = set()
         firstdata = NO_DEFAULT
+        return_stack = False
         for data in list_of_non_tensor:
             if not isinstance(data, NonTensorData):
-                return_stack = True
+                if raise_if_non_unique:
+                    data = cls._stack_non_tensor(
+                        data, raise_if_non_unique=raise_if_non_unique
+                    )
+                else:
+                    return_stack = True
                 break
             if firstdata is NO_DEFAULT:
                 firstdata = data.data
@@ -2931,6 +2957,10 @@ class NonTensorData:
             if len(ids) > 1:
                 if _check_equal(data.data, firstdata):
                     continue
+                if raise_if_non_unique:
+                    raise ValueError(
+                        "More than one unique value has been found in the stack."
+                    )
                 return_stack = True
                 break
         else:
@@ -3459,7 +3489,9 @@ class NonTensorStack(LazyStackedTensorDict):
                 self.tensordicts, raise_if_non_unique=True
             ).data
         except ValueError:
-            raise AttributeError("Cannot get the non-unique data of a NonTensorStack. Use .tolist() instead.")
+            raise AttributeError(
+                "Cannot get the non-unique data of a NonTensorStack. Use .tolist() instead."
+            )
 
 
 _register_tensor_class(NonTensorStack)
