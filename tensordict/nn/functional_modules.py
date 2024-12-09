@@ -142,7 +142,6 @@ class _exclude_td_from_pytree:
         self.__exit__(None, None, None)
 
 
-# Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if not strtobool(os.getenv("PYTORCH_TENSORDICT_IMPORT_VMAP", "False")):
     # Monkey-patches
 
