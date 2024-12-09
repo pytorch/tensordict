@@ -98,7 +98,7 @@ from tensordict.utils import (
     unravel_key,
     unravel_key_list,
 )
-from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch import multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -7260,7 +7260,7 @@ class TensorDictBase(MutableMapping):
 
     # Distributed functionality
     def gather_and_stack(
-        self, dst: int, group: "dist.ProcessGroup" | None = None
+        self, dst: int, group: "torch.distributed.ProcessGroup" | None = None
     ) -> T | None:
         """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
 
@@ -7319,6 +7319,8 @@ class TensorDictBase(MutableMapping):
             ...     main_worker.join()
             ...     secondary_worker.join()
         """
+        from torch import distributed as dist
+
         output = (
             [None for _ in range(dist.get_world_size(group=group))]
             if dst == dist.get_rank(group=group)
@@ -7336,7 +7338,7 @@ class TensorDictBase(MutableMapping):
         self,
         dst: int,
         *,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> None:  # noqa: D417
@@ -7426,8 +7428,10 @@ class TensorDictBase(MutableMapping):
         dst: int,
         _tag: int = -1,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> int:
+        from torch import distributed as dist
+
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
@@ -7449,7 +7453,7 @@ class TensorDictBase(MutableMapping):
         self,
         src: int,
         *,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> int:  # noqa: D417
@@ -7481,9 +7485,11 @@ class TensorDictBase(MutableMapping):
         src: int,
         _tag: int = -1,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
         non_blocking: bool = False,
     ) -> int:
+        from torch import distributed as dist
+
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
@@ -7508,7 +7514,7 @@ class TensorDictBase(MutableMapping):
         self,
         dst: int,
         *,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> int:  # noqa: D417
@@ -7603,8 +7609,10 @@ class TensorDictBase(MutableMapping):
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> int:
+        from torch import distributed as dist
+
         root = False
         if _futures is None:
             root = True
@@ -7639,7 +7647,7 @@ class TensorDictBase(MutableMapping):
         self,
         src: int,
         *,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
@@ -7687,8 +7695,10 @@ class TensorDictBase(MutableMapping):
         _tag: int = -1,
         _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
+        from torch import distributed as dist
+
         root = False
         if _future_list is None:
             _future_list = []
@@ -7736,6 +7746,8 @@ class TensorDictBase(MutableMapping):
         Only the process with ``rank`` dst is going to receive the final result.
 
         """
+        from torch import distributed as dist
+
         if op is None:
             op = dist.ReduceOp.SUM
         return self._reduce(dst, op, async_op, return_premature, group=group)
@@ -7749,6 +7761,8 @@ class TensorDictBase(MutableMapping):
         _future_list=None,
         group=None,
     ):
+        from torch import distributed as dist
+
         if op is None:
             op = dist.ReduceOp.SUM
         root = False
