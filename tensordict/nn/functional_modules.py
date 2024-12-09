@@ -119,8 +119,6 @@ from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
     tree_unflatten,
 )
 
-_has_functorch = True
-
 
 class _exclude_td_from_pytree:
     def __init__(self):
@@ -144,8 +142,7 @@ class _exclude_td_from_pytree:
         self.__exit__(None, None, None)
 
 
-# Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
-if _has_functorch:
+if not strtobool(os.getenv("PYTORCH_TENSORDICT_IMPORT_VMAP", "False")):
     # Monkey-patches
 
     def _process_batched_inputs(
