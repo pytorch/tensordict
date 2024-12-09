@@ -3445,7 +3445,16 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @property
     def data(self):
-        raise AttributeError
+        """Attempts to return the unique value in the stack.
+
+        Raises a ValueError if there is more than one unique value.
+        """
+        try:
+            return NonTensorData._stack_non_tensor(
+                self.tensordicts, raise_if_non_unique=True
+            ).data
+        except ValueError:
+            raise AttributeError("Cannot get the non-unique data of a NonTensorStack. Use .tolist() instead.")
 
 
 _register_tensor_class(NonTensorStack)
