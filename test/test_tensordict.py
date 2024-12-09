@@ -99,6 +99,7 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
 _v2_5 = TORCH_VERSION >= version.parse("2.5.0")
+PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
@@ -1151,6 +1152,7 @@ class TestGeneric:
         sd = net.state_dict()
         assert_allclose_td(params_sd.flatten_keys("."), TensorDict(sd, []))
 
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
     def test_from_modules(self, as_module, lazy_stack):
@@ -1196,6 +1198,7 @@ class TestGeneric:
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
 
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     def test_from_modules_expand(self, as_module):
         empty_module = nn.Sequential(
@@ -1229,6 +1232,7 @@ class TestGeneric:
             if isinstance(param, nn.Parameter)
         )
 
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -3397,6 +3401,7 @@ class TestPointwiseOps:
     TestTensorDictsBase.TYPES_DEVICES,
 )
 class TestTensorDicts(TestTensorDictsBase):
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):
         td = getattr(self, td_name)(device)
