@@ -8372,6 +8372,7 @@ class TestLazyStackedTensorDict:
         assert hasattr(td_c, "_consolidated")
         assert type(td_c) == type(td)  # noqa
         assert (td.to(td_c.device) == td_c).all()
+        assert td["d"] == [["a string!"] * 3]
         assert td_c["d"] == [["a string!"] * 3]
 
         storage = td_c._consolidated["storage"]

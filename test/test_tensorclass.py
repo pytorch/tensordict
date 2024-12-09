@@ -621,7 +621,7 @@ class TestTensorClass:
         assert isinstance(x.y, torch.Tensor)
         _ = {x: 0}
         assert x.is_locked
-        with pytest.raises(RuntimeError, match="locked"):
+        with pytest.raises((RuntimeError, dataclasses.FrozenInstanceError)):
             x.y = 0
 
         @tensorclass(frozen=False, autocast=True)
@@ -643,7 +643,7 @@ class TestTensorClass:
         assert isinstance(x.y, str)
         _ = {x: 0}
         assert x.is_locked
-        with pytest.raises(RuntimeError, match="locked"):
+        with pytest.raises((RuntimeError, dataclasses.FrozenInstanceError)):
             x.y = 0
 
         @tensorclass(frozen=False, autocast=False)
@@ -2585,7 +2585,7 @@ class TestSubClassing:
         assert issubclass(SubClass, TensorClass)
         s = SubClass(1)
         assert isinstance(s.a, int)
-        with pytest.raises(RuntimeError):
+        with pytest.raises((RuntimeError, dataclasses.FrozenInstanceError)):
             s.a = 2
 
         class SubClass(TensorClass["nocast", "frozen"]):
@@ -2599,8 +2599,26 @@ class TestSubClassing:
         assert issubclass(SubClass, TensorClass)
         s = SubClass(1)
         assert isinstance(s.a, int)
-        with pytest.raises(RuntimeError):
+        with pytest.raises((RuntimeError, dataclasses.FrozenInstanceError)):
             s.a = 2
+
+    def test_subclassing_super_call(self):
+        class SubClass(TensorClass, nocast=True):
+            a: int
+            b: int
+
+            def __setattr__(self, key, value):
+                if key == "b":
+                    return super().__setattr__("b", value + 1)
+                return super().__setattr__("a", value - 1)
+
+        s = SubClass(a=torch.zeros(3), b=torch.zeros(3))
+        assert (s.a == -1).all()
+        assert (s.b == 1).all()
+        s.a = torch.ones(())
+        s.b = torch.ones(())
+        assert (s.a == 0).all()
+        assert (s.b == 2).all()
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ import torch
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
+# We need this to build the distribution maps
 __all__ = [
     "NormalParamExtractor",
     "NormalParamWrapper",
@@ -23,7 +24,7 @@ __all__ = [
 ]
 
 # speeds up distribution construction
-D.Distribution.set_default_validate_args(False)
+# D.Distribution.set_default_validate_args(False)
 
 
 class NormalParamWrapper(nn.Module):

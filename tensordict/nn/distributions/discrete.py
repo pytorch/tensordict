@@ -10,6 +10,7 @@ from typing import Sequence
 import torch
 from torch import distributions as D
 
+# We need this to build the distribution maps
 __all__ = [
     "OneHotCategorical",
 ]
