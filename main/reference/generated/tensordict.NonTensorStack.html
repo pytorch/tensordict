@@ -1381,7 +1381,8 @@ with entries <code class="docutils literal notranslate"><span class="pre">&quot;
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.NonTensorStack.data">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">data</span></span><a class="headerlink" href="#tensordict.NonTensorStack.data" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a tensordict containing the .data attributes of the leaf tensors.</p>
+<dd><p>Attempts to return the unique value in the stack.</p>
+<p>Raises a ValueError if there is more than one unique value.</p>
 </dd></dl>
 
 <dl class="py method">
