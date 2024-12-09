@@ -144,8 +144,11 @@ def _gather(
 
 @implements_for_td(torch.full_like)
 def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
+    def full_like(x):
+        return torch.full_like(x, fill_value, *args, **kwargs)
+
     return td._fast_apply(
-        lambda x: torch.full_like(x, fill_value, *args, **kwargs),
+        full_like,
         inplace=True,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
@@ -154,8 +157,11 @@ def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
 
 @implements_for_td(torch.zeros_like)
 def _zeros_like(td: T, *args, **kwargs: Any) -> T:
+    def zeros_like(x):
+        return torch.zeros_like(x, *args, **kwargs)
+
     td_clone = td._fast_apply(
-        lambda x: torch.zeros_like(x, *args, **kwargs),
+        zeros_like,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
     )
@@ -173,8 +179,11 @@ def _zeros_like(td: T, *args, **kwargs: Any) -> T:
 
 @implements_for_td(torch.ones_like)
 def _ones_like(td: T, *args, **kwargs: Any) -> T:
+    def ones_like(x):
+        return torch.ones_like(x, *args, **kwargs)
+
     td_clone = td._fast_apply(
-        lambda x: torch.ones_like(x, *args, **kwargs),
+        ones_like,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
     )
@@ -190,8 +199,11 @@ def _ones_like(td: T, *args, **kwargs: Any) -> T:
 
 @implements_for_td(torch.rand_like)
 def _rand_like(td: T, *args, **kwargs: Any) -> T:
+    def rand_like(x):
+        return torch.rand_like(x, *args, **kwargs)
+
     td_clone = td._fast_apply(
-        lambda x: torch.rand_like(x, *args, **kwargs),
+        rand_like,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
     )
@@ -207,8 +219,11 @@ def _rand_like(td: T, *args, **kwargs: Any) -> T:
 
 @implements_for_td(torch.randn_like)
 def _randn_like(td: T, *args, **kwargs: Any) -> T:
+    def randn_like(x):
+        return torch.randn_like(x, *args, **kwargs)
+
     td_clone = td._fast_apply(
-        lambda x: torch.randn_like(x, *args, **kwargs),
+        randn_like,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
     )
@@ -224,8 +239,11 @@ def _randn_like(td: T, *args, **kwargs: Any) -> T:
 
 @implements_for_td(torch.empty_like)
 def _empty_like(td: T, *args, **kwargs) -> T:
+    def empty_like(x):
+        return torch.empty_like(x, *args, **kwargs)
+
     return td._fast_apply(
-        lambda x: torch.empty_like(x, *args, **kwargs),
+        empty_like,
         propagate_lock=True,
         device=kwargs.get("device", NO_DEFAULT),
     )

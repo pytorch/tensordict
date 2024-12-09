@@ -1571,8 +1571,11 @@ def assert_close(
         set2 = set(expected.keys())
     except ValueError:
         # Persistent tensordicts do not work with is_leaf
-        set1 = set(actual.keys(is_leaf=lambda cls: issubclass(cls, torch.Tensor)))
-        set2 = set(expected.keys(is_leaf=lambda cls: issubclass(cls, torch.Tensor)))
+        def istensor(cls):
+            return issubclass(cls, torch.Tensor)
+
+        set1 = set(actual.keys(is_leaf=istensor))
+        set2 = set(expected.keys(is_leaf=istensor))
     if not intersection and (
         not (len(set1.difference(set2)) == 0 and len(set2) == len(set1))
     ):
@@ -2505,7 +2508,11 @@ def _make_dtype_promotion(func):
             raise NotImplementedError(
                 f"Your pytorch version {torch.__version__} does not support {dtype}."
             )
-        return self._fast_apply(lambda x: x.to(dtype), propagate_lock=True)
+
+        def todtype(x):
+            return x.to(dtype)
+
+        return self._fast_apply(todtype, propagate_lock=True)
 
     new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
     return new_func
@@ -2605,7 +2612,7 @@ NESTED_TENSOR_ERR = (
     "version."
 )
 
-_DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))
+_DEVICE2STRDEVICE = KeyDependentDefaultDict(str)
 
 
 def _lock_warn():
@@ -2802,13 +2809,16 @@ def _rebuild_njt_from_njt(x, values, offsets, lengths):
 
 
 def _mismatch_keys(keys1, keys2):
+    def keyfunc(key):
+        return "".join(key) if isinstance(key, tuple) else key
+
     keys1 = sorted(
         keys1,
-        key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+        key=keyfunc,
     )
     keys2 = sorted(
         keys2,
-        key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+        key=keyfunc,
     )
     if set(keys1) - set(keys2):
         sub1 = rf"The first TD has keys {set(keys1) - set(keys2)} that the second does not have."

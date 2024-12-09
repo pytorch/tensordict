@@ -68,6 +68,11 @@ try:
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
+
+def _identity(cls):
+    return cls
+
+
 try:
     from typing import dataclass_transform
 except ImportError:
@@ -77,7 +82,7 @@ except ImportError:
 
         Placeholder for dataclass_transform (python<3.11).
         """
-        return lambda cls: cls
+        return _identity
 
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -673,7 +678,7 @@ def _tensorclass(cls: T, *, frozen) -> T:
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
 
-    cls.fields = classmethod(lambda cls: dataclasses.fields(cls))
+    cls.fields = classmethod(dataclasses.fields)
     for field in cls.fields():
         if hasattr(cls, field.name):
             delattr(cls, field.name)
@@ -936,7 +941,7 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
     return wrapper
 
 
-_cast_funcs = KeyDependentDefaultDict(lambda cls: cls)
+_cast_funcs = KeyDependentDefaultDict(_identity)
 _cast_funcs[torch.Tensor] = torch.as_tensor
 _cast_funcs[np.ndarray] = np.asarray
 
@@ -1332,7 +1337,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             non_tensordict = dict(non_tensordict)
             if copy_non_tensor and non_tensordict:
                 # use tree_map to copy
-                non_tensordict = tree_map(lambda x: x, non_tensordict)
+                non_tensordict = tree_map(_identity, non_tensordict)
             return self._from_tensordict(result, non_tensordict, safe=False)
         return result
 

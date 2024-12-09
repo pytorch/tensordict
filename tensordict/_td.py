@@ -1871,10 +1871,14 @@ class TensorDict(TensorDictBase):
                 for i, s in enumerate(self.batch_size)
             ]
         )
-        return self._fast_apply(
-            lambda leaf: leaf.repeat_interleave(
+
+        def rep(leaf):
+            return leaf.repeat_interleave(
                 repeats=repeats, dim=dim_corrected, output_size=output_size
-            ),
+            )
+
+        return self._fast_apply(
+            rep,
             batch_size=new_batch_size,
             call_on_nested=True,
             propagate_lock=True,
@@ -1882,8 +1886,12 @@ class TensorDict(TensorDictBase):
 
     def _repeat(self, *repeats: int) -> TensorDictBase:
         new_batch_size = torch.Size([i * r for i, r in zip(self.batch_size, repeats)])
+
+        def rep(leaf):
+            return leaf.repeat(*repeats, *((1,) * (leaf.ndim - self.ndim)))
+
         return self._fast_apply(
-            lambda leaf: leaf.repeat(*repeats, *((1,) * (leaf.ndim - self.ndim))),
+            rep,
             batch_size=new_batch_size,
             call_on_nested=True,
             propagate_lock=True,
@@ -2008,8 +2016,11 @@ class TensorDict(TensorDictBase):
         if names:
             names.pop(dim)
 
+        def squeeze(x):
+            return x.squeeze(newdim)
+
         result = self._fast_apply(
-            lambda x: x.squeeze(newdim),
+            squeeze,
             batch_size=batch_size,
             names=names,
             inplace=False,
@@ -3362,9 +3373,13 @@ class TensorDict(TensorDictBase):
             if not sort:
                 return _StringKeys(self._tensordict.keys())
             else:
+
+                def keyfunc(x):
+                    return ".".join(x) if isinstance(x, tuple) else x
+
                 return sorted(
                     _StringKeys(self._tensordict.keys()),
-                    key=lambda x: ".".join(x) if isinstance(x, tuple) else x,
+                    key=keyfunc,
                 )
         else:
             return self._nested_keys(
@@ -3403,7 +3418,11 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             if not sort:
                 return self._tensordict.items()
-            return sorted(self._tensordict.items(), key=lambda x: x[0])
+
+            def keyfunc(x):
+                return x[0]
+
+            return sorted(self._tensordict.items(), key=keyfunc)
         elif include_nested and leaves_only and not sort:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
             result = []
@@ -3449,9 +3468,11 @@ class TensorDict(TensorDictBase):
             if not sort:
                 return self._tensordict.values()
             else:
-                return list(zip(*sorted(self._tensordict.items(), key=lambda x: x[0])))[
-                    1
-                ]
+
+                def keyfunc(x):
+                    return x[0]
+
+                return list(zip(*sorted(self._tensordict.items(), key=keyfunc)))[1]
         else:
             return TensorDictBase.values(
                 self,
@@ -4061,8 +4082,12 @@ class _SubTensorDict(TensorDictBase):
             shape = tuple(args[0])
         else:
             shape = args
+
+        def expand(x):
+            return x.expand((*shape, *x.shape[self.ndim :]))
+
         return self._fast_apply(
-            lambda x: x.expand((*shape, *x.shape[self.ndim :])),
+            expand,
             batch_size=shape,
             propagate_lock=True,
         )
@@ -4432,9 +4457,13 @@ class _TensorDictKeysView:
                 )
 
         if self.sort:
+
+            def keyfunc(key):
+                return ".".join(key) if isinstance(key, tuple) else key
+
             yield from sorted(
                 _iter(),
-                key=lambda key: ".".join(key) if isinstance(key, tuple) else key,
+                key=keyfunc,
             )
         else:
             yield from _iter()
