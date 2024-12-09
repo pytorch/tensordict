@@ -517,8 +517,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = [val.isfinite() for val in vals]
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -534,8 +538,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = [val.isnan() for val in vals]
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -547,8 +555,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = [val.isneginf() for val in vals]
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -560,8 +572,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = [val.isposinf() for val in vals]
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -573,8 +589,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = [val.isreal() for val in vals]
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -2874,9 +2894,11 @@ class TensorDictBase(MutableMapping):
 
         """
         if _is_tensor_collection(type(other)):
-            return self.apply(
-                lambda x, y: x.expand_as(y), other, batch_size=other.batch_size
-            )
+
+            def expand_as(x, y):
+                return x.expand_as(y)
+
+            return self.apply(expand_as, other, batch_size=other.batch_size)
         return self.expand(other.shape)
 
     def new_zeros(
@@ -3828,7 +3850,10 @@ class TensorDictBase(MutableMapping):
 
     def _view_dtype(self, *, dtype, batch_size):
         # We use apply because we want to check the shapes
-        return self.apply(lambda x: x.view(dtype), batch_size=batch_size)
+        def view(x):
+            return x.view(dtype)
+
+        return self.apply(view, batch_size=batch_size)
 
     def _legacy_view(
         self,
@@ -4458,8 +4483,12 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
 
         """
+
+        def pin_memory(x):
+            return x.pin_memory()
+
         return self._fast_apply(
-            lambda x: x.pin_memory(),
+            pin_memory,
             num_threads=num_threads,
             inplace=inplace,
             propagate_lock=True,
@@ -5676,14 +5705,16 @@ class TensorDictBase(MutableMapping):
                 if return_early:
                     executor = ThreadPoolExecutor(max_workers=num_threads)
                 futures = []
+
                 # we create an empty copy of self
                 # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
                 # if both are in filesystem
-                input = self.apply(
-                    lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(
+                def empty(x):
+                    return torch.empty((), device=x.device, dtype=x.dtype).expand(
                         x.shape
                     )
-                )
+
+                input = self.apply(empty)
                 result = input._memmap_(
                     prefix=prefix,
                     copy_existing=copy_existing,
@@ -5699,9 +5730,11 @@ class TensorDictBase(MutableMapping):
                     return result
                 else:
                     return TensorDictFuture(futures, result)
-        input = self.apply(
-            lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
-        )
+
+        def empty_expand(x):
+            return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
+
+        input = self.apply(empty_expand)
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -6795,15 +6828,17 @@ class TensorDictBase(MutableMapping):
 
         """
         if sort:
+
+            def keyfunc(item):
+                return item[0] if isinstance(item[0], str) else ".".join(item[0])
+
             yield from sorted(
                 self.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
                     is_leaf=is_leaf,
                 ),
-                key=lambda item: (
-                    item[0] if isinstance(item[0], str) else ".".join(item[0])
-                ),
+                key=keyfunc,
             )
         else:
 
@@ -6993,8 +7028,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         grads = [val.grad for val in vals]
         items = dict(zip(keys, grads))
+
+        def get(name, val):
+            return items[name]
+
         return self._fast_apply(
-            lambda name, val: items[name],
+            get,
             named=True,
             nested_keys=True,
             propagate_lock=True,
@@ -7006,8 +7045,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         data = [val.data for val in vals]
         items = dict(zip(keys, data))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name),
+            get,
             named=True,
             nested_keys=True,
             propagate_lock=True,
@@ -8890,8 +8933,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_abs(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8908,8 +8955,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_acos(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8926,8 +8977,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_exp(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8944,8 +8999,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_neg(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8962,8 +9021,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_reciprocal(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8980,8 +9043,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sigmoid(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -8998,8 +9065,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sign(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9016,8 +9087,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sin(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9034,8 +9109,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sinh(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9052,8 +9131,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tan(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9070,8 +9153,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tanh(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9088,8 +9175,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_trunc(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9120,8 +9211,12 @@ class TensorDictBase(MutableMapping):
             raise RuntimeError("dtype must be None for torch <= 2.3")
         vals = torch._foreach_norm(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             batch_size=[],
@@ -9146,8 +9241,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True, collapse=True)
         vals = torch._foreach_norm(vals, dtype=dtype)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             batch_size=[],
@@ -9160,8 +9259,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_lgamma(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9178,8 +9281,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_frac(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9196,8 +9303,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_expm1(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9214,8 +9325,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9232,8 +9347,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log10(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9250,8 +9369,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log1p(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9268,8 +9391,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log2(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9286,8 +9413,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_ceil(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9304,8 +9435,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_floor(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9322,8 +9457,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_round(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9340,8 +9479,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erf(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9358,8 +9501,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erfc(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9376,8 +9523,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_asin(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9394,8 +9545,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_atan(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9412,8 +9567,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cos(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9430,8 +9589,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cosh(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9476,8 +9639,12 @@ class TensorDictBase(MutableMapping):
 
         items = foreach_vals
         items.update(iter_vals)
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9530,8 +9697,12 @@ class TensorDictBase(MutableMapping):
         else:
             vals = torch._foreach_add(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9593,8 +9764,12 @@ class TensorDictBase(MutableMapping):
             weight_val = weight
         vals = torch._foreach_lerp(vals, end_val, weight_val)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9651,8 +9826,12 @@ class TensorDictBase(MutableMapping):
             other2_val = other2
         vals = torch._foreach_addcdiv(vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9704,8 +9883,12 @@ class TensorDictBase(MutableMapping):
             other2_val = other2
         vals = torch._foreach_addcmul(vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9771,8 +9954,12 @@ class TensorDictBase(MutableMapping):
         else:
             vals = torch._foreach_sub(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9857,8 +10044,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_mul(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9919,8 +10110,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_maximum(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -9981,8 +10176,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_minimum(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -10043,8 +10242,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_clamp_max(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -10104,8 +10307,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_clamp_min(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -10171,8 +10378,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_pow(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -10239,8 +10450,12 @@ class TensorDictBase(MutableMapping):
             other_val = other
         vals = torch._foreach_div(vals, other_val)
         items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
         result = self._fast_apply(
-            lambda name, val: items.pop(name, None),
+            pop,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -10262,8 +10477,12 @@ class TensorDictBase(MutableMapping):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sqrt(vals)
         items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
         return self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -11351,7 +11570,11 @@ class TensorDictBase(MutableMapping):
         key = _unravel_key_to_tuple(key)
         data = self._get_tuple(key, NO_DEFAULT)
         if _is_tensor_collection(type(data)):
-            data._fast_apply(lambda x: x.fill_(value), inplace=True)
+
+            def fill(x):
+                return x.fill_(value)
+
+            data._fast_apply(fill, inplace=True)
         else:
             data = data.fill_(value)
             self._set_tuple(key, data, inplace=True, validated=True, non_blocking=False)
@@ -12100,8 +12323,12 @@ class TensorDictBase(MutableMapping):
         finally:
             for thread in threads:
                 thread.join(timeout=_PIN_MEM_TIMEOUT)
+
+        def get(name, val):
+            return items.get(name, val)
+
         result = self._fast_apply(
-            lambda name, val: items.get(name, val),
+            get,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -12256,8 +12483,12 @@ class TensorDictBase(MutableMapping):
                     keys, tensors = self._items_list(True, True)
                     tensors = [to(t) for t in tensors]
                     items = dict(zip(keys, tensors))
+
+                    def get(name, val):
+                        return items.get(name, val)
+
                     result = self._fast_apply(
-                        lambda name, val: items.get(name, val),
+                        get,
                         named=True,
                         nested_keys=True,
                         is_leaf=_NESTED_TENSORS_AS_LISTS,
@@ -12396,23 +12627,43 @@ class TensorDictBase(MutableMapping):
 
     def double(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.double(), propagate_lock=True)
+
+        def dble(x):
+            return x.double()
+
+        return self._fast_apply(dble, propagate_lock=True)
 
     def float(self):
         r"""Casts all tensors to ``torch.float``."""
-        return self._fast_apply(lambda x: x.float(), propagate_lock=True)
+
+        def tofloat(x):
+            return x.float()
+
+        return self._fast_apply(tofloat, propagate_lock=True)
 
     def int(self):
         r"""Casts all tensors to ``torch.int``."""
-        return self._fast_apply(lambda x: x.int(), propagate_lock=True)
+
+        def toint(x):
+            return x.int()
+
+        return self._fast_apply(toint, propagate_lock=True)
 
     def bool(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.bool(), propagate_lock=True)
+
+        def tobool(x):
+            return x.bool()
+
+        return self._fast_apply(tobool, propagate_lock=True)
 
     def half(self):
         r"""Casts all tensors to ``torch.half``."""
-        return self._fast_apply(lambda x: x.half(), propagate_lock=True)
+
+        def tohalf(x):
+            return x.half()
+
+        return self._fast_apply(tohalf, propagate_lock=True)
 
     def type(self, dst_type):
         r"""Casts all tensors to :attr:`dst_type`.
@@ -12421,7 +12672,11 @@ class TensorDictBase(MutableMapping):
             dst_type (type or string): the desired type
 
         """
-        return self._fast_apply(lambda x: x.type(dst_type))
+
+        def totype(x):
+            return x.type(dst_type)
+
+        return self._fast_apply(totype)
 
     # Gradient compatibility
     @property
@@ -12460,8 +12715,12 @@ class TensorDictBase(MutableMapping):
             a new tensordict with no tensor requiring gradient.
 
         """
+
+        def detach(x):
+            return x.detach()
+
         return self._fast_apply(
-            lambda x: x.detach(),
+            detach,
             propagate_lock=True,
         )
 
