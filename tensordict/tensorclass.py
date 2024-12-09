@@ -3484,7 +3484,9 @@ class NonTensorStack(LazyStackedTensorDict):
                 self.tensordicts, raise_if_non_unique=True
             ).data
         except ValueError:
-            raise AttributeError("Cannot get the non-unique data of a NonTensorStack. Use .tolist() instead.")
+            raise AttributeError(
+                "Cannot get the non-unique data of a NonTensorStack. Use .tolist() instead."
+            )
 
 
 _register_tensor_class(NonTensorStack)
