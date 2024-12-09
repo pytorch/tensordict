@@ -2129,6 +2129,7 @@ class TestEnsembleModule:
                 p0, p1
             ), f"Ensemble params were not initialized correctly {p0}, {p1}"
 
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize(
         "net",
         [
@@ -2154,6 +2155,7 @@ class TestEnsembleModule:
         outs = out["dork"].unbind(0)
         assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
 
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize(
         "net",
         [

@@ -50,7 +50,7 @@ from tensordict.utils import (
     unravel_key as unravel_key,
     unravel_key_list as unravel_key_list,
 )
-from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch import multiprocessing as mp, nn, Tensor
 
 class _NoDefault(enum.IntEnum):
     ZERO = 0
@@ -663,7 +663,7 @@ class TensorClass:
     ) -> T: ...
     def del_(self, key: NestedKey) -> T: ...
     def gather_and_stack(
-        self, dst: int, group: dist.ProcessGroup | None = None
+        self, dst: int, group: "dist.ProcessGroup" | None = None
     ) -> T | None: ...
     def send(
         self,

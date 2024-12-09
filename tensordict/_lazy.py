@@ -32,7 +32,6 @@ import numpy as np
 
 import orjson as json
 import torch
-import torch.distributed as dist
 
 from tensordict.memmap import MemoryMappedTensor
 
@@ -2388,7 +2387,7 @@ class LazyStackedTensorDict(TensorDictBase):
         dst: int,
         _tag: int = -1,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> int:
         for td in self.tensordicts:
             _tag = td._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
@@ -2400,7 +2399,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> int:
         if _futures is None:
             is_root = True
@@ -2421,7 +2420,7 @@ class LazyStackedTensorDict(TensorDictBase):
         src: int,
         _tag: int = -1,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> int:
         for td in self.tensordicts:
             _tag = td._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
@@ -2434,7 +2433,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
-        group: "dist.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         root = False
         if _future_list is None:
