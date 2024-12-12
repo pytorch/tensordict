@@ -1548,6 +1548,11 @@ def assert_close(
 
     from tensordict._lazy import LazyStackedTensorDict
 
+    if is_tensorclass(actual):
+        actual = actual._tensordict
+    if is_tensorclass(expected):
+        expected = expected._tensordict
+
     if isinstance(actual, LazyStackedTensorDict) and isinstance(
         expected, LazyStackedTensorDict
     ):
