@@ -39,9 +39,9 @@ from torch.nn.parameter import (
 )
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
@@ -301,7 +301,7 @@ def _cat(
         out = {}
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 ):
@@ -335,7 +335,7 @@ def _cat(
                 _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 )
-                if not is_dynamo_compiling()
+                if not is_compiling()
                 else contextlib.nullcontext()
             ):
                 if isinstance(out, TensorDict):
@@ -592,7 +592,7 @@ def _stack(
                     _ErrorInteceptor(
                         key, "Attempted to stack tensors on different devices at key"
                     )
-                    if not is_dynamo_compiling()
+                    if not is_compiling()
                     else contextlib.nullcontext()
                 ):
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)

@@ -64,9 +64,9 @@ from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 
 def _identity(cls):
@@ -890,7 +890,7 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
         if lock is None:
             lock = frozen
 
-        if not is_dynamo_compiling():
+        if not is_compiling():
             # zip not supported by dynamo
             for value, key in zip(args, self.__dataclass_fields__):
                 if key in kwargs:
@@ -904,7 +904,7 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
 
         if batch_size is None:
             batch_size = torch.Size([])
-        if not is_dynamo_compiling():
+        if not is_compiling():
             for key, field in type(self).__dataclass_fields__.items():
                 if field.default_factory is not dataclasses.MISSING:
                     default = field.default_factory()
@@ -1072,7 +1072,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: 
     # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
     # TODO: compile doesn't like set() over an arbitrary object
-    if is_dynamo_compiling():
+    if is_compiling():
         tensor_keys = {k for k in tensor_keys}  # noqa: C416
         exp_keys = {k for k in cls.__expected_keys__}  # noqa: C416
         if non_tensordict is not None:
@@ -1112,7 +1112,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: 
         for key in to_add:
             non_tensordict[key] = None
 
-    if not is_dynamo_compiling():
+    if not is_compiling():
         # bypass initialisation. this means we don't incur any overhead creating an
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
@@ -1313,7 +1313,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             value (any): the value to set for the attribute
 
         """
-        if not is_dynamo_compiling():
+        if not is_compiling():
             __dict__ = self.__dict__
             if (
                 "_tensordict" not in __dict__
@@ -1348,7 +1348,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
         if result is None:
             return
         if isinstance(result, TensorDictBase) and kwargs.get("out") is not result:
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 non_tensordict = super(type(self), self).__getattribute__(
                     "_non_tensordict"
                 )
@@ -1362,7 +1362,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
         return result
 
     def wrapped_func(self, *args, **kwargs):
-        if not is_dynamo_compiling():
+        if not is_compiling():
             td = super(type(self), self).__getattribute__("_tensordict")
         else:
             td = self._tensordict
@@ -1409,7 +1409,7 @@ def _wrap_method(self, attr, func, nowarn=False):
             return type(self)._from_tensordict(res, dict(self._non_tensordict))
         return res
 
-    if not is_dynamo_compiling():
+    if not is_compiling():
         wrapped_func = functools.wraps(func)(wrapped_func)
 
     return wrapped_func
