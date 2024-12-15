@@ -103,9 +103,9 @@ from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 try:
     from torch import _foreach_copy_
@@ -5247,7 +5247,7 @@ class TensorDictBase(MutableMapping):
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
                 stride = v.stride()
-                if is_dynamo_compiling():
+                if is_compiling():
                     if not v.is_contiguous():
                         v = v.clone(memory_format=torch.contiguous_format)
                 elif (stride and stride[-1] != 1) or v.storage_offset():
@@ -6963,7 +6963,7 @@ class TensorDictBase(MutableMapping):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            if is_dynamo_compiling():
+            if is_compiling():
                 key_to_index = {key: i for i, key in enumerate(keys)}
                 return [vals[key_to_index[key]] for key in sorting_keys]
             else:
@@ -6994,7 +6994,7 @@ class TensorDictBase(MutableMapping):
             return list(keys), list(vals)
         if default is None:
             # TODO: check that lists are identical
-            if is_dynamo_compiling():
+            if is_compiling():
                 key_to_index = {key: i for i, key in enumerate(keys)}
                 new_vals = [vals[key_to_index[key]] for key in sorting_keys]
                 if len(new_vals) < len(vals):
@@ -7015,12 +7015,9 @@ class TensorDictBase(MutableMapping):
             ]  # intersection does not keep the sorting
         else:
             new_keys = list(set(sorting_keys).union(keys))
-        if is_dynamo_compiling():
-            ...
-        else:
-            source = dict(zip(keys, vals))
-            vals = [source.get(key, default) for key in new_keys]
-            return new_keys, vals
+        source = dict(zip(keys, vals))
+        vals = [source.get(key, default) for key in new_keys]
+        return new_keys, vals
 
     def _grad(self):
         # We can't cache this because zero_grad can be called outside (eg from optimizer) and we want the tensors
@@ -11931,7 +11928,7 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 key_list = list(self.keys())
             else:
                 key_list = [k for k in self.keys()]  # noqa
@@ -12196,10 +12193,10 @@ class TensorDictBase(MutableMapping):
         """
         if self.is_locked:
             return self
-        is_compiling = is_dynamo_compiling()
-        if is_compiling:
+        is_comp = is_compiling()
+        if is_comp:
             _lock_warn()
-        self._propagate_lock(is_compiling=is_compiling)
+        self._propagate_lock(is_compiling=is_comp)
         return self
 
     @erase_cache
@@ -12611,7 +12608,7 @@ class TensorDictBase(MutableMapping):
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
-            if not is_dynamo_compiling() and torch.cuda.is_initialized():
+            if not is_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             mps = getattr(torch, "mps", None)
@@ -12799,7 +12796,7 @@ _TENSOR_COLLECTION_MEMO = {}
 
 
 def _is_tensor_collection(datatype: type) -> bool:
-    is_dynamo = is_dynamo_compiling()
+    is_dynamo = is_compiling()
     out = None
     if not is_dynamo:
         out = _TENSOR_COLLECTION_MEMO.get(datatype)

@@ -18,9 +18,9 @@ from torch import nn
 from torch.utils._contextlib import _DecoratorContextManager
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 
 _dispatch_tdnn_modules = _ContextManager(
@@ -300,7 +300,7 @@ class set_skip_existing(_DecoratorContextManager):
         return super().__call__(wrapper)
 
     def __enter__(self) -> None:
-        if self.mode and is_dynamo_compiling():
+        if self.mode and is_compiling():
             raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
         self.prev = _skip_existing.get_mode()
         if self.mode is not None:
@@ -338,7 +338,7 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
-            if skip_existing() and is_dynamo_compiling():
+            if skip_existing() and is_compiling():
                 raise RuntimeError(
                     "skip_existing is not compatible with torch.compile."
                 )
@@ -351,7 +351,7 @@ class _set_skip_existing_None(set_skip_existing):
                 and not any(key in out_keys for key in in_keys)
             ):
                 return tensordict
-            if is_dynamo_compiling():
+            if is_compiling():
                 return func(_self, tensordict, *args, **kwargs)
             self.prev = _skip_existing.get_mode()
             try:

@@ -98,9 +98,9 @@ except ImportError:
 
     _has_funcdim = False
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 try:
     from torch.nn.parameter import Buffer
@@ -251,7 +251,7 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
 
-        # if names and is_dynamo_compiling():
+        # if names and is_compiling():
         #     graph_break()
         has_device = device is not None
         sub_non_blocking = False
@@ -284,7 +284,7 @@ class TensorDict(TensorDictBase):
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
             # TODO: this breaks when stacking tensorclasses with dynamo
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self.names = names
 
             for key, value in source.items():
@@ -313,7 +313,7 @@ class TensorDict(TensorDictBase):
         nested: bool = True,
         **kwargs: dict[str, Any] | None,
     ) -> TensorDict:
-        if is_dynamo_compiling():
+        if is_compiling():
             return TensorDict(
                 source,
                 batch_size=batch_size,
@@ -473,7 +473,7 @@ class TensorDict(TensorDictBase):
         is_dynamo: bool | None = None,
     ):
         if is_dynamo is None:
-            is_dynamo = is_dynamo_compiling()
+            is_dynamo = is_compiling()
         if is_dynamo:
             _check_inbuild()
 
@@ -2264,7 +2264,7 @@ class TensorDict(TensorDictBase):
     ) -> torch.Size:
         ERR = "batch size was not specified when creating the TensorDict instance and it could not be retrieved from source."
 
-        if is_dynamo_compiling():
+        if is_compiling():
             if isinstance(batch_size, torch.Size):
                 return batch_size
             elif isinstance(batch_size, tuple):
@@ -2316,7 +2316,7 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        if is_dynamo_compiling():
+        if is_compiling():
             if value is not None:
                 graph_break()
             else:
