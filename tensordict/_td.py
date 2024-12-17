@@ -1334,7 +1334,7 @@ class TensorDict(TensorDictBase):
         filter_empty: bool | None = None,
         is_leaf: Callable | None = None,
         out: TensorDictBase | None = None,
-        **constructor_kwargs,
+        **constructor_kwargs: Any,
     ) -> T | None:
         if inplace:
             result = self
