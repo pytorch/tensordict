@@ -10,6 +10,7 @@ import os
 import pickle
 import unittest
 import weakref
+from collections import OrderedDict
 
 import pytest
 import torch
@@ -797,6 +798,58 @@ class TestTDModule:
 
 
 class TestTDSequence:
+    def test_ordered_dict(self):
+        linear = nn.Linear(3, 4)
+        linear.weight.data.fill_(0)
+        linear.bias.data.fill_(1)
+        layer0 = TensorDictModule(linear, in_keys=["x"], out_keys=["y"])
+        ordered_dict = OrderedDict(
+            layer0=layer0,
+            layer1=lambda x: x + 1,
+        )
+        seq = TensorDictSequential(ordered_dict)
+        td = seq(TensorDict(x=torch.ones(3)))
+        assert (td["x"] == 2).all()
+        assert (td["y"] == 2).all()
+        assert seq["layer0"] is layer0
+
+    def test_ordered_dict_select_subsequence(self):
+        ordered_dict = OrderedDict(
+            layer0=TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"]),
+            layer1=TensorDictModule(lambda x: x - 1, in_keys=["y"], out_keys=["z"]),
+            layer2=TensorDictModule(
+                lambda x, y: x + y, in_keys=["x", "y"], out_keys=["a"]
+            ),
+        )
+        seq = TensorDictSequential(ordered_dict)
+        assert len(seq) == 3
+        assert isinstance(seq.module, nn.ModuleDict)
+        seq_select = seq.select_subsequence(out_keys=["a"])
+        assert len(seq_select) == 2
+        assert isinstance(seq_select.module, nn.ModuleDict)
+        assert list(seq_select.module) == ["layer0", "layer2"]
+
+    def test_ordered_dict_select_outkeys(self):
+        ordered_dict = OrderedDict(
+            layer0=TensorDictModule(
+                lambda x: x + 1, in_keys=["x"], out_keys=["intermediate"]
+            ),
+            layer1=TensorDictModule(
+                lambda x: x - 1, in_keys=["intermediate"], out_keys=["z"]
+            ),
+            layer2=TensorDictModule(
+                lambda x, y: x + y, in_keys=["x", "z"], out_keys=["a"]
+            ),
+        )
+        seq = TensorDictSequential(ordered_dict)
+        assert len(seq) == 3
+        assert isinstance(seq.module, nn.ModuleDict)
+        seq.select_out_keys("z", "a")
+        td = seq(TensorDict(x=0))
+        assert "intermediate" not in td
+        assert "z" in td
+        assert "a" in td
+
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         module0 = TensorDictModule(lambda x: x + 0, in_keys=["input"], out_keys=["1"])
