@@ -11,6 +11,7 @@ import pickle
 import unittest
 import weakref
 from collections import OrderedDict
+from collections.abc import MutableSequence
 
 import pytest
 import torch
@@ -118,6 +119,34 @@ class TestInteractionType:
 
 
 class TestTDModule:
+    class MyMutableSequence(MutableSequence):
+        def __init__(self, initial_data=None):
+            self._data = [] if initial_data is None else list(initial_data)
+
+        def __getitem__(self, index):
+            return self._data[index]
+
+        def __setitem__(self, index, value):
+            self._data[index] = value
+
+        def __delitem__(self, index):
+            del self._data[index]
+
+        def __len__(self):
+            return len(self._data)
+
+        def insert(self, index, value):
+            self._data.insert(index, value)
+
+    def test_mutable_sequence(self):
+        in_keys = self.MyMutableSequence(["a", "b", "c"])
+        out_keys = self.MyMutableSequence(["d", "e", "f"])
+        mod = TensorDictModule(lambda *x: x, in_keys=in_keys, out_keys=out_keys)
+        td = mod(TensorDict(a=0, b=0, c=0))
+        assert "d" in td
+        assert "e" in td
+        assert "f" in td
+
     def test_auto_unravel(self):
         tdm = TensorDictModule(
             lambda x: x,
