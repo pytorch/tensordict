@@ -8393,7 +8393,7 @@ class TensorDictBase(MutableMapping):
 
     def map(
         self,
-        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        fn: Callable,  # [[TensorDictBase], TensorDictBase | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
@@ -8573,7 +8573,7 @@ class TensorDictBase(MutableMapping):
 
     def map_iter(
         self,
-        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        fn: Callable,  # [[TensorDictBase], TensorDictBase | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
@@ -8771,7 +8771,7 @@ class TensorDictBase(MutableMapping):
 
     def _map(
         self,
-        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        fn: Callable,  # [[TensorDictBase], TensorDictBase | None],
         dim: int = 0,
         *,
         shuffle: bool = False,
