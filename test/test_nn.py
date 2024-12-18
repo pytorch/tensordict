@@ -10,6 +10,7 @@ import os
 import pickle
 import unittest
 import weakref
+from collections import OrderedDict
 
 import pytest
 import torch
@@ -450,6 +451,9 @@ class TestTDModule:
 
         in_keys = ["in"]
         net = TensorDictModule(module=net, in_keys=in_keys, out_keys=out_keys)
+        corr = TensorDictModule(
+            lambda low: max_dist - low.abs(), in_keys=out_keys, out_keys=out_keys
+        )
 
         kwargs = {
             "distribution_class": distributions.Uniform,
@@ -464,7 +468,7 @@ class TestTDModule:
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
         )
 
-        tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
+        tensordict_module = ProbabilisticTensorDictSequential(net, corr, prob_module)
         assert tensordict_module.default_interaction_type is not None
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -797,6 +801,58 @@ class TestTDModule:
 
 
 class TestTDSequence:
+    def test_ordered_dict(self):
+        linear = nn.Linear(3, 4)
+        linear.weight.data.fill_(0)
+        linear.bias.data.fill_(1)
+        layer0 = TensorDictModule(linear, in_keys=["x"], out_keys=["y"])
+        ordered_dict = OrderedDict(
+            layer0=layer0,
+            layer1=lambda x: x + 1,
+        )
+        seq = TensorDictSequential(ordered_dict)
+        td = seq(TensorDict(x=torch.ones(3)))
+        assert (td["x"] == 2).all()
+        assert (td["y"] == 2).all()
+        assert seq["layer0"] is layer0
+
+    def test_ordered_dict_select_subsequence(self):
+        ordered_dict = OrderedDict(
+            layer0=TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"]),
+            layer1=TensorDictModule(lambda x: x - 1, in_keys=["y"], out_keys=["z"]),
+            layer2=TensorDictModule(
+                lambda x, y: x + y, in_keys=["x", "y"], out_keys=["a"]
+            ),
+        )
+        seq = TensorDictSequential(ordered_dict)
+        assert len(seq) == 3
+        assert isinstance(seq.module, nn.ModuleDict)
+        seq_select = seq.select_subsequence(out_keys=["a"])
+        assert len(seq_select) == 2
+        assert isinstance(seq_select.module, nn.ModuleDict)
+        assert list(seq_select.module) == ["layer0", "layer2"]
+
+    def test_ordered_dict_select_outkeys(self):
+        ordered_dict = OrderedDict(
+            layer0=TensorDictModule(
+                lambda x: x + 1, in_keys=["x"], out_keys=["intermediate"]
+            ),
+            layer1=TensorDictModule(
+                lambda x: x - 1, in_keys=["intermediate"], out_keys=["z"]
+            ),
+            layer2=TensorDictModule(
+                lambda x, y: x + y, in_keys=["x", "z"], out_keys=["a"]
+            ),
+        )
+        seq = TensorDictSequential(ordered_dict)
+        assert len(seq) == 3
+        assert isinstance(seq.module, nn.ModuleDict)
+        seq.select_out_keys("z", "a")
+        td = seq(TensorDict(x=0))
+        assert "intermediate" not in td
+        assert "z" in td
+        assert "a" in td
+
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         module0 = TensorDictModule(lambda x: x + 0, in_keys=["input"], out_keys=["1"])
@@ -2074,6 +2130,8 @@ class TestProbabilisticTensorDictModule:
             in_keys=[("data", "states")],
             out_keys=[("data", "scale")],
         )
+        scale_module.module.weight.data.abs_()
+        scale_module.module.bias.data.abs_()
         td = TensorDict(
             {"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3]
         )
@@ -2937,7 +2995,8 @@ class TestCompositeDist:
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("return_log_prob", [True, False])
-    def test_prob_module_seq(self, interaction, return_log_prob):
+    @pytest.mark.parametrize("ordereddict", [True, False])
+    def test_prob_module_seq(self, interaction, return_log_prob, ordereddict):
         params = TensorDict(
             {
                 "params": {
@@ -2960,7 +3019,7 @@ class TestCompositeDist:
             ("nested", "cont"): distributions.Normal,
         }
         backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
-        module = ProbabilisticTensorDictSequential(
+        args = [
             backbone,
             ProbabilisticTensorDictModule(
                 in_keys=in_keys,
@@ -2970,7 +3029,15 @@ class TestCompositeDist:
                 default_interaction_type=interaction,
                 return_log_prob=return_log_prob,
             ),
-        )
+        ]
+        if ordereddict:
+            args = [
+                OrderedDict(
+                    backbone=args[0],
+                    proba=args[1],
+                )
+            ]
+        module = ProbabilisticTensorDictSequential(*args)
         sample = module(params)
         if return_log_prob:
             assert "cont_log_prob" in sample.keys()
