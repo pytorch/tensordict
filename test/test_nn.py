@@ -2930,7 +2930,17 @@ class TestCompositeDist:
             assert key_logprob1 in sample
         assert all(key in sample for key in module.out_keys)
         sample_clone = sample.clone()
-        lp = module.log_prob(sample_clone)
+        with pytest.warns(
+            DeprecationWarning,
+            match="aggregate_probabilities wasn't defined in the ProbabilisticTensorDictModule",
+        ), pytest.warns(
+            DeprecationWarning,
+            match="inplace wasn't defined in the ProbabilisticTensorDictModule",
+        ), pytest.warns(
+            DeprecationWarning,
+            match="include_sum wasn't defined in the ProbabilisticTensorDictModule",
+        ):
+            lp = module.log_prob(sample_clone)
         assert isinstance(lp, torch.Tensor)
         if return_log_prob:
             torch.testing.assert_close(
@@ -3077,7 +3087,17 @@ class TestCompositeDist:
         assert isinstance(dist, CompositeDistribution)
 
         sample_clone = sample.clone()
-        lp = module.log_prob(sample_clone)
+        with pytest.warns(
+            DeprecationWarning,
+            match="aggregate_probabilities wasn't defined in the ProbabilisticTensorDictModule",
+        ), pytest.warns(
+            DeprecationWarning,
+            match="inplace wasn't defined in the ProbabilisticTensorDictModule",
+        ), pytest.warns(
+            DeprecationWarning,
+            match="include_sum wasn't defined in the ProbabilisticTensorDictModule",
+        ):
+            lp = module.log_prob(sample_clone)
 
         if return_log_prob:
             torch.testing.assert_close(
