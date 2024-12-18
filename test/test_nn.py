@@ -480,6 +480,9 @@ class TestTDModule:
 
         in_keys = ["in"]
         net = TensorDictModule(module=net, in_keys=in_keys, out_keys=out_keys)
+        corr = TensorDictModule(
+            lambda low: max_dist - low.abs(), in_keys=out_keys, out_keys=out_keys
+        )
 
         kwargs = {
             "distribution_class": distributions.Uniform,
@@ -494,7 +497,7 @@ class TestTDModule:
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
         )
 
-        tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
+        tensordict_module = ProbabilisticTensorDictSequential(net, corr, prob_module)
         assert tensordict_module.default_interaction_type is not None
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -2156,6 +2159,8 @@ class TestProbabilisticTensorDictModule:
             in_keys=[("data", "states")],
             out_keys=[("data", "scale")],
         )
+        scale_module.module.weight.data.abs_()
+        scale_module.module.bias.data.abs_()
         td = TensorDict(
             {"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3]
         )
@@ -3019,7 +3024,8 @@ class TestCompositeDist:
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("return_log_prob", [True, False])
-    def test_prob_module_seq(self, interaction, return_log_prob):
+    @pytest.mark.parametrize("ordereddict", [True, False])
+    def test_prob_module_seq(self, interaction, return_log_prob, ordereddict):
         params = TensorDict(
             {
                 "params": {
@@ -3042,7 +3048,7 @@ class TestCompositeDist:
             ("nested", "cont"): distributions.Normal,
         }
         backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
-        module = ProbabilisticTensorDictSequential(
+        args = [
             backbone,
             ProbabilisticTensorDictModule(
                 in_keys=in_keys,
@@ -3052,7 +3058,15 @@ class TestCompositeDist:
                 default_interaction_type=interaction,
                 return_log_prob=return_log_prob,
             ),
-        )
+        ]
+        if ordereddict:
+            args = [
+                OrderedDict(
+                    backbone=args[0],
+                    proba=args[1],
+                )
+            ]
+        module = ProbabilisticTensorDictSequential(*args)
         sample = module(params)
         if return_log_prob:
             assert "cont_log_prob" in sample.keys()
