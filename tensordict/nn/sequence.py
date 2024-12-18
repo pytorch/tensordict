@@ -53,14 +53,18 @@ class TensorDictSequential(TensorDictModule):
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
+        modules (OrderedDict[str, Callable[[TensorDictBase], TensorDictBase]] | List[Callable[[TensorDictBase], TensorDictBase]]):
+            ordered sequence of callables that take a TensorDictBase as input and return a TensorDictBase.
+            These can be instances of TensorDictModuleBase or any other function that matches this signature.
+            Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
+            and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
     Keyword Args:
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
-            looking for those that have the required keys, if any.
+            looking for those that have the required keys, if any. Defaults to False.
          selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
 
