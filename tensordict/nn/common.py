@@ -9,7 +9,18 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    MutableSequence,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
@@ -981,20 +992,20 @@ class TensorDictModule(TensorDictModuleBase):
         else:
             if isinstance(in_keys, (str, tuple)):
                 in_keys = [in_keys]
-            elif not isinstance(in_keys, list):
+            elif not isinstance(in_keys, MutableSequence):
                 raise ValueError(self._IN_KEY_ERR)
             self._kwargs = None
 
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
-        elif not isinstance(out_keys, list):
+        elif not isinstance(out_keys, MutableSequence):
             raise ValueError(self._OUT_KEY_ERR)
         try:
-            in_keys = unravel_key_list(in_keys)
+            in_keys = unravel_key_list(list(in_keys))
         except Exception:
             raise ValueError(self._IN_KEY_ERR)
         try:
-            out_keys = unravel_key_list(out_keys)
+            out_keys = unravel_key_list(list(out_keys))
         except Exception:
             raise ValueError(self._OUT_KEY_ERR)
 
