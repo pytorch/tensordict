@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import re
 import warnings
+from collections.abc import MutableSequence
 
 from textwrap import indent
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, OrderedDict, overload
 
 import torch
 
@@ -621,9 +622,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             log(p(z | x, y))
 
     Args:
-        *modules (sequence of TensorDictModules): An ordered sequence of
-            :class:`~tensordict.nn.TensorDictModule` instances, terminating in a :class:`~tensordict.nn.ProbabilisticTensorDictModule`,
+        *modules (sequence or OrderedDict of TensorDictModuleBase or ProbabilisticTensorDictModule): An ordered sequence of
+            :class:`~tensordict.nn.TensorDictModule` instances, usually terminating in a :class:`~tensordict.nn.ProbabilisticTensorDictModule`,
             to be run sequentially.
+            The modules can be instances of TensorDictModuleBase or any other function that matches this signature.
+            Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
+            and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
 
     Keyword Args:
         partial_tolerant (bool, optional): If ``True``, the input tensordict can miss some
@@ -791,6 +795,28 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     """
 
+    @overload
+    def __init__(
+        self,
+        modules: OrderedDict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
+        partial_tolerant: bool = False,
+        return_composite: bool | None = None,
+        aggregate_probabilities: bool | None = None,
+        include_sum: bool | None = None,
+        inplace: bool | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
+        partial_tolerant: bool = False,
+        return_composite: bool | None = None,
+        aggregate_probabilities: bool | None = None,
+        include_sum: bool | None = None,
+        inplace: bool | None = None,
+    ) -> None: ...
+
     def __init__(
         self,
         *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
@@ -805,7 +831,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "ProbabilisticTensorDictSequential must consist of zero or more "
                 "TensorDictModules followed by a ProbabilisticTensorDictModule"
             )
-        if not return_composite and not isinstance(
+        self._ordered_dict = False
+        if len(modules) == 1 and isinstance(modules[0], (OrderedDict, MutableSequence)):
+            if isinstance(modules[0], OrderedDict):
+                modules_list = list(modules[0].values())
+                self._ordered_dict = True
+            else:
+                modules = modules_list = list(modules[0])
+        elif not return_composite and not isinstance(
             modules[-1],
             (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
         ):
@@ -814,13 +847,22 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "an instance of ProbabilisticTensorDictModule or another "
                 "ProbabilisticTensorDictSequential (unless return_composite is set to ``True``)."
             )
+        else:
+            modules_list = list(modules)
+
         # if the modules not including the final probabilistic module return the sampled
-        # key we wont be sampling it again, in that case
+        # key we won't be sampling it again, in that case
         # ProbabilisticTensorDictSequential is presumably used to return the
         # distribution using `get_dist` or to sample log_probabilities
-        _, out_keys = self._compute_in_and_out_keys(modules[:-1])
-        self._requires_sample = modules[-1].out_keys[0] not in set(out_keys)
-        self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
+        _, out_keys = self._compute_in_and_out_keys(modules_list[:-1])
+        self._requires_sample = modules_list[-1].out_keys[0] not in set(out_keys)
+        if self._ordered_dict:
+            self.__dict__["_det_part"] = TensorDictSequential(
+                OrderedDict(list(modules[0].items())[:-1])
+            )
+        else:
+            self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
+
         super().__init__(*modules, partial_tolerant=partial_tolerant)
         self.return_composite = return_composite
         self.aggregate_probabilities = aggregate_probabilities
@@ -861,7 +903,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tds = self.det_part
         type = interaction_type()
         if type is None:
-            for m in reversed(self.module):
+            for m in reversed(list(self._module_iter())):
                 if hasattr(m, "default_interaction_type"):
                     type = m.default_interaction_type
                     break
@@ -873,7 +915,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     @property
     def num_samples(self):
         num_samples = ()
-        for tdm in self.module:
+        for tdm in self._module_iter():
             if isinstance(
                 tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
             ):
@@ -917,7 +959,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         td_copy = tensordict.copy()
         dists = {}
-        for i, tdm in enumerate(self.module):
+        for i, tdm in enumerate(self._module_iter()):
             if isinstance(
                 tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
             ):
@@ -957,11 +999,20 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         encountered is returned. If no such value is found, a default `interaction_type()` is returned.
 
         """
-        for m in reversed(self.module):
+        for m in reversed(list(self._module_iter())):
             interaction = getattr(m, "default_interaction_type", None)
             if interaction is not None:
                 return interaction
         return interaction_type()
+
+    @property
+    def _last_module(self):
+        if not self._ordered_dict:
+            return self.module[-1]
+        mod = None
+        for mod in self._module_iter():  # noqa: B007
+            continue
+        return mod
 
     def log_prob(
         self,
@@ -1079,7 +1130,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 include_sum=include_sum,
                 **kwargs,
             )
-        last_module: ProbabilisticTensorDictModule = self.module[-1]
+        last_module: ProbabilisticTensorDictModule = self._last_module
         out = last_module.log_prob(tensordict_inp, dist=dist, **kwargs)
         if is_tensor_collection(out):
             if tensordict_out is not None:
@@ -1138,7 +1189,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             tensordict_exec = tensordict
         if self.return_composite:
-            for m in self.module:
+            for m in self._module_iter():
                 if isinstance(
                     m, (ProbabilisticTensorDictModule, ProbabilisticTensorDictModule)
                 ):
@@ -1149,7 +1200,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     tensordict_exec = m(tensordict_exec, **kwargs)
         else:
             tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
-            tensordict_exec = self.module[-1](
+            tensordict_exec = self._last_module(
                 tensordict_exec, _requires_sample=self._requires_sample
             )
         if tensordict_out is not None:

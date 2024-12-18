@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
+import collections
 import logging
 from copy import deepcopy
-from typing import Any, Iterable, List
+from typing import Any, Callable, Iterable, List, OrderedDict, overload
 
 from tensordict._nestedkey import NestedKey
 
@@ -52,14 +53,18 @@ class TensorDictSequential(TensorDictModule):
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
+        modules (OrderedDict[str, Callable[[TensorDictBase], TensorDictBase]] | List[Callable[[TensorDictBase], TensorDictBase]]):
+            ordered sequence of callables that take a TensorDictBase as input and return a TensorDictBase.
+            These can be instances of TensorDictModuleBase or any other function that matches this signature.
+            Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
+            and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
     Keyword Args:
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
-            looking for those that have the required keys, if any.
+            looking for those that have the required keys, if any. Defaults to False.
          selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
 
@@ -170,19 +175,57 @@ class TensorDictSequential(TensorDictModule):
     module: nn.ModuleList
     _select_before_return = False
 
+    @overload
     def __init__(
         self,
-        *modules: TensorDictModuleBase,
+        modules: OrderedDict[str, Callable[[TensorDictBase], TensorDictBase]],
+        *,
+        partial_tolerant: bool = False,
+        selected_out_keys: List[NestedKey] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        modules: List[Callable[[TensorDictBase], TensorDictBase]],
+        *,
+        partial_tolerant: bool = False,
+        selected_out_keys: List[NestedKey] | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        *modules: Callable[[TensorDictBase], TensorDictBase],
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
     ) -> None:
-        modules = self._convert_modules(modules)
-        in_keys, out_keys = self._compute_in_and_out_keys(modules)
-        self._complete_out_keys = list(out_keys)
 
-        super().__init__(
-            module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
-        )
+        if len(modules) == 1 and isinstance(modules[0], collections.OrderedDict):
+            modules_vals = self._convert_modules(modules[0].values())
+            in_keys, out_keys = self._compute_in_and_out_keys(modules_vals)
+            self._complete_out_keys = list(out_keys)
+            modules = collections.OrderedDict(
+                **{key: val for key, val in zip(modules[0], modules_vals)}
+            )
+            super().__init__(
+                module=nn.ModuleDict(modules), in_keys=in_keys, out_keys=out_keys
+            )
+        elif len(modules) == 1 and isinstance(
+            modules[0], collections.abc.MutableSequence
+        ):
+            modules = self._convert_modules(modules[0])
+            in_keys, out_keys = self._compute_in_and_out_keys(modules)
+            self._complete_out_keys = list(out_keys)
+            super().__init__(
+                module=nn.ModuleList(modules), in_keys=in_keys, out_keys=out_keys
+            )
+        else:
+            modules = self._convert_modules(modules)
+            in_keys, out_keys = self._compute_in_and_out_keys(modules)
+            self._complete_out_keys = list(out_keys)
+            super().__init__(
+                module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
+            )
 
         self.partial_tolerant = partial_tolerant
         if selected_out_keys:
@@ -408,7 +451,7 @@ class TensorDictSequential(TensorDictModule):
             out_keys = deepcopy(self.out_keys)
         out_keys = unravel_key_list(out_keys)
 
-        module_list = list(self.module)
+        module_list = list(self._module_iter())
         id_to_keep = set(range(len(module_list)))
         for i, module in enumerate(module_list):
             if (
@@ -445,8 +488,14 @@ class TensorDictSequential(TensorDictModule):
             raise ValueError(
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
-
-        return type(self)(*modules)
+        if isinstance(self.module, nn.ModuleList):
+            return type(self)(*modules)
+        else:
+            keys = [key for key in self.module if self.module[key] in modules]
+            modules_dict = collections.OrderedDict(
+                **{key: val for key, val in zip(keys, modules)}
+            )
+            return type(self)(modules_dict)
 
     def _run_module(
         self,
@@ -466,6 +515,12 @@ class TensorDictSequential(TensorDictModule):
                     module(sub_td, **kwargs)
         return tensordict
 
+    def _module_iter(self):
+        if isinstance(self.module, nn.ModuleDict):
+            yield from self.module.children()
+        else:
+            yield from self.module
+
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()
     def forward(
@@ -481,7 +536,7 @@ class TensorDictSequential(TensorDictModule):
         else:
             tensordict_exec = tensordict
         if not len(kwargs):
-            for module in self.module:
+            for module in self._module_iter():
                 tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
         else:
             raise RuntimeError(
@@ -510,14 +565,16 @@ class TensorDictSequential(TensorDictModule):
     def __len__(self) -> int:
         return len(self.module)
 
-    def __getitem__(self, index: int | slice) -> TensorDictModuleBase:
-        if isinstance(index, int):
+    def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
+        if isinstance(index, (int, str)):
             return self.module.__getitem__(index)
         else:
             return type(self)(*self.module.__getitem__(index))
 
-    def __setitem__(self, index: int, tensordict_module: TensorDictModuleBase) -> None:
+    def __setitem__(
+        self, index: int | slice | str, tensordict_module: TensorDictModuleBase
+    ) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
-    def __delitem__(self, index: int | slice) -> None:
+    def __delitem__(self, index: int | slice | str) -> None:
         self.module.__delitem__(idx=index)
