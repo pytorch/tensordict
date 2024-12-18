@@ -9,7 +9,7 @@ import re
 import warnings
 
 from textwrap import indent
-from typing import Any, Dict, List, Optional, overload, OrderedDict
+from typing import Any, Dict, List, Optional, OrderedDict, overload
 
 import torch
 
@@ -800,8 +800,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         aggregate_probabilities: bool | None = None,
         include_sum: bool | None = None,
         inplace: bool | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def __init__(
@@ -812,8 +811,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         aggregate_probabilities: bool | None = None,
         include_sum: bool | None = None,
         inplace: bool | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def __init__(
         self,
