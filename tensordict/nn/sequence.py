@@ -488,7 +488,9 @@ class TensorDictSequential(TensorDictModule):
             return type(self)(*modules)
         else:
             keys = [key for key in self.module if self.module[key] in modules]
-            modules_dict = OrderedDict(**{key: val for key, val in zip(keys, modules)})
+            modules_dict = collections.OrderedDict(
+                **{key: val for key, val in zip(keys, modules)}
+            )
             return type(self)(modules_dict)
 
     def _run_module(
@@ -565,8 +567,10 @@ class TensorDictSequential(TensorDictModule):
         else:
             return type(self)(*self.module.__getitem__(index))
 
-    def __setitem__(self, index: int, tensordict_module: TensorDictModuleBase) -> None:
+    def __setitem__(
+        self, index: int | slice | str, tensordict_module: TensorDictModuleBase
+    ) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
-    def __delitem__(self, index: int | slice) -> None:
+    def __delitem__(self, index: int | slice | str) -> None:
         self.module.__delitem__(idx=index)
