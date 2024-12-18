@@ -9,7 +9,7 @@ import re
 import warnings
 
 from textwrap import indent
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, overload, OrderedDict
 
 import torch
 
@@ -791,6 +791,30 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     """
 
+    @overload
+    def __init__(
+        self,
+        modules: OrderedDict,
+        partial_tolerant: bool = False,
+        return_composite: bool | None = None,
+        aggregate_probabilities: bool | None = None,
+        include_sum: bool | None = None,
+        inplace: bool | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
+        partial_tolerant: bool = False,
+        return_composite: bool | None = None,
+        aggregate_probabilities: bool | None = None,
+        include_sum: bool | None = None,
+        inplace: bool | None = None,
+    ) -> None:
+        ...
+
     def __init__(
         self,
         *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
@@ -815,7 +839,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "ProbabilisticTensorDictSequential (unless return_composite is set to ``True``)."
             )
         # if the modules not including the final probabilistic module return the sampled
-        # key we wont be sampling it again, in that case
+        # key we won't be sampling it again, in that case
         # ProbabilisticTensorDictSequential is presumably used to return the
         # distribution using `get_dist` or to sample log_probabilities
         _, out_keys = self._compute_in_and_out_keys(modules[:-1])
