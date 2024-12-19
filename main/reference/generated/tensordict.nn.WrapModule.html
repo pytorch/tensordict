@@ -368,8 +368,16 @@ requires the entire TensorDict instance to be visible.</p>
 and returns a transformed TensorDictBase instance.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input TensorDict will be modified in-place. Otherwise, a new TensorDict
-will be returned (if the function does not modify it in-place and returns it). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input TensorDict will be modified in-place. Otherwise, a new TensorDict
+will be returned (if the function does not modify it in-place and returns it). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>in_keys</strong> (<em>list of NestedKey</em><em>, </em><em>optional</em>) – if provided, indicates what entries are read by the module.
+This will not be checked and is provided just for the purpose of informing <a class="reference internal" href="tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
+about the input keys of the wrapped module. Defaults to <cite>[]</cite>.</p></li>
+<li><p><strong>out_keys</strong> (<em>list of NestedKey</em><em>, </em><em>optional</em>) – if provided, indicates what entries are written by the module.
+This will not be checked and is provided just for the purpose of informing <a class="reference internal" href="tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
+about the output keys of the wrapped module. Defaults to <cite>[]</cite>.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>

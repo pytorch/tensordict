@@ -366,7 +366,10 @@ When calling a <code class="xref py py-obj docutils literal notranslate"><span c
 buffers) will be concatenated in a single list.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>modules</strong> (<em>iterable of TensorDictModules</em>) – ordered sequence of TensorDictModule instances to be run sequentially.</p>
+<dd class="field-odd"><p><strong>modules</strong> (<em>OrderedDict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>] </em><em>| </em><em>List</em><em>[</em><em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>]</em>) – ordered sequence of callables that take a TensorDictBase as input and return a TensorDictBase.
+These can be instances of TensorDictModuleBase or any other function that matches this signature.
+Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
+and thus will not affect the <cite>in_keys</cite> and <cite>out_keys</cite> attributes of the TensorDictSequential.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -375,7 +378,7 @@ If so, the only module that will be executed are those who can be executed given
 are present.
 Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a> AND if the
 stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
-looking for those that have the required keys, if any.</p></li>
+looking for those that have the required keys, if any. Defaults to False.</p></li>
 <li><p><strong>selected_out_keys</strong> (<em>iterable of NestedKeys</em><em>, </em><em>optional</em>) – the list of out-keys to select. If not provided, all
 <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> will be written.</p></li>
 </ul>
