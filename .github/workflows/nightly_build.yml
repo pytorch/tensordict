@@ -32,7 +32,7 @@ jobs:
   build-wheel-linux:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: ubuntu-20.04
+    runs-on: almalinux:8
     strategy:
       matrix:
         python_version: [
@@ -76,7 +76,7 @@ jobs:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: test-wheel-linux
-    runs-on: ubuntu-20.04
+    runs-on: almalinux:8
     strategy:
       matrix:
         python_version: [
