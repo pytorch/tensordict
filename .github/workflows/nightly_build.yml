@@ -42,6 +42,7 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
+    container: pytorch/almalinux-builder
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v4
@@ -85,6 +86,7 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
+    container: pytorch/almalinux-builder
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v4
