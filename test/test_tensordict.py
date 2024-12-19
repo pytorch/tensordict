@@ -133,6 +133,9 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
+    ),
 ]
 
 mp_ctx = "spawn"
