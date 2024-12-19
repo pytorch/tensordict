@@ -3033,6 +3033,28 @@ class TestGeneric:
             assert (td1.select(("a", "b")) == 2).all()
             assert (td1.exclude(("a", "b")) == 1).all()
 
+        # Any extra key in dest will raise an exception
+        with pytest.raises(KeyError):
+            td_dest = TensorDict(a=0)
+            td_source = TensorDict(b=1)
+            td_dest.update_(td_source)
+        with pytest.raises(KeyError):
+            td_dest = TensorDict(a=0)
+            td_source = {"b": torch.ones(())}
+            td_dest.update_(td_source)
+        with pytest.raises(KeyError):
+            td_dest = TensorDict(a=0)
+            td_source = TensorDict(b=1)
+            td_dest.update_(td_source, keys_to_update="b")
+        with pytest.raises(KeyError):
+            td_dest = TensorDict(a=0)
+            td_source = {"b": torch.ones(())}
+            td_dest.update_(td_source, keys_to_update="b")
+
+        td_dest = TensorDict(a=0, b=1)
+        td_source = TensorDict(a=0)
+        td_dest.update_(td_source)
+
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)

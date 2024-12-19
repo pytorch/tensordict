@@ -6544,12 +6544,16 @@ class TensorDictBase(MutableMapping):
 
             named = True
 
-            def inplace_update(name, dest, source):
+            def inplace_update(name, source, dest):
                 if source is None:
                     return None
                 name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
+                        if dest is None:
+                            raise KeyError(
+                                f"The key {name} was not found in the dest tensordict."
+                            )
                         dest.copy_(source, non_blocking=non_blocking)
 
         else:
@@ -6564,16 +6568,20 @@ class TensorDictBase(MutableMapping):
                     vals = [vals[k] for k in new_keys]
                 _foreach_copy_(vals, other_val, non_blocking=non_blocking)
                 return self
-            named = False
+            named = True
 
-            def inplace_update(dest, source):
+            def inplace_update(name, source, dest):
                 if source is None:
                     return None
+                if dest is None:
+                    raise KeyError(
+                        f"The key {name} was not found in the dest tensordict."
+                    )
                 dest.copy_(source, non_blocking=non_blocking)
 
-        self._apply_nest(
+        input_dict_or_td._apply_nest(
             inplace_update,
-            input_dict_or_td,
+            self,
             nested_keys=True,
             default=None,
             filter_empty=True,
