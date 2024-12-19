@@ -32,7 +32,7 @@ jobs:
   build-wheel-linux:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: centos
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         python_version: [
@@ -42,10 +42,13 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/almalinux-builder
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version[0] }}
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -76,7 +79,7 @@ jobs:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: test-wheel-linux
-    runs-on: centos
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         python_version: [
@@ -86,10 +89,13 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/almalinux-builder
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version[0] }}
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
