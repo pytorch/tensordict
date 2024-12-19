@@ -27,10 +27,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
-env:
-  ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
 
 jobs:
   build-wheel-linux:
@@ -46,6 +42,10 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout tensordict
@@ -90,6 +90,10 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout tensordict
@@ -117,6 +121,10 @@ jobs:
     if: github.repository_owner == 'pytorch'
     needs: build-wheel-linux
     runs-on: ubuntu-20.04
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     strategy:
       matrix:
         python_version: [
@@ -189,6 +197,10 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
         ]
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -227,6 +239,10 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
         ]
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -286,6 +302,10 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
         ]
+    env:
+      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v3
