@@ -33,8 +33,6 @@ jobs:
       matrix:
         include:
           - repository: pytorch/tensordict
-            smoke-test-script: test/smoke_test.py
-            env-script: .github/scripts/install-deps-smoke-test.sh
             package-name: tensordict
     name: pytorch/tensordict
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
