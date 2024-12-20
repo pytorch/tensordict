@@ -198,12 +198,10 @@ _FALLBACK_METHOD_FROM_TD = [
     "_maybe_remove_batch_dim",
     "_memmap_",
     "_multithread_apply_flat",
-    "_multithread_apply_flat",
     "_multithread_apply_nest",
     "_multithread_rebuild",
     "_permute",
     "_remove_batch_dim",
-    "_repeat",
     "_repeat",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
