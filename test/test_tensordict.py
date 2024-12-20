@@ -3080,6 +3080,72 @@ class TestGeneric:
 
 
 class TestPointwiseOps:
+    def test_r_ops(self):
+        td = TensorDict(a=1)
+        # mul
+        assert isinstance(0 * td, TensorDict)
+        assert isinstance(torch.zeros(()) * td, TensorDict)
+        # +
+        assert isinstance(0 + td, TensorDict)
+        assert isinstance(torch.zeros(()) + td, TensorDict)
+        # -
+        assert isinstance(0 - td, TensorDict)
+        assert isinstance(torch.zeros(()) - td, TensorDict)
+        # /
+        assert isinstance(0 / td, TensorDict)
+        assert isinstance(torch.zeros(()) / td, TensorDict)
+        # **
+        # assert isinstance(1 ** td, TensorDict)
+        # assert isinstance(torch.ones(()) ** td, TensorDict)
+
+        td = TensorDict(a=True)
+        # |
+        assert isinstance(False | td, TensorDict)
+        assert isinstance(torch.zeros((), dtype=torch.bool) | td, TensorDict)
+        # ^
+        assert isinstance(False ^ td, TensorDict)
+        assert isinstance(torch.zeros((), dtype=torch.bool) ^ td, TensorDict)
+
+    def test_builtins(self):
+        td_float = TensorDict(a=1.0)
+        td_bool = TensorDict(a=True)
+        ones = torch.ones(())
+        bool_ones = torch.ones(()).to(torch.bool)
+        assert ((-td_float) == (-ones)).all()
+        # assert ((-td_bool) == (-bool_ones)).all()  # Not defined for bool
+        assert (abs(td_float) == abs(ones)).all()
+        # assert (abs(td_bool) == abs(bool_ones)).all()  # Not defined for bool
+        # assert ((~td_float) == (~ones)).all()  # Not defined for float
+        assert ((~td_bool) == (~bool_ones)).all()
+        assert ((td_float != td_float) == (ones != ones)).all()
+        assert ((td_bool != td_bool) == (bool_ones != bool_ones)).all()
+        assert ((td_float == td_float) == (ones == ones)).all()
+        assert ((td_bool == td_bool) == (bool_ones == bool_ones)).all()
+        assert ((td_float < td_float) == (ones < ones)).all()
+        assert ((td_bool < td_bool) == (bool_ones < bool_ones)).all()
+        assert ((td_float <= td_float) == (ones <= ones)).all()
+        assert ((td_bool <= td_bool) == (bool_ones <= bool_ones)).all()
+        assert ((td_float > td_float) == (ones > ones)).all()
+        assert ((td_bool > td_bool) == (bool_ones > bool_ones)).all()
+        assert ((td_float >= td_float) == (ones >= ones)).all()
+        assert ((td_bool >= td_bool) == (bool_ones >= bool_ones)).all()
+        assert ((td_float + td_float) == (ones + ones)).all()
+        # assert ((td_bool + td_bool) == (bool_ones + bool_ones)).all()  # Not defined for bool
+        assert ((td_float - td_float) == (ones - ones)).all()
+        # assert ((td_bool - td_bool) == (bool_ones - bool_ones)).all()  # Not defined for bool
+        assert ((td_float * td_float) == (ones * ones)).all()
+        # assert ((td_bool * td_bool) == (bool_ones * bool_ones)).all()  # Not defined for bool
+        assert ((td_float / td_float) == (ones / ones)).all()
+        # assert ((td_bool / td_bool) == (bool_ones / bool_ones)).all()  # Not defined for bool
+        assert ((td_float**td_float) == (ones**ones)).all()
+        # assert ((td_bool**td_bool) == (bool_ones**bool_ones)).all()  # Not defined for bool
+        # assert ((td_float & td_float) == (ones & ones)).all()  # Not defined for float
+        assert ((td_bool & td_bool) == (bool_ones & bool_ones)).all()
+        # assert ((td_float ^ td_float) == (ones ^ ones)).all()  # Not defined for float
+        assert ((td_bool ^ td_bool) == (bool_ones ^ bool_ones)).all()
+        # assert ((td_float | td_float) == (ones | ones)).all()  # Not defined for float
+        assert ((td_bool | td_bool) == (bool_ones | bool_ones)).all()
+
     @property
     def dummy_td_0(self):
         return TensorDict(
