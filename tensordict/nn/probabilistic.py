@@ -510,9 +510,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                         kwargs = {"aggregate_probabilities": False}
                     log_prob = dist.log_prob(out_tensors, **kwargs)
                     if log_prob is not out_tensors:
-                        # Composite dists return the tensordict_out directly when aggrgate_prob is False
-                        out_tensors.set(self.log_prob_key, log_prob)
-                    else:
+                        if is_tensor_collection(log_prob):
+                            out_tensors.update(log_prob)
+                        else:
+                            # Composite dists return the tensordict_out directly when aggrgate_prob is False
+                            out_tensors.set(self.log_prob_key, log_prob)
+                    elif dist.log_prob_key in out_tensors:
                         out_tensors.rename_key_(dist.log_prob_key, self.log_prob_key)
                 tensordict_out.update(out_tensors)
             else:
