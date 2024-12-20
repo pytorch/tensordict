@@ -257,7 +257,7 @@ We mask :class:`TensorDict` as we mask tensors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.004 seconds)
+   **Total running time of the script:** (0 minutes 0.005 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_slicing.py:
