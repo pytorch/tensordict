@@ -205,6 +205,60 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
+def _maybe_broadcast_other(op: str, n_other: int = 1):
+    """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+
+    def wrap_func(func):
+        @wraps(func)
+        def new_func(self, *others, **kwargs):
+            others, args = others[:n_other], others[n_other:]
+            need_broadcast = False
+            for other in others:
+                if other is None:
+                    continue
+                if (isinstance(other, torch.Tensor) and other.ndim) or (
+                    is_tensor_collection(other)
+                    and other.ndim
+                    and other.shape != self.shape
+                ):
+                    need_broadcast = True
+                    break
+            if not need_broadcast:
+                return func(self, *others, *args, **kwargs)
+            others_map = []
+            shape = self.shape
+            self_expand = self
+            shape = torch.broadcast_shapes(
+                shape, *[other.shape for other in others if other is not None]
+            )
+            if shape != self_expand.shape:
+                self_expand = self_expand.expand(shape)
+            for other in others:
+                if other is None:
+                    others_map.append(other)
+                    continue
+                # broadcast dims
+                if shape != other.shape:
+                    other = other.expand(shape)
+                others_map.append(other)
+            if any(isinstance(other, torch.Tensor) for other in others_map):
+                return self_expand._fast_apply(
+                    lambda x: getattr(x, op)(
+                        *[
+                            expand_as_right(other, x) if other is not None else None
+                            for other in others_map
+                        ],
+                        *args,
+                        **kwargs,
+                    )
+                )
+            return getattr(self_expand, op)(*others_map, *args, **kwargs)
+
+        return new_func
+
+    return wrap_func
+
+
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
@@ -9849,6 +9903,7 @@ class TensorDictBase(MutableMapping):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("bitwise_and")
     def bitwise_and(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -9901,6 +9956,7 @@ class TensorDictBase(MutableMapping):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("logical_and")
     def logical_and(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -9953,6 +10009,7 @@ class TensorDictBase(MutableMapping):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("add")
     def add(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10034,6 +10091,7 @@ class TensorDictBase(MutableMapping):
             torch._foreach_add_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("lerp", 2)
     def lerp(
         self,
         end: TensorDictBase | torch.Tensor,
@@ -10097,6 +10155,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
         return self
 
+    @_maybe_broadcast_other("addcdiv", 2)
     def addcdiv(
         self,
         other1: TensorDictBase | torch.Tensor,
@@ -10159,7 +10218,14 @@ class TensorDictBase(MutableMapping):
         )
         return self
 
-    def addcmul(self, other1, other2, *, value: float | None = 1):  # noqa: D417
+    @_maybe_broadcast_other("addcmul", 2)
+    def addcmul(
+        self,
+        other1: TensorDictBase | torch.Tensor,
+        other2: TensorDictBase | torch.Tensor,
+        *,
+        value: float | None = 1,
+    ):  # noqa: D417
         r"""Performs the element-wise multiplication of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
 
         .. math::
@@ -10216,6 +10282,7 @@ class TensorDictBase(MutableMapping):
         )
         return self
 
+    @_maybe_broadcast_other("sub")
     def sub(
         self,
         other: TensorDictBase | torch.Tensor | float,
@@ -10314,6 +10381,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_mul_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("mul")
     def mul(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10385,6 +10453,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_maximum_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("maximum")
     def maximum(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10451,6 +10520,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_minimum_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("minimum")
     def minimum(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10524,6 +10594,7 @@ class TensorDictBase(MutableMapping):
                 )
         return self
 
+    @_maybe_broadcast_other("clamp_max")
     def clamp_max(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10605,6 +10676,7 @@ class TensorDictBase(MutableMapping):
 
         return self
 
+    @_maybe_broadcast_other("clamp_min")
     def clamp_min(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10662,7 +10734,14 @@ class TensorDictBase(MutableMapping):
             result.update(items)
         return result
 
-    def clamp(self, min=None, max=None, *, out=None):  # noqa: W605
+    @_maybe_broadcast_other("clamp", 2)
+    def clamp(
+        self,
+        min: TensorDictBase | torch.Tensor = None,
+        max: TensorDictBase | torch.Tensor = None,
+        *,
+        out=None,
+    ):  # noqa: W605
         r"""Clamps all elements in :attr:`self` into the range `[` :attr:`min`, :attr:`max` `]`.
 
         Letting min_value and max_value be :attr:`min` and :attr:`max`, respectively, this returns:
@@ -10690,11 +10769,33 @@ class TensorDictBase(MutableMapping):
                     "clamp() with min/max=None isn't implemented with specified output."
                 )
             return self.clamp_min(min)
+
+        is_tc_min = is_tensor_collection(min)
+        is_tc_max = is_tensor_collection(max)
+
+        if is_tc_min ^ is_tc_max:
+            raise ValueError(
+                "Mixed tensordict and non-tensordict min/max values are not authorized."
+            )
+
         if out is None:
+            if is_tc_min and is_tc_max:
+                return self._fast_apply(
+                    lambda x, low, high: x.clamp(low, high), min, max, default=None
+                )
             return self._fast_apply(lambda x: x.clamp(min, max))
-        result = self._fast_apply(
-            lambda x, y: x.clamp(min, max, out=y), out, default=None
-        )
+        if is_tc_min and is_tc_max:
+            result = self._fast_apply(
+                lambda x, y, low, high: x.clamp(low, high, out=y),
+                out,
+                min,
+                max,
+                default=None,
+            )
+        else:
+            result = self._fast_apply(
+                lambda x, y: x.clamp(min, max, out=y), out, default=None
+            )
         with out.unlock_() if out.is_locked else contextlib.nullcontext():
             return out.update(result)
 
@@ -10714,6 +10815,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_pow_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("pow")
     def pow(
         self,
         other: TensorDictBase | torch.Tensor,
@@ -10785,6 +10887,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_div_(vals, other_val)
         return self
 
+    @_maybe_broadcast_other("div")
     def div(
         self,
         other: TensorDictBase | torch.Tensor,

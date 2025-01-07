@@ -30,6 +30,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
+    _maybe_broadcast_other,
     _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
@@ -611,6 +612,7 @@ class TensorDict(TensorDictBase):
             else:
                 return TensorDict._new_unsafe(_swap, batch_size=torch.Size(()))
 
+    @_maybe_broadcast_other("__ne__")
     def __ne__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other != self
@@ -635,6 +637,7 @@ class TensorDict(TensorDictBase):
             )
         return True
 
+    @_maybe_broadcast_other("__xor__")
     def __xor__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other ^ self
@@ -659,6 +662,7 @@ class TensorDict(TensorDictBase):
             )
         return True
 
+    @_maybe_broadcast_other("__or__")
     def __or__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other | self
@@ -683,6 +687,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @_maybe_broadcast_other("__eq__")
     def __eq__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other == self
@@ -705,6 +710,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @_maybe_broadcast_other("__ge__")
     def __ge__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other <= self
@@ -727,6 +733,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @_maybe_broadcast_other("__gt__")
     def __gt__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other < self
@@ -749,6 +756,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @_maybe_broadcast_other("__le__")
     def __le__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other >= self
@@ -771,6 +779,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @_maybe_broadcast_other("__lt__")
     def __lt__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other > self

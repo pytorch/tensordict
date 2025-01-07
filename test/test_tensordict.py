@@ -3487,6 +3487,185 @@ class TestPointwiseOps:
         assert "d" not in tdpow
         assert "b" in tdpow
 
+    @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
+    def test_broadcast_tensor(self, shape):
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4),
+            b=torch.zeros(3, 4, 5),
+            c=torch.ones(3, 4, 5, 6),
+            batch_size=(3, 4),
+        )
+        broadcast_shape = torch.broadcast_shapes(shape, td.shape)
+        td_mul = td * torch.ones(shape)
+        assert td_mul.shape == broadcast_shape
+        assert (td_mul == td).all()
+        td_add = td + torch.ones(shape)
+        assert td_add.shape == broadcast_shape
+        assert (td_add == td + 1).all()
+        td_sub = td - torch.ones(shape)
+        assert td_sub.shape == broadcast_shape
+        assert (td_sub == td - 1).all()
+        td_div = td / torch.ones(shape)
+        assert td_div.shape == broadcast_shape
+        assert (td_div == td).all()
+        td_max = td.maximum(torch.ones(shape))
+        assert td_max.shape == broadcast_shape
+        assert (td_max == td.maximum(torch.ones_like(td))).all()
+        td_min = td.minimum(torch.ones(shape))
+        assert td_min.shape == broadcast_shape
+        assert (td_min == td.minimum(torch.ones_like(td))).all()
+        td_max = td.clamp_max(torch.ones(shape))
+        assert td_max.shape == broadcast_shape
+        assert (td_max == td.clamp_max(torch.ones_like(td))).all()
+        td_min = td.clamp_min(torch.ones(shape))
+        assert td_min.shape == broadcast_shape
+        assert (td_min == td.clamp_min(torch.ones_like(td))).all()
+
+        td_clamp = td.clamp(-torch.ones(shape), torch.ones(shape))
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp,
+            td.clamp(-torch.ones_like(td), torch.ones_like(td)).expand(broadcast_shape),
+        )
+        td_clamp = td.clamp(None, torch.ones(shape))
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp, td.clamp(None, torch.ones_like(td)).expand(broadcast_shape)
+        )
+        td_clamp = td.clamp(-torch.ones(shape), None)
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp, td.clamp(-torch.ones_like(td), None).expand(broadcast_shape)
+        )
+
+        td_pow = td.pow(torch.ones(shape))
+        assert td_pow.shape == broadcast_shape
+        assert (td_pow == td.pow(torch.ones_like(td))).all()
+
+        td_ba = td.bool().bitwise_and(torch.ones(shape, dtype=torch.bool))
+        assert td_ba.shape == broadcast_shape
+        assert (td_ba == td.bool().bitwise_and(torch.ones_like(td.bool()))).all()
+
+        td_la = td.logical_and(torch.ones(shape))
+        assert td_la.shape == broadcast_shape
+        assert (td_la == td.logical_and(torch.ones_like(td))).all()
+
+        td_lerp = td.lerp(-torch.ones(shape), torch.ones(shape))
+        assert td_lerp.shape == broadcast_shape
+        assert_allclose_td(
+            td_lerp,
+            td.lerp(-torch.ones_like(td), torch.ones_like(td)).expand(broadcast_shape),
+        )
+
+        td_addcdiv = td.addcdiv(-torch.ones(shape), torch.ones(shape))
+        assert td_addcdiv.shape == broadcast_shape
+        assert_allclose_td(
+            td_addcdiv,
+            td.addcdiv(-torch.ones_like(td), torch.ones_like(td)).expand(
+                broadcast_shape
+            ),
+        )
+
+        td_addcmul = td.addcmul(-torch.ones(shape), torch.ones(shape))
+        assert td_addcmul.shape == broadcast_shape
+        assert_allclose_td(
+            td_addcmul,
+            td.addcmul(-torch.ones_like(td), torch.ones_like(td)).expand(
+                broadcast_shape
+            ),
+        )
+
+    @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
+    def test_broadcast_tensordict(self, shape):
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 4),
+            b=torch.zeros(3, 4, 5),
+            c=torch.ones(3, 4, 5, 6),
+            batch_size=(3, 4),
+        )
+        td_mul = td * torch.ones(shape)
+        td_mul = td * td.new_ones(shape)
+        broadcast_shape = torch.broadcast_shapes(shape, td.shape)
+        assert td_mul.shape == broadcast_shape
+        assert (td_mul == td).all()
+        td_add = td + td.new_ones(shape)
+        assert td_add.shape == broadcast_shape
+        assert (td_add == td + 1).all()
+        td_sub = td - td.new_ones(shape)
+        assert td_sub.shape == broadcast_shape
+        assert (td_sub == td - 1).all()
+        td_div = td / td.new_ones(shape)
+        assert td_div.shape == broadcast_shape
+        assert (td_div == td).all()
+        td_max = td.maximum(td.new_ones(shape))
+        assert td_max.shape == broadcast_shape
+        assert (td_max == td.maximum(torch.ones_like(td))).all()
+        td_min = td.minimum(td.new_ones(shape))
+        assert td_min.shape == broadcast_shape
+        assert (td_min == td.minimum(torch.ones_like(td))).all()
+        td_max = td.clamp_max(td.new_ones(shape))
+        assert td_max.shape == broadcast_shape
+        assert (td_max == td.clamp_max(torch.ones_like(td))).all()
+        td_min = td.clamp_min(td.new_ones(shape))
+        assert td_min.shape == broadcast_shape
+        assert (td_min == td.clamp_min(torch.ones_like(td))).all()
+
+        td_clamp = td.clamp(-td.new_ones(shape), td.new_ones(shape))
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp,
+            td.clamp(-torch.ones_like(td), torch.ones_like(td)).expand(broadcast_shape),
+        )
+        td_clamp = td.clamp(None, td.new_ones(shape))
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp, td.clamp(None, torch.ones_like(td)).expand(broadcast_shape)
+        )
+        td_clamp = td.clamp(-torch.ones(shape), None)
+        assert td_clamp.shape == broadcast_shape
+        assert_allclose_td(
+            td_clamp, td.clamp(-torch.ones_like(td), None).expand(broadcast_shape)
+        )
+
+        td_pow = td.pow(td.new_ones(shape))
+        assert td_pow.shape == broadcast_shape
+        assert (td_pow == td.pow(torch.ones_like(td))).all()
+
+        td_ba = td.bool().bitwise_and(td.new_ones(shape, dtype=torch.bool))
+        assert td_ba.shape == broadcast_shape
+        assert (td_ba == td.bool().bitwise_and(torch.ones_like(td.bool()))).all()
+
+        td_la = td.logical_and(td.new_ones(shape))
+        assert td_la.shape == broadcast_shape
+        assert (td_la == td.logical_and(torch.ones_like(td))).all()
+
+        td_lerp = td.lerp(-td.new_ones(shape), td.new_ones(shape))
+        assert td_lerp.shape == broadcast_shape
+        assert_allclose_td(
+            td_lerp,
+            td.lerp(-torch.ones_like(td), torch.ones_like(td)).expand(broadcast_shape),
+        )
+
+        td_addcdiv = td.addcdiv(-td.new_ones(shape), td.new_ones(shape))
+        assert td_addcdiv.shape == broadcast_shape
+        assert_allclose_td(
+            td_addcdiv,
+            td.addcdiv(-torch.ones_like(td), torch.ones_like(td)).expand(
+                broadcast_shape
+            ),
+        )
+
+        td_addcmul = td.addcmul(-td.new_ones(shape), td.new_ones(shape))
+        assert td_addcmul.shape == broadcast_shape
+        assert_allclose_td(
+            td_addcmul,
+            td.addcmul(-torch.ones_like(td), torch.ones_like(td)).expand(
+                broadcast_shape
+            ),
+        )
+
 
 @pytest.mark.parametrize(
     "td_name,device",
