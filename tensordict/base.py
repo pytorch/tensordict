@@ -9465,7 +9465,7 @@ class TensorDictBase(MutableMapping):
         Otherwise, ``dim`` is squeezed (see :func:`~torch.squeeze`), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s).
 
         Args:
-            dim (int or tuple of ints): the dimension or dimensions to reduce. If ``None``, all batch dimensions of the
+            dim (int or tuple of ints, optional): the dimension or dimensions to reduce. If ``None``, all batch dimensions of the
                 tensordict are reduced.
             keepdim (bool): whether the output tensordict has dim retained or not.
 
@@ -9507,6 +9507,31 @@ class TensorDictBase(MutableMapping):
         return self._fast_apply(
             lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
             batch_size=batch_size,
+        )
+
+    def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
+        """Apply a softmax function to the tensordict elements.
+
+        Args:
+            dim (int or tuple of ints): A tensordict dimension along which softmax will be computed.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
+                If specified, the input tensor is cast to dtype before the operation is performed.
+                This is useful for preventing data type overflows.
+
+        """
+        if isinstance(dim, int):
+            if dim < 0:
+                new_dim = self.ndim + dim
+            else:
+                new_dim = dim
+        else:
+            raise ValueError(f"Expected dim of type int, got {type(dim)}.")
+        if (new_dim < 0) or (new_dim >= self.ndim):
+            raise ValueError(
+                f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
+            )
+        return self._fast_apply(
+            lambda x: torch.softmax(x, dim=new_dim, dtype=dtype),
         )
 
     def log10(self) -> T:

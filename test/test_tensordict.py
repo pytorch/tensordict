@@ -6303,6 +6303,18 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert td.shape == td.batch_size
 
+    @pytest.mark.parametrize("dim", [0, -1, 3])
+    def test_softmax(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        with td.unlock_():
+            td.apply(lambda x: x.float(), out=td)
+        tds = td.softmax(dim=dim)
+        assert tds.shape == td.shape
+        tds._check_batch_size()
+        tds._check_device()
+
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
