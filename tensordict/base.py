@@ -82,6 +82,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
+    expand_as_right,
     implement_for,
     IndexType,
     infer_size_impl,
@@ -10513,7 +10514,14 @@ class TensorDictBase(MutableMapping):
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_max_(vals, other_val)
+        try:
+            torch._foreach_clamp_max_(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_max_ with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_max_(val)` instead."
+                )
         return self
 
     def clamp_max(
@@ -10547,7 +10555,14 @@ class TensorDictBase(MutableMapping):
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_clamp_max(vals, other_val)
+        try:
+            vals = torch._foreach_clamp_max(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_max with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_max(val)` instead."
+                )
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -10579,7 +10594,15 @@ class TensorDictBase(MutableMapping):
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_min_(vals, other_val)
+        try:
+            torch._foreach_clamp_min_(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_min_ with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_min_(val)` instead."
+                )
+
         return self
 
     def clamp_min(
@@ -10612,7 +10635,15 @@ class TensorDictBase(MutableMapping):
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_clamp_min(vals, other_val)
+        try:
+            vals = torch._foreach_clamp_min(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_min with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_min(val)` instead."
+                )
+
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -10630,6 +10661,42 @@ class TensorDictBase(MutableMapping):
         if items:
             result.update(items)
         return result
+
+    def clamp(self, min=None, max=None, *, out=None):  # noqa: W605
+        r"""Clamps all elements in :attr:`self` into the range `[` :attr:`min`, :attr:`max` `]`.
+
+        Letting min_value and max_value be :attr:`min` and :attr:`max`, respectively, this returns:
+
+            .. math::
+                y_i = \min(\max(x_i, \text{min\_value}_i), \text{max\_value}_i)
+
+            If :attr:`min` is ``None``, there is no lower bound.
+            Or, if :attr:`max` is ``None`` there is no upper bound.
+
+        .. note::
+            If :attr:`min` is greater than :attr:`max` :func:`torch.clamp(..., min, max) <torch.clamp>`
+            sets all elements in :attr:`input` to the value of :attr:`max`.
+
+        """
+        if min is None:
+            if out is not None:
+                raise ValueError(
+                    "clamp() with min/max=None isn't implemented with specified output."
+                )
+            return self.clamp_max(max)
+        if max is None:
+            if out is not None:
+                raise ValueError(
+                    "clamp() with min/max=None isn't implemented with specified output."
+                )
+            return self.clamp_min(min)
+        if out is None:
+            return self._fast_apply(lambda x: x.clamp(min, max))
+        result = self._fast_apply(
+            lambda x, y: x.clamp(min, max, out=y), out, default=None
+        )
+        with out.unlock_() if out.is_locked else contextlib.nullcontext():
+            return out.update(result)
 
     def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.pow`.
