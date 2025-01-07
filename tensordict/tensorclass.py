@@ -163,14 +163,19 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+_FALLBACK_METHOD_FROM_TD_FORCE = [
+    "__ge__",
+    "__gt__",
+    "__le__",
+    "__lt__",
+    "__ror__",
+]
 _FALLBACK_METHOD_FROM_TD = [
     "__abs__",
     "__add__",
     "__and__",
     "__bool__",
     "__eq__",
-    "__ge__",
-    "__gt__",
     "__iadd__",
     "__imul__",
     "__invert__",
@@ -185,7 +190,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "__radd__",
     "__rand__",
     "__rmul__",
-    "__ror__",
     "__rpow__",
     "__rsub__",
     "__rtruediv__",
@@ -240,6 +244,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "auto_batch_size_",
     "auto_device_",
     "bitwise_and",
+    "bool",
     "ceil",
     "ceil_",
     "chunk",
@@ -814,6 +819,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
+        setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))

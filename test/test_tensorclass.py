@@ -2588,6 +2588,47 @@ class TestPointWise:
         assert (x.mul(2) == (x * 2)).all()
         assert (x.div(2) == (x / 2)).all()
 
+    def test_logic_and_right_ops(self):
+        @tensorclass
+        class MyClass:
+            x: str
+
+        c = MyClass(torch.randn(10))
+        _ = c < 0
+        _ = c > 0
+        _ = c <= 0
+        _ = c >= 0
+        _ = c != 0
+
+        _ = c.bool() ^ True
+        _ = True ^ c.bool()
+
+        _ = c.bool() | False
+        _ = False | c.bool()
+
+        _ = c.bool() & False
+        _ = False & c.bool()
+
+        _ = abs(c)
+
+        _ = c + 1
+        _ = 1 + c
+        c += 1
+
+        _ = c * 1
+        _ = 1 * c
+
+        _ = c - 1
+        _ = 1 - c
+        c -= 1
+
+        _ = c / 1
+        _ = 1 / c
+
+        _ = c**1
+        # not implemented
+        # 1 ** c
+
 
 class TestSubClassing:
     def test_subclassing(self):
