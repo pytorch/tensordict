@@ -936,6 +936,8 @@ def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
             batch_size = torch.Size(())
         else:
             batch_size = kwargs.pop("batch_size", torch.Size(()))
+        if isinstance(batch_size, int):
+            batch_size = (batch_size,)
         if "names" in required_params:
             names = None
         else:
@@ -997,7 +999,7 @@ def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
 
         # convert the non tensor data in a regular data
         kwargs = {
-            key: value.data if is_non_tensor(value) else value
+            key: value.data if isinstance(value, NonTensorData) else value
             for key, value in kwargs.items()
         }
         __init__(self, **kwargs)
@@ -3259,6 +3261,9 @@ class NonTensorStack(LazyStackedTensorDict):
     _is_non_tensor: bool = True
 
     def __init__(self, *args, **kwargs):
+        args = [
+            arg if is_tensor_collection(arg) else NonTensorData(arg) for arg in args
+        ]
         super().__init__(*args, **kwargs)
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
