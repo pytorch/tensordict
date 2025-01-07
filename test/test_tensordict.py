@@ -43,6 +43,7 @@ from tensordict import (
     make_tensordict,
     PersistentTensorDict,
     set_get_defaults_to_none,
+    TensorClass,
     TensorDict,
 )
 from tensordict._lazy import _CustomOpTensorDict
@@ -10954,6 +10955,19 @@ class TestNonTensorData:
         td = td0.apply(lambda x, y, func: func(x, y), td1, td_func)
         assert td["a"] == -1
         assert td["b"] == 1
+
+    def test_non_tensor_from_list(self):
+        class X(TensorClass):
+            non_tensor: str = None
+
+        x = X(batch_size=3)
+        x.non_tensor = NonTensorStack.from_list(["a", "b", "c"])
+        assert x[0].non_tensor == "a"
+        assert x[1].non_tensor == "b"
+
+        x = X(non_tensor=NonTensorStack("a", "b", "c"), batch_size=3)
+        assert x[0].non_tensor == "a"
+        assert x[1].non_tensor == "b"
 
     def test_nontensor_dict(self, non_tensor_data):
         assert (
