@@ -938,6 +938,9 @@ def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
             batch_size = kwargs.pop("batch_size", torch.Size(()))
         if isinstance(batch_size, int):
             batch_size = (batch_size,)
+        elif batch_size is None:
+            batch_size = torch.Size(())
+
         if "names" in required_params:
             names = None
         else:
