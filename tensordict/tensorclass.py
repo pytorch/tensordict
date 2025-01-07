@@ -163,14 +163,19 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+_FALLBACK_METHOD_FROM_TD_FORCE = [
+    "__ge__",
+    "__gt__",
+    "__le__",
+    "__lt__",
+    "__ror__",
+]
 _FALLBACK_METHOD_FROM_TD = [
     "__abs__",
     "__add__",
     "__and__",
     "__bool__",
     "__eq__",
-    "__ge__",
-    "__gt__",
     "__iadd__",
     "__imul__",
     "__invert__",
@@ -185,7 +190,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "__radd__",
     "__rand__",
     "__rmul__",
-    "__ror__",
     "__rpow__",
     "__rsub__",
     "__rtruediv__",
@@ -240,6 +244,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "auto_batch_size_",
     "auto_device_",
     "bitwise_and",
+    "bool",
     "ceil",
     "ceil_",
     "chunk",
@@ -303,7 +308,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "log2",
     "log2_",
     "log_",
-    "logical_and" "map",
+    "logical_and",
+    "logsumexp",
+    "map",
     "map_iter",
     "masked_fill",
     "masked_fill_",
@@ -352,6 +359,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "sin_",
     "sinh",
     "sinh_",
+    "softmax",
     "split",
     "sqrt",
     "sqrt_",
@@ -811,6 +819,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
+        setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
@@ -1856,7 +1866,7 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
                 retain_none = True
                 warnings.warn(
                     "retain_none was not specified and a None value was encountered in the tensorclass. "
-                    "As of now, the None will be written in the tensordict but this default behaviour will change"
+                    "As of now, the None will be written in the tensordict but this default behaviour will change "
                     "in v0.8. To disable this warning, specify the value of retain_none."
                 )
             if retain_none:

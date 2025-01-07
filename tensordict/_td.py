@@ -611,7 +611,7 @@ class TensorDict(TensorDictBase):
             else:
                 return TensorDict._new_unsafe(_swap, batch_size=torch.Size(()))
 
-    def __ne__(self, other: object) -> T | bool:
+    def __ne__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)):
@@ -635,7 +635,7 @@ class TensorDict(TensorDictBase):
             )
         return True
 
-    def __xor__(self, other: object) -> T | bool:
+    def __xor__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other ^ self
         if isinstance(other, (dict,)):
@@ -659,7 +659,7 @@ class TensorDict(TensorDictBase):
             )
         return True
 
-    def __or__(self, other: object) -> T | bool:
+    def __or__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other | self
         if isinstance(other, (dict,)):
@@ -683,7 +683,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
-    def __eq__(self, other: object) -> T | bool:
+    def __eq__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)):
@@ -705,7 +705,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
-    def __ge__(self, other: object) -> T | bool:
+    def __ge__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other <= self
         if isinstance(other, (dict,)):
@@ -727,7 +727,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
-    def __gt__(self, other: object) -> T | bool:
+    def __gt__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other < self
         if isinstance(other, (dict,)):
@@ -749,7 +749,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
-    def __le__(self, other: object) -> T | bool:
+    def __le__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other >= self
         if isinstance(other, (dict,)):
@@ -771,7 +771,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
-    def __lt__(self, other: object) -> T | bool:
+    def __lt__(self, other: Any) -> T | bool:
         if is_tensorclass(other):
             return other > self
         if isinstance(other, (dict,)):

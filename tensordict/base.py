@@ -82,6 +82,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
+    expand_as_right,
     implement_for,
     IndexType,
     infer_size_impl,
@@ -6378,7 +6379,7 @@ class TensorDictBase(MutableMapping):
                 # We raise an exception AND a warning because we want the user to know that this exception will
                 # not be raised in the future
                 warnings.warn(
-                    "The entry you have queried with `get` is not present in the tensordict. "
+                    f"The entry ({key}) you have queried with `get` is not present in the tensordict. "
                     "Currently, this raises an exception. "
                     "To align with `dict.get`, this behaviour will be changed in v0.7 and a `None` value will "
                     "be returned instead (no error will be raised). "
@@ -9458,6 +9459,82 @@ class TensorDictBase(MutableMapping):
         torch._foreach_log_(self._values_list(True, True))
         return self
 
+    def logsumexp(self, dim=None, keepdim=False, *, out=None):  # noqa: D417
+        """Returns the log of summed exponentials of each row of the input tensordict in the given dimension ``dim``. The computation is numerically stabilized.
+
+        If keepdim is ``True``, the output tensor is of the same size as input except in the dimension(s) ``dim`` where it is of size ``1``.
+        Otherwise, ``dim`` is squeezed (see :func:`~torch.squeeze`), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s).
+
+        Args:
+            dim (int or tuple of ints, optional): the dimension or dimensions to reduce. If ``None``, all batch dimensions of the
+                tensordict are reduced.
+            keepdim (bool): whether the output tensordict has dim retained or not.
+
+        Keyword Args:
+            out (TensorDictBase, optional): the output tensordict.
+
+        """
+        if isinstance(dim, int):
+            if dim < 0:
+                new_dim = (self.ndim + dim,)
+            else:
+                new_dim = (dim,)
+        elif dim is not None:
+            new_dim = tuple(self.ndim + _dim if _dim < 0 else _dim for _dim in dim)
+        else:
+            new_dim = tuple(range(self.ndim))
+        if new_dim is not None and any((d < 0) or (d >= self.ndim) for d in new_dim):
+            raise ValueError(
+                f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
+            )
+        batch_size = self.batch_size
+        if keepdim:
+            batch_size = torch.Size(
+                [b if i not in new_dim else 1 for i, b in enumerate(batch_size)]
+            )
+        else:
+            batch_size = torch.Size(
+                [b for i, b in enumerate(batch_size) if i not in new_dim]
+            )
+        if out is not None:
+            result = self._fast_apply(
+                lambda x, y: torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y),
+                out,
+                default=None,
+                batch_size=batch_size,
+            )
+            return out.update(result)
+
+        return self._fast_apply(
+            lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
+            batch_size=batch_size,
+        )
+
+    def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
+        """Apply a softmax function to the tensordict elements.
+
+        Args:
+            dim (int or tuple of ints): A tensordict dimension along which softmax will be computed.
+            dtype (torch.dtype, optional): the desired data type of returned tensor.
+                If specified, the input tensor is cast to dtype before the operation is performed.
+                This is useful for preventing data type overflows.
+
+        """
+        if isinstance(dim, int):
+            if dim < 0:
+                new_dim = self.ndim + dim
+            else:
+                new_dim = dim
+        else:
+            raise ValueError(f"Expected dim of type int, got {type(dim)}.")
+        if (new_dim < 0) or (new_dim >= self.ndim):
+            raise ValueError(
+                f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
+            )
+        return self._fast_apply(
+            lambda x: torch.softmax(x, dim=new_dim, dtype=dtype),
+        )
+
     def log10(self) -> T:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
@@ -10437,7 +10514,14 @@ class TensorDictBase(MutableMapping):
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_max_(vals, other_val)
+        try:
+            torch._foreach_clamp_max_(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_max_ with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_max_(val)` instead."
+                )
         return self
 
     def clamp_max(
@@ -10471,7 +10555,14 @@ class TensorDictBase(MutableMapping):
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_clamp_max(vals, other_val)
+        try:
+            vals = torch._foreach_clamp_max(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_max with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_max(val)` instead."
+                )
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -10503,7 +10594,15 @@ class TensorDictBase(MutableMapping):
         else:
             vals = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_min_(vals, other_val)
+        try:
+            torch._foreach_clamp_min_(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_min_ with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_min_(val)` instead."
+                )
+
         return self
 
     def clamp_min(
@@ -10536,7 +10635,15 @@ class TensorDictBase(MutableMapping):
                 keys = new_keys
         else:
             other_val = other
-        vals = torch._foreach_clamp_min(vals, other_val)
+        try:
+            vals = torch._foreach_clamp_min(vals, other_val)
+        except RuntimeError as err:
+            if "isDifferentiableType" in str(err):
+                raise RuntimeError(
+                    "Attempted to execute _foreach_clamp_min with a differentiable tensor. "
+                    "Use `td.apply(lambda x: x.clamp_min(val)` instead."
+                )
+
         items = dict(zip(keys, vals))
 
         def pop(name, val):
@@ -10554,6 +10661,42 @@ class TensorDictBase(MutableMapping):
         if items:
             result.update(items)
         return result
+
+    def clamp(self, min=None, max=None, *, out=None):  # noqa: W605
+        r"""Clamps all elements in :attr:`self` into the range `[` :attr:`min`, :attr:`max` `]`.
+
+        Letting min_value and max_value be :attr:`min` and :attr:`max`, respectively, this returns:
+
+            .. math::
+                y_i = \min(\max(x_i, \text{min\_value}_i), \text{max\_value}_i)
+
+            If :attr:`min` is ``None``, there is no lower bound.
+            Or, if :attr:`max` is ``None`` there is no upper bound.
+
+        .. note::
+            If :attr:`min` is greater than :attr:`max` :func:`torch.clamp(..., min, max) <torch.clamp>`
+            sets all elements in :attr:`input` to the value of :attr:`max`.
+
+        """
+        if min is None:
+            if out is not None:
+                raise ValueError(
+                    "clamp() with min/max=None isn't implemented with specified output."
+                )
+            return self.clamp_max(max)
+        if max is None:
+            if out is not None:
+                raise ValueError(
+                    "clamp() with min/max=None isn't implemented with specified output."
+                )
+            return self.clamp_min(min)
+        if out is None:
+            return self._fast_apply(lambda x: x.clamp(min, max))
+        result = self._fast_apply(
+            lambda x, y: x.clamp(min, max, out=y), out, default=None
+        )
+        with out.unlock_() if out.is_locked else contextlib.nullcontext():
+            return out.update(result)
 
     def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.pow`.
