@@ -354,6 +354,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "sin_",
     "sinh",
     "sinh_",
+    "softmax",
     "split",
     "sqrt",
     "sqrt_",
