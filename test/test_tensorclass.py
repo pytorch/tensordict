@@ -2448,6 +2448,71 @@ class TestAutoCasting:
         assert obj.tc.tc is None
 
 
+class TestShadow:
+    def test_no_shadow(self):
+        with pytest.raises(AttributeError):
+
+            @tensorclass
+            class MyClass:
+                x: str
+                y: int
+                batch_size: Any
+
+        with pytest.raises(AttributeError):
+
+            @tensorclass
+            class MyClass:  # noqa: F811
+                x: str
+                y: int
+                names: Any
+
+        with pytest.raises(AttributeError):
+
+            @tensorclass
+            class MyClass:  # noqa: F811
+                x: str
+                y: int
+                device: Any
+
+        @tensorclass(shadow=True)
+        class MyClass:  # noqa: F811
+            x: str
+            y: int
+            batch_size: Any
+            names: Any
+            device: Any
+
+    def test_shadow_values(self):
+        @tensorclass(shadow=True)
+        class MyClass:
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClass(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+
+    def test_shadow_repr(self):
+        @tensorclass(shadow=True)
+        class MyClass:
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClass(batch_size=0, names=0, device=0)
+        assert (
+            repr(c)
+            == """MyClass(
+    batch_size=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+    device=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+    names=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+    shape=torch.Size([]),
+    is_shared=False)"""
+        )
+
+
 class TestVMAP:
     def test_regular_vmap(self):
         @tensorclass
