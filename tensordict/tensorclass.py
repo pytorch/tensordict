@@ -303,7 +303,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "log2",
     "log2_",
     "log_",
-    "logical_and" "map",
+    "logical_and",
+    "logsumexp",
+    "map",
     "map_iter",
     "masked_fill",
     "masked_fill_",
@@ -352,6 +354,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "sin_",
     "sinh",
     "sinh_",
+    "softmax",
     "split",
     "sqrt",
     "sqrt_",
@@ -1856,7 +1859,7 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
                 retain_none = True
                 warnings.warn(
                     "retain_none was not specified and a None value was encountered in the tensorclass. "
-                    "As of now, the None will be written in the tensordict but this default behaviour will change"
+                    "As of now, the None will be written in the tensordict but this default behaviour will change "
                     "in v0.8. To disable this warning, specify the value of retain_none."
                 )
             if retain_none:
