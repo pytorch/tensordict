@@ -6378,7 +6378,7 @@ class TensorDictBase(MutableMapping):
                 # We raise an exception AND a warning because we want the user to know that this exception will
                 # not be raised in the future
                 warnings.warn(
-                    "The entry you have queried with `get` is not present in the tensordict. "
+                    f"The entry ({key}) you have queried with `get` is not present in the tensordict. "
                     "Currently, this raises an exception. "
                     "To align with `dict.get`, this behaviour will be changed in v0.7 and a `None` value will "
                     "be returned instead (no error will be raised). "
@@ -9457,6 +9457,57 @@ class TensorDictBase(MutableMapping):
         """Computes the :meth:`~torch.log` value of each element of the TensorDict in-place."""
         torch._foreach_log_(self._values_list(True, True))
         return self
+
+    def logsumexp(self, dim=None, keepdim=False, *, out=None):  # noqa: D417
+        """Returns the log of summed exponentials of each row of the input tensordict in the given dimension ``dim``. The computation is numerically stabilized.
+
+        If keepdim is ``True``, the output tensor is of the same size as input except in the dimension(s) ``dim`` where it is of size ``1``.
+        Otherwise, ``dim`` is squeezed (see :func:`~torch.squeeze`), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s).
+
+        Args:
+            dim (int or tuple of ints): the dimension or dimensions to reduce. If ``None``, all batch dimensions of the
+                tensordict are reduced.
+            keepdim (bool): whether the output tensordict has dim retained or not.
+
+        Keyword Args:
+            out (TensorDictBase, optional): the output tensordict.
+
+        """
+        if isinstance(dim, int):
+            if dim < 0:
+                new_dim = (self.ndim + dim,)
+            else:
+                new_dim = (dim,)
+        elif dim is not None:
+            new_dim = tuple(self.ndim + _dim if _dim < 0 else _dim for _dim in dim)
+        else:
+            new_dim = tuple(range(self.ndim))
+        if new_dim is not None and any((d < 0) or (d >= self.ndim) for d in new_dim):
+            raise ValueError(
+                f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
+            )
+        batch_size = self.batch_size
+        if keepdim:
+            batch_size = torch.Size(
+                [b if i not in new_dim else 1 for i, b in enumerate(batch_size)]
+            )
+        else:
+            batch_size = torch.Size(
+                [b for i, b in enumerate(batch_size) if i not in new_dim]
+            )
+        if out is not None:
+            result = self._fast_apply(
+                lambda x, y: torch.logsumexp(x, dim=new_dim, keepdim=keepdim, out=y),
+                out,
+                default=None,
+                batch_size=batch_size,
+            )
+            return out.update(result)
+
+        return self._fast_apply(
+            lambda x: torch.logsumexp(x, dim=new_dim, keepdim=keepdim),
+            batch_size=batch_size,
+        )
 
     def log10(self) -> T:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
