@@ -3995,6 +3995,18 @@ class TestTensorDicts(TestTensorDictsBase):
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
+    def test_clamp(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdc = td.clamp(-1, 1)
+        assert (tdc <= 1).all()
+        assert (tdc >= -1).all()
+        if td.requires_grad:
+            td = td.detach()
+        tdc = td.clamp(None, 1)
+        assert (tdc <= 1).all()
+        tdc = td.clamp(-1)
+        assert (tdc >= -1).all()
+
     def test_clear(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
