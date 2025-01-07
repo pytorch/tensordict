@@ -404,30 +404,45 @@ def is_non_tensor(obj):
 
 
 class _tensorclass_dec:
+    autocast: bool
+    frozen: bool
+    nocast: bool
+    shadow: bool
+
     def __new__(
-        cls, autocast: bool = False, frozen: bool = False, nocast: bool = False
+        cls,
+        autocast: bool = False,
+        frozen: bool = False,
+        nocast: bool = False,
+        shadow: bool = False,
     ):
         if not isinstance(autocast, bool):
             clz = autocast
             self = super().__new__(cls)
-            self.__init__(autocast=False, frozen=False, nocast=False)
+            self.__init__(autocast=False, frozen=False, nocast=False, shadow=False)
             return self.__call__(clz)
         return super().__new__(cls)
 
     def __init__(
-        self, autocast: bool = False, frozen: bool = False, nocast: bool = False
+        self,
+        autocast: bool = False,
+        frozen: bool = False,
+        nocast: bool = False,
+        shadow: bool = False,
     ):
         if autocast and nocast:
             raise ValueError("autocast is exclusive with nocast.")
         self.autocast = autocast
         self.frozen = frozen
         self.nocast = nocast
+        self.shadow = shadow
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
-        clz = _tensorclass(cls, frozen=self.frozen)
+        clz = _tensorclass(cls, frozen=self.frozen, shadow=self.shadow)
         clz._autocast = self.autocast
         clz._nocast = self.nocast
+        clz._shadow = self.shadow
         clz._frozen = self.frozen
         return clz
 
@@ -442,6 +457,7 @@ def from_dataclass(
     autocast: bool = False,
     nocast: bool = False,
     inplace: bool = False,
+    shadow: bool = False,
     device: torch.device | None = None,
 ) -> Any:
     """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
@@ -462,6 +478,8 @@ def from_dataclass(
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
+        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
+            Use with caution, as this may cause unintended consequences. Defaults to False.
 
     Returns:
         A tensor-compatible class or instance derived from the provided dataclass.
@@ -518,10 +536,11 @@ def from_dataclass(
             )
         else:
             cls = obj
-        clz = _tensorclass(cls, frozen=frozen)
+        clz = _tensorclass(cls, frozen=frozen, shadow=shadow)
         clz._type_hints = get_type_hints(obj)
         clz._autocast = autocast
         clz._nocast = nocast
+        clz._shadow = shadow
         clz._frozen = frozen
         return clz
 
@@ -529,10 +548,13 @@ def from_dataclass(
         raise TypeError(f"Expected a obj input, got a {type(obj)} input instead.")
     name = obj.__class__.__name__ + "_tc"
     clz = _tensorclass(
-        make_dataclass(name, fields=obj.__dataclass_fields__), frozen=frozen
+        make_dataclass(name, fields=obj.__dataclass_fields__),
+        frozen=frozen,
+        shadow=shadow,
     )
     clz._autocast = autocast
     clz._nocast = nocast
+    clz._shadow = shadow
     clz._frozen = frozen
     result = clz(**asdict(obj), batch_size=batch_size, device=device)
     if auto_batch_size:
@@ -552,6 +574,7 @@ def tensorclass(
     autocast: bool = False,
     frozen: bool = False,
     nocast: bool = False,
+    shadow: bool = False,
 ) -> T | None:
     """A decorator to create :obj:`tensorclass` classes.
 
@@ -569,6 +592,8 @@ def tensorclass(
         nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
             will not be cast to a tensor type. Thie argument is exclusive with ``autocast`` (both cannot be true
             at the same time). Defaults to ``False``.
+        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
+            Use with caution, as this may cause unintended consequences. Defaults to False.
 
     tensorclass can be used with or without arguments:
 
@@ -649,7 +674,7 @@ def tensorclass(
     """
 
     def wrap(cls):
-        return _tensorclass_dec(autocast, frozen, nocast)(cls)
+        return _tensorclass_dec(autocast, frozen, nocast, shadow)(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
     if cls is None:
@@ -661,7 +686,7 @@ def tensorclass(
 
 
 @dataclass_transform()
-def _tensorclass(cls: T, *, frozen) -> T:
+def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -704,11 +729,14 @@ def _tensorclass(cls: T, *, frozen) -> T:
 
     expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
 
-    for attr in expected_keys:
-        if attr in dir(TensorDict) and attr not in ("_is_non_tensor", "data"):
-            raise AttributeError(
-                f"Attribute name {attr} can't be used with @tensorclass"
-            )
+    if not shadow:
+        for attr in expected_keys:
+            if attr in dir(TensorDict) and attr not in ("_is_non_tensor", "data"):
+                raise AttributeError(
+                    f"Attribute name {attr} can't be used with @tensorclass or TensorClass. To allow it, please indicate "
+                    f"that builtin names can be overwritten by using the allow_names keyword argument (@tensorclass(shadow=True) "
+                    f"or TensorClass['shadow']."
+                )
 
     cls.fields = classmethod(dataclasses.fields)
     for field in cls.fields():
@@ -716,15 +744,14 @@ def _tensorclass(cls: T, *, frozen) -> T:
             delattr(cls, field.name)
 
     _get_type_hints(cls)
-    cls.__init__ = _init_wrapper(cls.__init__, frozen)
+    cls.__init__ = _init_wrapper(cls.__init__, frozen, shadow)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
-    # cls.__getattribute__ = object.__getattribute__
-    # if "__getattr__" not in cls.__dict__:
+
     cls.__getattr__ = _getattr
     if "__setattr__" not in cls.__dict__:
         cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
@@ -738,58 +765,45 @@ def _tensorclass(cls: T, *, frozen) -> T:
         cls.__repr__ = _repr
     if "__len__" not in cls.__dict__:
         cls.__len__ = _len
-    #
+
     cls.__eq__ = _eq
     cls.__ne__ = _ne
     cls.__or__ = _or
     cls.__xor__ = _xor
     cls.__bool__ = _bool
 
-    # cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
-    # # cls.__getattr__ = _getattr
-    # cls.__getitem__ = _getitem
-    # cls.__getitems__ = _getitem
-    # cls.__setitem__ = _setitem
-    # if not _is_non_tensor:
-    #     cls.__repr__ = _repr
-    # cls.__len__ = _len
-    # cls.__eq__ = _eq
-    # cls.__ne__ = _ne
-    # cls.__or__ = _or
-    # cls.__xor__ = _xor
-    # cls.__bool__ = _bool
-    if not hasattr(cls, "non_tensor_items"):
+    if not hasattr(cls, "non_tensor_items") and "non_tensor_items" not in expected_keys:
         cls.non_tensor_items = _non_tensor_items
-    if not hasattr(cls, "set"):
+    if not hasattr(cls, "set") and "set" not in expected_keys:
         cls.set = _set
-    if not hasattr(cls, "set_at_"):
+    if not hasattr(cls, "set_at_") and "set_at_" not in expected_keys:
         cls.set_at_ = _set_at_
     if not hasattr(cls, "_set_str"):
         cls._set_str = _set_str
     if not hasattr(cls, "_set_at_str"):
         cls._set_at_str = _set_at_str
-    if not hasattr(cls, "del_"):
+    if not hasattr(cls, "del_") and "del_" not in expected_keys:
         cls.del_ = _del_
-    if not hasattr(cls, "get"):
+    if not hasattr(cls, "get") and "get" not in expected_keys:
         cls.get = _get
-    if not hasattr(cls, "get_at"):
+    if not hasattr(cls, "get_at") and "get_at" not in expected_keys:
         cls.get_at = _get_at
-    if not hasattr(cls, "unbind"):
+    if not hasattr(cls, "unbind") and "unbind" not in expected_keys:
         cls.unbind = _unbind
     cls._unbind = _unbind
-    if not hasattr(cls, "state_dict"):
+    if not hasattr(cls, "state_dict") and "state_dict" not in expected_keys:
         cls.state_dict = _state_dict
-    if not hasattr(cls, "load_state_dict"):
+    if not hasattr(cls, "load_state_dict") and "load_state_dict" not in expected_keys:
         cls.load_state_dict = _load_state_dict
-    if not hasattr(cls, "_memmap_"):
+    if not hasattr(cls, "_memmap_") and "_memmap_" not in expected_keys:
         cls._memmap_ = _memmap_
-    if not hasattr(cls, "share_memory_"):
+    if not hasattr(cls, "share_memory_") and "share_memory_" not in expected_keys:
         cls.share_memory_ = _share_memory_
-    if not hasattr(cls, "update"):
+    if not hasattr(cls, "update") and "update" not in expected_keys:
         cls.update = _update
-    if not hasattr(cls, "update_"):
+    if not hasattr(cls, "update_") and "update_" not in expected_keys:
         cls.update_ = _update_
-    if not hasattr(cls, "update_at_"):
+    if not hasattr(cls, "update_at_") and "update_at_" not in expected_keys:
         cls.update_at_ = _update_at_
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
@@ -812,15 +826,18 @@ def _tensorclass(cls: T, *, frozen) -> T:
     cls.__exit__ = __exit__
 
     # Memmap
-    if not hasattr(cls, "load_memmap"):
+    if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
         cls.load_memmap = TensorDictBase.load_memmap
-    if not hasattr(cls, "load"):
+    if not hasattr(cls, "load") and "load" not in expected_keys:
         cls.load = TensorDictBase.load
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
-    if not hasattr(cls, "from_dict"):
+    if not hasattr(cls, "from_dict") and "from_dict" not in expected_keys:
         cls.from_dict = classmethod(_from_dict)
-    if not hasattr(cls, "from_dict_instance"):
+    if (
+        not hasattr(cls, "from_dict_instance")
+        and "from_dict_instance" not in expected_keys
+    ):
         cls.from_dict_instance = _from_dict_instance
 
     for attr in TensorDict.__dict__.keys():
@@ -830,21 +847,21 @@ def _tensorclass(cls: T, *, frozen) -> T:
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
-    if not hasattr(cls, "to_tensordict"):
+    if not hasattr(cls, "to_tensordict") and "to_tensordict" not in expected_keys:
         cls.to_tensordict = _to_tensordict
-    if not hasattr(cls, "device"):
+    if not hasattr(cls, "device") and "device" not in expected_keys:
         cls.device = property(_device, _device_setter)
-    if not hasattr(cls, "batch_size"):
+    if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
         cls.batch_size = property(_batch_size, _batch_size_setter)
-    if not hasattr(cls, "names"):
+    if not hasattr(cls, "shape") and "shape" not in expected_keys:
+        cls.shape = property(_batch_size, _batch_size_setter)
+    if not hasattr(cls, "names") and "names" not in expected_keys:
         cls.names = property(_names, _names_setter)
-    if not hasattr(cls, "names"):
-        cls.require = property(_names, _names_setter)
-    if not _is_non_tensor and not hasattr(cls, "data"):
+    if not _is_non_tensor and not hasattr(cls, "data") and "data" not in expected_keys:
         cls.data = property(_data, _data_setter)
-    if not hasattr(cls, "grad"):
+    if not hasattr(cls, "grad") and "grad" not in expected_keys:
         cls.grad = property(_grad)
-    if not hasattr(cls, "to_dict"):
+    if not hasattr(cls, "to_dict") and "to_dict" not in expected_keys:
         cls.to_dict = _to_dict
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
@@ -903,7 +920,7 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
-def _init_wrapper(__init__: Callable, frozen) -> Callable:
+def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
@@ -913,15 +930,29 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
     def wrapper(
         self,
         *args: Any,
-        batch_size: Sequence[int] | torch.Size | int = None,
-        device: DeviceType | None = None,
-        names: List[str] | None = None,
-        lock: bool | None = None,
         **kwargs,
     ):
+        if "batch_size" in required_params:
+            batch_size = torch.Size(())
+        else:
+            batch_size = kwargs.pop("batch_size", torch.Size(()))
+        if batch_size is None:
+            batch_size = torch.Size(())
+
+        if "names" in required_params:
+            names = None
+        else:
+            names = kwargs.pop("names", None)
+        if "device" in required_params:
+            device = None
+        else:
+            device = kwargs.pop("device", None)
+        if "lock" in required_params:
+            lock = None
+        else:
+            lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
-
         if not is_compiling():
             # zip not supported by dynamo
             for value, key in zip(args, self.__dataclass_fields__):
@@ -934,8 +965,6 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
                 )
 
-        if batch_size is None:
-            batch_size = torch.Size([])
         if not is_compiling():
             for key, field in type(self).__dataclass_fields__.items():
                 if field.default_factory is not dataclasses.MISSING:
@@ -983,11 +1012,38 @@ def _init_wrapper(__init__: Callable, frozen) -> Callable:
         if lock:
             self._tensordict.lock_()
 
-    new_params = [
-        inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
-        inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None),
-        inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None),
-    ]
+    if not shadow:
+        new_params = [
+            inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None),
+            inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None),
+        ]
+    else:
+        new_params = []
+        for p in params:
+            if p._name == "batch_size":
+                break
+        else:
+            new_params.append(
+                inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY)
+            )
+        for p in params:
+            if p._name == "device":
+                break
+        else:
+            new_params.append(
+                inspect.Parameter(
+                    "device", inspect.Parameter.KEYWORD_ONLY, default=None
+                )
+            )
+        for p in params:
+            if p._name == "names":
+                break
+        else:
+            new_params.append(
+                inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None)
+            )
+
     wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
     return wrapper
@@ -1296,11 +1352,11 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 
 def _getattr(self, item: str) -> Any:
-    _non_tensordict = self._non_tensordict
     _tensordict = self._tensordict
     __dataclass_fields__ = type(self).__expected_keys__
 
     if item in __dataclass_fields__:
+        _non_tensordict = self._non_tensordict
         if _non_tensordict:
             out = _non_tensordict.get(item, NO_DEFAULT)
             if out is not NO_DEFAULT:
@@ -1350,8 +1406,10 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             if (
                 "_tensordict" not in __dict__
                 or "_non_tensordict" not in __dict__
-                or key in SET_ATTRIBUTES
-                or key in type(self).__dict__
+                or (
+                    not self._shadow
+                    and (key in SET_ATTRIBUTES or key in type(self).__dict__)
+                )
             ):
                 # if we ever decide to allow anything to be written in a tc
                 # or key not in self.__dataclass_fields__):
@@ -1634,20 +1692,30 @@ def _repr(self) -> str:
     fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
-    batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-    device_str = indent(f"device={self.device}", 4 * " ")
+
+    medatada_fields = []
+
+    if "batch_size" not in self.__expected_keys__:
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        medatada_fields.append(batch_size_str)
+    elif "shape" not in self.__expected_keys__:
+        batch_size_str = indent(f"shape={self.shape}", 4 * " ")
+        medatada_fields.append(batch_size_str)
+    if "device" not in self.__expected_keys__:
+        device_str = indent(f"device={self.device}", 4 * " ")
+        medatada_fields.append(device_str)
+
     is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+    medatada_fields.append(is_shared_str)
+
     if len(non_tensor_fields) > 0:
         non_tensor_field_str = indent(
             ",\n".join(non_tensor_fields),
             4 * " ",
         )
-        string = ",\n".join(
-            field_str
-            + [non_tensor_field_str, batch_size_str, device_str, is_shared_str]
-        )
+        string = ",\n".join(field_str + [non_tensor_field_str, *medatada_fields])
     else:
-        string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
+        string = ",\n".join(field_str + medatada_fields)
     return f"{type(self).__name__}({string})"
 
 
@@ -1834,9 +1902,9 @@ def _set(
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
-        if key in ("batch_size", "names", "device"):
-            # handled by setattr
-            return
+        # if key in ("batch_size", "names", "device"):
+        #     # handled by setattr
+        #     return
         expected_keys = cls.__expected_keys__
         if key not in expected_keys:
             raise AttributeError(
@@ -2690,7 +2758,14 @@ class NonTensorData:
         data_str = str(self.data)
         if len(data_str) > 200:
             data_str = data_str[:20] + "  ...  " + data_str[-20:]
-        return f"{type(self).__name__}(data={data_str}, batch_size={self.batch_size}, device={self.device})"
+        repr_str = f"{type(self).__name__}(data={data_str}"
+        if "batch_size" not in self.__expected_keys__:
+            repr_str += f", batch_size={self.batch_size}"
+        elif "shape" not in self.__expected_keys__:
+            repr_str += f", shape={self.shape}"
+        if "device" not in self.__expected_keys__:
+            repr_str += f", device={self.device}"
+        return repr_str + ")"
 
     def __post_init__(self):
         _tensordict = self.__dict__["_tensordict"]
