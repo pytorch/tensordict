@@ -4792,6 +4792,44 @@ class TestTensorDicts(TestTensorDictsBase):
                 td_set = td
             td_set.set_(key, item)
 
+    @pytest.mark.parametrize("has_out", [False, "complete", "empty"])
+    @pytest.mark.parametrize("keepdim", [True, False])
+    @pytest.mark.parametrize("dim", [1, (1,), (1, -1)])
+    def test_logsumexp(self, td_name, device, has_out, keepdim, dim):
+        td = getattr(self, td_name)(device)
+        if not has_out:
+            out = None
+        elif has_out == "complete":
+            out = (
+                td.to_tensordict(retain_none=False)
+                .detach()
+                .logsumexp(dim=dim, keepdim=keepdim)
+            )
+            if td.requires_grad:
+                td = td.detach()
+        else:
+            out = (
+                td.to_tensordict(retain_none=False)
+                .detach()
+                .logsumexp(dim=dim, keepdim=keepdim)
+                .empty()
+            )
+            if td.requires_grad:
+                td = td.detach()
+        if out is not None:
+            out_c = out.copy()
+        tdlse = td.logsumexp(dim=dim, out=out, keepdim=keepdim)
+        assert tdlse.batch_size != td.batch_size
+        if out is not None:
+
+            def check(x, y):
+                if y is not None:
+                    assert x is y
+
+            assert tdlse is out
+            tdlse.apply(check, out_c, default=None)
+        tdlse._check_batch_size()
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -6264,6 +6302,18 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_shape(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert td.shape == td.batch_size
+
+    @pytest.mark.parametrize("dim", [0, -1, 3])
+    def test_softmax(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        with td.unlock_():
+            td.apply(lambda x: x.float(), out=td)
+        tds = td.softmax(dim=dim)
+        assert tds.shape == td.shape
+        tds._check_batch_size()
+        tds._check_device()
 
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
