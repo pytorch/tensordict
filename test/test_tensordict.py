@@ -4792,6 +4792,44 @@ class TestTensorDicts(TestTensorDictsBase):
                 td_set = td
             td_set.set_(key, item)
 
+    @pytest.mark.parametrize("has_out", [False, "complete", "empty"])
+    @pytest.mark.parametrize("keepdim", [True, False])
+    @pytest.mark.parametrize("dim", [1, (1,), (1, -1)])
+    def test_logsumexp(self, td_name, device, has_out, keepdim, dim):
+        td = getattr(self, td_name)(device)
+        if not has_out:
+            out = None
+        elif has_out == "complete":
+            out = (
+                td.to_tensordict(retain_none=False)
+                .detach()
+                .logsumexp(dim=dim, keepdim=keepdim)
+            )
+            if td.requires_grad:
+                td = td.detach()
+        else:
+            out = (
+                td.to_tensordict(retain_none=False)
+                .detach()
+                .logsumexp(dim=dim, keepdim=keepdim)
+                .empty()
+            )
+            if td.requires_grad:
+                td = td.detach()
+        if out is not None:
+            out_c = out.copy()
+        tdlse = td.logsumexp(dim=dim, out=out, keepdim=keepdim)
+        assert tdlse.batch_size != td.batch_size
+        if out is not None:
+
+            def check(x, y):
+                if y is not None:
+                    assert x is y
+
+            assert tdlse is out
+            tdlse.apply(check, out_c, default=None)
+        tdlse._check_batch_size()
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
