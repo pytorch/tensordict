@@ -362,13 +362,13 @@ efficiently and transparently load and manage data inside a training
 pipeline. The tutorial is based heavily on the <a class="reference external" href="https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html">PyTorch Quickstart
 Tutorial</a>,
 but modified to demonstrate use of <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">MemoryMappedTensor</span><span class="p">,</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
-<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="torch.utils.data.DataLoader" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">DataLoader</span></a>
-<span class="kn">from</span> <span class="nn">torchvision</span> <span class="kn">import</span> <span class="n">datasets</span>
-<span class="kn">from</span> <span class="nn">torchvision.transforms</span> <span class="kn">import</span> <span class="n">ToTensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemoryMappedTensor</span><span class="p">,</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="torch.utils.data.DataLoader" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">DataLoader</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchvision</span><span class="w"> </span><span class="kn">import</span> <span class="n">datasets</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchvision.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToTensor</span>
 
 <a href="https://docs.python.org/3/library/stdtypes.html#str" title="builtins.str" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using device: </span><span class="si">{</span><a href="https://docs.python.org/3/library/stdtypes.html#str" title="builtins.str" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -459,8 +459,8 @@ there is no need for collation, so we pass the identity function as <code class=
 <h2>Model<a class="headerlink" href="#model" title="Permalink to this heading">¶</a></h2>
 <p>We use the same model from the
 <a class="reference external" href="https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html">Quickstart Tutorial</a>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Net</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Net</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">flatten</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html#torch.nn.Flatten" title="torch.nn.Flatten" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span></a><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linear_relu_stack</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
@@ -471,7 +471,7 @@ there is no need for collation, so we pass the identity function as <code class=
             <a href="https://pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">512</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
         <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear_relu_stack</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">logits</span>
@@ -513,7 +513,7 @@ cross-entropy loss.</p>
 <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer_td</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span></a><span class="p">(</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">model_td</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">train</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">):</span>
     <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train" title="torch.nn.Module.train" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">model</span><span class="o">.</span><span class="n">train</span></a><span class="p">()</span>
 
@@ -535,7 +535,7 @@ cross-entropy loss.</p>
 <p>The training loop for our <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>-based DataLoader is very similar, we just
 adjust how we unpack the data to the more explicit key-based retrieval offered by
 <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>. The <code class="docutils literal notranslate"><span class="pre">.contiguous()</span></code> method loads the data stored in the memmap tensor.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">train_td</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">train_td</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.SGD.html#torch.optim.SGD" title="torch.optim.SGD" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">):</span>
     <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train" title="torch.nn.Module.train" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">model</span><span class="o">.</span><span class="n">train</span></a><span class="p">()</span>
 
@@ -554,7 +554,7 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;loss: </span><span class="si">{</span><span class="n">loss</span><span class="si">:</span><span class="s2">&gt;7f</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="n">current</span><span class="si">:</span><span class="s2">&gt;5d</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">size</span><span class="si">:</span><span class="s2">&gt;5d</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">):</span>
     <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
     <span class="n">num_batches</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval" title="torch.nn.Module.eval" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">model</span><span class="o">.</span><span class="n">eval</span></a><span class="p">()</span>
@@ -576,7 +576,7 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
     <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">test_td</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_td</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss" title="torch.nn.CrossEntropyLoss" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss_fn</span></a><span class="p">):</span>
     <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
     <span class="n">num_batches</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval" title="torch.nn.Module.eval" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">model</span><span class="o">.</span><span class="n">eval</span></a><span class="p">()</span>
@@ -602,7 +602,7 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
     <span class="nb">print</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
     <span class="k">break</span>
 
-<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
 <a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a> <span class="o">=</span> <a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span>
 <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">epochs</span></a> <span class="o">=</span> <span class="mi">5</span>
@@ -630,159 +630,159 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
     is_shared=False)
 Epoch 1
 -------------------------
-loss: 2.305175 [    0/60000]
-loss: 2.281769 [ 6400/60000]
-loss: 2.265654 [12800/60000]
-loss: 2.256933 [19200/60000]
-loss: 2.237922 [25600/60000]
-loss: 2.206394 [32000/60000]
-loss: 2.212585 [38400/60000]
-loss: 2.175308 [44800/60000]
-loss: 2.181939 [51200/60000]
-loss: 2.138306 [57600/60000]
+loss: 2.309888 [    0/60000]
+loss: 2.295121 [ 6400/60000]
+loss: 2.280686 [12800/60000]
+loss: 2.271210 [19200/60000]
+loss: 2.259902 [25600/60000]
+loss: 2.231734 [32000/60000]
+loss: 2.239176 [38400/60000]
+loss: 2.206609 [44800/60000]
+loss: 2.211201 [51200/60000]
+loss: 2.176013 [57600/60000]
 Test Error:
- Accuracy: 51.5%, Avg loss: 2.135719
+ Accuracy: 36.6%, Avg loss: 2.171962
 
 Epoch 2
 -------------------------
-loss: 2.153906 [    0/60000]
-loss: 2.134398 [ 6400/60000]
-loss: 2.077368 [12800/60000]
-loss: 2.096333 [19200/60000]
-loss: 2.036479 [25600/60000]
-loss: 1.976058 [32000/60000]
-loss: 1.998561 [38400/60000]
-loss: 1.916065 [44800/60000]
-loss: 1.932123 [51200/60000]
-loss: 1.842691 [57600/60000]
+loss: 2.184973 [    0/60000]
+loss: 2.174263 [ 6400/60000]
+loss: 2.128072 [12800/60000]
+loss: 2.130871 [19200/60000]
+loss: 2.096814 [25600/60000]
+loss: 2.035709 [32000/60000]
+loss: 2.053072 [38400/60000]
+loss: 1.985246 [44800/60000]
+loss: 1.994782 [51200/60000]
+loss: 1.903500 [57600/60000]
 Test Error:
- Accuracy: 57.3%, Avg loss: 1.847592
+ Accuracy: 55.9%, Avg loss: 1.920622
 
 Epoch 3
 -------------------------
-loss: 1.889370 [    0/60000]
-loss: 1.850633 [ 6400/60000]
-loss: 1.734769 [12800/60000]
-loss: 1.779277 [19200/60000]
-loss: 1.665908 [25600/60000]
-loss: 1.622329 [32000/60000]
-loss: 1.635031 [38400/60000]
-loss: 1.539899 [44800/60000]
-loss: 1.571238 [51200/60000]
-loss: 1.457807 [57600/60000]
+loss: 1.956147 [    0/60000]
+loss: 1.926316 [ 6400/60000]
+loss: 1.830256 [12800/60000]
+loss: 1.843623 [19200/60000]
+loss: 1.754887 [25600/60000]
+loss: 1.705938 [32000/60000]
+loss: 1.705119 [38400/60000]
+loss: 1.623518 [44800/60000]
+loss: 1.646965 [51200/60000]
+loss: 1.522858 [57600/60000]
 Test Error:
- Accuracy: 60.8%, Avg loss: 1.484727
+ Accuracy: 58.5%, Avg loss: 1.560956
 
 Epoch 4
 -------------------------
-loss: 1.557035 [    0/60000]
-loss: 1.523943 [ 6400/60000]
-loss: 1.374492 [12800/60000]
-loss: 1.447405 [19200/60000]
-loss: 1.335483 [25600/60000]
-loss: 1.332399 [32000/60000]
-loss: 1.336591 [38400/60000]
-loss: 1.263231 [44800/60000]
-loss: 1.298414 [51200/60000]
-loss: 1.201115 [57600/60000]
+loss: 1.629779 [    0/60000]
+loss: 1.591552 [ 6400/60000]
+loss: 1.466318 [12800/60000]
+loss: 1.505903 [19200/60000]
+loss: 1.403274 [25600/60000]
+loss: 1.402906 [32000/60000]
+loss: 1.391027 [38400/60000]
+loss: 1.327004 [44800/60000]
+loss: 1.359146 [51200/60000]
+loss: 1.254223 [57600/60000]
 Test Error:
- Accuracy: 63.2%, Avg loss: 1.232083
+ Accuracy: 62.0%, Avg loss: 1.288574
 
 Epoch 5
 -------------------------
-loss: 1.308482 [    0/60000]
-loss: 1.298786 [ 6400/60000]
-loss: 1.127774 [12800/60000]
-loss: 1.237278 [19200/60000]
-loss: 1.124621 [25600/60000]
-loss: 1.142707 [32000/60000]
-loss: 1.156671 [38400/60000]
-loss: 1.091129 [44800/60000]
-loss: 1.131343 [51200/60000]
-loss: 1.051001 [57600/60000]
+loss: 1.367239 [    0/60000]
+loss: 1.344848 [ 6400/60000]
+loss: 1.199537 [12800/60000]
+loss: 1.279345 [19200/60000]
+loss: 1.166658 [25600/60000]
+loss: 1.194966 [32000/60000]
+loss: 1.193302 [38400/60000]
+loss: 1.135209 [44800/60000]
+loss: 1.173753 [51200/60000]
+loss: 1.091729 [57600/60000]
 Test Error:
- Accuracy: 64.5%, Avg loss: 1.076613
+ Accuracy: 64.1%, Avg loss: 1.115064
 
-TensorDict training done! time:  8.6697 s
+TensorDict training done! time:  8.6569 s
 Epoch 1
 -------------------------
-loss: 2.310856 [    0/60000]
-loss: 2.295154 [ 6400/60000]
-loss: 2.277719 [12800/60000]
-loss: 2.261414 [19200/60000]
-loss: 2.247452 [25600/60000]
-loss: 2.222162 [32000/60000]
-loss: 2.223377 [38400/60000]
-loss: 2.202385 [44800/60000]
-loss: 2.197066 [51200/60000]
-loss: 2.151176 [57600/60000]
+loss: 2.319256 [    0/60000]
+loss: 2.300828 [ 6400/60000]
+loss: 2.273302 [12800/60000]
+loss: 2.264598 [19200/60000]
+loss: 2.246600 [25600/60000]
+loss: 2.218545 [32000/60000]
+loss: 2.228676 [38400/60000]
+loss: 2.191392 [44800/60000]
+loss: 2.187474 [51200/60000]
+loss: 2.147722 [57600/60000]
 Test Error:
- Accuracy: 45.4%, Avg loss: 2.152716
+ Accuracy: 39.4%, Avg loss: 2.152461
 
 Epoch 2
 -------------------------
-loss: 2.168890 [    0/60000]
-loss: 2.158426 [ 6400/60000]
-loss: 2.095641 [12800/60000]
-loss: 2.106893 [19200/60000]
-loss: 2.062990 [25600/60000]
-loss: 1.997146 [32000/60000]
-loss: 2.027863 [38400/60000]
-loss: 1.951842 [44800/60000]
-loss: 1.953090 [51200/60000]
-loss: 1.877915 [57600/60000]
+loss: 2.167552 [    0/60000]
+loss: 2.161367 [ 6400/60000]
+loss: 2.093919 [12800/60000]
+loss: 2.111467 [19200/60000]
+loss: 2.065855 [25600/60000]
+loss: 1.999444 [32000/60000]
+loss: 2.031877 [38400/60000]
+loss: 1.943139 [44800/60000]
+loss: 1.948649 [51200/60000]
+loss: 1.876375 [57600/60000]
 Test Error:
- Accuracy: 58.1%, Avg loss: 1.877860
+ Accuracy: 55.2%, Avg loss: 1.882336
 
 Epoch 3
 -------------------------
-loss: 1.910066 [    0/60000]
-loss: 1.884515 [ 6400/60000]
-loss: 1.758999 [12800/60000]
-loss: 1.802559 [19200/60000]
-loss: 1.699551 [25600/60000]
-loss: 1.643356 [32000/60000]
-loss: 1.668816 [38400/60000]
-loss: 1.572734 [44800/60000]
-loss: 1.592688 [51200/60000]
-loss: 1.494200 [57600/60000]
+loss: 1.915303 [    0/60000]
+loss: 1.894418 [ 6400/60000]
+loss: 1.764845 [12800/60000]
+loss: 1.809904 [19200/60000]
+loss: 1.706668 [25600/60000]
+loss: 1.653618 [32000/60000]
+loss: 1.677387 [38400/60000]
+loss: 1.567994 [44800/60000]
+loss: 1.598126 [51200/60000]
+loss: 1.495569 [57600/60000]
 Test Error:
- Accuracy: 60.7%, Avg loss: 1.512321
+ Accuracy: 60.2%, Avg loss: 1.518754
 
 Epoch 4
 -------------------------
-loss: 1.572525 [    0/60000]
-loss: 1.544828 [ 6400/60000]
-loss: 1.394224 [12800/60000]
-loss: 1.473343 [19200/60000]
-loss: 1.357858 [25600/60000]
-loss: 1.346688 [32000/60000]
-loss: 1.362244 [38400/60000]
-loss: 1.291647 [44800/60000]
-loss: 1.321316 [51200/60000]
-loss: 1.229401 [57600/60000]
+loss: 1.585963 [    0/60000]
+loss: 1.560733 [ 6400/60000]
+loss: 1.400808 [12800/60000]
+loss: 1.473205 [19200/60000]
+loss: 1.359597 [25600/60000]
+loss: 1.354113 [32000/60000]
+loss: 1.368542 [38400/60000]
+loss: 1.283031 [44800/60000]
+loss: 1.324119 [51200/60000]
+loss: 1.228730 [57600/60000]
 Test Error:
- Accuracy: 63.6%, Avg loss: 1.255025
+ Accuracy: 63.0%, Avg loss: 1.257389
 
 Epoch 5
 -------------------------
-loss: 1.324568 [    0/60000]
-loss: 1.310126 [ 6400/60000]
-loss: 1.147593 [12800/60000]
-loss: 1.260691 [19200/60000]
-loss: 1.136030 [25600/60000]
-loss: 1.153815 [32000/60000]
-loss: 1.176650 [38400/60000]
-loss: 1.116713 [44800/60000]
-loss: 1.151763 [51200/60000]
-loss: 1.074122 [57600/60000]
+loss: 1.335658 [    0/60000]
+loss: 1.323170 [ 6400/60000]
+loss: 1.151214 [12800/60000]
+loss: 1.254571 [19200/60000]
+loss: 1.131282 [25600/60000]
+loss: 1.157894 [32000/60000]
+loss: 1.179484 [38400/60000]
+loss: 1.106296 [44800/60000]
+loss: 1.151046 [51200/60000]
+loss: 1.071718 [57600/60000]
 Test Error:
- Accuracy: 64.9%, Avg loss: 1.093806
+ Accuracy: 64.5%, Avg loss: 1.093438
 
-Training done! time:  34.6885 s
+Training done! time:  33.7727 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 55.726 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 54.931 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-data-fashion-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">data_fashion.ipynb</span></code></a></p>

@@ -364,20 +364,20 @@ indexing, reshaping, item assignment. It also supports tensor operations like
 however all the tensor operations are strictly restricted to tensor attributes.</p>
 <p>One needs to implement their custom methods for non-tensor data.
 It is important to note that <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> does not enforce strict type matching</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.prototype</span> <span class="kn">import</span> <span class="n">tensorclass</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.prototype</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
-<span class="gp">... </span><span class="k">class</span> <span class="nc">MyData</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyData</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">floatdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">intdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">non_tensordata</span><span class="p">:</span> <span class="nb">str</span>
 <span class="gp">... </span>    <span class="n">nested</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyData</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="gp">...</span>
-<span class="gp">... </span>    <span class="k">def</span> <span class="nf">check_nested</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">check_nested</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">nested</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">MyData</span><span class="p">(</span>
@@ -581,7 +581,7 @@ and while resetting, based on the type of the value of the attribute,
 it will be saved as either tensor data or non-tensor / meta  data</p>
 <p>Here is an example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
-<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
 <span class="gp">... </span>  <span class="n">X</span><span class="p">:</span> <span class="n">Any</span>
 <span class="gp">... </span>  <span class="n">y</span><span class="p">:</span> <span class="n">Any</span>
 
@@ -599,7 +599,7 @@ it will be saved as either tensor data or non-tensor / meta  data</p>
 </div>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a>([cls, autocast, frozen, nocast])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a>([cls, autocast, frozen, nocast, ...])</p></td>
 <td><p>A decorator to create <a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> classes.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorClass</span></code></a>()</p></td>
@@ -631,7 +631,7 @@ instance (except in cases detailed below). For instance, following code will
 cast the <cite>td</cite> dictionary to a <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and the <cite>tc</cite>
 entry to a <code class="xref py py-class docutils literal notranslate"><span class="pre">MyClass</span></code> instance:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
-<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span>
 <span class="gp">... </span>    <span class="n">tc</span><span class="p">:</span> <span class="n">MyClass</span>
@@ -651,7 +651,7 @@ entry to a <code class="xref py py-class docutils literal notranslate"><span cla
 <code class="docutils literal notranslate"><span class="pre">typing.Union</span></code> will not be compatible with auto-casting, but other items
 in the tensorclass will:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
-<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">tc_autocast</span><span class="p">:</span> <span class="n">MyClass</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="gp">... </span>    <span class="n">tc_not_autocast</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyClass</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
@@ -672,7 +672,7 @@ Because <code class="docutils literal notranslate"><span class="pre">tensorclass
 these cases will lead to setting it as a plain dictionary instead of a
 tensor collection subclass (<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> or <code class="docutils literal notranslate"><span class="pre">tensorclass</span></code>):</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
-<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">... </span>    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span>
 <span class="gp">... </span>    <span class="n">tc</span><span class="p">:</span> <span class="n">MyClass</span> <span class="o">|</span> <span class="kc">None</span>

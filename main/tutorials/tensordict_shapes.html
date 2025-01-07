@@ -365,8 +365,8 @@ with the leading dimensions of all entries in the <a class="reference internal" 
 a guarantee that all entries share those dimensions in common, <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 is able to expose a number of methods with which we can manipulate the shape of the
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and its contents.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict.tensordict</span> <span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensordict</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
 </pre></div>
 </div>
 <section id="indexing-a-tensordict">
@@ -462,7 +462,7 @@ the stack operation can be expensive, and if only a small subset of keys is requ
 a lazy stack will be much faster than a proper stack.
 It relies on the <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> class.
 In this case, values will only be stacked on-demand when they are accessed.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">LazyStackedTensorDict</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">LazyStackedTensorDict</span></a>
 
 <span class="n">cloned_tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 <span class="n">stacked_tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">LazyStackedTensorDict</span></a><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
@@ -475,7 +475,7 @@ In this case, values will only be stacked on-demand when they are accessed.</p>
 <span class="c1"># dense tensordicts. To control which behaviour you are relying on, you can use</span>
 <span class="c1"># the :func:`~tensordict.utils.set_lazy_legacy` decorator/context manager:</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">set_lazy_legacy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_lazy_legacy</span>
 
 <span class="k">with</span> <span class="n">set_lazy_legacy</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># old behaviour</span>
     <span class="n">lazy_stack</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="torch.stack" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">stack</span></a><span class="p">([</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cloned_tensordict</span><span class="p">])</span>
@@ -672,19 +672,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[0, 2, 2, 1],
-        [2, 1, 0, 2],
-        [0, 0, 1, 1]])
+ tensor([[2, 1, 1, 2],
+        [0, 0, 2, 1],
+        [0, 0, 1, 2]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.7740, 0.6243, 0.0087, 0.2286],
-        [0.3745, 0.3275, 0.5390, 0.8298],
-        [0.0101, 0.0386, 0.1024, 0.6369]])
+ tensor([[0.2740, 0.4227, 0.7966, 0.5556],
+        [0.1520, 0.1511, 0.6615, 0.6814],
+        [0.4827, 0.1557, 0.7728, 0.7602]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.7740, 0.0087, 0.0087, 0.6243],
-        [0.5390, 0.3275, 0.3745, 0.5390],
-        [0.0101, 0.0101, 0.0386, 0.0386]])
+ tensor([[0.7966, 0.4227, 0.4227, 0.7966],
+        [0.1520, 0.1520, 0.6615, 0.1511],
+        [0.4827, 0.4827, 0.1557, 0.7728]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

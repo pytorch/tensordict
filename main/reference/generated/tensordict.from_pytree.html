@@ -377,7 +377,7 @@ recover the original types.</p>
 </div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a pytree with tensor leaves, and one &quot;weird&quot;-looking dict key</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">WeirdLookingClass</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">WeirdLookingClass</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="k">pass</span>
 <span class="gp">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">weird_key</span> <span class="o">=</span> <span class="n">WeirdLookingClass</span><span class="p">()</span>
@@ -399,7 +399,7 @@ recover the original types.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Recover the pytree</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">pytree_recon</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_pytree</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Check that the leaves match</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">):</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">v1</span> <span class="o">==</span> <span class="n">v2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span><span class="n">check</span><span class="p">,</span> <span class="n">pytree</span><span class="p">,</span> <span class="n">pytree_recon</span><span class="p">)</span>
