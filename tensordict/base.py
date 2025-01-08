@@ -217,7 +217,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1):
                 if other is None:
                     continue
                 if (isinstance(other, torch.Tensor) and other.ndim) or (
-                    is_tensor_collection(other)
+                    _is_tensor_collection(type(other))
                     and other.ndim
                     and other.shape != self.shape
                 ):
@@ -228,9 +228,8 @@ def _maybe_broadcast_other(op: str, n_other: int = 1):
             others_map = []
             shape = self.shape
             self_expand = self
-            shape = torch.broadcast_shapes(
-                shape, *[other.shape for other in others if other is not None]
-            )
+            shapes = [shape, *[other.shape for other in others if other is not None]]
+            shape = torch.broadcast_shapes(*shapes)
             if shape != self_expand.shape:
                 self_expand = self_expand.expand(shape)
             for other in others:

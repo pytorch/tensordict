@@ -7184,7 +7184,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_unflatten = td_flatten.unflatten_keys(
                 inplace=inplace, separator=separator
             )
-        assert (td == td_unflatten).all()
+        assert (td == td.empty(recurse=True).update(td_unflatten)).all()
         if inplace:
             assert td is td_unflatten
 
