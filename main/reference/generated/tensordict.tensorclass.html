@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>TensorClass &mdash; tensordict main documentation</title>
+  <title>tensorclass &mdash; tensordict main documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="NonTensorData" href="tensordict.NonTensorData.html" />
-    <link rel="prev" title="tensorclass" href="tensordict.tensorclass.html" />
+    <link rel="next" title="TensorClass" href="tensordict.TensorClass.html" />
+    <link rel="prev" title="tensorclass" href="../tensorclass.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -322,13 +322,13 @@
         
           <li><a href="../tensorclass.html">tensorclass</a> &gt;</li>
         
-      <li>TensorClass</li>
+      <li>tensorclass</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/tensordict.TensorClass.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.tensorclass.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -355,66 +355,108 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="tensorclass">
-<h1>TensorClass<a class="headerlink" href="#tensorclass" title="Permalink to this heading">¶</a></h1>
+<h1>tensorclass<a class="headerlink" href="#tensorclass" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="tensordict.TensorClass">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">TensorClass</span></span><a class="headerlink" href="#tensordict.TensorClass" title="Permalink to this definition">¶</a></dt>
-<dd><p>TensorClass is the inheritance-based version of the &#64;tensorclass decorator.</p>
-<p>TensorClass allows you to code dataclasses that are better type-checked and more pythonic than those built with
-the &#64;tensorclass decorator.</p>
+<dt class="sig sig-object py" id="tensordict.tensorclass">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">tensorclass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">autocast</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frozen</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nocast</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shadow</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.tensorclass" title="Permalink to this definition">¶</a></dt>
+<dd><p>A decorator to create <a class="reference internal" href="#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> classes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">tensorclass</span></code> classes are specialized <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass" title="(in Python v3.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.dataclass()</span></code></a> instances that
+can execute some pre-defined tensor operations out of the box, such as
+indexing, item assignment, reshaping, casting to device or storage and many
+others.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>autocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the types indicated will be enforced when an argument is set.
+Thie argument is exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> (both cannot be true at the same time). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>frozen</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensorclass cannot be modified. This argument is
+provided to dataclass-compatibility, a similar behavior can be obtained through the <cite>lock</cite> argument in
+the class constructor. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>nocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, Tensor-compatible types such as <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code> and the like
+will not be cast to a tensor type. Thie argument is exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> (both cannot be true
+at the same time). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved attributes.
+Use with caution, as this may cause unintended consequences. Defaults to False.</p></li>
+</ul>
+</dd>
+</dl>
+<p>tensorclass can be used with or without arguments:</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-<span class="gp">... </span>    <span class="n">non_tensor</span><span class="p">:</span> <span class="n">Any</span>
-<span class="gp">... </span>    <span class="n">nested</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">foo</span> <span class="o">=</span> <span class="n">Foo</span><span class="p">(</span><span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">non_tensor</span><span class="o">=</span><span class="s2">&quot;a string!&quot;</span><span class="p">,</span> <span class="n">nested</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">foo</span><span class="p">)</span>
-<span class="go">Foo(</span>
-<span class="go">    non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),</span>
-<span class="go">    tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">    nested=None,</span>
-<span class="go">    batch_size=torch.Size([3]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
-<p>You can pass keyword arguments in two ways: using brackets or keyword arguments.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">integer</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">y</span>
+<span class="go">tensor(1.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">autocast</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">y</span>
+<span class="go">tensor(1.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">y</span>
 <span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># equivalent</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">integer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">nocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">Any</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">y</span>
 <span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>  <span class="c1"># multiple keywords can be used</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">nocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># equivalent</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">nocast</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">Any</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">X</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">y</span>
 <span class="go">tensor(1)</span>
 </pre></div>
 </div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>TensorClass itself is not decorated as a tensorclass, but subclasses will be.
-This is because we cannot anticipate if the frozen argument will be set, and if it is, it may
-conflict with the parent class (a subclass cannot be frozen if the parent class isn’t).</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyData</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">X</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">z</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">expand_and_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">]</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">X</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">MyData</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">X</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">z</span><span class="o">=</span><span class="s2">&quot;test&quot;</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="go">MyData(</span>
+<span class="go">    X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),</span>
+<span class="go">    y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),</span>
+<span class="go">    z=&quot;test&quot;</span>
+<span class="go">    batch_size=[3, 4],</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">expand_and_mask</span><span class="p">())</span>
+<span class="go">tensor([])</span>
+</pre></div>
 </div>
+<dl class="simple">
+<dt>It is also possible to nest tensorclasses instances within each other:</dt><dd><p>Examples:
+&gt;&gt;&gt; from tensordict import tensorclass
+&gt;&gt;&gt; import torch
+&gt;&gt;&gt; from typing import Optional
+&gt;&gt;&gt;
+&gt;&gt;&gt; &#64;tensorclass
+… class NestingMyData:
+…     nested: MyData
+…
+&gt;&gt;&gt; nesting_data = NestingMyData(nested=data, batch_size=[3, 4])
+&gt;&gt;&gt; # although the data is stored as a TensorDict, the type hint helps us
+&gt;&gt;&gt; # to appropriately cast the data to the right type
+&gt;&gt;&gt; assert isinstance(nesting_data.nested, type(data))</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -427,10 +469,10 @@ conflict with the parent class (a subclass cannot be frozen if the parent class 
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.NonTensorData.html" class="btn btn-neutral float-right" title="NonTensorData" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.TensorClass.html" class="btn btn-neutral float-right" title="TensorClass" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.tensorclass.html" class="btn btn-neutral" title="tensorclass" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../tensorclass.html" class="btn btn-neutral" title="tensorclass" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -462,7 +504,7 @@ conflict with the parent class (a subclass cannot be frozen if the parent class 
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">TensorClass</a></li>
+<li><a class="reference internal" href="#">tensorclass</a></li>
 </ul>
 
             </div>

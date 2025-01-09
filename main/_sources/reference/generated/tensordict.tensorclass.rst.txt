@@ -1,9 +1,9 @@
 ﻿.. currentmodule:: tensordict
 
 
-TensorClass
+tensorclass
 ===========
 
-.. autoclass:: TensorClass
+.. autoclass:: tensorclass
     :members:
     :inherited-members:
