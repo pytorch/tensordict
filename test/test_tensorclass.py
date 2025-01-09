@@ -99,7 +99,7 @@ def _get_methods_from_class(cls):
     methods = set()
     for name in dir(cls):
         attr = getattr(cls, name)
-        if inspect.isfunction(attr) or inspect.ismethod(attr):
+        if inspect.isfunction(attr) or inspect.ismethod(attr) or isinstance(attr, property):
             methods.add(name)
 
     return methods
@@ -122,6 +122,34 @@ def test_tensorclass_stub_methods():
 
     if missing_methods:
         raise Exception(f"Missing methods in tensorclass.pyi: {missing_methods}")
+        raise Exception(
+            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
+        )
+
+
+def test_tensorclass_instance_methods():
+    @tensorclass
+    class X:
+        x: torch.Tensor
+
+    tensorclass_pyi_path = (
+        pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
+    )
+    tensorclass_abstract_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
+
+    tensorclass_methods = _get_methods_from_class(X)
+
+    missing_methods = tensorclass_abstract_methods - tensorclass_methods - {"data", "grad"}
+    missing_methods = [
+        method for method in missing_methods if (not method.startswith("_"))
+    ]
+
+    if missing_methods:
+        raise Exception(
+            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
+        )
+
+
 
 
 def _make_data(shape):
@@ -188,6 +216,12 @@ class TestTensorClass:
             MyClass1(torch.zeros(3, 1), "z", batch_size=[3, 1]),
             batch_size=[3, 1],
         )
+        assert x.shape == x.batch_size
+        assert x.batch_size == (3, 1)
+        assert x.ndim == 2
+        assert x.batch_dims == 2
+        assert x.numel() == 3
+
         assert not x.all()
         assert not x.any()
         assert isinstance(x.all(), bool)
