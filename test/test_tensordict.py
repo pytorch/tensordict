@@ -1920,6 +1920,13 @@ class TestGeneric:
         assert (d["a"] == torch.tensor([[1, 1], [2, 0]])).all()
         assert d["b"] == ["asd", "efg"]
 
+    def test_pad_sequence_single_nontensor(self):
+        d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
+        d = pad_sequence([d1])
+        assert (d["a"] == torch.tensor([[1, 1]])).all()
+        assert d["b"] == ["asd"]
+        assert isinstance(d.get("b"), NonTensorStack)
+
     def test_pad_sequence_tensorclass_nontensor(self):
         @tensorclass
         class Sample:
