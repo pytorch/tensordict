@@ -7938,7 +7938,7 @@ class TensorDictBase(MutableMapping):
         async_op=False,
         return_premature=False,
         group=None,
-    ):
+    ) -> None:
         """Reduces the tensordict across all machines.
 
         Only the process with ``rank`` dst is going to receive the final result.
@@ -9028,7 +9028,7 @@ class TensorDictBase(MutableMapping):
             return out
 
     # Stream
-    def record_stream(self, stream: torch.cuda.Stream):
+    def record_stream(self, stream: torch.cuda.Stream) -> T:
         """Marks the tensordict as having been used by this stream.
 
         When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
@@ -11345,7 +11345,7 @@ class TensorDictBase(MutableMapping):
         """
         return self.clone(recurse=False)
 
-    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None):
+    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None) -> T:
         """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
 
         Args:
@@ -12430,7 +12430,7 @@ class TensorDictBase(MutableMapping):
         default: Any = NO_DEFAULT,
         strict: bool = True,
         reproduce_struct: bool = False,
-    ):
+    ) -> Tuple[T, ...]:
         """Splits the tensordict in subsets given one or more set of keys.
 
         The method will return ``N+1`` tensordicts, where ``N`` is the number of
