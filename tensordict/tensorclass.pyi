@@ -526,7 +526,15 @@ class TensorClass:
         return_early: bool = False,
         share_non_tensor: bool = False,
     ) -> T: ...
-    dumps = save
+    def dumps(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+    ) -> T: ...
     def memmap(
         self,
         prefix: str | None = None,
@@ -892,6 +900,14 @@ class TensorClass:
         *,
         default: str | CompatibleType | None = None,
     ) -> T: ...
+    def clamp(
+        self,
+        min: TensorDictBase | torch.Tensor = None,
+        max: TensorDictBase | torch.Tensor = None,
+        *,
+        out=None,
+    ): ...
+    def logsumexp(self, dim=None, keepdim=False, *, out=None): ...
     def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T: ...
     def clamp_max(
         self,
@@ -944,6 +960,27 @@ class TensorClass:
     def to_namedtuple(self, dest_cls: type | None = None): ...
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False): ...
+    def from_tuple(
+        cls,
+        obj,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+    ): ...
+    def logical_and(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        *,
+        default: str | CompatibleType | None = None,
+    ) -> TensorDictBase: ...
+    def bitwise_and(
+        self,
+        other: TensorDictBase | torch.Tensor,
+        *,
+        default: str | CompatibleType | None = None,
+    ) -> TensorDictBase: ...
     @classmethod
     def from_struct_array(
         cls, struct_array: np.ndarray, device: torch.device | None = None
@@ -987,6 +1024,20 @@ class TensorClass:
         strict: bool = True,
         reproduce_struct: bool = False,
     ): ...
+    def separates(
+        self,
+        *keys: NestedKey,
+        default: Any = NO_DEFAULT,
+        strict: bool = True,
+        filter_empty: bool = True,
+    ) -> T: ...
+    def norm(
+        self,
+        *,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ): ...
+    def softmax(self, dim: int, dtype: torch.dtype | None = None): ...
     @property
     def is_locked(self) -> bool: ...
     @is_locked.setter
