@@ -416,12 +416,12 @@ that want to unbind or split nested structures, rather than computing a nested s
 <section id="features">
 <h2>Features<a class="headerlink" href="#features" title="Permalink to this heading">¶</a></h2>
 <p>A <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> is a dict-like container for tensors. To instantiate a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>,
-you must specify key-value pairs as well as the batch size. The leading dimensions of any values in the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> must be compatible with the batch size.</p>
+you can specify key-value pairs
+as well as the batch size (an empty tensordict can be created via <cite>TensorDict()</cite>).
+The leading dimensions of any values in the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> must be compatible with the batch size.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;zeros&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">&quot;ones&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
@@ -444,12 +444,34 @@ For example, to place all of the contents onto a particular device one can simpl
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>You can then assert that the device of the tensordict is <cite>“cuda:0”</cite>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
 <p>To reshape the batch dimensions one can do</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The class supports many other operations, including squeeze, unsqueeze, view, permute, unbind, stack, cat and many more.
-If an operation is not present, the TensorDict.apply method will usually provide the solution that was needed.</p>
+<p>The class supports many other operations, including <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.squeeze.html#torch.squeeze" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">squeeze()</span></code></a>, <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.unsqueeze.html#torch.unsqueeze" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.view" title="tensordict.TensorDict.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>, <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.permute.html#torch.permute" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">permute()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.unbind" title="tensordict.TensorDict.unbind"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unbind()</span></code></a>,
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a> and many more.</p>
+<p>If an operation is not present, the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> method will usually provide the solution
+that was needed.</p>
+<section id="escaping-shape-operations">
+<h3>Escaping shape operations<a class="headerlink" href="#escaping-shape-operations" title="Permalink to this heading">¶</a></h3>
+<p>In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
+shape operations.</p>
+<p>This can be achieved by wrapping the tensor in an <code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> instance.</p>
+<p>An <code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> ignores its shape during shape operations on the TensorDict, allowing for
+flexible storage and manipulation of tensors with arbitrary shapes.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnbatchedTensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;zeros&quot;</span><span class="p">:</span> <span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">))},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped_td</span><span class="p">[</span><span class="s2">&quot;zeros&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;zeros&quot;</span><span class="p">]</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</section>
 </section>
 <section id="non-tensor-data">
 <h2>Non-tensor data<a class="headerlink" href="#non-tensor-data" title="Permalink to this heading">¶</a></h2>
@@ -808,7 +830,10 @@ capabilities.</p>
               <ul>
 <li><a class="reference internal" href="#">Overview</a><ul>
 <li><a class="reference internal" href="#motivation">Motivation</a></li>
-<li><a class="reference internal" href="#features">Features</a></li>
+<li><a class="reference internal" href="#features">Features</a><ul>
+<li><a class="reference internal" href="#escaping-shape-operations">Escaping shape operations</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#non-tensor-data">Non-tensor data</a><ul>
 <li><a class="reference internal" href="#creating-a-tensordict-with-non-tensor-data">Creating a TensorDict with Non-Tensor Data</a></li>
 <li><a class="reference internal" href="#accessing-non-tensor-data">Accessing Non-Tensor Data</a></li>
