@@ -66,6 +66,8 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _parse_to,
+    _pass_through,
+    _pass_through_cls,
     _pin_mem,
     _PIN_MEM_TIMEOUT,
     _prefix_last_key,
@@ -6450,7 +6452,7 @@ class TensorDictBase(MutableMapping):
 
     def _get_tuple_maybe_non_tensor(self, key, default):
         result = self._get_tuple(key, default)
-        if is_non_tensor(result):
+        if _pass_through(result):
             # Only lazy stacks of non tensors are actually tensordict instances
             if isinstance(result, TensorDictBase):
                 return result.tolist()
@@ -7371,7 +7373,11 @@ class TensorDictBase(MutableMapping):
         else:
             names = None
         out = self._fast_apply(
-            flatten, batch_size=batch_size, propagate_lock=True, names=names
+            flatten,
+            batch_size=batch_size,
+            propagate_lock=True,
+            names=names,
+            call_on_nested=True,
         )
         return out
 
@@ -7417,7 +7423,9 @@ class TensorDictBase(MutableMapping):
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(unflatten, batch_size=batch_size, propagate_lock=True)
+        out = self._fast_apply(
+            unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
+        )
         if self._has_names():
             names = copy(self.names)
             for _ in range(len(unflattened_size) - 1):
@@ -13317,7 +13325,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return _is_non_tensor(cls)
+        return _pass_through_cls(cls)
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)

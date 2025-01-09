@@ -23,10 +23,10 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
+    _pass_through,
     _shape,
     _zip_strict,
     DeviceType,
-    is_non_tensor,
     is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
@@ -454,10 +454,10 @@ def _stack(
     if maybe_dense_stack is None:
         maybe_dense_stack = lazy_legacy()
     is_tc = any(is_tensorclass(td) for td in list_of_tensordicts)
-    if all(is_non_tensor(td) for td in list_of_tensordicts):
-        from tensordict.tensorclass import NonTensorData
-
-        return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
+    if all(_pass_through(td) for td in list_of_tensordicts):
+        return type(list_of_tensordicts[0])._stack_non_tensor(
+            list_of_tensordicts, dim=dim
+        )
     if is_tc:
         tc_type = type(list_of_tensordicts[0])
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]

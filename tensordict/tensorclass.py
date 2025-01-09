@@ -3427,6 +3427,8 @@ class NonTensorStack(LazyStackedTensorDict):
     def is_empty(self) -> bool:
         return False
 
+    _stack_non_tensor = NonTensorData._stack_non_tensor
+
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data

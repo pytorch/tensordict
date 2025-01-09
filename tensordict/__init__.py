@@ -23,6 +23,7 @@ from tensordict._td import (
     stack,
     TensorDict,
 )
+from tensordict._unbatched import UnbatchedTensor
 
 from tensordict.base import (
     from_any,
