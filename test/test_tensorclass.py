@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import dataclasses
 import inspect
 import os
+import pathlib
 import pickle
 import re
 import sys
@@ -59,6 +61,126 @@ pytestmark = [
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
 ]
+
+
+def _get_methods_from_pyi(file_path):
+    """
+    Reads a .pyi file and returns a set of method names.
+
+    Args:
+        file_path (str): Path to the .pyi file.
+
+    Returns:
+        set: A set of method names.
+    """
+    with open(file_path, "r") as f:
+        tree = ast.parse(f.read())
+
+    methods = set()
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for child_node in node.body:
+                if isinstance(child_node, ast.FunctionDef):
+                    methods.add(child_node.name)
+
+    return methods
+
+
+def _get_methods_from_class(cls):
+    """
+    Returns a set of method names from a given class.
+
+    Args:
+        cls (class): The class to get methods from.
+
+    Returns:
+        set: A set of method names.
+    """
+    methods = set()
+    for name in dir(cls):
+        attr = getattr(cls, name)
+        if (
+            inspect.isfunction(attr)
+            or inspect.ismethod(attr)
+            or isinstance(attr, property)
+        ):
+            methods.add(name)
+
+    return methods
+
+
+def test_tensorclass_stub_methods():
+    tensorclass_pyi_path = (
+        pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
+    )
+    tensorclass_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
+
+    from tensordict import TensorDict
+
+    tensordict_methods = _get_methods_from_class(TensorDict)
+
+    missing_methods = tensordict_methods - tensorclass_methods
+    missing_methods = [
+        method for method in missing_methods if (not method.startswith("_"))
+    ]
+
+    if missing_methods:
+        raise Exception(
+            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
+        )
+
+
+def test_tensorclass_instance_methods():
+    @tensorclass
+    class X:
+        x: torch.Tensor
+
+    tensorclass_pyi_path = (
+        pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
+    )
+    tensorclass_abstract_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
+
+    tensorclass_methods = _get_methods_from_class(X)
+
+    missing_methods = (
+        tensorclass_abstract_methods - tensorclass_methods - {"data", "grad"}
+    )
+    missing_methods = [
+        method for method in missing_methods if (not method.startswith("_"))
+    ]
+
+    if missing_methods:
+        raise Exception(
+            f"Missing methods in tensorclass.pyi: {sorted(missing_methods)}"
+        )
+
+
+def test_sorted_methods():
+    from tensordict.tensorclass import (
+        _FALLBACK_METHOD_FROM_TD,
+        _FALLBACK_METHOD_FROM_TD_FORCE,
+        _FALLBACK_METHOD_FROM_TD_NOWRAP,
+        _METHOD_FROM_TD,
+    )
+
+    lists_to_check = [
+        _FALLBACK_METHOD_FROM_TD_NOWRAP,
+        _METHOD_FROM_TD,
+        _FALLBACK_METHOD_FROM_TD_FORCE,
+        _FALLBACK_METHOD_FROM_TD,
+    ]
+    # Check that each list is sorted and has unique elements
+    for lst in lists_to_check:
+        assert lst == sorted(lst), f"List {lst} is not sorted"
+        assert len(lst) == len(set(lst)), f"List {lst} has duplicate elements"
+    # Check that no two lists share any elements
+    for i, lst1 in enumerate(lists_to_check):
+        for j, lst2 in enumerate(lists_to_check):
+            if i != j:
+                shared_elements = set(lst1) & set(lst2)
+                assert (
+                    not shared_elements
+                ), f"Lists {lst1} and {lst2} share elements: {shared_elements}"
 
 
 def _make_data(shape):
@@ -125,6 +247,12 @@ class TestTensorClass:
             MyClass1(torch.zeros(3, 1), "z", batch_size=[3, 1]),
             batch_size=[3, 1],
         )
+        assert x.shape == x.batch_size
+        assert x.batch_size == (3, 1)
+        assert x.ndim == 2
+        assert x.batch_dims == 2
+        assert x.numel() == 3
+
         assert not x.all()
         assert not x.any()
         assert isinstance(x.all(), bool)

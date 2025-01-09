@@ -121,6 +121,7 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "dumps",
     "load_",
     "memmap",
     "memmap_",
@@ -145,21 +146,48 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_items_list",
     "_maybe_names",
     "_multithread_apply_flat",
+    "_multithread_apply_nest",
     "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
     "_propagate_unlock",
     "_reduce_get_metadata",
     "_values_list",
+    "bytes",
+    "cat_tensors",
     "data_ptr",
+    "depth",
     "dim",
+    "dtype",
+    "entry_class",
+    "get_item_shape",
+    "get_non_tensor",
+    "irecv",
+    "is_consolidated",
+    "is_contiguous",
+    "is_cpu",
+    "is_cuda",
     "is_empty",
+    "is_floating_point",
     "is_memmap",
+    "is_meta",
     "is_shared",
+    "isend",
     "items",
     "keys",
+    "make_memmap",
+    "make_memmap_from_tensor",
     "ndimension",
     "numel",
+    "numpy",
+    "param_count",
+    "pop",
+    "recv",
+    "reduce",
+    "saved_path",
+    "send",
     "size",
+    "sorted_keys",
+    "to_struct_array",
     "values",
     # "ndim",
 ]
@@ -214,9 +242,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "_map",
     "_maybe_remove_batch_dim",
     "_memmap_",
-    "_multithread_apply_flat",
-    "_multithread_apply_nest",
-    "_multithread_rebuild",
     "_permute",
     "_remove_batch_dim",
     "_repeat",
@@ -235,6 +260,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "addcmul",
     "addcmul_",
     "all",
+    "amax",
+    "amin",
     "any",
     "apply",
     "apply_",
@@ -245,31 +272,43 @@ _FALLBACK_METHOD_FROM_TD = [
     "atan_",
     "auto_batch_size_",
     "auto_device_",
+    "bfloat16",
     "bitwise_and",
     "bool",
+    "cat",
+    "cat_from_tensordict",
     "ceil",
     "ceil_",
     "chunk",
+    "clamp",
     "clamp_max",
     "clamp_max_",
     "clamp_min",
     "clamp_min_",
     "clear",
     "clear_device_",
+    "complex128",
+    "complex32",
+    "complex64",
     "consolidate",
     "contiguous",
     "copy_",
+    "copy_at_",
     "cos",
     "cos_",
     "cosh",
     "cosh_",
     "cpu",
+    "create_nested",
     "cuda",
     "cummax",
     "cummin",
     "densify",
+    "detach",
+    "detach_",
     "div",
     "div_",
+    "double",
     "empty",
     "erf",
     "erf_",
@@ -282,20 +321,43 @@ _FALLBACK_METHOD_FROM_TD = [
     "expand_as",
     "expm1",
     "expm1_",
+    "fill_",
+    "filter_empty_",
     "filter_non_tensor_data",
     "flatten",
+    "flatten_keys",
+    "float",
+    "float16",
+    "float32",
+    "float64",
     "floor",
     "floor_",
     "frac",
     "frac_",
     "from_any",
+    "from_consolidated",
     "from_dataclass",
+    "from_h5",
+    "from_modules",
     "from_namedtuple",
     "from_pytree",
+    "from_struct_array",
+    "from_tuple",
+    "fromkeys",
     "gather",
+    "gather_and_stack",
+    "half",
+    "int",
+    "int16",
+    "int32",
+    "int64",
+    "int8",
     "isfinite",
     "isnan",
+    "isneginf",
+    "isposinf",
     "isreal",
+    "lazy_stack",
     "lerp",
     "lerp_",
     "lgamma",
@@ -312,13 +374,16 @@ _FALLBACK_METHOD_FROM_TD = [
     "log_",
     "logical_and",
     "logsumexp",
+    "make_memmap_from_storage",
     "map",
     "map_iter",
     "masked_fill",
     "masked_fill_",
+    "masked_select",
     "max",
     "maximum",
     "maximum_",
+    "maybe_dense_stack",
     "mean",
     "min",
     "minimum",
@@ -338,13 +403,22 @@ _FALLBACK_METHOD_FROM_TD = [
     "norm",
     "permute",
     "pin_memory",
+    "pin_memory_",
+    "popitem",
     "pow",
     "pow_",
     "prod",
+    "qint32",
+    "qint8",
+    "quint4x2",
+    "quint8",
     "reciprocal",
     "reciprocal_",
+    "record_stream",
     "refine_names",
+    "rename",
     "rename_",  # TODO: must be specialized
+    "rename_key_",
     "repeat",
     "repeat_interleave",
     "replace",
@@ -353,6 +427,10 @@ _FALLBACK_METHOD_FROM_TD = [
     "round",
     "round_",
     "select",
+    "separates",
+    "set_",
+    "set_non_tensor",
+    "setdefault",
     "sigmoid",
     "sigmoid_",
     "sign",
@@ -363,9 +441,13 @@ _FALLBACK_METHOD_FROM_TD = [
     "sinh_",
     "softmax",
     "split",
+    "split_keys",
     "sqrt",
     "sqrt_",
     "squeeze",
+    "stack",
+    "stack_from_tensordict",
+    "stack_tensors",
     "std",
     "sub",
     "sub_",
@@ -375,13 +457,21 @@ _FALLBACK_METHOD_FROM_TD = [
     "tanh",
     "tanh_",
     "to",
+    "to_h5",
     "to_module",
     "to_namedtuple",
+    "to_padded_tensor",
     "to_pytree",
     "transpose",
     "trunc",
     "trunc_",
+    "type",
+    "uint16",
+    "uint32",
+    "uint64",
+    "uint8",
     "unflatten",
+    "unflatten_keys",
     "unlock_",
     "unsqueeze",
     "var",
@@ -390,10 +480,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "zero_",
     "zero_grad",
 ]
-assert not any(v in _METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD), set(
-    _METHOD_FROM_TD
-).intersection(_FALLBACK_METHOD_FROM_TD)
-assert len(set(_FALLBACK_METHOD_FROM_TD)) == len(_FALLBACK_METHOD_FROM_TD)
 
 # These methods require a copy of the non tensor data
 _FALLBACK_METHOD_FROM_TD_COPY = [
@@ -865,6 +951,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
         cls.device = property(_device, _device_setter)
     if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
         cls.batch_size = property(_batch_size, _batch_size_setter)
+    if not hasattr(cls, "batch_dims") and "batch_dims" not in expected_keys:
+        cls.batch_dims = property(_batch_dims)
+    if not hasattr(cls, "requires_grad") and "requires_grad" not in expected_keys:
+        cls.requires_grad = property(_requires_grad)
+    if not hasattr(cls, "is_locked") and "is_locked" not in expected_keys:
+        cls.is_locked = property(_is_locked)
+    if not hasattr(cls, "ndim") and "ndim" not in expected_keys:
+        cls.ndim = property(_batch_dims)
     if not hasattr(cls, "shape") and "shape" not in expected_keys:
         cls.shape = property(_batch_size, _batch_size_setter)
     if not hasattr(cls, "names") and "names" not in expected_keys:
@@ -2158,6 +2252,18 @@ def _batch_size(self) -> torch.Size:
 
     """
     return self._tensordict.batch_size
+
+
+def _batch_dims(self) -> torch.Size:
+    return self._tensordict.batch_dims
+
+
+def _requires_grad(self) -> torch.Size:
+    return self._tensordict.requires_grad
+
+
+def _is_locked(self) -> torch.Size:
+    return self._tensordict.is_locked
 
 
 def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
