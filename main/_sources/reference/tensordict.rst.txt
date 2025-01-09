@@ -109,6 +109,114 @@ However, physical storage of PyTorch tensors should not be any different:
 
     MemoryMappedTensor
 
+Pointwise Operations
+--------------------
+
+Tensordict supports various pointwise operations, allowing you to perform element-wise computations on the tensors
+stored within it. These operations are similar to those performed on regular PyTorch tensors.
+
+Supported Operations
+~~~~~~~~~~~~~~~~~~~~
+
+The following pointwise operations are currently supported:
+
+- Left and right addition (`+`)
+- Left and right subtraction (`-`)
+- Left and right multiplication (`*`)
+- Left and right division (`/`)
+- Left power (`**`)
+
+Many other ops, like :meth:`~tensordict.TensorDict.clamp`, :meth:`~tensordict.TensorDict.sqrt` etc. are supported.
+
+Performing Pointwise Operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can perform pointwise operations between two Tensordicts or between a Tensordict and a tensor/scalar value.
+
+Example 1: Tensordict-Tensordict Operation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> td1 = TensorDict(
+    ...     a=torch.randn(3, 4),
+    ...     b=torch.zeros(3, 4, 5),
+    ...     c=torch.ones(3, 4, 5, 6),
+    ...     batch_size=(3, 4),
+    ... )
+    >>> td2 = TensorDict(
+    ...     a=torch.randn(3, 4),
+    ...     b=torch.zeros(3, 4, 5),
+    ...     c=torch.ones(3, 4, 5, 6),
+    ...     batch_size=(3, 4),
+    ... )
+    >>> result = td1 * td2
+
+In this example, the * operator is applied element-wise to the corresponding tensors in td1 and td2.
+
+Example 2: Tensordict-Tensor Operation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> td = TensorDict(
+    ...     a=torch.randn(3, 4),
+    ...     b=torch.zeros(3, 4, 5),
+    ...     c=torch.ones(3, 4, 5, 6),
+    ...     batch_size=(3, 4),
+    ... )
+    >>> tensor = torch.randn(4)
+    >>> result = td * tensor
+
+ere, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.
+
+Example 3: Tensordict-Scalar Operation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> td = TensorDict(
+    ...     a=torch.randn(3, 4),
+    ...     b=torch.zeros(3, 4, 5),
+    ...     c=torch.ones(3, 4, 5, 6),
+    ...     batch_size=(3, 4),
+    ... )
+    >>> scalar = 2.0
+    >>> result = td * scalar
+
+In this case, the * operator is applied element-wise to each tensor in td and the provided scalar.
+
+Broadcasting Rules
+~~~~~~~~~~~~~~~~~~
+
+When performing pointwise operations between a Tensordict and a tensor/scalar, the tensor/scalar is broadcasted to match
+the shape of each tensor in the Tensordict: the tensor is broadcast on the left to match the tensordict shape, then
+individually broadcast on the right to match the tensors shapes. This follows the standard broadcasting rules used in
+PyTorch if one thinks of the ``TensorDict`` as a single tensor instance.
+
+For example, if you have a Tensordict with tensors of shape ``(3, 4)`` and you multiply it by a tensor of shape ``(4,)``,
+the tensor will be broadcasted to shape (3, 4) before the operation is applied. If the tensordict contains a tensor of
+shape ``(3, 4, 5)``, the tensor used for the multiplication will be broadcast to ``(3, 4, 5)`` on the right for that
+multiplication.
+
+If the pointwise operation is executed across multiple tensordicts and their batch-size differ, they will be
+broadcasted to a common shape.
+
+Efficiency of pointwise operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When possible, ``torch._foreach_<op>`` fused kernels will be used to speed up the computation of the pointwise
+operation.
+
+Handling Missing Entries
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+When performing pointwise operations between two Tensordicts, they must have the same keys.
+Some operations, like :meth:`~tensordict.TensorDict.add`, have a ``default`` keyword argument that can be used
+to operate with tensordict with exclusive entries.
+If ``default=None`` (the default), the two Tensordicts must have exactly matching key sets.
+If ``default="intersection"``, only the intersecting key sets will be considered, and other keys will be ignored.
+In all other cases, ``default`` will be used for all missing entries on both sides of the operation.
 
 Utils
 -----

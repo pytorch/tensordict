@@ -503,6 +503,107 @@ However, physical storage of PyTorch tensors should not be any different:</p>
 </tbody>
 </table>
 </section>
+<section id="pointwise-operations">
+<h2>Pointwise Operations<a class="headerlink" href="#pointwise-operations" title="Permalink to this heading">¶</a></h2>
+<p>Tensordict supports various pointwise operations, allowing you to perform element-wise computations on the tensors
+stored within it. These operations are similar to those performed on regular PyTorch tensors.</p>
+<section id="supported-operations">
+<h3>Supported Operations<a class="headerlink" href="#supported-operations" title="Permalink to this heading">¶</a></h3>
+<p>The following pointwise operations are currently supported:</p>
+<ul class="simple">
+<li><p>Left and right addition (<cite>+</cite>)</p></li>
+<li><p>Left and right subtraction (<cite>-</cite>)</p></li>
+<li><p>Left and right multiplication (<cite>*</cite>)</p></li>
+<li><p>Left and right division (<cite>/</cite>)</p></li>
+<li><p>Left power (<cite>**</cite>)</p></li>
+</ul>
+<p>Many other ops, like <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.clamp" title="tensordict.TensorDict.clamp"><code class="xref py py-meth docutils literal notranslate"><span class="pre">clamp()</span></code></a>, <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.sqrt" title="tensordict.TensorDict.sqrt"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sqrt()</span></code></a> etc. are supported.</p>
+</section>
+<section id="performing-pointwise-operations">
+<h3>Performing Pointwise Operations<a class="headerlink" href="#performing-pointwise-operations" title="Permalink to this heading">¶</a></h3>
+<p>You can perform pointwise operations between two Tensordicts or between a Tensordict and a tensor/scalar value.</p>
+<section id="example-1-tensordict-tensordict-operation">
+<h4>Example 1: Tensordict-Tensordict Operation<a class="headerlink" href="#example-1-tensordict-tensordict-operation" title="Permalink to this heading">¶</a></h4>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td1</span> <span class="o">*</span> <span class="n">td2</span>
+</pre></div>
+</div>
+<p>In this example, the * operator is applied element-wise to the corresponding tensors in td1 and td2.</p>
+</section>
+<section id="example-2-tensordict-tensor-operation">
+<h4>Example 2: Tensordict-Tensor Operation<a class="headerlink" href="#example-2-tensordict-tensor-operation" title="Permalink to this heading">¶</a></h4>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td</span> <span class="o">*</span> <span class="n">tensor</span>
+</pre></div>
+</div>
+<p>ere, the * operator is applied element-wise to each tensor in td and the provided tensor. The tensor is broadcasted to match the shape of each tensor in the Tensordict.</p>
+</section>
+<section id="example-3-tensordict-scalar-operation">
+<h4>Example 3: Tensordict-Scalar Operation<a class="headerlink" href="#example-3-tensordict-scalar-operation" title="Permalink to this heading">¶</a></h4>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">scalar</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td</span> <span class="o">*</span> <span class="n">scalar</span>
+</pre></div>
+</div>
+<p>In this case, the * operator is applied element-wise to each tensor in td and the provided scalar.</p>
+</section>
+</section>
+<section id="broadcasting-rules">
+<h3>Broadcasting Rules<a class="headerlink" href="#broadcasting-rules" title="Permalink to this heading">¶</a></h3>
+<p>When performing pointwise operations between a Tensordict and a tensor/scalar, the tensor/scalar is broadcasted to match
+the shape of each tensor in the Tensordict: the tensor is broadcast on the left to match the tensordict shape, then
+individually broadcast on the right to match the tensors shapes. This follows the standard broadcasting rules used in
+PyTorch if one thinks of the <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> as a single tensor instance.</p>
+<p>For example, if you have a Tensordict with tensors of shape <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">4)</span></code> and you multiply it by a tensor of shape <code class="docutils literal notranslate"><span class="pre">(4,)</span></code>,
+the tensor will be broadcasted to shape (3, 4) before the operation is applied. If the tensordict contains a tensor of
+shape <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">4,</span> <span class="pre">5)</span></code>, the tensor used for the multiplication will be broadcast to <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">4,</span> <span class="pre">5)</span></code> on the right for that
+multiplication.</p>
+<p>If the pointwise operation is executed across multiple tensordicts and their batch-size differ, they will be
+broadcasted to a common shape.</p>
+</section>
+<section id="efficiency-of-pointwise-operations">
+<h3>Efficiency of pointwise operations<a class="headerlink" href="#efficiency-of-pointwise-operations" title="Permalink to this heading">¶</a></h3>
+<p>When possible, <code class="docutils literal notranslate"><span class="pre">torch._foreach_&lt;op&gt;</span></code> fused kernels will be used to speed up the computation of the pointwise
+operation.</p>
+</section>
+<section id="handling-missing-entries">
+<h3>Handling Missing Entries<a class="headerlink" href="#handling-missing-entries" title="Permalink to this heading">¶</a></h3>
+<p>When performing pointwise operations between two Tensordicts, they must have the same keys.
+Some operations, like <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.add" title="tensordict.TensorDict.add"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add()</span></code></a>, have a <code class="docutils literal notranslate"><span class="pre">default</span></code> keyword argument that can be used
+to operate with tensordict with exclusive entries.
+If <code class="docutils literal notranslate"><span class="pre">default=None</span></code> (the default), the two Tensordicts must have exactly matching key sets.
+If <code class="docutils literal notranslate"><span class="pre">default=&quot;intersection&quot;</span></code>, only the intersecting key sets will be considered, and other keys will be ignored.
+In all other cases, <code class="docutils literal notranslate"><span class="pre">default</span></code> will be used for all missing entries on both sides of the operation.</p>
+</section>
+</section>
 <section id="utils">
 <h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
@@ -601,6 +702,19 @@ However, physical storage of PyTorch tensors should not be any different:</p>
 <li><a class="reference internal" href="#constructors-and-handlers">Constructors and handlers</a></li>
 <li><a class="reference internal" href="#tensordict-as-a-context-manager">TensorDict as a context manager</a></li>
 <li><a class="reference internal" href="#memory-mapped-tensors">Memory-mapped tensors</a></li>
+<li><a class="reference internal" href="#pointwise-operations">Pointwise Operations</a><ul>
+<li><a class="reference internal" href="#supported-operations">Supported Operations</a></li>
+<li><a class="reference internal" href="#performing-pointwise-operations">Performing Pointwise Operations</a><ul>
+<li><a class="reference internal" href="#example-1-tensordict-tensordict-operation">Example 1: Tensordict-Tensordict Operation</a></li>
+<li><a class="reference internal" href="#example-2-tensordict-tensor-operation">Example 2: Tensordict-Tensor Operation</a></li>
+<li><a class="reference internal" href="#example-3-tensordict-scalar-operation">Example 3: Tensordict-Scalar Operation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#broadcasting-rules">Broadcasting Rules</a></li>
+<li><a class="reference internal" href="#efficiency-of-pointwise-operations">Efficiency of pointwise operations</a></li>
+<li><a class="reference internal" href="#handling-missing-entries">Handling Missing Entries</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
 </ul>
 </li>
