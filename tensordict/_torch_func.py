@@ -84,6 +84,21 @@ def _unbind(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.unbind(*args, **kwargs)
 
 
+@implements_for_td(torch.unflatten)
+def _unflatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
+    return td.unflatten(*args, **kwargs)
+
+
+@implements_for_td(torch.flatten)
+def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
+    return td.flatten(*args, **kwargs)
+
+
+@implements_for_td(torch.transpose)
+def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
+    return td.transpose(*args, **kwargs)
+
+
 @implements_for_td(torch.gather)
 def _gather(
     input: T,
