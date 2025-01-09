@@ -45,6 +45,7 @@ from tensordict import (
     set_get_defaults_to_none,
     TensorClass,
     TensorDict,
+    UnbatchedTensor,
 )
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._reductions import _reduce_td
@@ -59,6 +60,7 @@ from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
+    _pass_through,
     assert_allclose_td,
     convert_ellipsis_to_idx,
     is_non_tensor,
@@ -11771,6 +11773,108 @@ class TestSubclassing:
         assert is_tensor_collection(SubTC)
         assert is_tensorclass(SubTC)
         assert is_non_tensor(SubTC(data=1, batch_size=[]))
+
+
+class TestUnbatchedTensor:
+    def test_unbatched(self):
+        assert UnbatchedTensor._pass_through
+        td = TensorDict(
+            a=UnbatchedTensor(torch.randn(10)),
+            b=torch.randn(3),
+            batch_size=(3,),
+        )
+        assert _pass_through(td.get("a"))
+        assert isinstance(td["a"], torch.Tensor)
+        assert isinstance(td.get("a"), UnbatchedTensor)
+
+    def test_unbatched_shape_ops(self):
+        td = TensorDict(
+            a=UnbatchedTensor(torch.randn(10)),
+            b=torch.randn(3),
+            batch_size=(3,),
+        )
+        # get item
+        assert td[0]["a"] is td["a"]
+        assert td[:]["a"] is td["a"]
+
+        unbind = td.unbind(0)[0]
+        assert unbind["a"] is td["a"]
+        assert unbind.batch_size == ()
+
+        split = td.split(1)[0]
+        assert split["a"] is td["a"]
+        assert split.batch_size == (1,)
+        assert td.split((2, 1))[0]["a"] is td["a"]
+
+        reshape = td.reshape((1, 3))
+        assert reshape["a"] is td["a"]
+        assert reshape.batch_size == (1, 3)
+        transpose = reshape.transpose(0, 1)
+        assert transpose["a"] is td["a"]
+        assert transpose.batch_size == (3, 1)
+        permute = reshape.permute(1, 0)
+        assert permute["a"] is td["a"]
+        assert permute.batch_size == (3, 1)
+        squeeze = reshape.squeeze()
+        assert squeeze["a"] is td["a"]
+        assert squeeze.batch_size == (3,)
+
+        view = td.view((1, 3))
+        assert view["a"] is td["a"]
+        assert view.batch_size == (1, 3)
+        unsqueeze = td.unsqueeze(0)
+        assert unsqueeze["a"] is td["a"]
+        assert unsqueeze.batch_size == (1, 3)
+        gather = td.gather(0, torch.tensor((0,)))
+        assert gather["a"] is td["a"]
+        assert gather.batch_size == (1,)
+
+        unflatten = td.unflatten(0, (1, 3))
+        assert unflatten["a"] is td["a"]
+        assert unflatten.batch_size == (1, 3)
+        assert unflatten.get("a").batch_size == (1, 3)
+        assert unflatten.get("a")._tensordict.batch_size == ()
+
+        flatten = unflatten.flatten(0, 1)
+        assert flatten["a"] is td["a"]
+        assert flatten.batch_size == (3,)
+
+    def test_unbatched_torch_func(self):
+        td = TensorDict(
+            a=UnbatchedTensor(torch.randn(10)),
+            b=torch.randn(3),
+            batch_size=(3,),
+        )
+        assert torch.unbind(td, 0)[0]["a"] is td["a"]
+        assert torch.stack([td, td], 0)[0]["a"] is td["a"]
+        assert torch.cat([td, td], 0)[0]["a"] is td["a"]
+        assert (torch.ones_like(td)["a"] == 1).all()
+        assert torch.unsqueeze(td, 0)["a"] is td["a"]
+        assert torch.squeeze(td)["a"] is td["a"]
+        unflatten = torch.unflatten(td, 0, (1, 3))
+        assert unflatten["a"] is td["a"]
+        flatten = torch.flatten(unflatten, 0, 1)
+        assert flatten["a"] is td["a"]
+        permute = torch.permute(unflatten, (1, 0))
+        assert permute["a"] is td["a"]
+        transpose = torch.transpose(unflatten, 1, 0)
+        assert transpose["a"] is td["a"]
+
+    def test_unbatched_other_ops(self):
+        td = TensorDict(
+            a=UnbatchedTensor(torch.randn(10)),
+            b=torch.randn(3),
+            c_d=UnbatchedTensor(torch.randn(10)),
+            batch_size=(3,),
+        )
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        assert td.copy()["a"] is td["a"]
+        assert td.int()["a"].dtype == torch.int
+        assert td.to(device)["a"].device == device
+        assert td.select("a")["a"] is td["a"]
+        assert td.exclude("b")["a"] is td["a"]
+        assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
+        assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
 
 def _to_float(td, td_name, tmpdir):

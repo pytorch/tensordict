@@ -61,25 +61,26 @@ Decomposing the output dictionary in three similarly structured dictionaries aft
 Features
 --------
 
-A ``TensorDict`` is a dict-like container for tensors. To instantiate a ``TensorDict``, you must specify key-value pairs as well as the batch size. The leading dimensions of any values in the ``TensorDict`` must be compatible with the batch size.
+A ``TensorDict`` is a dict-like container for tensors. To instantiate a ``TensorDict``, you can specify key-value pairs
+as well as the batch size (an empty tensordict can be created via `TensorDict()`).
+The leading dimensions of any values in the ``TensorDict`` must be compatible with the batch size.
 
->>> import torch
->>> from tensordict import TensorDict
-
->>> tensordict = TensorDict(
-...     {"zeros": torch.zeros(2, 3, 4), "ones": torch.ones(2, 3, 4, 5)},
-...     batch_size=[2, 3],
-... )
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> tensordict = TensorDict(
+    ...     {"zeros": torch.zeros(2, 3, 4), "ones": torch.ones(2, 3, 4, 5)},
+    ...     batch_size=[2, 3],
+    ... )
 
 The syntax for setting or retrieving values is much like that for a regular dictionary.
 
->>> zeros = tensordict["zeros"]
->>> tensordict["twos"] = 2 * torch.ones(2, 3)
+    >>> zeros = tensordict["zeros"]
+    >>> tensordict["twos"] = 2 * torch.ones(2, 3)
 
 One can also index a tensordict along its batch_size which makes it possible to obtain congruent slices of data in just
 a few characters (notice that indexing the nth leading dimensions with tree_map using an ellipsis would require a bit more coding):
 
->>> sub_tensordict = tensordict[..., :2]
+    >>> sub_tensordict = tensordict[..., :2]
 
 One can also use the set method with ``inplace=True`` or the ``set_`` method to do inplace updates of the contents.
 The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.
@@ -87,13 +88,39 @@ The former is a fault-tolerant version of the latter: if no matching key is foun
 The contents of the TensorDict can now be manipulated collectively.
 For example, to place all of the contents onto a particular device one can simply do
 
->>> tensordict = tensordict.to("cuda:0")
+    >>> tensordict = tensordict.to("cuda:0")
+
+You can then assert that the device of the tensordict is `"cuda:0"`:
+
+    >>> assert tensordict.device == torch.device("cuda:0")
 
 To reshape the batch dimensions one can do
 
->>> tensordict = tensordict.reshape(6)
+    >>> tensordict = tensordict.reshape(6)
 
-The class supports many other operations, including squeeze, unsqueeze, view, permute, unbind, stack, cat and many more. If an operation is not present, the TensorDict.apply method will usually provide the solution that was needed.
+The class supports many other operations, including :func:`~torch.squeeze`, :func:`~torch.unsqueeze`,
+:meth:`~tensordict.TensorDict.view`, :func:`~torch.permute`, :meth:`~tensordict.TensorDict.unbind`,
+:func:`~torch.stack`, :func:`~torch.cat` and many more.
+
+If an operation is not present, the :meth:`~tensordict.TensorDict.apply` method will usually provide the solution
+that was needed.
+
+Escaping shape operations
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
+shape operations.
+
+This can be achieved by wrapping the tensor in an :class:`~tensordict.UnbatchedTensor` instance.
+
+An :class:`~tensordict.UnbatchedTensor` ignores its shape during shape operations on the TensorDict, allowing for
+flexible storage and manipulation of tensors with arbitrary shapes.
+
+    >>> from tensordict import UnbatchedTensor
+    >>> tensordict = TensorDict({"zeros": UnbatchedTensor(torch.zeros(10))}, batch_size=[2, 3])
+    >>> reshaped_td = tensordict.reshape(6)
+    >>> reshaped_td["zeros"] is tensordict["zeros"]
+    True
 
 Named dimensions
 ----------------

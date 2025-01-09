@@ -1231,13 +1231,13 @@ def _as_context_manager(attr=None):
         if attr is not None:
 
             @wraps(func)
-            def new_func(_self, *args, **kwargs):
+            def func_as_decorator(_self, *args, **kwargs):
                 _attr_pre = getattr(_self, attr)
                 out = func(_self, *args, **kwargs)
                 _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
-                        out._last_op = (new_func.__name__, (args, kwargs, _self))
+                        out._last_op = (func.__name__, (args, kwargs, _self))
                     else:
                         out._last_op = None
                 return out
@@ -1245,13 +1245,13 @@ def _as_context_manager(attr=None):
         else:
 
             @wraps(func)
-            def new_func(_self, *args, **kwargs):
+            def func_as_decorator(_self, *args, **kwargs):
                 out = func(_self, *args, **kwargs)
                 if out is not None:
-                    out._last_op = (new_func.__name__, (args, kwargs, _self))
+                    out._last_op = (func.__name__, (args, kwargs, _self))
                 return out
 
-        return new_func
+        return func_as_decorator
 
     return __call__
 
@@ -2452,9 +2452,13 @@ class _add_batch_dim_pre_hook:
             raise RuntimeError("did not find pre-hook")
 
 
-def is_non_tensor(data):
+def is_non_tensor(data) -> bool:
     """Checks if an item is a non-tensor."""
-    return getattr(type(data), "_is_non_tensor", False)
+    return _is_non_tensor(type(data))
+
+
+def _pass_through(data) -> bool:
+    return _pass_through_cls(type(data))
 
 
 _NON_TENSOR_MEMO = {}
@@ -2466,7 +2470,21 @@ def _is_non_tensor(cls: type):
     if not is_dynamo:
         out = _NON_TENSOR_MEMO.get(cls)
     if out is None:
-        out = getattr(cls, "_is_non_tensor", False)
+        out = bool(getattr(cls, "_is_non_tensor", False))
+        if not is_dynamo:
+            _NON_TENSOR_MEMO[cls] = out
+    return out
+
+
+def _pass_through_cls(cls: type):
+    out = None
+    is_dynamo = is_compiling()
+    if not is_dynamo:
+        out = _NON_TENSOR_MEMO.get(cls)
+    if out is None:
+        out = bool(getattr(cls, "_is_non_tensor", False)) or getattr(
+            cls, "_pass_through", False
+        )
         if not is_dynamo:
             _NON_TENSOR_MEMO[cls] = out
     return out
