@@ -216,7 +216,7 @@ def pad_sequence(
         try:
             item0 = list_of_dicts[0][key]
             if is_non_tensor(item0):
-                out.set(key, torch.stack([d[key] for d in list_of_dicts]))
+                out.set(key, TensorDict.lazy_stack([d[key] for d in list_of_dicts]))
                 continue
             tensor_shape = item0.shape
             pos_pad_dim = (
