@@ -104,6 +104,7 @@ _TD_PASS_THROUGH = {
     torch.cat: True,
     torch.clone: True,
     torch.empty_like: True,
+    torch.flatten: True,
     torch.full_like: True,
     torch.gather: True,
     torch.ones_like: True,
@@ -114,6 +115,7 @@ _TD_PASS_THROUGH = {
     torch.squeeze: True,
     torch.stack: True,
     torch.unbind: True,
+    torch.unflatten: True,
     torch.unsqueeze: True,
     torch.zeros_like: True,
 }
