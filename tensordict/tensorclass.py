@@ -2251,10 +2251,15 @@ def _batch_size(self) -> torch.Size:
     """
     return self._tensordict.batch_size
 
+
 def _batch_dims(self) -> torch.Size:
     return self._tensordict.batch_dims
+
+
 def _requires_grad(self) -> torch.Size:
     return self._tensordict.requires_grad
+
+
 def _is_locked(self) -> torch.Size:
     return self._tensordict.is_locked
 
