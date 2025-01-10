@@ -354,6 +354,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if self.return_log_prob and self.log_prob_key not in self.out_keys:
             self.out_keys.append(self.log_prob_key)
 
+    @property
+    def dist_params_keys(self) -> List[NestedKey]:
+        """Returns all the keys pointing at the distribution params."""
+        return list(self.in_keys)
+
+    @property
+    def dist_sample_keys(self) -> List[NestedKey]:
+        """Returns all the keys pointing at the distribution samples."""
+        return [key for key in self.out_keys if key is not self.log_prob_key]
+
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict.
 
@@ -388,6 +398,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 raise err
         return dist
+
+    build_dist_from_params = get_dist
 
     def log_prob(
         self,
@@ -943,6 +955,22 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 raise ValueError("Could not find a default interaction in the modules.")
         with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
+
+    @property
+    def dist_params_keys(self) -> List[NestedKey]:
+        """Returns all the keys pointing at the distribution params."""
+        result = []
+        for m in reversed(list(self._module_iter())):
+            result.extend(getattr(m, "dist_params_keys", []))
+        return result
+
+    @property
+    def dist_sample_keys(self) -> List[NestedKey]:
+        """Returns all the keys pointing at the distribution samples."""
+        result = []
+        for m in reversed(list(self._module_iter())):
+            result.extend(getattr(m, "dist_sample_keys", []))
+        return result
 
     @property
     def num_samples(self):

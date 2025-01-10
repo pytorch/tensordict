@@ -1992,6 +1992,8 @@ class TestProbabilisticTensorDictModule:
         assert td["sample"].shape == (2, 3, 4)
         if return_log_prob:
             assert "sample_log_prob" in td
+        assert prob.dist_sample_keys == ["sample"]
+        assert prob.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -2042,6 +2044,8 @@ class TestProbabilisticTensorDictModule:
             assert isinstance(log_prob, torch.Tensor)
         else:
             assert isinstance(log_prob, TensorDict)
+        assert seq.dist_sample_keys == ["sample"]
+        assert seq.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -2093,6 +2097,8 @@ class TestProbabilisticTensorDictModule:
             assert isinstance(log_prob, torch.Tensor)
         else:
             assert isinstance(log_prob, TensorDict)
+        assert seq.dist_sample_keys == ["sample"]
+        assert seq.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize(
         "log_prob_key",
@@ -2118,6 +2124,8 @@ class TestProbabilisticTensorDictModule:
             return_log_prob=True,
             log_prob_key=log_prob_key,
         )
+        assert module.dist_sample_keys == [("data", "action")]
+        assert module.dist_params_keys == [("data", "param")]
         td_out = module(policy_module(td))
         assert td_out["data", "action"].shape == (3, 4, 1)
         if log_prob_key:
@@ -2132,6 +2140,8 @@ class TestProbabilisticTensorDictModule:
             return_log_prob=True,
             log_prob_key=log_prob_key,
         )
+        assert module.dist_sample_keys == [("data", "action")]
+        assert module.dist_params_keys == [("data", "param")]
         td_out = module(policy_module(td))
         assert td_out["data", "action"].shape == (3, 4, 1)
         if log_prob_key:
@@ -2912,6 +2922,8 @@ class TestCompositeDist:
             default_interaction_type=interaction,
             return_log_prob=return_log_prob,
         )
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
         if not return_log_prob:
             assert module.out_keys[-2:] == out_keys
         else:
@@ -3010,6 +3022,8 @@ class TestCompositeDist:
         )
         # loosely checks that the log-prob keys have been added
         assert module.out_keys[-2:] != out_keys
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
 
         sample = module(params)
         key_logprob0 = (
@@ -3077,6 +3091,8 @@ class TestCompositeDist:
                 )
             ]
         module = ProbabilisticTensorDictSequential(*args)
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
         sample = module(params)
         if return_log_prob:
             assert "cont_log_prob" in sample.keys()
@@ -3156,6 +3172,8 @@ class TestCompositeDist:
                 log_prob_key=log_prob_key,
             ),
         )
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
         sample = module(params)
         assert "cont_log_prob" in sample.keys()
         assert ("nested", "cont_log_prob") in sample.keys(True)
