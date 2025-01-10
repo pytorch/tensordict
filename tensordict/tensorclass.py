@@ -917,8 +917,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name) and method_name not in expected_keys:
-            is_property = isinstance(getattr(TensorDictBase, method_name, None), property)
-            setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True, is_property=is_property))
+            is_property = isinstance(
+                getattr(TensorDictBase, method_name, None), property
+            )
+            setattr(
+                cls,
+                method_name,
+                _wrap_td_method(method_name, no_wrap=True, is_property=is_property),
+            )
 
     for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
         if not hasattr(cls, method_name):
@@ -1535,7 +1541,9 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False):
+def _wrap_td_method(
+    funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
+):
     def deliver_result(self, result, kwargs):
         if result is None:
             return
@@ -1554,6 +1562,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False, is_proper
         return result
 
     if not is_property:
+
         def wrapped_func(self, *args, **kwargs):
             if not is_compiling():
                 td = super(type(self), self).__getattribute__("_tensordict")
