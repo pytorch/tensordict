@@ -424,6 +424,9 @@ class TestTensorClass:
         myc.batch_size = torch.Size([2])
 
         assert myc.batch_size == torch.Size([2])
+        myc.batch_size = [2]
+        assert isinstance(myc.batch_size, torch.Size)
+
         assert myc.X.shape == torch.Size([2, 3, 4])
 
     def test_cat(self):
