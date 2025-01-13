@@ -872,7 +872,7 @@ class TensorDictBase(MutableMapping):
         )
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
-            from .return_types import min
+            from torch.return_types import min
 
             values_dict = {}
             indices_dict = {}
@@ -882,8 +882,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     indices_dict[key] = key[:-1]
             return min(
-                *result.split_keys(values_dict, indices_dict),
-                batch_size=result.batch_size,
+                result.split_keys(values_dict, indices_dict)[:2],
             )
         return result
 
@@ -1006,7 +1005,7 @@ class TensorDictBase(MutableMapping):
         )
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
-            from .return_types import max
+            from torch.return_types import max
 
             values_dict = {}
             indices_dict = {}
@@ -1016,8 +1015,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     indices_dict[key] = key[:-1]
             return max(
-                *result.split_keys(values_dict, indices_dict),
-                batch_size=result.batch_size,
+                result.split_keys(values_dict, indices_dict)[:2],
             )
         return result
 
@@ -1110,7 +1108,7 @@ class TensorDictBase(MutableMapping):
             return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
-            from .return_types import cummin
+            from torch.return_types import cummin
 
             values_dict = {}
             indices_dict = {}
@@ -1120,8 +1118,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     indices_dict[key] = key[:-1]
             return cummin(
-                *result.split_keys(values_dict, indices_dict),
-                batch_size=result.batch_size,
+                result.split_keys(values_dict, indices_dict)[:2],
             )
         return result
 
@@ -1214,7 +1211,7 @@ class TensorDictBase(MutableMapping):
             return result
         if dim is not NO_DEFAULT and return_indices:
             # Split the tensordict
-            from .return_types import cummax
+            from torch.return_types import cummax
 
             values_dict = {}
             indices_dict = {}
@@ -1224,8 +1221,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     indices_dict[key] = key[:-1]
             return cummax(
-                *result.split_keys(values_dict, indices_dict),
-                batch_size=result.batch_size,
+                result.split_keys(values_dict, indices_dict)[:2],
             )
         return result
 
