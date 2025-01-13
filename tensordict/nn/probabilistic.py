@@ -11,7 +11,7 @@ from collections.abc import MutableSequence
 
 from textwrap import indent
 from typing import Any, Dict, List, Optional, OrderedDict, overload
-
+import collections
 import torch
 
 from tensordict._nestedkey import NestedKey
@@ -33,10 +33,13 @@ from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _ContextManager, _zip_strict
+from tensordict.utils import _ContextManager, _zip_strict, unravel_key
 from torch import distributions as D, Tensor
 
 from torch.utils._contextlib import _DecoratorContextManager
+
+from tensordict.nn.distributions.composite import _add_suffix
+from tensordict.base import is_tensor_collection
 
 try:
     from torch.compiler import is_compiling
@@ -76,6 +79,37 @@ class InteractionType(StrEnum):
         """Return the interaction_type with name matched to the provided string (case insensitive)."""
         return cls(type_str.lower())
 
+
+_composite_lp_aggregate = _ContextManager()
+
+
+def composite_lp_aggregate() -> bool | None:
+    return _composite_lp_aggregate.get_mode()
+
+
+class set_composite_lp_aggregate(_DecoratorContextManager):
+    def __init__(
+        self, mode: bool = True,
+    ) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_composite_lp_aggregate:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.prev = _composite_lp_aggregate.get_mode()
+        _composite_lp_aggregate.set_mode(self.mode)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        _composite_lp_aggregate.set_mode(self.prev)
+
+    def set(self):
+        self.__enter__()
+
+    def unset(self):
+        return self.__exit__(None, None, None)
 
 _interaction_type = _ContextManager()
 
@@ -226,8 +260,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             If ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
             `log_prob_key`. Default is ``False``.
-        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+        log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
+            Defaults to `'<sample_name>_log_prob'`, where `<sample_name>` is each of the :attr:`out_keys`.
+
+            .. note:: This is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``False``.
+
+        log_prob_key (NestedKey, optional): key where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'sample_log_prob'`.
+
+            .. note:: This is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``True``.
+
         cache_dist (bool, optional): keyword-only argument.
             EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
@@ -323,10 +365,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
-        log_prob_key: Optional[NestedKey] = "sample_log_prob",
+        log_prob_keys: List[NestedKey] | None = None,
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
         num_samples: int | torch.Size | None = None,
+        log_prob_key: NestedKey | None = None,
     ) -> None:
         super().__init__()
         distribution_kwargs = (
@@ -366,7 +409,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.dist_keys = dist_keys
         if log_prob_key is None:
             log_prob_key = "sample_log_prob"
-        self.log_prob_key = log_prob_key
+        elif not composite_lp_aggregate():
+            raise RuntimeError("composite_lp_aggregate is set to False but a log_prob_key was passed. "
+                               "When composite_lp_aggregate() returns ``False``, log_prob_keys must be used instead.")
+        self._log_prob_key = log_prob_key
+        if log_prob_keys is None:
+            log_prob_keys = [_add_suffix(key, "_log_prob") for key in self.out_keys]
+        elif composite_lp_aggregate():
+            raise RuntimeError("composite_lp_aggregate is set to True but log_prob_keys were passed. "
+                               "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead.")
+        self._log_prob_keys = log_prob_keys
 
         self.default_interaction_type = InteractionType(default_interaction_type)
 
@@ -381,8 +433,26 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if isinstance(num_samples, (int, torch.SymInt)):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
-        if self.return_log_prob and self.log_prob_key not in self.out_keys:
-            self.out_keys.append(self.log_prob_key)
+        if not composite_lp_aggregate():
+            if self.return_log_prob and self.out_keys[-len(self.log_prob_keys):] != self.log_prob_keys:
+                self.out_keys.extend(self.log_prob_keys)
+        else:
+            if self.return_log_prob and self.log_prob_key not in self.out_keys:
+                self.out_keys.append(self.log_prob_key)
+
+    @property
+    def log_prob_key(self):
+        if not composite_lp_aggregate():
+            raise RuntimeError(f"composite_lp_aggregate is set to ``False``, hence {type(self)}.log_prob_key cannot be accessed. "
+                           f"When composite_lp_aggregate() returns ``False``, use {type(self)}.log_prob_keys instead.")
+        return self._log_prob_key
+
+    @property
+    def log_prob_keys(self):
+        if composite_lp_aggregate():
+            raise RuntimeError(f"composite_lp_aggregate is set to ``True``, hence {type(self)}.log_prob_keys cannot be accessed. "
+                           f"When composite_lp_aggregate() returns ``True``, use {type(self)}.log_prob_key instead.")
+        return self._log_prob_keys
 
     @property
     def dist_params_keys(self) -> List[NestedKey]:
@@ -392,7 +462,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     @property
     def dist_sample_keys(self) -> List[NestedKey]:
         """Returns all the keys pointing at the distribution samples."""
-        return [key for key in self.out_keys if key is not self.log_prob_key]
+        return [key for key in self.out_keys if key not in self.log_prob_keys]
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict.
@@ -459,66 +529,47 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if dist is None:
             dist = self.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
-            # Check the values within the dist - if not set, choose defaults
-            if aggregate_probabilities is None:
-                if dist.aggregate_probabilities is not None:
-                    aggregate_probabilities_inp = dist.aggregate_probabilities
-                else:
-                    warnings.warn(
-                        f"aggregate_probabilities wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the aggregate_probability will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `aggregate_probabilities` will default to ``False`` such "
-                        f"that log_prob will return a tensordict with the log-prob values. To silence this warning, "
-                        f"pass `aggregate_probabilities` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    aggregate_probabilities_inp = False
+            if composite_lp_aggregate():
+                # Old behaviour - discouraged
+                td = dist.log_prob(tensordict, aggregate_probabilities=False)
+                return td.get(dist.log_prob_key)
             else:
-                aggregate_probabilities_inp = aggregate_probabilities
-            if inplace is None:
-                if dist.inplace is not None:
-                    inplace = dist.inplace
+                # Check the values within the dist - if not set, choose defaults
+                if aggregate_probabilities is None:
+                    if dist.aggregate_probabilities is not None:
+                        aggregate_probabilities_inp = dist.aggregate_probabilities
+                    else:
+                        aggregate_probabilities_inp = False
                 else:
-                    warnings.warn(
-                        f"inplace wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the `inplace` will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `inplace` will default to ``False`` such "
-                        f"that log_prob will return a new tensordict containing only the log-prob values. To silence this warning, "
-                        f"pass `inplace` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    inplace = True
-            if include_sum is None:
-                if dist.include_sum is not None:
-                    include_sum = dist.include_sum
-                else:
-                    warnings.warn(
-                        f"include_sum wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the `include_sum` will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `include_sum` will default to ``False`` such "
-                        f"that log_prob will return a new tensordict containing only the leaf log-prob values. "
-                        f"To silence this warning, "
-                        f"pass `include_sum` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    include_sum = True
-            lp = dist.log_prob(
-                tensordict,
-                aggregate_probabilities=aggregate_probabilities_inp,
-                inplace=inplace,
-                include_sum=include_sum,
-            )
-            if is_tensor_collection(lp) and aggregate_probabilities is None:
-                return lp.get(dist.log_prob_key)
-            return lp
+                    aggregate_probabilities_inp = aggregate_probabilities
+                if inplace is None:
+                    if dist.inplace is not None:
+                        inplace = dist.inplace
+                    else:
+                        inplace = False
+                if include_sum is None:
+                    if dist.include_sum is not None:
+                        include_sum = dist.include_sum
+                    else:
+                        include_sum = False
+                lp = dist.log_prob(
+                    tensordict,
+                    aggregate_probabilities=aggregate_probabilities_inp,
+                    inplace=inplace,
+                    include_sum=include_sum,
+                )
+                if isinstance(lp, torch.Tensor):
+                    return lp
+                self._update_td_lp(lp)
+                return lp
         else:
             return dist.log_prob(tensordict.get(self.out_keys[0]))
+
+    def _update_td_lp(self, lp):
+        for out_key, lp_key in zip(self.dist_sample_keys, self.log_prob_keys):
+            lp_key_expected = _add_suffix(out_key, "_log_prob")
+            if lp_key != lp_key_expected:
+                lp.rename_key_(lp_key_expected, lp_key)
 
     @property
     def SAMPLE_LOG_PROB_KEY(self):
@@ -547,18 +598,26 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
             if isinstance(out_tensors, TensorDictBase):
                 if self.return_log_prob:
-                    kwargs = {}
-                    if isinstance(dist, CompositeDistribution):
-                        kwargs = {"aggregate_probabilities": False}
-                    log_prob = dist.log_prob(out_tensors, **kwargs)
-                    if log_prob is not out_tensors:
-                        if is_tensor_collection(log_prob):
-                            out_tensors.update(log_prob)
-                        else:
+                    if composite_lp_aggregate():
+                        kwargs = {}
+                        if isinstance(dist, CompositeDistribution):
+                            kwargs = {"aggregate_probabilities": False}
+                        log_prob = dist.log_prob(out_tensors, **kwargs)
+                        if log_prob is not out_tensors:
                             # Composite dists return the tensordict_out directly when aggrgate_prob is False
                             out_tensors.set(self.log_prob_key, log_prob)
-                    elif dist.log_prob_key in out_tensors:
-                        out_tensors.rename_key_(dist.log_prob_key, self.log_prob_key)
+                        else:
+                            out_tensors.rename_key_(dist.log_prob_key, self.log_prob_key)
+                    else:
+                        kwargs = {}
+                        if isinstance(dist, CompositeDistribution):
+                            kwargs = {"aggregate_probabilities": False, "inplace": False, "include_sum": False}
+                        log_prob = dist.log_prob(out_tensors, **kwargs)
+                        if is_tensor_collection(log_prob):
+                            out_tensors.update(log_prob)
+                            self._update_td_lp(log_prob)
+                        else:
+                            out_tensors.set(self.log_prob_keys[0], log_prob)
                 tensordict_out.update(out_tensors)
             else:
                 if isinstance(out_tensors, Tensor):
@@ -734,27 +793,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             .. warning:: The behaviour of :attr:`return_composite` will change in v0.9
                 and default to True from there on.
 
-        aggregate_probabilities (bool, optional): (:class:`~tensordict.nn.CompositeDistribution`
-            outputs only) If provided, overrides the default ``aggregate_probabilities``
-            from the class.
-        include_sum (bool, optional): (:class:`~tensordict.nn.CompositeDistribution`
-            outputs only) Whether to include the summed log-probability in the output
-            TensorDict. Defaults to ``self.include_sum`` which is set through the class
-            constructor (True by default). Has no effect if ``aggregate_probabilities``
-            is set to True.
-
-            .. warning:: The default value of ``include_sum`` will switch to False in
-                v0.9 in the constructor.
-
-        inplace (bool, optional): (:class:`~tensordict.nn.CompositeDistribution`
-            outputs only) Whether to update the input sample in-place or return a new
-            TensorDict. Defaults to ``self.inplace`` which is set through the class
-            constructor (True by default). Has no effect if ``aggregate_probabilities``
-            is set to True.
-
-            .. warning:: The default value of ``inplace`` will switch to False in v0.9
-                in the constructor.
-
     Raises:
         ValueError: If the input sequence of modules is empty.
         TypeError: If the final module is not an instance of
@@ -842,7 +880,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             is_shared=False)
         >>> print(module.get_dist(input))
         CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3])), 'sample1': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
-        >>> print(module.log_prob(td, aggregate_probabilities=False))
+        >>> print(module.log_prob(td))
         TensorDict(
             fields={
                 sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -872,7 +910,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             is_shared=False)
         >>> print(module.get_dist(input))
         CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
-        >>> print(module.log_prob(td, aggregate_probabilities=False, inplace=False, include_sum=False))
+        >>> print(module.log_prob(td))
         TensorDict(
             fields={
                 sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
@@ -888,9 +926,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         modules: OrderedDict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
-        aggregate_probabilities: bool | None = None,
-        include_sum: bool | None = None,
-        inplace: bool | None = None,
     ) -> None: ...
 
     @overload
@@ -899,9 +934,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
-        aggregate_probabilities: bool | None = None,
-        include_sum: bool | None = None,
-        inplace: bool | None = None,
     ) -> None: ...
 
     def __init__(
@@ -909,9 +941,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
-        aggregate_probabilities: bool | None = None,
-        include_sum: bool | None = None,
-        inplace: bool | None = None,
     ) -> None:
         if len(modules) == 0:
             raise ValueError(
@@ -919,8 +948,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "TensorDictModules followed by a ProbabilisticTensorDictModule"
             )
         self._ordered_dict = False
-        if len(modules) == 1 and isinstance(modules[0], (OrderedDict, MutableSequence)):
-            if isinstance(modules[0], OrderedDict):
+        if len(modules) == 1 and isinstance(modules[0], (collections.OrderedDict, MutableSequence)):
+            if isinstance(modules[0], collections.OrderedDict):
                 modules_list = list(modules[0].values())
                 self._ordered_dict = True
             else:
@@ -945,17 +974,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         self._requires_sample = modules_list[-1].out_keys[0] not in set(out_keys)
         if self._ordered_dict:
             self.__dict__["_det_part"] = TensorDictSequential(
-                OrderedDict(list(modules[0].items())[:-1])
+                collections.OrderedDict(list(modules[0].items())[:-1])
             )
         else:
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
         super().__init__(*modules, partial_tolerant=partial_tolerant)
         self.return_composite = return_composite
-        self.aggregate_probabilities = aggregate_probabilities
-        self.include_sum = include_sum
-        self.inplace = inplace
-
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
 
     @property
@@ -998,6 +1023,22 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 raise ValueError("Could not find a default interaction in the modules.")
         with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
+
+    @property
+    def log_prob_keys(self):
+        lpks = []
+        for m in reversed(list(self._module_iter())):
+            lpks.extend(getattr(m, "log_prob_keys", []))
+        return lpks
+
+    @property
+    def log_prob_keys(self):
+        lpks = []
+        for m in reversed(list(self._module_iter())):
+            lpks.extend(getattr(m, "log_prob_keys", []))
+        return lpks
+
+    log_prob_key = ProbabilisticTensorDictModule.log_prob_key
 
     @property
     def dist_params_keys(self) -> List[NestedKey]:
@@ -1088,9 +1129,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return CompositeDistribution.from_distributions(
             td_copy,
             dists,
-            aggregate_probabilities=self.aggregate_probabilities,
-            inplace=self.inplace,
-            include_sum=self.include_sum,
         )
 
     @property
@@ -1123,16 +1161,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict_out: TensorDictBase | None = None,
         *,
         dist: torch.distributions.Distribution | None = None,
-        aggregate_probabilities: bool | None = None,
-        inplace: bool | None = None,
-        include_sum: bool | None = None,
         **kwargs,
     ):
         """Returns the log-probability of the input tensordict.
 
         If `self.return_composite` is ``True`` and the distribution is a :class:`~tensordict.nn.CompositeDistribution`,
-        or if any of :attr:`aggregate_probabilities`, :attr:`inplace` or :attr:`include_sum` this method will return
-        the log-probability of the entire composite distribution.
+        this method will return the log-probability of the entire composite distribution.
 
         Otherwise, it will only consider the last probabilistic module in the sequence.
 
@@ -1144,23 +1178,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         Keyword Args:
             dist (torch.distributions.Distribution, optional): The distribution object. If ``None``, it will be computed using `get_dist`.
                 Defaults to ``None``.
-            aggregate_probabilities (bool, optional): Whether to aggregate the probabilities of the composite distribution.
-                If ``None``, it will default to the value set in the constructor or the distribution object.
-                Defaults to ``None``.
-            inplace (bool, optional): Whether to update the input tensordict in-place or return a new tensordict.
-                If ``None``, it will default to the value set in the constructor or the distribution object.
-                Defaults to ``None``.
-            include_sum (bool, optional): Whether to include the summed log-probability in the output tensordict.
-                If ``None``, it will default to the value set in the constructor or the distribution object.
-                Defaults to ``None``.
 
         Returns:
             TensorDictBase or torch.Tensor: The log-probability of the input tensordict.
-
-        .. note::
-            If `aggregate_probabilities` is ``True``, the log-probability will be aggregated across all components of the composite distribution.
-            If `inplace` is ``True``, the input tensordict will be updated in-place with the log-probability values.
-            If `include_sum` is ``True``, the summed log-probability will be included in the output tensordict.
 
         .. warning::
             In future releases (v0.9), the default values of `aggregate_probabilities`, `inplace`, and `include_sum` will change.
@@ -1173,71 +1193,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_inp = tensordict
         if dist is None:
             dist = self.get_dist(tensordict_inp)
-        return_composite = (
-            self.return_composite
-            or (aggregate_probabilities is not None)
-            or (inplace is not None)
-            or (include_sum is not None)
-        )
+        return_composite = self.return_composite
         if return_composite and isinstance(dist, CompositeDistribution):
             # Check the values within the dist - if not set, choose defaults
-            if aggregate_probabilities is None:
-                if self.aggregate_probabilities is not None:
-                    aggregate_probabilities = self.aggregate_probabilities
-                elif dist.aggregate_probabilities is not None:
-                    aggregate_probabilities = dist.aggregate_probabilities
-                else:
-                    warnings.warn(
-                        f"aggregate_probabilities wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the aggregate_probability will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `aggregate_probabilities` will default to ``False`` such "
-                        f"that log_prob will return a tensordict with the log-prob values. To silence this warning, "
-                        f"pass `aggregate_probabilities` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    aggregate_probabilities = True
-            if inplace is None:
-                if self.inplace is not None:
-                    inplace = self.inplace
-                elif dist.inplace is not None:
-                    inplace = dist.inplace
-                else:
-                    warnings.warn(
-                        f"inplace wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the `inplace` will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `inplace` will default to ``False`` such "
-                        f"that log_prob will return a new tensordict containing only the log-prob values. To silence this warning, "
-                        f"pass `inplace` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    inplace = True
-            if include_sum is None:
-                if self.include_sum is not None:
-                    include_sum = self.include_sum
-                elif dist.include_sum is not None:
-                    include_sum = dist.include_sum
-                else:
-                    warnings.warn(
-                        f"include_sum wasn't defined in the {type(self).__name__} instance. "
-                        f"It couldn't be retrieved from the CompositeDistribution object either. "
-                        f"Currently, the `include_sum` will be `True` in this case but in a future release "
-                        f"(v0.9) this will change and `include_sum` will default to ``False`` such "
-                        f"that log_prob will return a new tensordict containing only the leaf log-prob values. "
-                        f"To silence this warning, "
-                        f"pass `include_sum` to the {type(self).__name__} constructor, to the distribution kwargs "
-                        f"or to the log-prob method.",
-                        category=DeprecationWarning,
-                    )
-                    include_sum = True
             return dist.log_prob(
                 tensordict,
-                aggregate_probabilities=aggregate_probabilities,
-                inplace=inplace,
-                include_sum=include_sum,
                 **kwargs,
             )
         last_module: ProbabilisticTensorDictModule = self._last_module

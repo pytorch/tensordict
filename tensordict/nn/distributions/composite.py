@@ -9,6 +9,7 @@ from typing import Dict
 
 import torch
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn.probabilistic import composite_lp_aggregate
 from tensordict.utils import NestedKey, unravel_key, unravel_keys
 from torch import distributions as d
 
@@ -29,23 +30,31 @@ class CompositeDistribution(d.Distribution):
         name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
             the key names from `distribution_map` will be used.
         extra_kwargs (Dict[NestedKey, Dict], optional): A dictionary of additional keyword arguments for constructing the distributions.
-        aggregate_probabilities (bool, optional): If `True`, the `log_prob` and `entropy` methods will sum the probabilities and entropies
-            of the individual distributions and return a single tensor. If `False`, individual log-probabilities will be stored in the input
-            TensorDict (for `log_prob`) or returned as leaves of the output TensorDict (for `entropy`). This can be overridden at runtime
+        aggregate_probabilities (bool, optional): If `True`, the `log_prob` and `entropy` methods will sum the
+            probabilities and entropies of the individual distributions and return a single tensor.
+            If `False`, individual log-probabilities will be stored in the input TensorDict (for `log_prob`) or returned
+            as leaves of the output TensorDict (for `entropy`). This can be overridden at runtime
             by passing the `aggregate_probabilities` argument to `log_prob` and `entropy`. Defaults to `False`.
-        log_prob_key (NestedKey, optional): The key where the log probability will be stored. Defaults to `'sample_log_prob'`.
+
+            .. warning:: This argument will be deprecated in v0.9 when :func:`tensordict.nn.probabilistic.composite_lp_aggregate`
+                will default to ``False``.
+
+        log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
+            Defaults to `'sample_log_prob'`.
+
+            .. note:: if ``tensordict.nn.probabilistic.composite_lp_aggregate() == False``, tbe log-probabilities will
+                be written under `("path", "to", "leaf", "<sample_name>_log_prob")`
+                where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
+                the leaf tensor being sampled. In that case, the ``log_prob_key`` argument will be ignored.
+
         entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`.
-        inplace (bool, optional): Whether to modify the input TensorDict in-place. Defaults to `True`.
-
-            .. warning:: The default value of ``inplace`` will switch to ``False`` in v0.9 in the constructor.
-
-        include_sum (bool, optional): Whether to include the summed log-probability in the output TensorDict. Defaults to `True`.
-
-            .. warning:: The default value of ``include_sum`` will switch to ``False`` in v0.9 in the constructor.
 
     .. note:: The batch size of the input TensorDict containing the parameters (`params`) determines the batch shape of
         the distribution. For example, the `"sample_log_prob"` entry resulting from a call to `log_prob` will have the
         shape of the parameters plus any additional batch dimensions.
+
+    .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictModule` and :class:`~tensordict.nn.ProbabilisticTensorDictSequential`
+        to learn how to use this class as part of a model.
 
     Examples:
         >>> params = TensorDict({
@@ -71,6 +80,7 @@ class CompositeDistribution(d.Distribution):
             batch_size=torch.Size([4]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -83,8 +93,6 @@ class CompositeDistribution(d.Distribution):
         aggregate_probabilities: bool | None = None,
         log_prob_key: NestedKey = "sample_log_prob",
         entropy_key: NestedKey = "entropy",
-        inplace: bool | None = None,
-        include_sum: bool | None = None,
     ):
         self._batch_shape = params.shape
         if extra_kwargs is None:
@@ -119,8 +127,6 @@ class CompositeDistribution(d.Distribution):
         self.entropy_key = entropy_key
 
         self.aggregate_probabilities = aggregate_probabilities
-        self.include_sum = include_sum
-        self.inplace = inplace
 
     @classmethod
     def from_distributions(
@@ -129,11 +135,8 @@ class CompositeDistribution(d.Distribution):
         distributions: Dict[NestedKey, d.Distribution],
         *,
         name_map: dict | None = None,
-        aggregate_probabilities: bool | None = None,
         log_prob_key: NestedKey = "sample_log_prob",
         entropy_key: NestedKey = "entropy",
-        inplace: bool | None = None,
-        include_sum: bool | None = None,
     ) -> CompositeDistribution:
         """Create a `CompositeDistribution` instance from existing distribution objects.
 
@@ -150,19 +153,9 @@ class CompositeDistribution(d.Distribution):
         Keyword Args:
             name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
                 the key names from `distribution_map` will be used.
-            aggregate_probabilities (bool, optional): If `True`, the `log_prob` and `entropy` methods will sum the probabilities and entropies
-                of the individual distributions and return a single tensor. If `False`, individual log-probabilities will be stored in the input
-                TensorDict (for `log_prob`) or returned as leaves of the output TensorDict (for `entropy`). This can be overridden at runtime
-                by passing the `aggregate_probabilities` argument to `log_prob` and `entropy`. Defaults to `False`.
-            log_prob_key (NestedKey, optional): The key where the log probability will be stored. Defaults to `'sample_log_prob'`.
+            log_prob_key (NestedKey, optional): The key where the log probability will be stored.
+                Defaults to `'sample_log_prob'`.
             entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`.
-            inplace (bool, optional): Whether to modify the input TensorDict in-place. Defaults to `True`.
-
-                .. warning:: The default value of ``inplace`` will switch to ``False`` in v0.9 in the constructor.
-
-            include_sum (bool, optional): Whether to include the summed log-probability in the output TensorDict. Defaults to `True`.
-
-                .. warning:: The default value of ``include_sum`` will switch to ``False`` in v0.9 in the constructor.
 
         Returns:
             CompositeDistribution: An instance of `CompositeDistribution` initialized with the provided distributions.
@@ -216,9 +209,6 @@ class CompositeDistribution(d.Distribution):
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
 
-        self.aggregate_probabilities = aggregate_probabilities
-        self.include_sum = include_sum
-        self.inplace = inplace
         return self
 
     def sample(self, shape=None) -> TensorDictBase:
@@ -309,8 +299,6 @@ class CompositeDistribution(d.Distribution):
         sample: TensorDictBase,
         *,
         aggregate_probabilities: bool | None = None,
-        include_sum: bool | None = None,
-        inplace: bool | None = None,
     ) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Compute the summed log-probability of a given sample.
 
@@ -320,17 +308,6 @@ class CompositeDistribution(d.Distribution):
         Keyword Args:
             aggregate_probabilities (bool, optional): if provided, overrides the default ``aggregate_probabilities``
                 from the class.
-            include_sum (bool, optional): Whether to include the summed log-probability in the output TensorDict.
-                Defaults to ``self.include_sum`` which is set through the class constructor (``True`` by default).
-                Has no effect if ``aggregate_probabilities`` is set to ``True``.
-
-                .. warning:: The default value of ``include_sum`` will switch to ``False`` in v0.9 in the constructor.
-
-            inplace (bool, optional): Whether to update the input sample in-place or return a new TensorDict.
-                Defaults to ``self.inplace`` which is set through the class constructor (``True`` by default).
-                Has no effect if ``aggregate_probabilities`` is set to ``True``.
-
-                .. warning:: The default value of ``inplace`` will switch to ``False`` in v0.9 in the constructor.
 
         If ``self.aggregate_probabilities`` is ``True``, this method will return a single tensor with
         the summed log-probabilities. If ``self.aggregate_probabilities`` is ``False``, this method will
@@ -341,11 +318,9 @@ class CompositeDistribution(d.Distribution):
         if aggregate_probabilities is None:
             aggregate_probabilities = self.aggregate_probabilities
             if aggregate_probabilities is None:
-                aggregate_probabilities = False
+                aggregate_probabilities = composite_lp_aggregate()
         if not aggregate_probabilities:
-            return self.log_prob_composite(
-                sample, include_sum=include_sum, inplace=inplace
-            )
+            return self.log_prob_composite(sample)
         slp = 0.0
         for name, dist in self.dists.items():
             lp = dist.log_prob(sample.get(name))
@@ -359,7 +334,6 @@ class CompositeDistribution(d.Distribution):
         sample: TensorDictBase,
         *,
         include_sum: bool | None = None,
-        inplace: bool | None = None,
     ) -> TensorDictBase:
         """Computes the log-probability of each component in the input sample and return a TensorDict with individual log-probabilities.
 
@@ -372,34 +346,14 @@ class CompositeDistribution(d.Distribution):
 
                 .. warning:: The default value of ``include_sum`` will switch to ``False`` in v0.9 in the constructor.
 
-            inplace (bool, optional): Whether to update the input sample in-place or return a new TensorDict.
-                Defaults to ``self.inplace`` which is set through the class constructor (``True`` by default).
-
-                .. warning:: The default value of ``inplace`` will switch to ``False`` in v0.9 in the constructor.
-
         Returns:
             TensorDictBase: A TensorDict containing the individual log-probabilities for each component in the input sample,
                 along with a "sample_log_prob" entry containing the summed log-probability if `include_sum` is True.
         """
         if include_sum is None:
-            include_sum = self.include_sum
+            include_sum = composite_lp_aggregate()
+        inplace = composite_lp_aggregate()
 
-        if include_sum is None:
-            include_sum = True
-            warnings.warn(
-                "`include_sum` wasn't set when building the `CompositeDistribution` or when calling log_prob_composite. "
-                "The current default is ``True`` but from v0.9 it will be changed to ``False``. Please adapt your call to `log_prob_composite` accordingly.",
-                category=DeprecationWarning,
-            )
-        if inplace is None:
-            inplace = self.inplace
-        if inplace is None:
-            inplace = True
-            warnings.warn(
-                "`inplace` wasn't set when building the `CompositeDistribution` or when calling log_prob_composite. "
-                "The current default is ``True`` but from v0.9 it will be changed to ``False``. Please adapt your call to `log_prob_composite` accordingly.",
-                category=DeprecationWarning,
-            )
         if include_sum:
             slp = 0.0
         d = {}
@@ -453,7 +407,7 @@ class CompositeDistribution(d.Distribution):
         if aggregate_probabilities is None:
             aggregate_probabilities = self.aggregate_probabilities
             if aggregate_probabilities is None:
-                aggregate_probabilities = False
+                aggregate_probabilities = composite_lp_aggregate()
         if not aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=include_sum)
         se = 0.0
@@ -496,7 +450,7 @@ class CompositeDistribution(d.Distribution):
             to estimate it.
         """
         if include_sum is None:
-            include_sum = self.include_sum
+            include_sum = composite_lp_aggregate()
 
         if include_sum is None:
             include_sum = True
