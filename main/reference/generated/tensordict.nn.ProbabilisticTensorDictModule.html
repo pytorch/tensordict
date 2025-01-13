@@ -542,6 +542,35 @@ mean when it is not available. Defaults to 1000.</p></li>
 </pre></div>
 </div>
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params">
+<span class="sig-name descname"><span class="pre">build_dist_from_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.5)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The input tensordict containing the distribution parameters.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distribution.Distribution</span></code> instance created from the input tensordict.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If the input tensordict does not match the distribution keywords.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.dist_params_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_params_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_params_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns all the keys pointing at the distribution params.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.dist_sample_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_sample_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.dist_sample_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns all the keys pointing at the distribution samples.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">tensordict.base.TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_requires_sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Define the computation performed at every call.</p>
