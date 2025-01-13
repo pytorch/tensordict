@@ -5303,7 +5303,10 @@ class TestTensorDicts(TestTensorDictsBase):
         ],
     )
     def test_min_max_cummin_cummax(self, td_name, device, dim, keepdim, return_indices):
-        import tensordict.return_types as return_types
+        def _get_td(v):
+            if not is_tensor_collection(v):
+                return v.values
+            return v
 
         td = getattr(self, td_name)(device)
         # min
@@ -5315,71 +5318,63 @@ class TestTensorDicts(TestTensorDictsBase):
         if not return_indices and dim is not None:
             assert_allclose_td(r, td.amin(dim=dim, keepdim=keepdim))
         if return_indices:
-            assert is_tensorclass(r)
-            assert isinstance(r, return_types.min)
-            assert not r.vals.is_empty()
+            # assert is_tensorclass(r)
+            assert isinstance(r, torch.return_types.min)
+            assert not r.values.is_empty()
             assert not r.indices.is_empty()
-        else:
-            assert not is_tensorclass(r)
         if dim is None:
-            assert r.batch_size == ()
+            assert _get_td(r).batch_size == ()
         elif keepdim:
             s = list(td.batch_size)
             s[dim] = 1
-            assert r.batch_size == tuple(s)
+            assert _get_td(r).batch_size == tuple(s)
         else:
             s = list(td.batch_size)
             s.pop(dim)
-            assert r.batch_size == tuple(s)
+            assert _get_td(r).batch_size == tuple(s)
 
         r = td.max(**kwargs)
         if not return_indices and dim is not None:
             assert_allclose_td(r, td.amax(dim=dim, keepdim=keepdim))
         if return_indices:
-            assert is_tensorclass(r)
-            assert isinstance(r, return_types.max)
-            assert not r.vals.is_empty()
+            # assert is_tensorclass(r)
+            assert isinstance(r, torch.return_types.max)
+            assert not r.values.is_empty()
             assert not r.indices.is_empty()
-        else:
-            assert not is_tensorclass(r)
         if dim is None:
-            assert r.batch_size == ()
+            assert _get_td(r).batch_size == ()
         elif keepdim:
             s = list(td.batch_size)
             s[dim] = 1
-            assert r.batch_size == tuple(s)
+            assert _get_td(r).batch_size == tuple(s)
         else:
             s = list(td.batch_size)
             s.pop(dim)
-            assert r.batch_size == tuple(s)
+            assert _get_td(r).batch_size == tuple(s)
         if dim is None:
             return
         kwargs.pop("keepdim")
         r = td.cummin(**kwargs)
         if return_indices:
-            assert is_tensorclass(r)
-            assert isinstance(r, return_types.cummin)
-            assert not r.vals.is_empty()
+            # assert is_tensorclass(r)
+            assert isinstance(r, torch.return_types.cummin)
+            assert not r.values.is_empty()
             assert not r.indices.is_empty()
-        else:
-            assert not is_tensorclass(r)
         if dim is None:
-            assert r.batch_size == ()
+            assert _get_td(r).batch_size == ()
         else:
-            assert r.batch_size == td.batch_size
+            assert _get_td(r).batch_size == td.batch_size
 
         r = td.cummax(**kwargs)
         if return_indices:
-            assert is_tensorclass(r)
-            assert isinstance(r, return_types.cummax)
-            assert not r.vals.is_empty()
+            # assert is_tensorclass(r)
+            assert isinstance(r, torch.return_types.cummax)
+            assert not r.values.is_empty()
             assert not r.indices.is_empty()
-        else:
-            assert not is_tensorclass(r)
         if dim is None:
-            assert r.batch_size == ()
+            assert _get_td(r).batch_size == ()
         else:
-            assert r.batch_size == td.batch_size
+            assert _get_td(r).batch_size == td.batch_size
 
     @pytest.mark.parametrize("inplace", [False, True])
     def test_named_apply(self, td_name, device, inplace):
