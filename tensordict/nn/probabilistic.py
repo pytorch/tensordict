@@ -6,11 +6,9 @@
 from __future__ import annotations
 
 import collections
-
 import re
 import warnings
 from collections.abc import MutableSequence
-
 from textwrap import indent
 from typing import Any, Dict, List, OrderedDict, overload
 
@@ -18,24 +16,16 @@ import torch
 
 from tensordict._nestedkey import NestedKey
 from tensordict.base import is_tensor_collection
-
-
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-from tensordict.nn.distributions import Delta, distributions_maps
-
-from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions import distributions_maps
-
-from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.composite import _add_suffix, CompositeDistribution
 from tensordict.nn.distributions.continuous import Delta
 from tensordict.nn.distributions.discrete import OneHotCategorical
-
 from tensordict.nn.distributions.truncated_normal import (
     TruncatedNormal,
     TruncatedStandardNormal,
 )
 from tensordict.nn.sequence import TensorDictSequential
-
 from tensordict.nn.utils import (
     _set_skip_existing_None,
     composite_lp_aggregate,
@@ -45,14 +35,7 @@ from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _ContextManager, _zip_strict
 from torch import distributions as D, Tensor
-
 from torch.utils._contextlib import _DecoratorContextManager
-
-from tensordict.nn.distributions.composite import _add_suffix
-from tensordict.base import is_tensor_collection
-from .. import is_tensor_collection
-
-from .distributions.composite import _add_suffix
 
 try:
     from torch.compiler import is_compiling
@@ -431,7 +414,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def log_prob_key(self):
-        if not composite_lp_aggregate():
+        if not composite_lp_aggregate(nowarn=True):
             if len(self.log_prob_keys) == 1:
                 return self.log_prob_keys[0]
             raise RuntimeError(
