@@ -15,11 +15,19 @@ from typing import Any, Dict, List, Optional, OrderedDict, overload
 import torch
 
 from tensordict._nestedkey import NestedKey
-
-from tensordict.nn import CompositeDistribution
+from tensordict.base import is_tensor_collection
 
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-from tensordict.nn.distributions import Delta, distributions_maps
+from tensordict.nn.distributions import distributions_maps
+
+from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.continuous import Delta
+from tensordict.nn.distributions.discrete import OneHotCategorical
+
+from tensordict.nn.distributions.truncated_normal import (
+    TruncatedNormal,
+    TruncatedStandardNormal,
+)
 from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import _set_skip_existing_None
@@ -29,8 +37,6 @@ from tensordict.utils import _ContextManager, _zip_strict
 from torch import distributions as D, Tensor
 
 from torch.utils._contextlib import _DecoratorContextManager
-
-from .. import is_tensor_collection
 
 try:
     from torch.compiler import is_compiling
@@ -72,6 +78,30 @@ class InteractionType(StrEnum):
 
 
 _interaction_type = _ContextManager()
+
+
+DETERMINISTIC_REGISTER = {}
+
+dist_has_enum_support = {}
+# Iterate over all distribution classes in torch.distributions
+for dist_name in dir(D):
+    dist_cls = getattr(D, dist_name)
+
+    # Check if it's a class (not a function or variable) and is a subclass of Distribution
+    if isinstance(dist_cls, type) and issubclass(dist_cls, D.Distribution):
+        if dist_cls is D.LogisticNormal:
+            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.DETERMINISTIC
+        elif dist_cls.has_enumerate_support:
+            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MODE
+        else:
+            DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MEAN
+
+
+DETERMINISTIC_REGISTER[Delta] = InteractionType.DETERMINISTIC
+DETERMINISTIC_REGISTER[OneHotCategorical] = InteractionType.MODE
+
+DETERMINISTIC_REGISTER[TruncatedNormal] = InteractionType.MEAN
+DETERMINISTIC_REGISTER[TruncatedStandardNormal] = InteractionType.MEAN
 
 
 def interaction_type() -> InteractionType | None:
@@ -562,40 +592,53 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             raise TypeError("Expected Distribution, but got {}".format(type(dist)))
         if interaction_type is None:
             interaction_type = self.default_interaction_type
+        if isinstance(dist, D.LKJCholesky) and interaction_type in (
+            InteractionType.DETERMINISTIC,
+            InteractionType.MEAN,
+            InteractionType.MODE,
+        ):
+            raise RuntimeError(
+                f"DETERMINISTIC, MEAN and MODE are not implemented for {type(dist).__name__}."
+            )
         if interaction_type is InteractionType.DETERMINISTIC:
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
             else:
-                try:
-                    support = dist.support
-                    fallback = (
-                        "mean" if isinstance(support, D.constraints._Real) else "mode"
-                    )
-                except NotImplementedError:
-                    # Some custom dists don't have a support
-                    # We arbitrarily fall onto 'mean' in these cases
-                    fallback = "mean"
-                try:
-                    if fallback == "mean":
-                        return dist.mean
-                    elif fallback == "mode":
-                        # Categorical dists don't have an average
-                        return dist.mode
-                    else:
-                        raise AttributeError
-                except AttributeError:
-                    raise NotImplementedError(
-                        f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
-                    )
-                finally:
-                    warnings.warn(
-                        f"deterministic_sample wasn't found when queried on {type(dist)}. "
-                        f"{type(self).__name__} is falling back on {fallback} instead. "
-                        f"For better code quality and efficiency, make sure to either "
-                        f"provide a distribution with a deterministic_sample attribute or "
-                        f"to change the InteractionMode to the desired value.",
-                        category=UserWarning,
-                    )
+                # Fallbacks
+                interaction_type = DETERMINISTIC_REGISTER.get(type(dist))
+                if interaction_type is None:
+                    try:
+                        support = dist.support
+                        fallback = (
+                            "mean"
+                            if isinstance(support, D.constraints._Real)
+                            else "mode"
+                        )
+                    except NotImplementedError:
+                        # Some custom dists don't have a support
+                        # We arbitrarily fall onto 'mean' in these cases
+                        fallback = "mean"
+                    try:
+                        if fallback == "mean":
+                            interaction_type = InteractionType.MEAN
+                        elif fallback == "mode":
+                            # Categorical dists don't have an average
+                            interaction_type = InteractionType.MODE
+                        else:
+                            raise AttributeError
+                    except AttributeError:
+                        raise NotImplementedError(
+                            f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
+                        )
+                    finally:
+                        warnings.warn(
+                            f"deterministic_sample wasn't found when queried on {type(dist)}. "
+                            f"{type(self).__name__} is falling back on {fallback} instead. "
+                            f"For better code quality and efficiency, make sure to either "
+                            f"provide a distribution with a deterministic_sample attribute or "
+                            f"to change the InteractionMode to the desired value.",
+                            category=UserWarning,
+                        )
 
         if interaction_type is InteractionType.MODE:
             try:
