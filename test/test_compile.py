@@ -29,7 +29,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule as Prob,
     TensorDictModule,
     TensorDictModule as Mod,
-    TensorDictSequential as Seq, set_composite_lp_aggregate,
+    TensorDictSequential as Seq,
 )
 
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
