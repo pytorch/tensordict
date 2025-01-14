@@ -2682,6 +2682,42 @@ class TestCompositeDist:
             lp = dist.log_prob(sample)
             assert isinstance(lp, torch.Tensor)
 
+    @pytest.mark.parametrize("mode", [None, True, False])
+    def test_set_composite_lp_aggregate_build_and_get(self, mode):
+        d = torch.distributions
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist_maker = functools.partial(
+            CompositeDistribution,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        with set_composite_lp_aggregate(mode):
+            p = ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=["cont", ("nested", "disc")],
+                distribution_class=dist_maker,
+                return_log_prob=True,
+            )
+        with set_composite_lp_aggregate(True):
+            assert p.out_keys == ["cont", ("nested", "disc"), "sample_log_prob"]
+            assert p.log_prob_key == "sample_log_prob"
+            assert p.log_prob_keys == ["sample_log_prob"]
+        with set_composite_lp_aggregate(False):
+            assert p.out_keys == [
+                "cont",
+                ("nested", "disc"),
+                "cont_log_prob",
+                ("nested", "disc_log_prob"),
+            ]
+            with pytest.raises(RuntimeError):
+                p.log_prob_key
+            assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
+
     @set_composite_lp_aggregate(False)
     def test_from_distributions(self):
 
@@ -3110,9 +3146,7 @@ class TestCompositeDist:
             assert module.out_keys[-2:] != out_keys
 
         assert module.log_prob_key == "sample_log_prob"
-        with pytest.raises(RuntimeError):
-            module.log_prob_keys
-
+        assert module.log_prob_keys == ["sample_log_prob"]
         sample = module(params)
 
         key_logprob0 = ("sample", "cont_log_prob") if map_names else "cont_log_prob"

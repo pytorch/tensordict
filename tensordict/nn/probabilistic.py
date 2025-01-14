@@ -369,14 +369,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         else:
             dist_keys = in_keys
 
-        self.out_keys = out_keys
+        self._out_keys = out_keys
         self.in_keys = in_keys
         self.dist_keys = dist_keys
         if log_prob_keys is None:
             if len(out_keys) == 1 and log_prob_key is not None:
                 log_prob_keys = [log_prob_key]
             else:
-                log_prob_keys = [_add_suffix(key, "_log_prob") for key in self.out_keys]
+                log_prob_keys = [
+                    _add_suffix(key, "_log_prob") for key in self._out_keys
+                ]
         elif composite_lp_aggregate():
             raise RuntimeError(
                 "composite_lp_aggregate is set to True but log_prob_keys were passed. "
@@ -405,16 +407,21 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if isinstance(num_samples, (int, torch.SymInt)):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
+
+    @property
+    def out_keys(self) -> List[NestedKey]:
+        out_keys = list(self._out_keys)
         if self.return_log_prob:
             if not composite_lp_aggregate():
-                if self.out_keys[-len(self.log_prob_keys) :] != self.log_prob_keys:
-                    self.out_keys.extend(self.log_prob_keys)
-            elif self.log_prob_key not in self.out_keys:
-                self.out_keys.append(self.log_prob_key)
+                if out_keys[-len(self.log_prob_keys) :] != self.log_prob_keys:
+                    out_keys.extend(self.log_prob_keys)
+            elif self.log_prob_key not in out_keys:
+                out_keys.append(self.log_prob_key)
+        return out_keys
 
     @property
     def log_prob_key(self):
-        if not composite_lp_aggregate(nowarn=True):
+        if not composite_lp_aggregate():
             if len(self.log_prob_keys) == 1:
                 return self.log_prob_keys[0]
             raise RuntimeError(
@@ -427,10 +434,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     @property
     def log_prob_keys(self):
         if composite_lp_aggregate():
-            raise RuntimeError(
-                f"composite_lp_aggregate is set to ``True``, hence {type(self).__name__}.log_prob_keys cannot be accessed. "
-                f"When composite_lp_aggregate() returns ``True``, use {type(self).__name__}.log_prob_key instead."
-            )
+            return [self.log_prob_key]
         return self._log_prob_keys
 
     @property
