@@ -9,7 +9,7 @@ from typing import Dict
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn.probabilistic import composite_lp_aggregate
+from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
 from tensordict.utils import NestedKey, unravel_key, unravel_keys
 from torch import distributions as d
 
@@ -42,7 +42,7 @@ class CompositeDistribution(d.Distribution):
         log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
             Defaults to `'sample_log_prob'`.
 
-            .. note:: if ``tensordict.nn.probabilistic.composite_lp_aggregate() == False``, tbe log-probabilities will
+            .. note:: if :func:`tensordict.nn.probabilistic.composite_lp_aggregate` returns ``False``, tbe log-probabilities will
                 be written under `("path", "to", "leaf", "<sample_name>_log_prob")`
                 where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
                 the leaf tensor being sampled. In that case, the ``log_prob_key`` argument will be ignored.
@@ -56,6 +56,8 @@ class CompositeDistribution(d.Distribution):
     .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictModule` and :class:`~tensordict.nn.ProbabilisticTensorDictSequential`
         to learn how to use this class as part of a model.
 
+    .. seealso:: :class:`~tensordict.nn.set_composite_lp_aggregate` to control the aggregation of the log-probabilities.
+
     Examples:
         >>> params = TensorDict({
         ...     "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
@@ -64,8 +66,9 @@ class CompositeDistribution(d.Distribution):
         >>> dist = CompositeDistribution(params,
         ...     distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
         >>> sample = dist.sample((4,))
-        >>> sample = dist.log_prob(sample)
-        >>> print(sample)
+        >>> with set_composite_lp_aggregate(False):
+        ...     sample = dist.log_prob(sample)
+        ...     print(sample)
         TensorDict(
             fields={
                 cont: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -125,6 +128,12 @@ class CompositeDistribution(d.Distribution):
         self.dists = dists
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
+
+        if aggregate_probabilities is not None:
+            warnings.warn(
+                "aggregate_probabilities is deprecated and will be removed in v0.9. Use set_composite_lp_aggregate instead.",
+                category=DeprecationWarning,
+            )
 
         self.aggregate_probabilities = aggregate_probabilities
 
@@ -208,6 +217,7 @@ class CompositeDistribution(d.Distribution):
         self.dists = dists
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
+        self.aggregate_probabilities = None
 
         return self
 
@@ -295,10 +305,7 @@ class CompositeDistribution(d.Distribution):
         )
 
     def log_prob(
-        self,
-        sample: TensorDictBase,
-        *,
-        aggregate_probabilities: bool | None = None,
+        self, sample: TensorDictBase, *, aggregate_probabilities: bool | None = None
     ) -> torch.Tensor | TensorDictBase:  # noqa: D417
         """Compute the summed log-probability of a given sample.
 
@@ -315,12 +322,18 @@ class CompositeDistribution(d.Distribution):
         of each sample in the input tensordict along with a ``sample_log_prob`` entry with the summed
         log-prob. In both cases, the output shape will be the shape of the input tensordict.
         """
-        if aggregate_probabilities is None:
+        if aggregate_probabilities is not None:
+            warnings.warn(
+                "aggregate_probabilities is deprecated and will be removed in v0.9. Use set_composite_lp_aggregate instead.",
+                category=DeprecationWarning,
+            )
+        elif self.aggregate_probabilities is not None:
             aggregate_probabilities = self.aggregate_probabilities
-            if aggregate_probabilities is None:
-                aggregate_probabilities = composite_lp_aggregate()
+        else:
+            aggregate_probabilities = composite_lp_aggregate()
         if not aggregate_probabilities:
-            return self.log_prob_composite(sample)
+            with set_composite_lp_aggregate(False):
+                return self.log_prob_composite(sample)
         slp = 0.0
         for name, dist in self.dists.items():
             lp = dist.log_prob(sample.get(name))
@@ -366,10 +379,9 @@ class CompositeDistribution(d.Distribution):
         if include_sum:
             d[self.log_prob_key] = slp
         if inplace:
-            sample.update(d)
+            return sample.update(d)
         else:
             return sample.empty(recurse=True).update(d).filter_empty_()
-        return sample
 
     def entropy(
         self,
@@ -388,7 +400,8 @@ class CompositeDistribution(d.Distribution):
 
         Keyword Args:
             aggregate_probabilities (bool, optional): If provided, overrides the default `aggregate_probabilities`
-                setting from the class. Determines whether to return a single summed entropy tensor or a TensorDict
+                setting from the class.
+                Determines whether to return a single summed entropy tensor or a TensorDict
                 with individual entropies. Defaults to ``False`` if not set in the class.
             include_sum (bool, optional): Whether to include the summed entropy in the output TensorDict.
                 Defaults to `self.include_sum`, which is set through the class constructor. Has no effect if
@@ -404,10 +417,16 @@ class CompositeDistribution(d.Distribution):
         .. note:: If a distribution does not implement a closed-form solution for entropy, Monte Carlo sampling is used
             to estimate it.
         """
-        if aggregate_probabilities is None:
+        if aggregate_probabilities is not None:
+            warnings.warn(
+                "aggregate_probabilities is deprecated and will be removed in v0.9. Use set_composite_lp_aggregate instead.",
+                category=DeprecationWarning,
+            )
+        elif self.aggregate_probabilities is not None:
             aggregate_probabilities = self.aggregate_probabilities
-            if aggregate_probabilities is None:
-                aggregate_probabilities = composite_lp_aggregate()
+        else:
+            aggregate_probabilities = composite_lp_aggregate()
+
         if not aggregate_probabilities:
             return self.entropy_composite(samples_mc, include_sum=include_sum)
         se = 0.0

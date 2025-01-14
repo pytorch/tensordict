@@ -17,7 +17,13 @@ from collections.abc import MutableSequence
 import pytest
 import torch
 
-from tensordict import NonTensorData, NonTensorStack, tensorclass, TensorDict
+from tensordict import (
+    is_tensor_collection,
+    NonTensorData,
+    NonTensorStack,
+    tensorclass,
+    TensorDict,
+)
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
     dispatch,
@@ -42,6 +48,8 @@ from tensordict.nn.probabilistic import (
 )
 from tensordict.nn.utils import (
     _set_dispatch_td_nn_modules,
+    composite_lp_aggregate,
+    set_composite_lp_aggregate,
     set_skip_existing,
     skip_existing,
 )
@@ -1204,6 +1212,7 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("td_out", [True, False])
+    @set_composite_lp_aggregate(False)
     def test_probtdseq(self, return_log_prob, td_out):
         mod = ProbabilisticTensorDictSequential(
             TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
@@ -1256,10 +1265,8 @@ class TestTDSequence:
                 == expected
             )
 
-    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
-    @pytest.mark.parametrize("inplace", [None, False, True])
-    @pytest.mark.parametrize("include_sum", [None, False, True])
-    def test_probtdseq_multdist(self, include_sum, aggregate_probabilities, inplace):
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_multdist(self):
 
         tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
         tdm1 = ProbabilisticTensorDictModule(
@@ -1283,50 +1290,20 @@ class TestTDSequence:
             tdm1,
             tdm2,
             tdm3,
-            include_sum=include_sum,
-            aggregate_probabilities=aggregate_probabilities,
-            inplace=inplace,
             return_composite=True,
         )
         assert tdm.default_interaction_type is not None
         dist: CompositeDistribution = tdm.get_dist(TensorDict(x=torch.randn(10, 3)))
         s = dist.sample()
-        assert dist.aggregate_probabilities is aggregate_probabilities
-        assert dist.inplace is inplace
-        assert dist.include_sum is include_sum
-        if aggregate_probabilities in (None, False):
-            assert isinstance(dist.log_prob(s), TensorDict)
-        else:
-            assert isinstance(dist.log_prob(s), torch.Tensor)
+        assert isinstance(dist, CompositeDistribution)
+        assert isinstance(dist.log_prob(s), TensorDict)
 
         v = tdm(TensorDict(x=torch.randn(10, 3)))
         assert set(v.keys()) == {"x", "loc", "y", "loc2", "z"}
-        if aggregate_probabilities is None and not PYTORCH_TEST_FBCODE:
-            cm0 = pytest.warns(
-                expected_warning=DeprecationWarning, match="aggregate_probabilities"
-            )
-        else:
-            cm0 = contextlib.nullcontext()
-        if include_sum is None and not PYTORCH_TEST_FBCODE:
-            cm1 = pytest.warns(expected_warning=DeprecationWarning, match="include_sum")
-        else:
-            cm1 = contextlib.nullcontext()
-        if inplace is None and not PYTORCH_TEST_FBCODE:
-            cm2 = pytest.warns(expected_warning=DeprecationWarning, match="inplace")
-        else:
-            cm2 = contextlib.nullcontext()
-        with cm0, cm1, cm2:
-            if aggregate_probabilities in (None, True):
-                assert isinstance(tdm.log_prob(v), torch.Tensor)
-            else:
-                assert isinstance(tdm.log_prob(v), TensorDict)
+        assert isinstance(tdm.log_prob(v), TensorDict)
 
-    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
-    @pytest.mark.parametrize("inplace", [None, False, True])
-    @pytest.mark.parametrize("include_sum", [None, False, True])
-    def test_probtdseq_intermediate_dist(
-        self, include_sum, aggregate_probabilities, inplace
-    ):
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_intermediate_dist(self):
         tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
         tdm1 = ProbabilisticTensorDictModule(
             in_keys=["loc"],
@@ -1340,9 +1317,6 @@ class TestTDSequence:
             tdm0,
             tdm1,
             tdm2,
-            include_sum=include_sum,
-            aggregate_probabilities=aggregate_probabilities,
-            inplace=inplace,
             return_composite=True,
         )
         assert tdm.default_interaction_type is not None
@@ -1350,35 +1324,11 @@ class TestTDSequence:
         assert isinstance(dist, CompositeDistribution)
 
         s = dist.sample()
-        assert dist.aggregate_probabilities is aggregate_probabilities
-        assert dist.inplace is inplace
-        assert dist.include_sum is include_sum
-        if aggregate_probabilities in (None, False):
-            assert isinstance(dist.log_prob(s), TensorDict)
-        else:
-            assert isinstance(dist.log_prob(s), torch.Tensor)
+        assert isinstance(dist.log_prob(s), TensorDict)
 
         v = tdm(TensorDict(x=torch.randn(10, 3)))
         assert set(v.keys()) == {"x", "loc", "y", "loc2"}
-        if aggregate_probabilities is None and not PYTORCH_TEST_FBCODE:
-            cm0 = pytest.warns(
-                expected_warning=DeprecationWarning, match="aggregate_probabilities"
-            )
-        else:
-            cm0 = contextlib.nullcontext()
-        if include_sum is None and not PYTORCH_TEST_FBCODE:
-            cm1 = pytest.warns(expected_warning=DeprecationWarning, match="include_sum")
-        else:
-            cm1 = contextlib.nullcontext()
-        if inplace is None and not PYTORCH_TEST_FBCODE:
-            cm2 = pytest.warns(expected_warning=DeprecationWarning, match="inplace")
-        else:
-            cm2 = contextlib.nullcontext()
-        with cm0, cm1, cm2:
-            if aggregate_probabilities in (None, True):
-                assert isinstance(tdm.log_prob(v), torch.Tensor)
-            else:
-                assert isinstance(tdm.log_prob(v), TensorDict)
+        assert isinstance(tdm.log_prob(v), TensorDict)
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
@@ -2084,6 +2034,7 @@ def test_module_buffer():
 
 class TestProbabilisticTensorDictModule:
     @pytest.mark.parametrize("return_log_prob", [True, False])
+    @set_composite_lp_aggregate(False)
     def test_probabilistic_n_samples(self, return_log_prob):
         prob = ProbabilisticTensorDictModule(
             in_keys=["loc"],
@@ -2106,18 +2057,14 @@ class TestProbabilisticTensorDictModule:
         assert prob.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
-    @pytest.mark.parametrize("inplace", [True, False])
-    @pytest.mark.parametrize("include_sum", [True, False])
-    @pytest.mark.parametrize("aggregate_probabilities", [True, False])
     @pytest.mark.parametrize("return_composite", [True, False])
+    @set_composite_lp_aggregate(False)
     def test_probabilistic_seq_n_samples(
         self,
         return_log_prob,
         return_composite,
-        include_sum,
-        aggregate_probabilities,
-        inplace,
     ):
+        aggregate_probabilities = composite_lp_aggregate()
         prob = ProbabilisticTensorDictModule(
             in_keys=["loc"],
             out_keys=["sample"],
@@ -2131,9 +2078,6 @@ class TestProbabilisticTensorDictModule:
         seq = ProbabilisticTensorDictSequential(
             TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
             prob,
-            inplace=inplace,
-            aggregate_probabilities=aggregate_probabilities,
-            include_sum=include_sum,
             return_composite=return_composite,
         )
         td = TensorDict(x=torch.randn(3, 4), batch_size=[3])
@@ -2158,17 +2102,12 @@ class TestProbabilisticTensorDictModule:
         assert seq.dist_params_keys == ["loc"]
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
-    @pytest.mark.parametrize("inplace", [True, False])
-    @pytest.mark.parametrize("include_sum", [True, False])
-    @pytest.mark.parametrize("aggregate_probabilities", [True, False])
     @pytest.mark.parametrize("return_composite", [True])
+    @set_composite_lp_aggregate(False)
     def test_intermediate_probabilistic_seq_n_samples(
         self,
         return_log_prob,
         return_composite,
-        include_sum,
-        aggregate_probabilities,
-        inplace,
     ):
         prob = ProbabilisticTensorDictModule(
             in_keys=["loc"],
@@ -2179,7 +2118,7 @@ class TestProbabilisticTensorDictModule:
             num_samples=2,
             default_interaction_type="random",
         )
-
+        aggregate_probabilities = composite_lp_aggregate()
         # intermediate in a sequence
         seq = ProbabilisticTensorDictSequential(
             TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
@@ -2187,9 +2126,6 @@ class TestProbabilisticTensorDictModule:
             TensorDictModule(
                 lambda x: x + 1, in_keys=["sample"], out_keys=["new_sample"]
             ),
-            inplace=inplace,
-            aggregate_probabilities=aggregate_probabilities,
-            include_sum=include_sum,
             return_composite=return_composite,
         )
         td = TensorDict(x=torch.randn(3, 4), batch_size=[3])
@@ -2219,6 +2155,7 @@ class TestProbabilisticTensorDictModule:
             ("data", "sample_log_prob"),
         ],
     )
+    @set_composite_lp_aggregate(False)  # not a legacy test
     def test_nested_keys_probabilistic_delta(self, log_prob_key):
         policy_module = TensorDictModule(
             nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
@@ -2241,7 +2178,7 @@ class TestProbabilisticTensorDictModule:
         if log_prob_key:
             assert td_out[log_prob_key].shape == (3, 4)
         else:
-            assert td_out["sample_log_prob"].shape == (3, 4)
+            assert td_out[module.log_prob_key].shape == (3, 4)
 
         module = ProbabilisticTensorDictModule(
             in_keys={"param": ("data", "param")},
@@ -2257,7 +2194,7 @@ class TestProbabilisticTensorDictModule:
         if log_prob_key:
             assert td_out[log_prob_key].shape == (3, 4)
         else:
-            assert td_out["sample_log_prob"].shape == (3, 4)
+            assert td_out[module.log_prob_key].shape == (3, 4)
 
     @pytest.mark.parametrize(
         "log_prob_key",
@@ -2268,6 +2205,7 @@ class TestProbabilisticTensorDictModule:
             ("data", "sample_log_prob"),
         ],
     )
+    @set_composite_lp_aggregate(False)
     def test_nested_keys_probabilistic_normal(self, log_prob_key):
         loc_module = TensorDictModule(
             nn.Linear(1, 1),
@@ -2297,7 +2235,7 @@ class TestProbabilisticTensorDictModule:
         if log_prob_key:
             assert td_out[log_prob_key].shape == (3, 4, 1)
         else:
-            assert td_out["sample_log_prob"].shape == (3, 4, 1)
+            assert td_out[module.log_prob_key].shape == (3, 4, 1)
 
         module = ProbabilisticTensorDictModule(
             in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
@@ -2311,7 +2249,7 @@ class TestProbabilisticTensorDictModule:
         if log_prob_key:
             assert td_out[log_prob_key].shape == (3, 4, 1)
         else:
-            assert td_out["sample_log_prob"].shape == (3, 4, 1)
+            assert td_out[module.log_prob_key].shape == (3, 4, 1)
 
 
 class TestEnsembleModule:
@@ -2722,6 +2660,29 @@ class TestCompositeDist:
         sample = dist.sample((4,))
         assert sample.shape == torch.Size((4,) + params.shape)
 
+    def test_set_composite_lp_aggregate(self):
+        d = torch.distributions
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        sample = dist.sample((4,))
+        with set_composite_lp_aggregate(False):
+            lp = dist.log_prob(sample)
+            assert isinstance(lp, TensorDict)
+
+        with set_composite_lp_aggregate(True):
+            lp = dist.log_prob(sample)
+            assert isinstance(lp, torch.Tensor)
+
+    @set_composite_lp_aggregate(False)
     def test_from_distributions(self):
 
         # Values are not used to build the dists
@@ -2768,19 +2729,8 @@ class TestCompositeDist:
         assert sample.shape == params.shape
         sample = dist.sample((4,))
         assert sample.shape == torch.Size((4,) + params.shape)
-        assert sample["sample", "cont"].shape == torch.Size(
-            (
-                4,
-                3,
-                4,
-            )
-        )
-        assert sample["sample", "disc"].shape == torch.Size(
-            (
-                4,
-                3,
-            )
-        )
+        assert sample["sample", "cont"].shape == torch.Size((4, 3, 4))
+        assert sample["sample", "disc"].shape == torch.Size((4, 3))
 
     def test_rsample(self):
         params = TensorDict(
@@ -2808,6 +2758,44 @@ class TestCompositeDist:
         assert sample.shape == torch.Size((4,) + params.shape)
         assert sample.requires_grad
 
+    @set_composite_lp_aggregate(True)
+    def test_log_prob_legacy(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
+            CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+                },
+                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+                aggregate_probabilities=True,
+            )
+
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+
+        sample = dist.rsample((4,))
+        lp = dist.log_prob(sample)
+        assert isinstance(lp, torch.Tensor)
+        assert lp.requires_grad
+
+    @set_composite_lp_aggregate(False)
     def test_log_prob(self):
         params = TensorDict(
             {
@@ -2819,6 +2807,17 @@ class TestCompositeDist:
             },
             [3],
         )
+        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
+            CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+                },
+                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+                aggregate_probabilities=True,
+            )
+
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -2826,17 +2825,15 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-            aggregate_probabilities=True,
         )
 
         sample = dist.rsample((4,))
         lp = dist.log_prob(sample)
-        assert isinstance(lp, torch.Tensor)
+        assert isinstance(lp, TensorDict)
         assert lp.requires_grad
 
-    @pytest.mark.parametrize("inplace", [None, True, False])
-    @pytest.mark.parametrize("include_sum", [None, True, False])
-    def test_log_prob_composite(self, inplace, include_sum):
+    @set_composite_lp_aggregate(True)
+    def test_log_prob_composite_legacy(self):
         params = TensorDict(
             {
                 "cont": {
@@ -2854,27 +2851,74 @@ class TestCompositeDist:
                 ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-            aggregate_probabilities=False,
-            inplace=inplace,
-            include_sum=include_sum,
         )
-        if include_sum is None:
-            include_sum = True
-        if inplace is None:
-            inplace = True
+        sample = dist.rsample((4,))
+        sample_lp = dist.log_prob_composite(sample)
+        assert isinstance(sample_lp, TensorDict)
+
+    @set_composite_lp_aggregate(False)
+    def test_log_prob_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
         sample = dist.rsample((4,))
         sample_lp = dist.log_prob_composite(sample)
         assert sample_lp.get("cont_log_prob").requires_grad
         assert sample_lp.get(("nested", "disc_log_prob")).requires_grad
-        if inplace:
-            assert sample_lp is sample
-        else:
-            assert sample_lp is not sample
-        if include_sum:
-            assert "sample_log_prob" in sample_lp.keys()
-        else:
-            assert "sample_log_prob" not in sample_lp.keys()
+        assert sample_lp is not sample
+        assert "sample_log_prob" not in sample_lp.keys()
 
+    @set_composite_lp_aggregate(True)
+    def test_entropy_legacy(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+
+        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
+            CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+                aggregate_probabilities=True,
+            )
+
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
+        ent = dist.entropy()
+        assert ent.shape == params.shape == dist._batch_shape
+        assert isinstance(ent, torch.Tensor)
+        assert ent.requires_grad
+
+    @set_composite_lp_aggregate(False)
     def test_entropy(self):
         params = TensorDict(
             {
@@ -2886,21 +2930,31 @@ class TestCompositeDist:
             },
             [3],
         )
+
+        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
+            CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+                aggregate_probabilities=True,
+            )
+
         dist = CompositeDistribution(
             params,
             distribution_map={
                 "cont": distributions.Normal,
                 ("nested", "disc"): distributions.Categorical,
             },
-            aggregate_probabilities=True,
         )
         ent = dist.entropy()
         assert ent.shape == params.shape == dist._batch_shape
-        assert isinstance(ent, torch.Tensor)
+        assert isinstance(ent, TensorDict)
         assert ent.requires_grad
 
-    @pytest.mark.parametrize("include_sum", [None, True, False])
-    def test_entropy_composite(self, include_sum):
+    @set_composite_lp_aggregate(True)
+    def test_entropy_composite_legacy(self):
         params = TensorDict(
             {
                 "cont": {
@@ -2917,19 +2971,34 @@ class TestCompositeDist:
                 "cont": distributions.Normal,
                 ("nested", "disc"): distributions.Categorical,
             },
-            aggregate_probabilities=False,
-            include_sum=include_sum,
         )
-        if include_sum is None:
-            include_sum = True
+        sample = dist.entropy()
+        assert isinstance(sample, torch.Tensor)
+
+    @set_composite_lp_aggregate(False)
+    def test_entropy_composite(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+        )
         sample = dist.entropy()
         assert sample.shape == params.shape == dist._batch_shape
         assert sample.get("cont_entropy").requires_grad
         assert sample.get(("nested", "disc_entropy")).requires_grad
-        if include_sum:
-            assert "entropy" in sample.keys()
-        else:
-            assert "entropy" not in sample.keys()
+        assert "entropy" not in sample.keys()
 
     def test_cdf(self):
         params = TensorDict(
@@ -2990,6 +3059,96 @@ class TestCompositeDist:
     )
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("map_names", [True, False])
+    @set_composite_lp_aggregate(True)
+    def test_prob_module_legacy(self, interaction, return_log_prob, map_names):
+        params = TensorDict(
+            {
+                "params": {
+                    "cont": {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                    ("nested", "cont"): {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                }
+            },
+            batch_size=(3,),
+        )
+        in_keys = ["params"]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
+        distribution_kwargs = {"distribution_map": distribution_map}
+        if map_names:
+            distribution_kwargs.update(
+                {
+                    "name_map": {
+                        "cont": ("sample", "cont"),
+                        ("nested", "cont"): ("sample", "nested", "cont"),
+                    }
+                }
+            )
+            out_keys = list(distribution_kwargs["name_map"].values())
+        module = ProbabilisticTensorDictModule(
+            in_keys=in_keys,
+            out_keys=None,
+            distribution_class=CompositeDistribution,
+            distribution_kwargs=distribution_kwargs,
+            default_interaction_type=interaction,
+            return_log_prob=return_log_prob,
+        )
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
+        if not return_log_prob:
+            assert module.out_keys[-2:] == out_keys
+        else:
+            # loosely checks that the log-prob keys have been added
+            assert module.out_keys[-2:] != out_keys
+
+        assert module.log_prob_key == "sample_log_prob"
+        with pytest.raises(RuntimeError):
+            module.log_prob_keys
+
+        sample = module(params)
+
+        key_logprob0 = ("sample", "cont_log_prob") if map_names else "cont_log_prob"
+        key_logprob1 = (
+            ("sample", "nested", "cont_log_prob")
+            if map_names
+            else ("nested", "cont_log_prob")
+        )
+        if return_log_prob:
+            assert key_logprob0 in sample
+            assert key_logprob1 in sample
+            assert module.log_prob_key in sample, list(sample.keys(True, True))
+
+        assert all(key in sample for key in module.out_keys)
+        sample_clone = sample.clone()
+        lp = module.log_prob(sample_clone)
+        assert isinstance(lp, torch.Tensor)
+        assert lp.shape == sample_clone.shape
+        if return_log_prob:
+            torch.testing.assert_close(
+                lp,
+                sample.get(key_logprob0).sum(-1) + sample.get(key_logprob1).sum(-1),
+            )
+        else:
+            torch.testing.assert_close(
+                lp,
+                sample_clone.get(key_logprob0).sum(-1)
+                + sample_clone.get(key_logprob1).sum(-1),
+            )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    @pytest.mark.parametrize("map_names", [True, False])
+    @set_composite_lp_aggregate(False)
     def test_prob_module(self, interaction, return_log_prob, map_names):
         params = TensorDict(
             {
@@ -3046,40 +3205,26 @@ class TestCompositeDist:
             if map_names
             else ("nested", "cont_log_prob")
         )
+        assert module.log_prob_keys == [key_logprob0, key_logprob1]
+        with pytest.raises(RuntimeError):
+            module.log_prob_key
         if return_log_prob:
             assert key_logprob0 in sample
             assert key_logprob1 in sample
+            assert "sample_log_prob" not in sample
         assert all(key in sample for key in module.out_keys)
         sample_clone = sample.clone()
-        with pytest.warns(
-            DeprecationWarning,
-            match="aggregate_probabilities wasn't defined in the ProbabilisticTensorDictModule",
-        ), pytest.warns(
-            DeprecationWarning,
-            match="inplace wasn't defined in the ProbabilisticTensorDictModule",
-        ), pytest.warns(
-            DeprecationWarning,
-            match="include_sum wasn't defined in the ProbabilisticTensorDictModule",
-        ):
-            lp = module.log_prob(sample_clone)
-        assert isinstance(lp, torch.Tensor)
-        if return_log_prob:
-            torch.testing.assert_close(
-                lp,
-                sample.get(key_logprob0).sum(-1) + sample.get(key_logprob1).sum(-1),
-            )
-        else:
-            torch.testing.assert_close(
-                lp,
-                sample_clone.get(key_logprob0).sum(-1)
-                + sample_clone.get(key_logprob1).sum(-1),
-            )
+        lp = module.log_prob(sample_clone)
+        assert is_tensor_collection(lp)
+        assert key_logprob0 in lp
+        assert key_logprob1 in lp
 
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("map_names", [True, False])
-    def test_prob_module_nested(self, interaction, map_names):
+    @set_composite_lp_aggregate(True)
+    def test_prob_module_nested_legacy(self, interaction, map_names):
         params = TensorDict(
             {
                 "agents": TensorDict(
@@ -3148,6 +3293,8 @@ class TestCompositeDist:
         assert all(key in sample for key in module.out_keys)
 
         lp = sample.get(module.log_prob_key)
+        assert module.log_prob_key == ("agents", "sample_log_prob")
+        assert isinstance(lp, torch.Tensor)
         torch.testing.assert_close(
             lp,
             sample.get(key_logprob0).sum(-1) + sample.get(key_logprob1).sum(-1),
@@ -3156,9 +3303,86 @@ class TestCompositeDist:
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
+    @pytest.mark.parametrize("map_names", [True, False])
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_nested(self, interaction, map_names):
+        params = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "params": {
+                            "cont": {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                            ("nested", "cont"): {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                        }
+                    },
+                    batch_size=3,
+                ),
+                "done": torch.ones(1),
+            }
+        )
+        in_keys = [("agents", "params")]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
+        distribution_kwargs = {
+            "distribution_map": distribution_map,
+            "log_prob_key": ("agents", "sample_log_prob"),
+        }
+        if map_names:
+            distribution_kwargs.update(
+                {
+                    "name_map": {
+                        "cont": ("sample", "agents", "cont"),
+                        ("nested", "cont"): ("sample", "agents", "nested", "cont"),
+                    }
+                }
+            )
+            out_keys = list(distribution_kwargs["name_map"].values())
+        module = ProbabilisticTensorDictModule(
+            in_keys=in_keys,
+            out_keys=None,
+            distribution_class=CompositeDistribution,
+            distribution_kwargs=distribution_kwargs,
+            default_interaction_type=interaction,
+            return_log_prob=True,
+        )
+        # loosely checks that the log-prob keys have been added
+        assert module.out_keys[-2:] != out_keys
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
+
+        sample = module(params)
+        key_logprob0 = (
+            ("sample", "agents", "cont_log_prob") if map_names else "cont_log_prob"
+        )
+        key_logprob1 = (
+            ("sample", "agents", "nested", "cont_log_prob")
+            if map_names
+            else ("nested", "cont_log_prob")
+        )
+        assert key_logprob0 in sample
+        assert key_logprob1 in sample
+        assert all(key in sample for key in module.out_keys)
+
+        lp = sample.select(*module.log_prob_keys)
+        assert lp[key_logprob0] is not None
+        assert lp[key_logprob1] is not None
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("ordereddict", [True, False])
-    def test_prob_module_seq(self, interaction, return_log_prob, ordereddict):
+    @set_composite_lp_aggregate(True)
+    def test_prob_module_seq_legacy(self, interaction, return_log_prob, ordereddict):
         params = TensorDict(
             {
                 "params": {
@@ -3212,17 +3436,7 @@ class TestCompositeDist:
         assert isinstance(dist, CompositeDistribution)
 
         sample_clone = sample.clone()
-        with pytest.warns(
-            DeprecationWarning,
-            match="aggregate_probabilities wasn't defined in the ProbabilisticTensorDictModule",
-        ), pytest.warns(
-            DeprecationWarning,
-            match="inplace wasn't defined in the ProbabilisticTensorDictModule",
-        ), pytest.warns(
-            DeprecationWarning,
-            match="include_sum wasn't defined in the ProbabilisticTensorDictModule",
-        ):
-            lp = module.log_prob(sample_clone)
+        lp = module.log_prob(sample_clone)
 
         if return_log_prob:
             torch.testing.assert_close(
@@ -3240,7 +3454,8 @@ class TestCompositeDist:
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
-    def test_prob_module_seq_nested(self, interaction):
+    @set_composite_lp_aggregate(True)
+    def test_prob_module_seq_nested_legacy(self, interaction):
         params = TensorDict(
             {
                 "agents": TensorDict(
@@ -3292,6 +3507,57 @@ class TestCompositeDist:
             sample.get("cont_log_prob").sum(-1)
             + sample.get(("nested", "cont_log_prob")).sum(-1),
         )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_seq_nested(self, interaction):
+        params = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "params": {
+                            "cont": {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                            ("nested", "cont"): {
+                                "loc": torch.randn(3, 4, requires_grad=True),
+                                "scale": torch.rand(3, 4, requires_grad=True),
+                            },
+                        }
+                    },
+                    batch_size=3,
+                ),
+                "done": torch.ones(1),
+            }
+        )
+        in_keys = [("agents", "params")]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
+        log_prob_keys = ("cont_log_prob", ("nested", "cont_log_prob"))
+        backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
+        module = ProbabilisticTensorDictSequential(
+            backbone,
+            ProbabilisticTensorDictModule(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={"distribution_map": distribution_map},
+                default_interaction_type=interaction,
+                return_log_prob=True,
+                log_prob_keys=log_prob_keys,
+            ),
+        )
+        assert module.dist_sample_keys == out_keys
+        assert module.dist_params_keys == in_keys
+        sample = module(params)
+        assert "cont_log_prob" in sample.keys()
+        assert ("nested", "cont_log_prob") in sample.keys(True)
 
 
 class TestAddStateIndependentNormalScale:

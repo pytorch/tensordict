@@ -44,3 +44,4 @@ from tensordict.nn.utils import (
 )
 
 from .cudagraphs import CudaGraphModule
+from .utils import composite_lp_aggregate, set_composite_lp_aggregate
