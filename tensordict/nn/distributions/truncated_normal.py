@@ -15,6 +15,7 @@ import torch
 from torch.distributions import constraints, Distribution
 from torch.distributions.utils import broadcast_all
 
+
 CONST_SQRT_2 = math.sqrt(2)
 CONST_INV_SQRT_2PI = 1 / math.sqrt(2 * math.pi)
 CONST_INV_SQRT_2 = 1 / math.sqrt(2)

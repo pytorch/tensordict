@@ -6,9 +6,11 @@
 import argparse
 import contextlib
 import copy
+import functools
 import os
 import pickle
 import unittest
+import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import MutableSequence
@@ -98,6 +100,7 @@ if PYTORCH_TEST_FBCODE:
 
 
 class TestInteractionType:
+
     @pytest.mark.parametrize(
         "str_and_expected_type",
         [
@@ -116,6 +119,131 @@ class TestInteractionType:
     def test_from_str_correct_raise(self, unsupported_type_str):
         with pytest.raises(ValueError, match=" is not a valid InteractionType"):
             InteractionType.from_str(unsupported_type_str)
+
+    dist_partials = {
+        "Bernoulli": functools.partial(
+            distributions.Bernoulli, probs=torch.tensor([0.5, 0.5])
+        ),
+        "Beta": functools.partial(
+            distributions.Beta, concentration1=1.0, concentration0=1.0
+        ),
+        "Binomial": functools.partial(
+            distributions.Binomial, total_count=1, probs=torch.tensor([0.5, 0.5])
+        ),
+        "Categorical": functools.partial(
+            distributions.Categorical, probs=torch.tensor([0.5, 0.5])
+        ),
+        "Cauchy": functools.partial(distributions.Cauchy, loc=0.0, scale=1.0),
+        "Chi2": functools.partial(distributions.Chi2, df=1),
+        "ContinuousBernoulli": functools.partial(
+            distributions.ContinuousBernoulli, probs=torch.tensor([0.5, 0.5])
+        ),
+        "Dirichlet": functools.partial(
+            distributions.Dirichlet, concentration=torch.tensor([0.5, 0.5])
+        ),
+        "Exponential": functools.partial(distributions.Exponential, rate=1.0),
+        "FisherSnedecor": functools.partial(distributions.FisherSnedecor, df1=1, df2=1),
+        "Gamma": functools.partial(distributions.Gamma, concentration=1.0, rate=1.0),
+        "Geometric": functools.partial(
+            distributions.Geometric, probs=torch.tensor([0.5, 0.5])
+        ),
+        "Gumbel": functools.partial(distributions.Gumbel, loc=0.0, scale=1.0),
+        "HalfCauchy": functools.partial(distributions.HalfCauchy, scale=1.0),
+        "HalfNormal": functools.partial(distributions.HalfNormal, scale=1.0),
+        "InverseGamma": functools.partial(
+            distributions.InverseGamma, concentration=1.0, rate=1.0
+        ),
+        "Kumaraswamy": functools.partial(
+            distributions.Kumaraswamy, concentration1=1.0, concentration0=1.0
+        ),
+        "LKJCholesky": functools.partial(distributions.LKJCholesky, 3, 5),
+        "Laplace": functools.partial(distributions.Laplace, loc=0.0, scale=1.0),
+        "LogNormal": functools.partial(distributions.LogNormal, loc=0.0, scale=1.0),
+        "LogisticNormal": functools.partial(
+            distributions.LogisticNormal, loc=0.0, scale=1.0
+        ),
+        "LowRankMultivariateNormal": functools.partial(
+            distributions.LowRankMultivariateNormal,
+            loc=torch.zeros(2),
+            cov_factor=torch.tensor([[1.0], [0.0]]),
+            cov_diag=torch.ones(2),
+        ),
+        "MixtureSameFamily": functools.partial(
+            distributions.MixtureSameFamily,
+            mixture_distribution=distributions.Categorical(
+                torch.ones(
+                    5,
+                )
+            ),
+            component_distribution=distributions.Normal(
+                torch.randn(
+                    5,
+                ),
+                torch.rand(
+                    5,
+                ),
+            ),
+        ),
+        "Multinomial": functools.partial(
+            distributions.Multinomial, total_count=1, probs=torch.tensor([0.5, 0.5])
+        ),
+        "MultivariateNormal": functools.partial(
+            distributions.MultivariateNormal,
+            loc=torch.ones(3),
+            covariance_matrix=torch.eye(3),
+        ),
+        "NegativeBinomial": functools.partial(
+            distributions.NegativeBinomial,
+            total_count=1,
+            probs=torch.tensor([0.5, 0.5]),
+        ),
+        "Normal": functools.partial(distributions.Normal, loc=0.0, scale=1.0),
+        "OneHotCategorical": functools.partial(
+            distributions.OneHotCategorical, probs=torch.tensor([0.5, 0.5])
+        ),
+        "OneHotCategoricalStraightThrough": functools.partial(
+            distributions.OneHotCategoricalStraightThrough,
+            probs=torch.tensor([0.5, 0.5]),
+        ),
+        "Pareto": functools.partial(distributions.Pareto, scale=1.0, alpha=1.0),
+        "Poisson": functools.partial(distributions.Poisson, rate=1.0),
+        "RelaxedBernoulli": functools.partial(
+            distributions.RelaxedBernoulli,
+            temperature=1,
+            probs=torch.tensor([0.5, 0.5]),
+        ),
+        "RelaxedOneHotCategorical": functools.partial(
+            distributions.RelaxedOneHotCategorical,
+            temperature=1,
+            probs=torch.tensor([0.5, 0.5]),
+        ),
+        "StudentT": functools.partial(distributions.StudentT, df=1, loc=0.0, scale=1.0),
+        "Uniform": functools.partial(distributions.Uniform, low=0.0, high=1.0),
+        "VonMises": functools.partial(
+            distributions.VonMises, loc=0.0, concentration=1.0
+        ),
+        "Weibull": functools.partial(
+            distributions.Weibull, scale=1.0, concentration=1.0
+        ),
+        "Wishart": functools.partial(
+            distributions.Wishart, df=torch.tensor([2]), covariance_matrix=torch.eye(2)
+        ),
+    }
+
+    @pytest.mark.parametrize("partial", dist_partials)
+    def test_deterministic_sample(self, partial):
+        with (
+            pytest.raises(RuntimeError, match="DETERMINISTIC, MEAN and MODE")
+            if partial in ("LKJCholesky",)
+            else contextlib.nullcontext()
+        ):
+            partial = self.dist_partials[partial]
+            dist_mod = ProbabilisticTensorDictModule(
+                in_keys=[], out_keys=["out"], distribution_class=partial
+            )
+            with set_interaction_type("DETERMINISTIC"):
+                td = dist_mod(TensorDict())
+                assert td["out"] is not None
 
 
 class TestTDModule:
@@ -458,12 +586,7 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
-            with (
-                pytest.warns(UserWarning, match="deterministic_sample")
-                if it in (InteractionType.DETERMINISTIC, None)
-                else contextlib.nullcontext()
-            ):
-                tensordict_module(td)
+            tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -502,12 +625,7 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
-            with (
-                pytest.warns(UserWarning, match="deterministic_sample")
-                if it in (None, InteractionType.DETERMINISTIC)
-                else contextlib.nullcontext()
-            ):
-                tensordict_module(td)
+            tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -566,12 +684,7 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         with set_interaction_type(it):
-            with (
-                pytest.warns(UserWarning, match="deterministic_sample")
-                if it in (None, InteractionType.DETERMINISTIC)
-                else contextlib.nullcontext()
-            ):
-                tensordict_module(td)
+            tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1083,8 +1196,7 @@ class TestTDSequence:
         assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with pytest.warns(UserWarning, match="deterministic_sample"):
-            tdmodule(td)
+        tdmodule(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -1318,8 +1430,7 @@ class TestTDSequence:
         assert tdmodule[3] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with pytest.warns(UserWarning, match="deterministic_sample"):
-            tdmodule(td)
+        tdmodule(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -2182,27 +2293,26 @@ class TestProbabilisticTensorDictModule:
             return_log_prob=True,
             log_prob_key=log_prob_key,
         )
-        with pytest.warns(UserWarning, match="deterministic_sample"):
-            td_out = module(loc_module(scale_module(td)))
-            assert td_out["data", "action"].shape == (3, 4, 1)
-            if log_prob_key:
-                assert td_out[log_prob_key].shape == (3, 4, 1)
-            else:
-                assert td_out["sample_log_prob"].shape == (3, 4, 1)
+        td_out = module(loc_module(scale_module(td)))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4, 1)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
-            module = ProbabilisticTensorDictModule(
-                in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
-                out_keys=[("data", "action")],
-                distribution_class=Normal,
-                return_log_prob=True,
-                log_prob_key=log_prob_key,
-            )
-            td_out = module(loc_module(scale_module(td)))
-            assert td_out["data", "action"].shape == (3, 4, 1)
-            if log_prob_key:
-                assert td_out[log_prob_key].shape == (3, 4, 1)
-            else:
-                assert td_out["sample_log_prob"].shape == (3, 4, 1)
+        module = ProbabilisticTensorDictModule(
+            in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+            out_keys=[("data", "action")],
+            distribution_class=Normal,
+            return_log_prob=True,
+            log_prob_key=log_prob_key,
+        )
+        td_out = module(loc_module(scale_module(td)))
+        assert td_out["data", "action"].shape == (3, 4, 1)
+        if log_prob_key:
+            assert td_out[log_prob_key].shape == (3, 4, 1)
+        else:
+            assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
 
 class TestEnsembleModule:

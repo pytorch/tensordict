@@ -12,6 +12,7 @@ from typing import Sequence
 import numpy as np
 
 import torch
+
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
@@ -305,3 +306,14 @@ class Delta(D.Distribution):
     @property
     def deterministic_sample(self) -> torch.Tensor:
         return self.param
+
+
+@property
+def _logistic_deterministic_sample(self):
+    s = self.loc
+    for t in self.transforms:
+        s = t(s)
+    return s
+
+
+D.LogisticNormal.deterministic_sample = _logistic_deterministic_sample

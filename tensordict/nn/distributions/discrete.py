@@ -88,3 +88,16 @@ class OneHotCategorical(D.Categorical):
         out = d.rsample(sample_shape)
         out.data.copy_((out == out.max(-1)[0].unsqueeze(-1)).to(out.dtype))
         return out
+
+
+D.RelaxedBernoulli.deterministic_sample = D.Bernoulli.mode
+
+
+@property
+def _relaxed_onehot_mode(self) -> torch.Tensor:
+    probs = self.base_dist.probs
+    mode = probs.argmax(dim=-1)
+    return torch.nn.functional.one_hot(mode, num_classes=probs.shape[-1]).to(probs)
+
+
+D.RelaxedOneHotCategorical.deterministic_sample = _relaxed_onehot_mode
