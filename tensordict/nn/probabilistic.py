@@ -33,7 +33,7 @@ from tensordict.nn.utils import (
 )
 from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _ContextManager, _zip_strict
+from tensordict.utils import _ContextManager, _zip_strict, unravel_key
 from torch import distributions as D, Tensor
 from torch.utils._contextlib import _DecoratorContextManager
 
@@ -369,7 +369,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         else:
             dist_keys = in_keys
 
-        self._out_keys = out_keys
+        self._out_keys = [unravel_key(k) for k in out_keys]
         self.in_keys = in_keys
         self.dist_keys = dist_keys
         if log_prob_keys is None:
@@ -379,14 +379,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 log_prob_keys = [
                     _add_suffix(key, "_log_prob") for key in self._out_keys
                 ]
-        elif composite_lp_aggregate():
+        elif composite_lp_aggregate(nowarn=True):
             raise RuntimeError(
                 "composite_lp_aggregate is set to True but log_prob_keys were passed. "
                 "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead."
             )
         if log_prob_key is None:
             log_prob_key = "sample_log_prob"
-        elif len(out_keys) > 1 and not composite_lp_aggregate():
+        elif len(out_keys) > 1 and not composite_lp_aggregate(nowarn=True):
             raise RuntimeError(
                 "composite_lp_aggregate is set to `False` but a `log_prob_key` was passed. "
                 "When composite_lp_aggregate() returns ``False``, log_prob_keys must be used instead."
@@ -407,12 +407,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if isinstance(num_samples, (int, torch.SymInt)):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
+        self._composite_lp_aggreate_at_init = composite_lp_aggregate(nowarn=True)
 
     @property
     def out_keys(self) -> List[NestedKey]:
         out_keys = list(self._out_keys)
         if self.return_log_prob:
-            if not composite_lp_aggregate():
+            if not composite_lp_aggregate(nowarn=True):
                 if out_keys[-len(self.log_prob_keys) :] != self.log_prob_keys:
                     out_keys.extend(self.log_prob_keys)
             elif self.log_prob_key not in out_keys:
@@ -421,7 +422,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def log_prob_key(self):
-        if not composite_lp_aggregate():
+        if not composite_lp_aggregate(nowarn=True):
             if len(self.log_prob_keys) == 1:
                 return self.log_prob_keys[0]
             raise RuntimeError(
@@ -433,7 +434,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def log_prob_keys(self):
-        if composite_lp_aggregate():
+        if composite_lp_aggregate(nowarn=True):
             return [self.log_prob_key]
         return self._log_prob_keys
 
@@ -445,10 +446,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     @property
     def dist_sample_keys(self) -> List[NestedKey]:
         """Returns all the keys pointing at the distribution samples."""
-        if composite_lp_aggregate():
-            return [key for key in self.out_keys if key != self.log_prob_key]
-        else:
-            return [key for key in self.out_keys if key not in self.log_prob_keys]
+        return list(self._out_keys)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict.
@@ -487,6 +485,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     build_dist_from_params = get_dist
 
+    _CHANGE_IN_C_LP_A = "The value returned by composite_lp_aggregate changed between init of {} and its execution ({} -> {}). Make sure the mode matches."
+
     def log_prob(
         self,
         tensordict,
@@ -506,7 +506,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if dist is None:
             dist = self.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
-            if composite_lp_aggregate():
+            clpa = composite_lp_aggregate()
+            if clpa != self._composite_lp_aggreate_at_init:
+                raise RuntimeError(
+                    self._CHANGE_IN_C_LP_A.format(
+                        type(self).__name__, self._composite_lp_aggreate_at_init, clpa
+                    )
+                )
+            if clpa:
                 # Old behaviour - discouraged
                 with set_composite_lp_aggregate(False):
                     td = dist.log_prob(tensordict)
@@ -554,11 +561,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
             if isinstance(out_tensors, TensorDictBase):
                 if self.return_log_prob:
-                    if composite_lp_aggregate():
-                        kwargs = {}
+                    clpa = composite_lp_aggregate()
+                    if clpa != self._composite_lp_aggreate_at_init:
+                        raise RuntimeError(
+                            self._CHANGE_IN_C_LP_A.format(
+                                type(self).__name__,
+                                self._composite_lp_aggreate_at_init,
+                                clpa,
+                            )
+                        )
+                    if clpa:
                         with set_composite_lp_aggregate(False):
                             # We want the tensordict to do the sum and such
-                            log_prob = dist.log_prob(out_tensors, **kwargs)
+                            log_prob = dist.log_prob(out_tensors)
                         if log_prob is not out_tensors:
                             # Composite dists return the tensordict_out directly when aggrgate_prob is False
                             out_tensors.update(log_prob)
@@ -582,7 +597,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
-                tensordict.get(key) for key in self.out_keys if key != self.log_prob_key
+                tensordict.get(key)
+                for key in self.out_keys
+                if key not in self.log_prob_keys
             ]
             log_prob = dist.log_prob(*out_tensors)
             tensordict_out.set(self.log_prob_key, log_prob)
@@ -925,7 +942,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         # ProbabilisticTensorDictSequential is presumably used to return the
         # distribution using `get_dist` or to sample log_probabilities
         _, out_keys = self._compute_in_and_out_keys(modules_list[:-1])
-        self._requires_sample = modules_list[-1].out_keys[0] not in set(out_keys)
+        self._requires_sample = any(
+            key not in set(out_keys)
+            for key in getattr(modules_list[-1], "dist_sample_keys", [None])
+        )
         if self._ordered_dict:
             self.__dict__["_det_part"] = TensorDictSequential(
                 collections.OrderedDict(list(modules[0].items())[:-1])

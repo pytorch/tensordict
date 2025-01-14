@@ -2685,13 +2685,6 @@ class TestCompositeDist:
     @pytest.mark.parametrize("mode", [None, True, False])
     def test_set_composite_lp_aggregate_build_and_get(self, mode):
         d = torch.distributions
-        params = TensorDict(
-            {
-                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
-                ("nested", "disc"): {"logits": torch.randn(3, 10)},
-            },
-            [3],
-        )
         dist_maker = functools.partial(
             CompositeDistribution,
             distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
