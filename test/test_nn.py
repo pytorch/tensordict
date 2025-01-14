@@ -10,7 +10,6 @@ import functools
 import os
 import pickle
 import unittest
-import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import MutableSequence
