@@ -198,6 +198,8 @@ to build distributions from network outputs and get summary statistics or sample
     TensorDictModuleWrapper
     CudaGraphModule
     WrapModule
+    set_composite_lp_aggregate
+    composite_lp_aggregate
 
 Ensembles
 ---------
@@ -249,10 +251,10 @@ Distributions
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    NormalParamExtractor
     AddStateIndependentNormalScale
     CompositeDistribution
     Delta
+    NormalParamExtractor
     OneHotCategorical
     TruncatedNormal
 

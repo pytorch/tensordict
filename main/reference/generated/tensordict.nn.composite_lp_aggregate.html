@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>tensordict.nn.distributions.CompositeDistribution &mdash; tensordict main documentation</title>
+  <title>composite_lp_aggregate &mdash; tensordict main documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="tensordict.nn.distributions.Delta" href="tensordict.nn.distributions.Delta.html" />
-    <link rel="prev" title="tensordict.nn.distributions.AddStateIndependentNormalScale" href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" />
+    <link rel="next" title="tensordict.nn.EnsembleModule" href="tensordict.nn.EnsembleModule.html" />
+    <link rel="prev" title="set_composite_lp_aggregate" href="tensordict.nn.set_composite_lp_aggregate.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -322,13 +322,13 @@
         
           <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
         
-      <li>tensordict.nn.distributions.CompositeDistribution</li>
+      <li>composite_lp_aggregate</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/tensordict.nn.distributions.CompositeDistribution.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.nn.composite_lp_aggregate.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -354,102 +354,20 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="tensordict-nn-distributions-compositedistribution">
-<h1>tensordict.nn.distributions.CompositeDistribution<a class="headerlink" href="#tensordict-nn-distributions-compositedistribution" title="Permalink to this heading">¶</a></h1>
+  <section id="composite-lp-aggregate">
+<h1>composite_lp_aggregate<a class="headerlink" href="#composite-lp-aggregate" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="tensordict.nn.distributions.CompositeDistribution">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.distributions.</span></span><span class="sig-name descname"><span class="pre">CompositeDistribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">distribution_map</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><span class="pre">dict</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name_map</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><span class="pre">dict</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extra_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_probabilities</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entropy_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.distributions.CompositeDistribution" title="Permalink to this definition">¶</a></dt>
-<dd><p>A composite distribution that groups multiple distributions together using the TensorDict interface.</p>
-<p>This class allows for operations such as <cite>log_prob_composite</cite>, <cite>entropy_composite</cite>, <cite>cdf</cite>, <cite>icdf</cite>, <cite>rsample</cite>, and <cite>sample</cite>
-to be performed on a collection of distributions, returning a TensorDict. The input TensorDict may be modified in-place.</p>
+<dt class="sig sig-object py" id="tensordict.nn.composite_lp_aggregate">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nowarn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.composite_lp_aggregate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns whether a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>params</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – A nested key-tensor map where the root entries correspond to sample names, and the leaves
-are the distribution parameters. Entry names must match those specified in <cite>distribution_map</cite>.</p></li>
-<li><p><strong>distribution_map</strong> (<em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>Type</em><em>[</em><em>torch.distribution.Distribution</em><em>]</em><em>]</em>) – Specifies the distribution types to be used.
-The names of the distributions should match the sample names in the <cite>TensorDict</cite>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>name_map</strong> (<em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>NestedKey</em><em>]</em><em>, </em><em>optional</em>) – A mapping of where each sample should be written. If not provided,
-the key names from <cite>distribution_map</cite> will be used.</p></li>
-<li><p><strong>extra_kwargs</strong> (<em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>Dict</em><em>]</em><em>, </em><em>optional</em>) – A dictionary of additional keyword arguments for constructing the distributions.</p></li>
-<li><p><strong>aggregate_probabilities</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>If <cite>True</cite>, the <cite>log_prob</cite> and <cite>entropy</cite> methods will sum the
-probabilities and entropies of the individual distributions and return a single tensor.
-If <cite>False</cite>, individual log-probabilities will be stored in the input TensorDict (for <cite>log_prob</cite>) or returned
-as leaves of the output TensorDict (for <cite>entropy</cite>). This can be overridden at runtime
-by passing the <cite>aggregate_probabilities</cite> argument to <cite>log_prob</cite> and <cite>entropy</cite>. Defaults to <cite>False</cite>.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>This argument will be deprecated in v0.9 when <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.probabilistic.composite_lp_aggregate()</span></code>
-will default to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div>
-</p></li>
-<li><p><strong>log_prob_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>The key where the aggregated log probability will be stored.
-Defaults to <cite>‘sample_log_prob’</cite>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>if <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.probabilistic.composite_lp_aggregate()</span></code> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe log-probabilities will
-be written under <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;_log_prob”)</cite>
-where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
-the leaf tensor being sampled. In that case, the <code class="docutils literal notranslate"><span class="pre">log_prob_key</span></code> argument will be ignored.</p>
-</div>
-</p></li>
-<li><p><strong>entropy_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>The key where the entropy will be stored. Defaults to <cite>‘entropy’</cite></p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>if <code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.probabilistic.composite_lp_aggregate()</span></code> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, tbe entropies will
-be written under <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;_entropy”)</cite>
-where <cite>(“path”, “to”, “leaf”, “&lt;sample_name&gt;”)</cite> is the <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> corresponding to
-the leaf tensor being sampled. In that case, the <code class="docutils literal notranslate"><span class="pre">entropy_key</span></code> argument will be ignored.</p>
-</div>
-</p></li>
-</ul>
+<dd class="field-odd"><p><strong>nowarn</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – whether to ignore warnings. Defaults to False.</p>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The batch size of the input TensorDict containing the parameters (<cite>params</cite>) determines the batch shape of
-the distribution. For example, the <cite>“sample_log_prob”</cite> entry resulting from a call to <cite>log_prob</cite> will have the
-shape of the parameters plus any additional batch dimensions.</p>
-</div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> and <code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code>
-to learn how to use this class as part of a model.</p>
-</div>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a> to control the aggregation of the log-probabilities.</p>
-</div>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
-<span class="gp">... </span>    <span class="s2">&quot;cont&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span>
-<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;nested&quot;</span><span class="p">,</span> <span class="s2">&quot;disc&quot;</span><span class="p">):</span> <span class="p">{</span><span class="s2">&quot;logits&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">10</span><span class="p">)}</span>
-<span class="gp">... </span><span class="p">},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dist</span> <span class="o">=</span> <span class="n">CompositeDistribution</span><span class="p">(</span><span class="n">params</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">distribution_map</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cont&quot;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">Normal</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;nested&quot;</span><span class="p">,</span> <span class="s2">&quot;disc&quot;</span><span class="p">):</span> <span class="n">d</span><span class="o">.</span><span class="n">Categorical</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">((</span><span class="mi">4</span><span class="p">,))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">sample</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        cont: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        nested: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                disc: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([4]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
+<p><a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_composite_lp_aggregate()</span></code></a></p>
 </div>
 </dd></dl>
 
@@ -463,10 +381,10 @@ to learn how to use this class as part of a model.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.nn.distributions.Delta.html" class="btn btn-neutral float-right" title="tensordict.nn.distributions.Delta" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.EnsembleModule.html" class="btn btn-neutral float-right" title="tensordict.nn.EnsembleModule" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" class="btn btn-neutral" title="tensordict.nn.distributions.AddStateIndependentNormalScale" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.set_composite_lp_aggregate.html" class="btn btn-neutral" title="set_composite_lp_aggregate" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -498,7 +416,7 @@ to learn how to use this class as part of a model.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">tensordict.nn.distributions.CompositeDistribution</a></li>
+<li><a class="reference internal" href="#">composite_lp_aggregate</a></li>
 </ul>
 
             </div>
