@@ -27,6 +27,7 @@ from tensordict.nn.distributions.truncated_normal import (
 )
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import (
+    _composite_lp_aggregate,
     _set_skip_existing_None,
     composite_lp_aggregate,
     set_composite_lp_aggregate,
@@ -445,6 +446,18 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 f"unless there is one and only one element in log_prob_keys (got log_prob_keys={self.log_prob_keys}). "
                 f"When composite_lp_aggregate() returns ``False``, try to use {type(self).__name__}.log_prob_keys instead."
             )
+        if _composite_lp_aggregate.get_mode() is None:
+            warnings.warn(
+                f"You are querying the log-probability key of a {type(self).__name__} where the "
+                f"composite_lp_aggregate has not been set. "
+                f"Currently, it is assumed that composite_lp_aggregate() will return True: the log-probs will be aggregated "
+                f"in a {self._log_prob_key} entry. From v0.9, this behaviour will be changed and individual log-probs will "
+                f"be written in `('path', 'to', 'leaf', '<sample_name>_log_prob')`. To prepare for this change, "
+                f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script. Use mode=True "
+                f"to keep the current behaviour, and mode=False to use per-leaf log-probs.",
+                category=DeprecationWarning,
+            )
+
         return self._log_prob_key
 
     @property

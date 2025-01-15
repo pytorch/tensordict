@@ -2697,7 +2697,12 @@ class TestCompositeDist:
                 return_log_prob=True,
             )
             if composite_lp_aggregate(nowarn=True):
-                assert p.log_prob_key == "sample_log_prob"
+                with (
+                    pytest.warns(DeprecationWarning)
+                    if mode is None
+                    else contextlib.nullcontext()
+                ):
+                    assert p.log_prob_key == "sample_log_prob"
             else:
                 assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
 

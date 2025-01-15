@@ -9,7 +9,11 @@ from typing import Dict
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
+from tensordict.nn.utils import (
+    _composite_lp_aggregate,
+    composite_lp_aggregate,
+    set_composite_lp_aggregate,
+)
 from tensordict.utils import NestedKey, unravel_key, unravel_keys
 from torch import distributions as d
 
@@ -47,7 +51,12 @@ class CompositeDistribution(d.Distribution):
                 where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
                 the leaf tensor being sampled. In that case, the ``log_prob_key`` argument will be ignored.
 
-        entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`.
+        entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`
+
+            .. note:: if :func:`tensordict.nn.probabilistic.composite_lp_aggregate` returns ``False``, tbe entropies will
+                be written under `("path", "to", "leaf", "<sample_name>_entropy")`
+                where `("path", "to", "leaf", "<sample_name>")` is the :class:`~tensordict.NestedKey` corresponding to
+                the leaf tensor being sampled. In that case, the ``entropy_key`` argument will be ignored.
 
     .. note:: The batch size of the input TensorDict containing the parameters (`params`) determines the batch shape of
         the distribution. For example, the `"sample_log_prob"` entry resulting from a call to `log_prob` will have the
@@ -94,8 +103,8 @@ class CompositeDistribution(d.Distribution):
         name_map: dict | None = None,
         extra_kwargs=None,
         aggregate_probabilities: bool | None = None,
-        log_prob_key: NestedKey = "sample_log_prob",
-        entropy_key: NestedKey = "entropy",
+        log_prob_key: NestedKey | None = None,
+        entropy_key: NestedKey | None = None,
     ):
         self._batch_shape = params.shape
         if extra_kwargs is None:
@@ -137,6 +146,50 @@ class CompositeDistribution(d.Distribution):
 
         self.aggregate_probabilities = aggregate_probabilities
 
+    @property
+    def log_prob_key(self):
+        log_prob_key = self._log_prob_key
+        if log_prob_key is None:
+            log_prob_key = "sample_log_prob"
+        if _composite_lp_aggregate.get_mode() is None:
+            warnings.warn(
+                f"You are querying the log-probability key of a {type(self).__name__} where the "
+                f"composite_lp_aggregate has not been set. "
+                f"Currently, it is assumed that composite_lp_aggregate() will return True: the log-probs will be aggregated "
+                f"in a {log_prob_key} entry. From v0.9, this behaviour will be changed and individual log-probs will "
+                f"be written in `('path', 'to', 'leaf', '<sample_name>_log_prob')`. To prepare for this change, "
+                f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script. Use mode=True "
+                f"to keep the current behaviour, and mode=False to use per-leaf log-probs.",
+                category=DeprecationWarning,
+            )
+        return log_prob_key
+
+    @log_prob_key.setter
+    def log_prob_key(self, value):
+        self._log_prob_key = value
+
+    @property
+    def entropy_key(self):
+        entropy_key = self._entropy_key
+        if entropy_key is None:
+            entropy_key = "entropy"
+        if _composite_lp_aggregate.get_mode() is None:
+            warnings.warn(
+                f"You are querying the entropy key of a {type(self).__name__} where the "
+                f"composite_lp_aggregate has not been set. "
+                f"Currently, it is assumed that composite_lp_aggregate() will return True: the entropy will be aggregated "
+                f"in a {entropy_key} entry. From v0.9, this behaviour will be changed and individual entropies will "
+                f"be written in `('path', 'to', 'leaf', '<sample_name>_entropy')`. To prepare for this change, "
+                f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script. Use mode=True "
+                f"to keep the current behaviour, and mode=False to use per-leaf entropy.",
+                category=DeprecationWarning,
+            )
+        return entropy_key
+
+    @entropy_key.setter
+    def entropy_key(self, value):
+        self._entropy_key = value
+
     @classmethod
     def from_distributions(
         cls,
@@ -144,8 +197,8 @@ class CompositeDistribution(d.Distribution):
         distributions: Dict[NestedKey, d.Distribution],
         *,
         name_map: dict | None = None,
-        log_prob_key: NestedKey = "sample_log_prob",
-        entropy_key: NestedKey = "entropy",
+        log_prob_key: NestedKey | None = None,
+        entropy_key: NestedKey | None = None,
     ) -> CompositeDistribution:
         """Create a `CompositeDistribution` instance from existing distribution objects.
 
