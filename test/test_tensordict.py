@@ -1942,7 +1942,8 @@ class TestGeneric:
         assert d.b == ["asd", "efg"]
 
     @pytest.mark.parametrize("make_mask", [True, ("bibbidi", "bobbidi", "boo"), False])
-    def test_pad_sequence_pad_dim0(self, make_mask):
+    @pytest.mark.parametrize("pad_val", [0, -1])
+    def test_pad_sequence_pad_dim0(self, make_mask, pad_val):
         pad_dim = 0
         list_td = [
             TensorDict(
@@ -1953,7 +1954,9 @@ class TestGeneric:
                 [4],
             ),
         ]
-        padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+        padded_td = pad_sequence(
+            list_td, pad_dim=pad_dim, return_mask=make_mask, padding_value=pad_val
+        )
         assert padded_td.shape == torch.Size(
             [2, 4]
         )  # check the shape of the padded tensordict
@@ -1966,17 +1969,17 @@ class TestGeneric:
         assert padded_td["a"].shape == torch.Size(
             [2, 4, 8, 8]
         )  # check the shape of the padded tensor
-        assert torch.all(padded_td["a"][0, 2:, :, :] == 0)  # check the padding
+        assert torch.all(padded_td["a"][0, 2:, :, :] == pad_val)  # check the padding
         assert padded_td["b", "c"].shape == torch.Size(
             [2, 4, 3]
         )  # check the shape of the padded tensor
-        assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
+        assert torch.all(padded_td["b", "c"][0, 2:, :] == pad_val)  # check the padding
         if make_mask:
             masks_key = "masks"
             if not isinstance(make_mask, bool):
                 masks_key = make_mask
             padded_td_without_masks = pad_sequence(
-                list_td, pad_dim=pad_dim, return_mask=False
+                list_td, pad_dim=pad_dim, return_mask=False, padding_value=pad_val
             )
             assert masks_key in padded_td.keys(True)
             assert set(
@@ -1984,12 +1987,16 @@ class TestGeneric:
             ) == set(padded_td[masks_key].keys(include_nested=True, leaves_only=True))
             assert not padded_td[masks_key, "a"].all()
             assert padded_td[masks_key, "a"].ndim == pad_dim + 2
-            assert (padded_td["a"][padded_td[masks_key, "a"]] != 0).all()
-            assert (padded_td["a"][~padded_td[masks_key, "a"]] == 0).all()
+            assert (padded_td["a"][padded_td[masks_key, "a"]] != pad_val).all()
+            assert (padded_td["a"][~padded_td[masks_key, "a"]] == pad_val).all()
             assert not padded_td[masks_key, "b", "c"].all()
             assert padded_td[masks_key, "b", "c"].ndim == pad_dim + 2
-            assert (padded_td["b", "c"][padded_td[masks_key, "b", "c"]] != 0).all()
-            assert (padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == 0).all()
+            assert (
+                padded_td["b", "c"][padded_td[masks_key, "b", "c"]] != pad_val
+            ).all()
+            assert (
+                padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == pad_val
+            ).all()
         else:
             assert "masks" not in padded_td.keys()
 

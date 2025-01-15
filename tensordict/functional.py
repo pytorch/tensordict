@@ -156,10 +156,11 @@ def pad_sequence(
             "plase convert the tensorclasses to TensorDicts first."
         )
 
-    masks_key = "masks"
     if not isinstance(return_mask, bool):
         masks_key = unravel_key(return_mask)
         return_mask = True
+    else:
+        masks_key = "masks"
 
     # check that all tensordict match
     update_batch_size = True
@@ -167,6 +168,7 @@ def pad_sequence(
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     keys_copy = list(keys)
+    mask_keys = []
     for i, td in enumerate(list_of_tensordicts):
         if is_tensorclass(td):
             td = td._tensordict
@@ -197,6 +199,7 @@ def pad_sequence(
 
             if return_mask:
                 mask_key = unravel_key((masks_key, key))
+                mask_keys.append(mask_key)
                 list_of_dicts[i][mask_key] = torch.ones(mask_shape, dtype=torch.bool)
                 keys_copy.append(mask_key)
 
@@ -229,7 +232,7 @@ def pad_sequence(
                 torch.nn.utils.rnn.pad_sequence(
                     [d[key].transpose(0, pos_pad_dim) for d in list_of_dicts],
                     batch_first=True,
-                    padding_value=padding_value,
+                    padding_value=padding_value if key not in mask_keys else False,
                 ).transpose(1, pos_pad_dim + 1),
                 inplace=True,
             )
