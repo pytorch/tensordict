@@ -226,14 +226,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             distribution sample will be written in the tensordict with the key
             `log_prob_key`. Default is ``False``.
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
-            Defaults to `'<sample_name>_log_prob'`, where `<sample_name>` is each of the :attr:`out_keys`.
+            Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
 
             .. note:: This is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``False``.
 
         log_prob_key (NestedKey, optional): key where to write the log_prob if ``return_log_prob=True``.
-            Defaults to `'sample_log_prob'`.
+            Defaults to `'sample_log_prob'` when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to `True`
+            or `'<sample_key_name>_log_prob'` otherwise.
 
-            .. note:: This is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``True``.
+            .. note:: When there is more than one sample, this is only available when :func:`~tensordict.nn.probabilistic.composite_lp_aggregate` is set to ``True``.
 
         cache_dist (bool, optional): keyword-only argument.
             EXPERIMENTAL: if ``True``, the parameters of the
@@ -331,10 +332,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
         log_prob_keys: List[NestedKey] | None = None,
+        log_prob_key: NestedKey | None = None,
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
         num_samples: int | torch.Size | None = None,
-        log_prob_key: NestedKey | None = None,
     ) -> None:
         super().__init__()
         distribution_kwargs = (
@@ -375,6 +376,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if log_prob_keys is None:
             if len(out_keys) == 1 and log_prob_key is not None:
                 log_prob_keys = [log_prob_key]
+            elif composite_lp_aggregate(nowarn=True):
+                if len(out_keys) == 1:
+                    log_prob_keys = ["sample_log_prob"]
+                else:
+                    log_prob_keys = None
             else:
                 log_prob_keys = [
                     _add_suffix(key, "_log_prob") for key in self._out_keys
@@ -385,7 +391,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead."
             )
         if log_prob_key is None:
-            log_prob_key = "sample_log_prob"
+            if composite_lp_aggregate(nowarn=True):
+                log_prob_key = "sample_log_prob"
+            elif len(out_keys) == 1:
+                log_prob_key = _add_suffix(out_keys[0], "_log_prob")
         elif len(out_keys) > 1 and not composite_lp_aggregate(nowarn=True):
             raise RuntimeError(
                 "composite_lp_aggregate is set to `False` but a `log_prob_key` was passed. "
@@ -422,7 +431,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def log_prob_key(self):
-        if not composite_lp_aggregate(nowarn=True):
+        clpa = composite_lp_aggregate(nowarn=True)
+        if clpa != self._composite_lp_aggreate_at_init:
+            raise RuntimeError(
+                f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
+                f"which may affect the log_prob_key property."
+            )
+        if not clpa:
             if len(self.log_prob_keys) == 1:
                 return self.log_prob_keys[0]
             raise RuntimeError(
@@ -434,7 +449,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     @property
     def log_prob_keys(self):
-        if composite_lp_aggregate(nowarn=True):
+        clpa = composite_lp_aggregate(nowarn=True)
+        if clpa != self._composite_lp_aggreate_at_init:
+            raise RuntimeError(
+                f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
+                f"which may affect the log_prob_keys property."
+            )
+        if clpa:
             return [self.log_prob_key]
         return self._log_prob_keys
 

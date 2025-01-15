@@ -2696,20 +2696,41 @@ class TestCompositeDist:
                 distribution_class=dist_maker,
                 return_log_prob=True,
             )
-        with set_composite_lp_aggregate(True):
-            assert p.out_keys == ["cont", ("nested", "disc"), "sample_log_prob"]
-            assert p.log_prob_key == "sample_log_prob"
-            assert p.log_prob_keys == ["sample_log_prob"]
-        with set_composite_lp_aggregate(False):
-            assert p.out_keys == [
-                "cont",
-                ("nested", "disc"),
-                "cont_log_prob",
-                ("nested", "disc_log_prob"),
-            ]
-            with pytest.raises(RuntimeError):
-                p.log_prob_key
-            assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
+            if composite_lp_aggregate(nowarn=True):
+                assert p.log_prob_key == "sample_log_prob"
+            else:
+                assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
+
+        if mode in (True, None):
+            with set_composite_lp_aggregate(True):
+                assert p.out_keys == ["cont", ("nested", "disc"), "sample_log_prob"]
+                assert p.log_prob_key == "sample_log_prob"
+                assert p.log_prob_keys == ["sample_log_prob"]
+            with set_composite_lp_aggregate(False):
+                with pytest.raises(RuntimeError):
+                    p.out_keys
+                with pytest.raises(RuntimeError):
+                    p.log_prob_key
+                with pytest.raises(RuntimeError):
+                    p.log_prob_keys
+        else:
+            with set_composite_lp_aggregate(False):
+                assert p.out_keys == [
+                    "cont",
+                    ("nested", "disc"),
+                    "cont_log_prob",
+                    ("nested", "disc_log_prob"),
+                ]
+                with pytest.raises(RuntimeError):
+                    p.log_prob_key
+                assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
+            with set_composite_lp_aggregate(True):
+                with pytest.raises(RuntimeError):
+                    p.out_keys
+                with pytest.raises(RuntimeError):
+                    p.log_prob_key
+                with pytest.raises(RuntimeError):
+                    p.log_prob_keys
 
     @set_composite_lp_aggregate(False)
     def test_from_distributions(self):
