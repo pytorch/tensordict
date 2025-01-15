@@ -27,6 +27,7 @@ from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
+    set_composite_lp_aggregate,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -665,6 +666,7 @@ class TestNN:
         mod_compile = torch.compile(mod, fullgraph=_v2_5, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
+    @set_composite_lp_aggregate(False)
     def test_prob_module_with_kwargs(self, mode):
         kwargs = TensorDictParams(
             TensorDict(scale=1.0, validate_args=NonTensorData(False)), no_convert=True
