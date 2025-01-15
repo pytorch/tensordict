@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
+import warnings
 from enum import Enum
 from typing import Any, Callable
 
@@ -447,3 +448,98 @@ class StrEnum(str, Enum):  # noqa
 
     def _generate_next_value_(name, start, count, last_values):
         return name.lower()
+
+
+_composite_lp_aggregate = _ContextManager()
+
+
+def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
+    """Returns whether a :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+
+    Args:
+        nowarn (bool, optional): whether to ignore warnings. Defaults to False.
+
+    .. seealso:: :func:`~tensordict.nn.set_composite_lp_aggregate`
+
+    """
+    mode = _composite_lp_aggregate.get_mode()
+    if mode is None:
+        if not nowarn:
+            warnings.warn(
+                "Composite log-prob aggregation wasn't defined explicitly and ``composite_lp_aggregate()`` will "
+                "currently return ``True``. However, from v0.9, this behaviour will change and ``composite_lp_aggregate`` will "
+                "return ``False``. Please change your code accordingly by specifying the aggregation strategy via "
+                "`tensordict.nn.set_composite_lp_aggregate`.",
+                category=DeprecationWarning,
+            )
+        return True
+    return mode
+
+
+class set_composite_lp_aggregate(_DecoratorContextManager):
+    """Controls whether :class:`~tensordict.nn.CompositeDistribution` log-probabilities and entropies will be aggregated in a single tensor.
+
+    When :func:`~tensordict.nn.composite_lp_aggregate` returns ``True``, the log-probs / entropies of :class:`~tensordict.nn.CompositeDistribution`
+    will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of
+    non-aggregated log-probs, which offer more flexibility and a somewhat more natural API (tensordict samples, tensordict log-probs, tensordict entropies).
+
+    Example:
+        >>> _ = torch.manual_seed(0)
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate
+        >>> import torch
+        >>> from torch import distributions as d
+        >>> params = TensorDict({
+        ...     "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+        ...     ("nested", "disc"): {"logits": torch.randn(3, 10)}
+        ... }, [3])
+        >>> dist = CompositeDistribution(params,
+        ...     distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+        >>> sample = dist.sample((4,))
+        >>> with set_composite_lp_aggregate(False):
+        ...     lp = dist.log_prob(sample)
+        ...     print(lp)
+        TensorDict(
+            fields={
+                cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                nested: TensorDict(
+                    fields={
+                        disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([4, 3]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([4, 3]),
+            device=None,
+            is_shared=False)
+        >>> with set_composite_lp_aggregate(True):
+        ...     lp = dist.log_prob(sample)
+        ...     print(lp)
+        tensor([[-2.0886, -1.2155, -0.0414],
+                [-2.8973, -5.5165,  2.4402],
+                [-0.2806, -1.2799,  3.1733],
+                [-3.0407, -4.3593,  0.5763]])
+    """
+
+    def __init__(
+        self,
+        mode: bool = True,
+    ) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_composite_lp_aggregate:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.prev = _composite_lp_aggregate.get_mode()
+        _composite_lp_aggregate.set_mode(self.mode)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        _composite_lp_aggregate.set_mode(self.prev)
+
+    def set(self):
+        self.__enter__()
+
+    def unset(self):
+        return self.__exit__(None, None, None)

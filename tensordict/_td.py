@@ -2629,6 +2629,8 @@ class TensorDict(TensorDictBase):
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
         if old_key == new_key:
+            if old_key not in self.keys(include_nested=isinstance(old_key, tuple)):
+                raise KeyError(f"Key {old_key} not found in tensordict.")
             return self
         if safe and (new_key in self.keys(include_nested=True)):
             raise KeyError(f"key {new_key} already present in TensorDict.")
