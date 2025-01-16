@@ -273,6 +273,16 @@ class TensorDictBase(MutableMapping):
     _memmap_prefix = None
     _stream: torch.cuda.Stream | None = None
 
+    @classmethod
+    def _new_unsafe(cls, *args, **kwargs):
+        # This to make sure all TensorDictBase subclasses have a proper fallback if they don't have a _new_unsafe
+        # In other words, only TensorDict subclasses will have their type preserved, others will become TensorDict
+        # instances (note that TensorDictBase should not be directly subclassed outside of this codebase, as it is
+        # highly abstract).
+        from tensordict._td import TensorDict
+
+        return TensorDict._new_unsafe(*args, **kwargs)
+
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
 

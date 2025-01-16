@@ -344,7 +344,7 @@ class TensorDict(TensorDictBase):
         if source:  # faster than calling items
             for key, value in source.items():
                 if nested and isinstance(value, dict):
-                    value = TensorDict._new_unsafe(
+                    value = cls._new_unsafe(
                         source=value,
                         batch_size=self._batch_size,
                         device=self._device,
@@ -374,7 +374,7 @@ class TensorDict(TensorDictBase):
             filter_empty=filter_empty,
         )
         if result is None:
-            result = TensorDict._new_unsafe({}, batch_size=torch.Size(()))
+            result = cls._new_unsafe({}, batch_size=torch.Size(()))
         if lock:
             result.lock_()
         return result
@@ -419,7 +419,7 @@ class TensorDict(TensorDictBase):
                     destination = hook_result
         if not filter_empty or destination:
             destination_set = True
-            destination = TensorDict._new_unsafe(destination, batch_size=torch.Size(()))
+            destination = cls._new_unsafe(destination, batch_size=torch.Size(()))
         else:
             destination_set = False
         for name, submodule in module._modules.items():
@@ -433,7 +433,7 @@ class TensorDict(TensorDictBase):
                 )
                 if subtd is not None:
                     if not destination_set:
-                        destination = TensorDict._new_unsafe(batch_size=torch.Size(()))
+                        destination = cls._new_unsafe(batch_size=torch.Size(()))
                         destination_set = True
                     destination._set_str(
                         name, subtd, validated=True, inplace=False, non_blocking=False
@@ -610,7 +610,7 @@ class TensorDict(TensorDictBase):
                 _quick_set(_swap, swap_dest)
                 return swap_dest
             else:
-                return TensorDict._new_unsafe(_swap, batch_size=torch.Size(()))
+                return self._new_unsafe(_swap, batch_size=torch.Size(()))
 
     @_maybe_broadcast_other("__ne__")
     def __ne__(self, other: Any) -> T | bool:
@@ -1479,7 +1479,7 @@ class TensorDict(TensorDictBase):
                 return value
             return _add_batch_dim(value, in_dim, vmap_level)
 
-        out = TensorDict._new_unsafe(
+        out = self._new_unsafe(
             {key: _add_batch_dim_wrapper(key, value) for key, value in td.items()},
             batch_size=torch.Size(
                 [b for i, b in enumerate(td.batch_size) if i != in_dim]
@@ -1613,7 +1613,7 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 source[key] = _get_item(item, index)
-        result = TensorDict._new_unsafe(
+        result = self._new_unsafe(
             source=source,
             batch_size=batch_size,
             device=self.device,
@@ -1694,7 +1694,7 @@ class TensorDict(TensorDictBase):
             is_shared=is_shared,
             is_memmap=is_memmap,
         ):
-            result = TensorDict._new_unsafe(
+            result = self._new_unsafe(
                 {}, batch_size=batch_size, names=names, device=device
             )
             result._is_shared = is_shared
@@ -3231,7 +3231,7 @@ class TensorDict(TensorDictBase):
         if recurse and self.device is not None:
             return self._clone_recurse()
 
-        result = TensorDict._new_unsafe(
+        result = self._new_unsafe(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
@@ -3248,7 +3248,7 @@ class TensorDict(TensorDictBase):
         source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
-        out = TensorDict._new_unsafe(
+        out = self._new_unsafe(
             source=source,
             batch_size=batch_size,
             device=device,
@@ -3260,7 +3260,7 @@ class TensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> T:
         if not recurse:
-            return TensorDict._new_unsafe(
+            return self._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
                 batch_size=(
                     self._batch_size if batch_size is None else torch.Size(batch_size)
@@ -3309,7 +3309,7 @@ class TensorDict(TensorDictBase):
                         *val, strict=strict, inplace=inplace, set_shared=set_shared
                     )
 
-        result = TensorDict._new_unsafe(
+        result = self._new_unsafe(
             device=self.device,
             batch_size=self.batch_size,
             source=source,
@@ -3358,7 +3358,7 @@ class TensorDict(TensorDictBase):
                         _tensordict[key] = val
         if inplace:
             return self
-        result = TensorDict._new_unsafe(
+        result = self._new_unsafe(
             _tensordict,
             batch_size=self.batch_size,
             device=self.device,
@@ -4059,7 +4059,7 @@ class _SubTensorDict(TensorDictBase):
         return all(value.is_contiguous() for value in self.values())
 
     def contiguous(self) -> T:
-        return TensorDict._new_unsafe(
+        return self._new_unsafe(
             batch_size=self.batch_size,
             source={key: value.contiguous() for key, value in self.items()},
             device=self.device,

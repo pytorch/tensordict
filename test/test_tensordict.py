@@ -2709,6 +2709,38 @@ class TestGeneric:
         assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
         assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
 
+    def test_subclassing(self):
+        class SubTD(TensorDict): ...
+
+        t = SubTD(a=torch.randn(3))
+        assert isinstance(t + t, SubTD)
+        assert isinstance(t / 2, SubTD)
+        assert isinstance(2 / t, SubTD)
+        assert isinstance(t.to(torch.float), SubTD)
+        assert isinstance(t.to("cpu"), SubTD)
+        assert isinstance(torch.zeros_like(t), SubTD)
+        assert isinstance(t.copy(), SubTD)
+        assert isinstance(t.clone(), SubTD)
+        assert isinstance(t.empty(), SubTD)
+        assert isinstance(t.select(), SubTD)
+        assert isinstance(t.exclude("a"), SubTD)
+        assert isinstance(t.split_keys({"a"})[0], SubTD)
+        assert isinstance(t.flatten_keys(), SubTD)
+        assert isinstance(t.unflatten_keys(), SubTD)
+        stack = torch.stack([t, t])
+        assert isinstance(stack, SubTD)
+        assert isinstance(stack[0], SubTD)
+        assert isinstance(stack.unbind(0)[0], SubTD)
+        assert isinstance(stack.split(1)[0], SubTD)
+        assert isinstance(stack.gather(0, torch.ones((1,), dtype=torch.long)), SubTD)
+        unsqueeze = stack.unsqueeze(0)
+        assert isinstance(unsqueeze, SubTD)
+        assert isinstance(unsqueeze.transpose(1, 0), SubTD)
+        assert isinstance(unsqueeze.permute(1, 0), SubTD)
+        assert isinstance(unsqueeze.squeeze(), SubTD)
+        assert isinstance(unsqueeze.reshape(-1), SubTD)
+        assert isinstance(unsqueeze.view(-1), SubTD)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):
         torch.manual_seed(1)
