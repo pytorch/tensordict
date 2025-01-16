@@ -23,11 +23,11 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
+    _is_tensorclass,
     _pass_through,
     _shape,
     _zip_strict,
     DeviceType,
-    is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
 )
@@ -138,12 +138,12 @@ def _gather(
         return out
 
     if out is None:
-        if len(index.shape) == input.ndim and input._has_names():
-            names = input.names
+        if len(index.shape) == input.ndim:
+            names = input._maybe_names()
         else:
             names = None
         device = input.device
-        return TensorDict(
+        return type(input)._new_unsafe(
             {
                 key: _gather_tensor(value)
                 for key, value in input.items(is_leaf=_is_leaf_nontensor)
@@ -300,6 +300,7 @@ def _cat(
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     batch_size = list(list_of_tensordicts[0].batch_size)
+    tdtype = type(list_of_tensordicts[0])
     if dim < 0:
         dim = len(batch_size) + dim
     if dim >= len(batch_size):
@@ -334,9 +335,13 @@ def _cat(
         names = None
         if list_of_tensordicts[0]._has_names():
             names = list_of_tensordicts[0].names
-        return TensorDict._new_unsafe(
-            out, device=device, batch_size=batch_size, names=names
-        )
+        # if we have a TD subclass, use _new_unsafe bc we know it exists. Otherwise, use
+        #  TensorDict's one
+        if issubclass(tdtype, TensorDict):
+            clz = tdtype
+        else:
+            clz = TensorDict
+        return clz._new_unsafe(out, device=device, batch_size=batch_size, names=names)
     else:
         if out.batch_size != batch_size:
             raise RuntimeError(
@@ -453,14 +458,19 @@ def _stack(
         raise RuntimeError("list_of_tensordicts cannot be empty")
     if maybe_dense_stack is None:
         maybe_dense_stack = lazy_legacy()
-    is_tc = any(is_tensorclass(td) for td in list_of_tensordicts)
+    td_types = [type(td) for td in list_of_tensordicts]
+    is_tc = any(_is_tensorclass(td_type) for td_type in td_types)
     if all(_pass_through(td) for td in list_of_tensordicts):
         return type(list_of_tensordicts[0])._stack_non_tensor(
             list_of_tensordicts, dim=dim
         )
     if is_tc:
-        tc_type = type(list_of_tensordicts[0])
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
+        clz = type(list_of_tensordicts[0])
+    elif issubclass(td_types[0], TensorDict):
+        clz = td_types[0]
+    else:
+        clz = TensorDict
 
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
@@ -617,7 +627,7 @@ def _stack(
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
 
-            result = TensorDict._new_unsafe(
+            result = clz._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
@@ -625,7 +635,7 @@ def _stack(
                 device=device,
             )
             if is_tc:
-                return tc_type._from_tensordict(result)
+                return td_types[0]._from_tensordict(result)
             return result
         else:
             out = LazyStackedTensorDict(
