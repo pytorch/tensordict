@@ -363,6 +363,7 @@
 <p>When <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probs / entropies of <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code>
 will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of
 non-aggregated log-probs, which offer more flexibility and a somewhat more natural API (tensordict samples, tensordict log-probs, tensordict entropies).</p>
+<p>The value of composite_lp_aggregate can also be controlled through the <cite>COMPOSITE_LP_AGGREGATE</cite> environment variable.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
