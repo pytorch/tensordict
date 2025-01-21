@@ -2251,6 +2251,25 @@ class TestProbabilisticTensorDictModule:
         else:
             assert td_out[module.log_prob_key].shape == (3, 4, 1)
 
+    def test_index_prob_seq(self):
+        m0 = ProbabilisticTensorDictModule(
+            in_keys=["loc"], out_keys=["sample"], distribution_class=Normal
+        )
+        m1 = TensorDictModule(lambda x: x, in_keys=["other"], out_keys=["something"])
+        m2 = ProbabilisticTensorDictModule(
+            in_keys=["scale"], out_keys=["sample2"], distribution_class=Normal
+        )
+        seq = ProbabilisticTensorDictSequential(m0, m1, m2)
+        assert isinstance(seq[0], ProbabilisticTensorDictModule)
+        assert isinstance(seq[:2], TensorDictSequential)
+        assert not isinstance(seq[:2], ProbabilisticTensorDictSequential)
+        assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
+
+        seq = ProbabilisticTensorDictSequential(m0, m1, m2, return_composite=True)
+        assert isinstance(seq[0], ProbabilisticTensorDictModule)
+        assert isinstance(seq[:2], ProbabilisticTensorDictSequential)
+        assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
+
 
 class TestEnsembleModule:
     def test_init(self):
