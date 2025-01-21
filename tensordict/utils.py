@@ -1241,8 +1241,8 @@ def _as_context_manager(attr=None):
                         out._last_op = (
                             func.__name__,
                             (
-                                weakref.ref(args),
-                                weakref.ref(kwargs),
+                                args,
+                                kwargs,
                                 weakref.ref(_self),
                             ),
                         )
