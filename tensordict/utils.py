@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 import warnings
+import weakref
 from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
@@ -1237,7 +1238,14 @@ def _as_context_manager(attr=None):
                 _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
-                        out._last_op = (func.__name__, (args, kwargs, _self))
+                        out._last_op = (
+                            func.__name__,
+                            (
+                                args,
+                                kwargs,
+                                weakref.ref(_self),
+                            ),
+                        )
                     else:
                         out._last_op = None
                 return out
@@ -1248,7 +1256,7 @@ def _as_context_manager(attr=None):
             def func_as_decorator(_self, *args, **kwargs):
                 out = func(_self, *args, **kwargs)
                 if out is not None:
-                    out._last_op = (func.__name__, (args, kwargs, _self))
+                    out._last_op = (func.__name__, (args, kwargs, weakref.ref(_self)))
                 return out
 
         return func_as_decorator

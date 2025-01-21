@@ -11144,12 +11144,12 @@ class TensorDictBase(MutableMapping):
             return False
         _last_op = self._last_op_queue.pop()
         if _last_op is not None:
-            last_op, (args, kwargs, out) = _last_op
+            last_op, (args, kwargs, out_wr) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
             #  added or deleted
             _inv_caller = LAST_OP_MAPS.get(last_op)
             if _inv_caller is not None:
-                return _inv_caller(self, args, kwargs, out)
+                return _inv_caller(self, args, kwargs, out_wr())
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
         return self
