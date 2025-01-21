@@ -990,6 +990,27 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         super().__init__(*modules, partial_tolerant=partial_tolerant)
         self.return_composite = return_composite
 
+    def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
+        if isinstance(index, (int, str)):
+            return self.module.__getitem__(index)
+        else:
+            mods = self.module.__getitem__(index)
+            if self.return_composite and any(
+                isinstance(
+                    item,
+                    (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+                )
+                for item in mods
+            ):
+                return type(self)(*mods, return_composite=self.return_composite)
+            elif isinstance(
+                mods[-1],
+                (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+            ):
+                return type(self)(*mods)
+            else:
+                return TensorDictSequential(*mods)
+
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
 
     @property

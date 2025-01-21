@@ -330,7 +330,11 @@ LAST_OP_MAPS["squeeze"] = _reverse_squeeze
 
 def _reverse_to_module(self, args, kwargs, out):
     try:
-        with out.unlock_() if not is_compiling() else contextlib.nullcontext():
+        with (
+            out.unlock_()
+            if not is_compiling() and out is not None
+            else contextlib.nullcontext()
+        ):
             return self.to_module(*args, **kwargs, swap_dest=out)
     except AttributeError:
         # This is a bit unsafe but we assume that out won't have an unlock_() if it's not a TD
