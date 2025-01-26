@@ -2923,3 +2923,24 @@ class _ContextManager:
         cm = self._lock if not is_compiling() else nullcontext()
         with cm:
             self._mode = type
+
+
+def _maybe_correct_neg_dim(
+    dim: int, shape: torch.Size | None, ndim: int | None = None
+) -> int:
+    """Corrects neg dim to pos."""
+    if ndim is None:
+        ndim = len(shape)
+    if dim < 0:
+        new_dim = ndim + dim
+    else:
+        new_dim = dim
+    if new_dim < 0 or new_dim >= ndim:
+        if shape is not None:
+            raise IndexError(
+                f"Incompatible dim {new_dim} for tensordict with shape {shape}."
+            )
+        raise IndexError(
+            f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
+        )
+    return new_dim

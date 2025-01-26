@@ -2566,7 +2566,7 @@ class TestGeneric:
     def test_split_with_invalid_arguments(self):
         td = TensorDict({"a": torch.zeros(2, 1)}, [])
         # Test empty batch size
-        with pytest.raises(IndexError, match="Dimension out of range"):
+        with pytest.raises(IndexError, match="Incompatible dim"):
             td.split(1, 0)
 
         td = TensorDict({}, [3, 2])
@@ -2587,9 +2587,9 @@ class TestGeneric:
             td.split([1, 1], 0)
 
         # Test invalid dimension input
-        with pytest.raises(IndexError, match="Dimension out of range"):
+        with pytest.raises(IndexError, match="Incompatible dim"):
             td.split(1, 2)
-        with pytest.raises(IndexError, match="Dimension out of range"):
+        with pytest.raises(IndexError, match="Incompatible dim"):
             td.split(1, -3)
 
     def test_split_with_negative_dim(self):
