@@ -57,6 +57,7 @@ from tensordict.utils import (
     _is_shared,
     _KEY_ERROR,
     _LOCK_ERROR,
+    _maybe_correct_neg_dim,
     _mismatch_keys,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
@@ -878,8 +879,7 @@ class TensorDict(TensorDictBase):
                 "smaller than tensordict.batch_dims"
             )
         if dim is not None:
-            if dim < 0:
-                dim = self.batch_dims + dim
+            dim = _maybe_correct_neg_dim(dim, self.batch_size)
 
             names = None
             if self._has_names():
@@ -901,8 +901,7 @@ class TensorDict(TensorDictBase):
                 "smaller than tensordict.batch_dims"
             )
         if dim is not None:
-            if dim < 0:
-                dim = self.batch_dims + dim
+            dim = _maybe_correct_neg_dim(dim, self.batch_size)
 
             names = None
             if self._has_names():
@@ -980,14 +979,7 @@ class TensorDict(TensorDictBase):
                         for _d in proc_dim(d, batch_dims, tuple_ok=False)
                     )
                 return dim
-            if dim >= batch_dims or dim < -batch_dims:
-                raise RuntimeError(
-                    "dim must be greater than or equal to -tensordict.batch_dims and "
-                    "smaller than tensordict.batch_dims"
-                )
-            if dim < 0:
-                return (batch_dims + dim,)
-            return (dim,)
+            return (_maybe_correct_neg_dim(dim, None, batch_dims),)
 
         dim_needs_proc = (dim is not NO_DEFAULT) and (dim not in ("feature",))
         if dim_needs_proc:
@@ -1724,13 +1716,7 @@ class TensorDict(TensorDictBase):
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
         batch_sizes = []
-        batch_dims = len(batch_size)
-        if dim < 0:
-            dim = len(batch_size) + dim
-        if dim >= batch_dims or dim < 0:
-            raise IndexError(
-                f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
-            )
+        dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
             idx0 = 0
@@ -2005,17 +1991,7 @@ class TensorDict(TensorDictBase):
                 propagate_lock=True,
             )
         # make the dim positive
-        if dim < 0:
-            newdim = self.batch_dims + dim
-        else:
-            newdim = dim
-
-        if (newdim >= self.batch_dims) or (newdim < 0):
-            raise RuntimeError(
-                f"squeezing is allowed for dims comprised between "
-                f"`-td.batch_dims` and `td.batch_dims - 1` only. Got "
-                f"dim={dim} with a batch size of {self.batch_size}."
-            )
+        newdim = _maybe_correct_neg_dim(dim, batch_size)
         if batch_size[dim] != 1:
             return self
         batch_size = list(batch_size)
