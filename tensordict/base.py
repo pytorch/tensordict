@@ -11580,7 +11580,11 @@ class TensorDictBase(MutableMapping):
                 device=device,
                 batch_size=batch_size,
             )
-        if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
+        if (
+            isinstance(obj, np.ndarray)
+            and hasattr(obj.dtype, "names")
+            and obj.dtype.names is not None
+        ):
             return cls.from_struct_array(
                 obj,
                 auto_batch_size=auto_batch_size,
