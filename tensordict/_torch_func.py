@@ -728,3 +728,20 @@ def _stack_uninit_params(list_of_params, dim=0, out=None):
         )
     out.batch_size = torch.Size([len(list_of_params)])
     return out
+
+def implements_for_tdtype(torch_function: Callable) -> Callable[[Callable], Callable]:
+    """Register a torch function override for TensorDict."""
+
+    from tensordict.dtype import TDTYPE_HANDLED_FUNCTIONS
+
+    @functools.wraps(torch_function)
+    def decorator(func: Callable) -> Callable:
+        TDTYPE_HANDLED_FUNCTIONS[torch_function] = func
+        return func
+
+    return decorator
+
+@implements_for_tdtype(torch.Tensor.view)
+def view(tensor: torch.tensor, dtype: Any) -> TensorDictBase:
+    from tensordict.dtype import StructDtype
+    return StructDtype.view(tensor, dtype)
