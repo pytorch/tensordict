@@ -1217,6 +1217,10 @@ def lock_blocked(func):
     return new_func
 
 
+def _strong_ref(self):
+    return lambda self: self
+
+
 def _as_context_manager(attr=None):
     """Converts a method to a decorator.
 
@@ -1238,12 +1242,13 @@ def _as_context_manager(attr=None):
                 _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
+                        ref = weakref.ref(_self)
                         out._last_op = (
                             func.__name__,
                             (
                                 args,
                                 kwargs,
-                                weakref.ref(_self),
+                                ref,
                             ),
                         )
                     else:
@@ -1256,7 +1261,8 @@ def _as_context_manager(attr=None):
             def func_as_decorator(_self, *args, **kwargs):
                 out = func(_self, *args, **kwargs)
                 if out is not None:
-                    out._last_op = (func.__name__, (args, kwargs, weakref.ref(_self)))
+                    ref = weakref.ref(_self)
+                    out._last_op = (func.__name__, (args, kwargs, ref))
                 return out
 
         return func_as_decorator
