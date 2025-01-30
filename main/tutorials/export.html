@@ -430,7 +430,7 @@ parameters to be passed to the <code class="docutils literal notranslate"><span 
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.6906, 0.0000, 1.0760, 0.2540]], grad_fn=&lt;ReluBackward0&gt;), tensor([[0.6310, 0.4312, 0.4770, 0.5333]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[0.6310, 0.4312]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.3250, 1.3666]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[0.6310, 0.4312]], grad_fn=&lt;SplitBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.0000, 0.4439, 0.0452, 0.2138]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.5727, -0.1611,  0.0990,  0.5977]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.5727, -0.1611]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.0633, 1.4148]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[-0.5727, -0.1611]], grad_fn=&lt;SplitBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -441,7 +441,7 @@ model to deal with this issue.</p>
 <h3>Using <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> with a <code class="docutils literal notranslate"><span class="pre">TensorDictModule</span></code><a class="headerlink" href="#using-torch-export-with-a-tensordictmodule" title="Permalink to this heading">¶</a></h3>
 <p>Now that we have successfully built our model, we would like to extract its computational graph in a single object that
 is independent of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>. <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> is a PyTorch module dedicated to isolate the graph of a module and
-represent it in a standardized way. Its main entry point is <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> which returns a <code class="docutils literal notranslate"><span class="pre">ExportedProgram</span></code>
+represent it in a standardized way. Its main entry point is <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> which returns a <code class="docutils literal notranslate"><span class="pre">ExportedProgram</span></code>
 object. In turn, this object has several attributes of interest that we will explore below: a <code class="docutils literal notranslate"><span class="pre">graph_module</span></code>,
 which represents the FX graph captured by <code class="docutils literal notranslate"><span class="pre">export</span></code>, a <code class="docutils literal notranslate"><span class="pre">graph_signature</span></code> with input, outputs etc of the graph,
 and finally a <code class="docutils literal notranslate"><span class="pre">module()</span></code> that returns a callable that can be used in-place of the original module.</p>
@@ -504,8 +504,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  520.23 micro-seconds
-Time for exported module:  353.57 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  527.14 micro-seconds
+Time for exported module:  359.30 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -597,11 +597,11 @@ def forward(self, some_key):
 </pre></div>
 </div>
 <p>Note that the callable returned by <cite>module()</cite> is a pure python callable that can be in turn compiled using
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.</p>
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.</p>
 </section>
 <section id="saving-the-exported-module">
 <h2>Saving the exported module<a class="headerlink" href="#saving-the-exported-module" title="Permalink to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">torch.export</span></code> has its own serialization protocol, <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.save" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> and <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.load" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a>.
+<p><code class="docutils literal notranslate"><span class="pre">torch.export</span></code> has its own serialization protocol, <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.save" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> and <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.load" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a>.
 Conventionally, the <cite>“.pt2”</cite> extension is to be used:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><a href="https://pytorch.org/docs/stable/export.html#torch.export.save" title="torch.export.save" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">save</span></a><span class="p">(</span><a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a><span class="p">,</span> <span class="s2">&quot;model.pt2&quot;</span><span class="p">)</span>
 </pre></div>
@@ -636,7 +636,7 @@ distribution:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[0.6310, 0.4312]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.5727, -0.1611]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor, corresponding to the sample of the distribution.
@@ -798,7 +798,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.481 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.463 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
