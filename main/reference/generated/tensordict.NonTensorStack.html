@@ -1047,6 +1047,15 @@ operation.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorStack.clear_refs_for_compile_">
+<span class="sig-name descname"><span class="pre">clear_refs_for_compile_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.NonTensorStack.clear_refs_for_compile_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clears the weakrefs in order for the tensordict to get out of the compile region safely.</p>
+<p>Use this whenever you hit <cite>torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable()</cite>
+before returning a TensorDict.</p>
+<p>Returns: self</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.NonTensorStack.clone">
 <span class="sig-name descname"><span class="pre">clone</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.NonTensorStack.clone" title="Permalink to this definition">¶</a></dt>
 <dd><p>Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.</p>
