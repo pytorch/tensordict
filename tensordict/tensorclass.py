@@ -3562,6 +3562,10 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=0,
         )
 
+    def densify(self, layout: torch.layout = torch.strided):
+        # No need to do anything with a non tensor stack
+        return self
+
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
