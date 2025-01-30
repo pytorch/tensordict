@@ -144,7 +144,8 @@ class TestTD:
 
     def test_view(self, mode):
         def view(td):
-            return td.view(2, 2)
+            out = td.view(2, 2).clear_refs_for_compile_()
+            return out
 
         view_c = torch.compile(view, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
@@ -155,7 +156,7 @@ class TestTD:
 
     def test_transpose(self, mode):
         def transpose(td):
-            return td.transpose(0, 1)
+            return td.transpose(0, 1).clear_refs_for_compile_()
 
         transpose_c = torch.compile(transpose, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(6).view(2, 3)}}, [2, 3])
@@ -211,7 +212,7 @@ class TestTD:
     @pytest.mark.parametrize("recurse", [True, False])
     def test_flatten_keys(self, recurse, mode):
         def flatten_keys(td: TensorDict):
-            return td.flatten_keys()
+            return td.flatten_keys().clear_refs_for_compile_()
 
         flatten_keys_c = torch.compile(flatten_keys, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": 0, "c": 1}})
@@ -225,7 +226,7 @@ class TestTD:
     @pytest.mark.parametrize("recurse", [True, False])
     def test_unflatten_keys(self, recurse, mode):
         def unflatten_keys(td: TensorDict):
-            return td.unflatten_keys()
+            return td.unflatten_keys().clear_refs_for_compile_()
 
         unflatten_keys_c = torch.compile(unflatten_keys, fullgraph=True, mode=mode)
         data = TensorDict({"a.b": 0, "a.c": 1})
@@ -280,7 +281,7 @@ class TestTD:
             # Adding stuff uses cache, check that this doesn't break
             td2 = td + 1
             td3 = td + td2
-            return td3
+            return td3.clear_refs_for_compile_()
 
         td = TensorDict(
             {"a": torch.randn(1, 2, 3), "b": torch.zeros(1, 2, 3, dtype=torch.bool)},
@@ -761,7 +762,9 @@ class TestFunctional:
 
         def call(x, td):
             with td.to_module(module):
-                return module(x)
+                y = module(x)
+            td.clear_refs_for_compile_()
+            return y
 
         call_compile = torch.compile(call, fullgraph=True, mode=mode)
         x = torch.randn(2, 3)

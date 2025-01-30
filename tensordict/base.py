@@ -11140,6 +11140,8 @@ class TensorDictBase(MutableMapping):
     def __exit__(self, exc_type, exc_val, exc_tb):
         # During exit, updates mustn't be made in-place as the source and dest
         # storage location can be identical, resulting in a RuntimeError
+        if is_compiling():
+            self.clear_refs_for_compile_()
         if exc_type is not None and issubclass(exc_type, Exception):
             return False
         _last_op = self._last_op_queue.pop()
@@ -11149,9 +11151,25 @@ class TensorDictBase(MutableMapping):
             #  added or deleted
             _inv_caller = LAST_OP_MAPS.get(last_op)
             if _inv_caller is not None:
-                return _inv_caller(self, args, kwargs, out_wr())
+                prev_ref = out_wr()
+                return _inv_caller(self, args, kwargs, prev_ref)
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
+        return self
+
+    def clear_refs_for_compile_(self) -> T:
+        """Clears the weakrefs in order for the tensordict to get out of the compile region safely.
+
+        Use this whenever you hit `torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable()`
+        before returning a TensorDict.
+
+        Returns: self
+        """
+        self._last_op = None
+        for v in self.values(True, True, is_leaf=_is_tensor_collection):
+            if _is_tensorclass(type(v)):
+                v = v._tensordict
+            v._last_op = None
         return self
 
     # Clone, select, exclude, empty

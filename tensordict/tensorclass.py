@@ -156,6 +156,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "batch_size",
     "bytes",
     "cat_tensors",
+    "clear_refs_for_compile_",
     "data_ptr",
     "depth",
     "dim",
