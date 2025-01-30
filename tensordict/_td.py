@@ -314,7 +314,9 @@ class TensorDict(TensorDictBase):
         nested: bool = True,
         **kwargs: dict[str, Any] | None,
     ) -> TensorDict:
-        if is_compiling():
+        if is_compiling() and cls is TensorDict:
+            # If the cls is not TensorDict, we must escape this to keep the same class.
+            # That's unfortunate because as of now it graph breaks but that's the best we can do.
             return TensorDict(
                 source,
                 batch_size=batch_size,

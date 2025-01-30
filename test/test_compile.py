@@ -587,6 +587,29 @@ class TestTC:
         tc_op_c = locked_op_c(data)
         assert (tc_op == tc_op_c).all()
 
+    def test_td_new_unsafe(self, mode):
+
+        class MyTd(TensorDict):
+            pass
+
+        def func_td():
+            return TensorDict._new_unsafe(a=torch.randn(3), batch_size=torch.Size(()))
+
+        @torch.compile(fullgraph=True, mode=mode)
+        def func_c_td():
+            return TensorDict._new_unsafe(a=torch.randn(3), batch_size=torch.Size(()))
+
+        def func_mytd():
+            return MyTd._new_unsafe(a=torch.randn(3), batch_size=torch.Size(()))
+
+        # This will graph break
+        @torch.compile(mode=mode)
+        def func_c_mytd():
+            return MyTd._new_unsafe(a=torch.randn(3), batch_size=torch.Size(()))
+
+        assert type(func_td()) is type(func_c_td())
+        assert type(func_mytd()) is type(func_c_mytd())
+
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
