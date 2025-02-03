@@ -537,22 +537,25 @@ to build distributions from network outputs and get summary statistics or sample
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A probabilistic TD Module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a>(*args, ...)</p></td>
+<td><p>A sequence of <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModules</span></code> containing at least one <a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A sequence of TensorDictModules.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModuleWrapper.html#tensordict.nn.TensorDictModuleWrapper" title="tensordict.nn.TensorDictModuleWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModuleWrapper</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModuleWrapper.html#tensordict.nn.TensorDictModuleWrapper" title="tensordict.nn.TensorDictModuleWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModuleWrapper</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Wrapper class for TensorDictModule objects.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>(module[, warmup, in_keys, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>(module[, warmup, in_keys, ...])</p></td>
 <td><p>A cudagraph wrapper for PyTorch callables.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.WrapModule.html#tensordict.nn.WrapModule" title="tensordict.nn.WrapModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrapModule</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.WrapModule.html#tensordict.nn.WrapModule" title="tensordict.nn.WrapModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrapModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A wrapper around any callable that processes TensorDict instances.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
 <td><p>Controls whether <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_lp_aggregate</span></code></a>([nowarn])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_lp_aggregate</span></code></a>([nowarn])</p></td>
 <td><p>Returns whether a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
 </tbody>
@@ -630,20 +633,20 @@ a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.h
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dispatch</span></code></a>([separator, source, dest, ...])</p></td>
 <td><p>Allows for a function expecting a TensorDict to be called using kwargs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>([type])</p></td>
-<td><p>Sets all ProbabilisticTDModules sampling to the desired type.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.inv_softplus.html#tensordict.nn.inv_softplus" title="tensordict.nn.inv_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">inv_softplus</span></code></a>(bias)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.inv_softplus.html#tensordict.nn.inv_softplus" title="tensordict.nn.inv_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">inv_softplus</span></code></a>(bias)</p></td>
 <td><p>Inverse softplus function.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">biased_softplus</span></code></a>(bias[, min_val])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">biased_softplus</span></code></a>(bias[, min_val])</p></td>
 <td><p>A biased softplus module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing" title="tensordict.nn.set_skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_skip_existing</span></code></a>([mode, in_key_attr, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing" title="tensordict.nn.set_skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_skip_existing</span></code></a>([mode, in_key_attr, ...])</p></td>
 <td><p>A context manager for skipping existing nodes in a TensorDict graph.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_existing</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_existing</span></code></a>()</p></td>
 <td><p>Returns whether or not existing entries in a tensordict should be re-computed by a module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.rand_one_hot.html#tensordict.nn.rand_one_hot" title="tensordict.nn.rand_one_hot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rand_one_hot</span></code></a>(values[, do_softmax])</p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>
