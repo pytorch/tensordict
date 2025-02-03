@@ -71,12 +71,26 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
+def expln(x):
+    """A smooth, continuous positive mapping presented in "State-Dependent Exploration for Policy Gradient Methods".
+
+    https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf
+
+    """
+    out = torch.empty_like(x)
+    idx_neg = x <= 0
+    out[idx_neg] = x[idx_neg].exp()
+    out[~idx_neg] = x[~idx_neg].log1p() + 1
+    return out
+
+
 _MAPPINGS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
     "softplus": torch.nn.functional.softplus,
     "exp": torch.exp,
     "relu": torch.relu,
     "biased_softplus": biased_softplus(1.0),
     "none": lambda x: x,
+    "expln": expln,
 }
 
 
