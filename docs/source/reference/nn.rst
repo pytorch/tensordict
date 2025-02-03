@@ -152,7 +152,7 @@ to build distributions from network outputs and get summary statistics or sample
   >>> import torch
   >>> from tensordict import TensorDict
   >>> from tensordict.nn import TensorDictModule
-  >>> from tensordict.nn.distributions import NormalParamWrapper
+  >>> from tensordict.nn.distributions import NormalParamExtractor
   >>> from tensordict.nn.prototype import (
   ...     ProbabilisticTensorDictModule,
   ...     ProbabilisticTensorDictSequential,
@@ -161,9 +161,9 @@ to build distributions from network outputs and get summary statistics or sample
   >>> td = TensorDict(
   ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
   ... )
-  >>> net = torch.nn.GRUCell(4, 8)
+  >>> net = torch.nn.Sequential(torch.nn.GRUCell(4, 8), NormalParamExtractor())
   >>> module = TensorDictModule(
-  ...     NormalParamWrapper(net), in_keys=["input", "hidden"], out_keys=["loc", "scale"]
+  ...     net, in_keys=["input", "hidden"], out_keys=["loc", "scale"]
   ... )
   >>> prob_module = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],

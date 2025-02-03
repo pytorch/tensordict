@@ -2277,8 +2277,7 @@ def _get_at(self, key: NestedKey, idx, default: Any = NO_DEFAULT):
 def _data(self):
     # We allow data to be a field of the class too
     if "data" in self.__dataclass_fields__:
-        # TODO: remove the None in v0.7
-        data = self._tensordict.get("data", None)
+        data = self._tensordict.get("data")
         if data is None:
             data = self._non_tensordict.get("data")
         return data

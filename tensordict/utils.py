@@ -1491,8 +1491,7 @@ def _default_hook(td: T, key: tuple[str, ...]) -> None:
     For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
 
     """
-    # TODO: remove the None in v0.7
-    out = td.get(key[0], None)
+    out = td.get(key[0])
     if out is None:
         td._create_nested_str(key[0])
         out = td._get_str(key[0], None)
@@ -1508,8 +1507,7 @@ def _get_leaf_tensordict(
         if hook is not None:
             tensordict = hook(tensordict, key)
         else:
-            # TODO: remove the None in v0.7
-            tensordict = tensordict.get(key[0], default=None)
+            tensordict = tensordict.get(key[0])
             if tensordict is None:
                 raise KeyError(f"No sub-tensordict with key {key[0]}.")
         key = key[1:]
@@ -2267,9 +2265,8 @@ def isin(
         >>> torch.testing.assert_close(in_reference, expected_in_reference)
     """
     # Get the data
-    # TODO: remove the None in v0.7
-    reference_tensor = reference.get(key, default=None)
-    target_tensor = input.get(key, default=None)
+    reference_tensor = reference.get(key)
+    target_tensor = input.get(key)
 
     # Check key is present in both tensordict and reference_tensordict
     if not isinstance(target_tensor, torch.Tensor):
@@ -2365,8 +2362,7 @@ def remove_duplicates(
         ... )
         >>> assert (td == expected_output).all()
     """
-    # TODO: remove the None in v0.7
-    tensor = input.get(key, default=None)
+    tensor = input.get(key)
 
     # Check if the key is a TensorDict
     if tensor is None:
