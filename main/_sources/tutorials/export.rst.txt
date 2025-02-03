@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.5058, 0.1084, 0.0000, 0.0000]], grad_fn=<ReluBackward0>), tensor([[ 0.0516, -0.0173,  0.0108, -0.3756]], grad_fn=<AddmmBackward0>), tensor([[ 0.0516, -0.0173]], grad_fn=<SplitBackward0>), tensor([[1.0068, 0.7809]], grad_fn=<ClampMinBackward0>), tensor([[ 0.0516, -0.0173]], grad_fn=<SplitBackward0>))
+    (tensor([[0., 0., 0., 0.]], grad_fn=<ReluBackward0>), tensor([[0.1015, 0.1999, 0.3681, 0.4090]], grad_fn=<AddmmBackward0>), tensor([[0.1015, 0.1999]], grad_fn=<SplitBackward0>), tensor([[1.2466, 1.2758]], grad_fn=<ClampMinBackward0>), tensor([[0.1015, 0.1999]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  532.15 micro-seconds
-    Time for exported module:  359.30 micro-seconds
+    Time for TDModule:  521.18 micro-seconds
+    Time for exported module:  359.06 micro-seconds
 
 
 
@@ -297,7 +297,7 @@ and the FX graph:
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:131 in forward, code: loc, scale = tensor.chunk(2, -1)
+             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
@@ -307,7 +307,7 @@ and the FX graph:
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:132 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         
              # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:57 in broadcast_all, code: return torch.broadcast_tensors(*values)
@@ -323,7 +323,7 @@ and the FX graph:
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:131 in forward, code: loc, scale = tensor.chunk(2, -1)
+             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
@@ -333,7 +333,7 @@ and the FX graph:
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:132 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         
              # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:57 in broadcast_all, code: return torch.broadcast_tensors(*values)
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[ 0.0516, -0.0173]], grad_fn=<SplitBackward0>)
+    tensor([[0.1015, 0.1999]], grad_fn=<SplitBackward0>)
 
 
 
@@ -657,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.485 seconds)
+   **Total running time of the script:** (0 minutes 1.474 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.6.2)
+                  main (0.7.0)
                 </div>
               
             
@@ -2756,14 +2756,14 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>tuple of str</em>) – key to be queried. If tuple of str it is
 equivalent to chained calls of getattr.</p></li>
-<li><p><strong>default</strong> – <p>default value if the key is not found in the tensordict.</p>
+<li><p><strong>default</strong> – <p>default value if the key is not found in the tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>Currently, if a key is not present in the tensordict and no default
-is passed, a <cite>KeyError</cite> is raised. From v0.7, this behaviour will be changed
-and a <cite>None</cite> value will be returned instead. To adopt the new behaviour,
-set the environment variable <cite>export TD_GET_DEFAULTS_TO_NONE=’1’</cite> or call
-:func`~tensordict.set_get_defaults_to_none`.</p>
+<p>Previously, if a key was not present in the tensordict and no default
+was passed, a <cite>KeyError</cite> was raised. From v0.7, this behaviour has been changed
+and a <cite>None</cite> value is returned instead (in accordance with the what dict.get behavior).
+To adopt the old behavior, set the environment variable <cite>export TD_GET_DEFAULTS_TO_NONE=’0’</cite> or call
+:func`~tensordict.set_get_defaults_to_none(False)`.</p>
 </div>
 </p></li>
 </ul>
@@ -2773,9 +2773,6 @@ set the environment variable <cite>export TD_GET_DEFAULTS_TO_NONE=’1’</cite>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span>
 <span class="go">tensor(1)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">set_get_defaults_to_none</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span> <span class="c1"># Current default behaviour</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)</span> <span class="c1"># Raises KeyError</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">set_get_defaults_to_none</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)</span>
 <span class="go">None</span>
 </pre></div>

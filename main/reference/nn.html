@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.6.2)
+                  main (0.7.0)
                 </div>
               
             
@@ -491,7 +491,7 @@ to build distributions from network outputs and get summary statistics or sample
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NormalParamWrapper</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NormalParamExtractor</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.prototype</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
 <span class="gp">... </span>    <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
@@ -500,9 +500,9 @@ to build distributions from network outputs and get summary statistics or sample
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">&quot;hidden&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">GRUCell</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">GRUCell</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">NormalParamExtractor</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">NormalParamWrapper</span><span class="p">(</span><span class="n">net</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">prob_module</span> <span class="o">=</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
