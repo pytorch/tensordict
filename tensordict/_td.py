@@ -2221,8 +2221,7 @@ class TensorDict(TensorDictBase):
         input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                # TODO: v0.7: remove the None
-                cur_value = self.get(key, None)
+                cur_value = self.get(key)
                 if cur_value is not None:
                     input_dict[key] = cur_value.from_dict_instance(
                         value,

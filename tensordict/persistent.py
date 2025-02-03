@@ -344,8 +344,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
             return out
         else:
-            # TODO: remove the None in v0.7
-            out = self._nested_tensordicts.get(key, None)
+            out = self._nested_tensordicts.get(key)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,
@@ -398,8 +397,7 @@ class PersistentTensorDict(TensorDictBase):
                 return out.pin_memory()
             return out
         elif array is not default:
-            # TODO: remove the None in v0.7
-            out = self._nested_tensordicts.get(key, None)
+            out = self._nested_tensordicts.get(key)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
                     group=array,

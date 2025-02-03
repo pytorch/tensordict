@@ -127,8 +127,7 @@ class CompositeDistribution(d.Distribution):
             else:
                 write_name = name_unravel
             name = name_unravel
-            # TODO: v0.7: remove the None
-            dist_params = params.get(name, None)
+            dist_params = params.get(name)
             kwargs = extra_kwargs.get(name, {})
             if dist_params is None:
                 raise KeyError
@@ -587,8 +586,7 @@ class CompositeDistribution(d.Distribution):
             KeyError: If neither `<sample_name>` nor `<sample_name>_cdf` can be found in the input TensorDict for a component distribution.
         """
         for name, dist in self.dists.items():
-            # TODO: v0.7: remove the None
-            prob = sample.get(_add_suffix(name, "_cdf"), None)
+            prob = sample.get(_add_suffix(name, "_cdf"))
             if prob is None:
                 try:
                     prob = self.cdf(sample.get(name))
