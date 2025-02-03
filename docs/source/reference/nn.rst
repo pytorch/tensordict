@@ -194,6 +194,7 @@ to build distributions from network outputs and get summary statistics or sample
     TensorDictModuleBase
     TensorDictModule
     ProbabilisticTensorDictModule
+    ProbabilisticTensorDictSequential
     TensorDictSequential
     TensorDictModuleWrapper
     CudaGraphModule
@@ -257,6 +258,10 @@ Distributions
     NormalParamExtractor
     OneHotCategorical
     TruncatedNormal
+    InteractionType
+    set_interaction_type
+    add_custom_mapping
+    mappings
 
 
 Utils
@@ -270,8 +275,8 @@ Utils
 
     make_tensordict
     dispatch
-    set_interaction_type
     inv_softplus
     biased_softplus
     set_skip_existing
     skip_existing
+    rand_one_hot
