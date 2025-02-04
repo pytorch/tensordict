@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import importlib.util
 import inspect
+import platform
 from pathlib import Path
 from typing import Any, Callable
 
@@ -42,6 +43,8 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
 _v2_5 = TORCH_VERSION >= version.parse("2.5.0")
+
+_IS_OSX = platform.system() == "Darwin"
 
 
 def test_vmap_compile():
@@ -951,6 +954,10 @@ class TestONNXExport:
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.1"), reason="requires torch>=2.5"
+)
+@pytest.mark.skipif(
+    (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
+    reason="requires torch>=2.7 ons OSX",
 )
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:

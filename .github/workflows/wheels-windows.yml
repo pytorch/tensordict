@@ -43,7 +43,7 @@ jobs:
       - name: Upload wheel for download
         uses: actions/upload-artifact@v4
         with:
-          name: tensordict-batch.whl
+          name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
 
   test-wheel-windows:
