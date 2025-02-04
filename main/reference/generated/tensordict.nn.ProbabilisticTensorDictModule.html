@@ -360,28 +360,28 @@
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">ProbabilisticTensorDictModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule" title="Permalink to this definition">¶</a></dt>
 <dd><p>A probabilistic TD Module.</p>
-<p><cite>ProbabilisticTensorDictModule</cite> is a non-parametric module representing a probability distribution.
-It reads the distribution parameters from an input TensorDict using the specified <cite>in_keys</cite>.
-The output is sampled given some rule, specified by the input <code class="xref py py-obj docutils literal notranslate"><span class="pre">default_interaction_type</span></code> argument and the
-<code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code> global function.</p>
-<p><a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> can be used to construct the distribution
+<p><cite>ProbabilisticTensorDictModule</cite> is a non-parametric module embedding a
+probability distribution constructor. It reads the distribution parameters from an input
+TensorDict using the specified <cite>in_keys</cite> and outputs a sample (loosely speaking) of the
+distribution.</p>
+<p>The output “sample” is produced given some rule, specified by the input <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>
+argument and the <code class="docutils literal notranslate"><span class="pre">interaction_type()</span></code> global function.</p>
+<p><cite>ProbabilisticTensorDictModule</cite> can be used to construct the distribution
 (through the <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code></a> method) and/or sampling from this distribution
-(through a regular <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> to the module).</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> instance has two main features:</p>
+(through a regular <code class="xref py py-meth docutils literal notranslate"><span class="pre">__call__()</span></code> to the module).</p>
+<p>A <cite>ProbabilisticTensorDictModule</cite> instance has two main features:</p>
 <ul class="simple">
-<li><p>It reads and writes TensorDict objects</p></li>
-<li><dl class="simple">
-<dt>It uses a real mapping R^n -&gt; R^m to create a distribution in R^d from</dt><dd><p>which values can be sampled or computed.</p>
-</dd>
-</dl>
-</li>
+<li><p>It reads and writes from and to TensorDict objects;</p></li>
+<li><p>It uses a real mapping R^n -&gt; R^m to create a distribution in R^d from
+which values can be sampled or computed.</p></li>
 </ul>
-<p>When the <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method is called, a distribution is
-created, and a value computed (using the ‘mean’, ‘mode’, ‘median’ attribute or
-the ‘rsample’, ‘sample’ method). The sampling step is skipped if the supplied
-TensorDict has all of the desired key-value pairs already.</p>
-<p>By default, the <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> distribution class is a <code class="docutils literal notranslate"><span class="pre">Delta</span></code>
-distribution, making <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code> a simple wrapper around
+<p>When the <code class="xref py py-meth docutils literal notranslate"><span class="pre">__call__()</span></code> and <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.forward" title="tensordict.nn.ProbabilisticTensorDictModule.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method are called, a distribution is
+created, and a value computed (depending on the <code class="docutils literal notranslate"><span class="pre">interaction_type</span></code> value, ‘dist.mean’,
+‘dist.mode’, ‘dist.median’ attributes could be used, as well as
+the ‘dist.rsample’, ‘dist.sample’ method). The sampling step is skipped if the supplied
+TensorDict has all the desired key-value pairs already.</p>
+<p>By default, <cite>ProbabilisticTensorDictModule</cite> distribution class is a <code class="xref py py-class docutils literal notranslate"><span class="pre">Delta</span></code>
+distribution, making <cite>ProbabilisticTensorDictModule</cite> a simple wrapper around
 a deterministic mapping function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
