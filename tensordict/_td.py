@@ -314,7 +314,9 @@ class TensorDict(TensorDictBase):
         nested: bool = True,
         **kwargs: dict[str, Any] | None,
     ) -> TensorDict:
-        if is_compiling():
+        if is_compiling() and cls is TensorDict:
+            # If the cls is not TensorDict, we must escape this to keep the same class.
+            # That's unfortunate because as of now it graph breaks but that's the best we can do.
             return TensorDict(
                 source,
                 batch_size=batch_size,
@@ -2219,8 +2221,7 @@ class TensorDict(TensorDictBase):
         input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                # TODO: v0.7: remove the None
-                cur_value = self.get(key, None)
+                cur_value = self.get(key)
                 if cur_value is not None:
                     input_dict[key] = cur_value.from_dict_instance(
                         value,

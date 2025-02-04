@@ -18,6 +18,9 @@ concurrency:
 jobs:
   python-source-and-configs:
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    permissions:
+      id-token: write
+      contents: read
     with:
       repository: pytorch/tensordict
       script: |
@@ -46,6 +49,9 @@ jobs:
 
   c-source:
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    permissions:
+      id-token: write
+      contents: read
     with:
       repository: pytorch/tensordict
       script: |

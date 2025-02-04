@@ -156,7 +156,7 @@ _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
     _GET_DEFAULTS_TO_NONE = strtobool(os.environ["TD_GET_DEFAULTS_TO_NONE"])
 else:
-    _GET_DEFAULTS_TO_NONE = None
+    _GET_DEFAULTS_TO_NONE = True
 
 
 def set_get_defaults_to_none(set_to_none: bool = True):
@@ -171,7 +171,7 @@ def set_get_defaults_to_none(set_to_none: bool = True):
 
     """
     global _GET_DEFAULTS_TO_NONE
-    _GET_DEFAULTS_TO_NONE = set_to_none
+    _GET_DEFAULTS_TO_NONE = bool(set_to_none)
 
 
 def get_defaults_to_none(set_to_none: bool = True):
@@ -6395,22 +6395,19 @@ class TensorDictBase(MutableMapping):
         Args:
             key (str, tuple of str): key to be queried. If tuple of str it is
                 equivalent to chained calls of getattr.
-            default: default value if the key is not found in the tensordict.
+            default: default value if the key is not found in the tensordict. Defaults to ``None``.
 
                 .. warning::
-                    Currently, if a key is not present in the tensordict and no default
-                    is passed, a `KeyError` is raised. From v0.7, this behaviour will be changed
-                    and a `None` value will be returned instead. To adopt the new behaviour,
-                    set the environment variable `export TD_GET_DEFAULTS_TO_NONE='1'` or call
-                    :func`~tensordict.set_get_defaults_to_none`.
+                    Previously, if a key was not present in the tensordict and no default
+                    was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
+                    and a `None` value is returned instead (in accordance with the what dict.get behavior).
+                    To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
+                    :func`~tensordict.set_get_defaults_to_none(False)`.
 
         Examples:
             >>> td = TensorDict({"x": 1}, batch_size=[])
             >>> td.get("x")
             tensor(1)
-            >>> set_get_defaults_to_none(False) # Current default behaviour
-            >>> td.get("y") # Raises KeyError
-            >>> set_get_defaults_to_none(True)
             >>> td.get("y")
             None
         """
@@ -6418,37 +6415,19 @@ class TensorDictBase(MutableMapping):
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Find what the default is
-        has_default = False
         if args:
             default = args[0]
             if len(args) > 1 or kwargs:
                 raise TypeError("only one (keyword) argument is allowed.")
-            has_default = True
         elif kwargs:
             default = kwargs.pop("default")
             if args or kwargs:
                 raise TypeError("only one (keyword) argument is allowed.")
-            has_default = True
         elif _GET_DEFAULTS_TO_NONE:
             default = None
         else:
             default = NO_DEFAULT
-        try:
-            return self._get_tuple(key, default=default)
-        except KeyError:
-            if _GET_DEFAULTS_TO_NONE is None and not has_default:
-                # We raise an exception AND a warning because we want the user to know that this exception will
-                # not be raised in the future
-                warnings.warn(
-                    f"The entry ({key}) you have queried with `get` is not present in the tensordict. "
-                    "Currently, this raises an exception. "
-                    "To align with `dict.get`, this behaviour will be changed in v0.7 and a `None` value will "
-                    "be returned instead (no error will be raised). "
-                    "To suppress this warning and use the new behaviour (recommended), call `tensordict.set_get_defaults_to_none(True)` or set the env variable `export TD_GET_DEFAULTS_TO_NONE='1'`. "
-                    "To suppress this warning and keep the old behaviour, call `tensordict.set_get_defaults_to_none(False)` or set the env variable `export TD_GET_DEFAULTS_TO_NONE='0'`.",
-                    category=DeprecationWarning,
-                )
-            raise
+        return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
     def _get_str(self, key, default): ...
@@ -11140,6 +11119,8 @@ class TensorDictBase(MutableMapping):
     def __exit__(self, exc_type, exc_val, exc_tb):
         # During exit, updates mustn't be made in-place as the source and dest
         # storage location can be identical, resulting in a RuntimeError
+        if is_compiling():
+            self.clear_refs_for_compile_()
         if exc_type is not None and issubclass(exc_type, Exception):
             return False
         _last_op = self._last_op_queue.pop()
@@ -11149,9 +11130,25 @@ class TensorDictBase(MutableMapping):
             #  added or deleted
             _inv_caller = LAST_OP_MAPS.get(last_op)
             if _inv_caller is not None:
-                return _inv_caller(self, args, kwargs, out_wr())
+                prev_ref = out_wr()
+                return _inv_caller(self, args, kwargs, prev_ref)
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
+        return self
+
+    def clear_refs_for_compile_(self) -> T:
+        """Clears the weakrefs in order for the tensordict to get out of the compile region safely.
+
+        Use this whenever you hit `torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable()`
+        before returning a TensorDict.
+
+        Returns: self
+        """
+        self._last_op = None
+        for v in self.values(True, True, is_leaf=_is_tensor_collection):
+            if _is_tensorclass(type(v)):
+                v = v._tensordict
+            v._last_op = None
         return self
 
     # Clone, select, exclude, empty
@@ -11580,7 +11577,11 @@ class TensorDictBase(MutableMapping):
                 device=device,
                 batch_size=batch_size,
             )
-        if isinstance(obj, np.ndarray) and hasattr(obj.dtype, "names"):
+        if (
+            isinstance(obj, np.ndarray)
+            and hasattr(obj.dtype, "names")
+            and obj.dtype.names is not None
+        ):
             return cls.from_struct_array(
                 obj,
                 auto_batch_size=auto_batch_size,

@@ -453,7 +453,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 f"Currently, it is assumed that composite_lp_aggregate() will return True: the log-probs will be aggregated "
                 f"in a {self._log_prob_key} entry. From v0.9, this behaviour will be changed and individual log-probs will "
                 f"be written in `('path', 'to', 'leaf', '<sample_name>_log_prob')`. To prepare for this change, "
-                f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script. Use mode=True "
+                f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script (or set the "
+                f"COMPOSITE_LP_AGGREGATE env variable). Use mode=True "
                 f"to keep the current behaviour, and mode=False to use per-leaf log-probs.",
                 category=DeprecationWarning,
             )
