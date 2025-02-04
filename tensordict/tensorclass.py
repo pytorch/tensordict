@@ -156,6 +156,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "batch_size",
     "bytes",
     "cat_tensors",
+    "clear_refs_for_compile_",
     "data_ptr",
     "depth",
     "dim",
@@ -2276,8 +2277,7 @@ def _get_at(self, key: NestedKey, idx, default: Any = NO_DEFAULT):
 def _data(self):
     # We allow data to be a field of the class too
     if "data" in self.__dataclass_fields__:
-        # TODO: remove the None in v0.7
-        data = self._tensordict.get("data", None)
+        data = self._tensordict.get("data")
         if data is None:
             data = self._non_tensordict.get("data")
         return data
@@ -3561,6 +3561,10 @@ class NonTensorStack(LazyStackedTensorDict):
             ),
             stack_dim=0,
         )
+
+    def densify(self, layout: torch.layout = torch.strided):
+        # No need to do anything with a non tensor stack
+        return self
 
     def update(
         self,

@@ -3794,8 +3794,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
         if inplace:
             for key in td.keys(True, True):
-                # TODO: remove default None in v0.7
-                td_c_val = td_c.get(key, None)
+                td_c_val = td_c.get(key)
                 if td_c_val is not None:
                     assert (td_c[key] == td[key]).all()
                 else:
@@ -3804,8 +3803,7 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_1[key] == td[key]).all()
         else:
             for key in td.keys(True, True):
-                # TODO: remove default None in v0.7
-                td_c_val = td_c.get(key, None)
+                td_c_val = td_c.get(key)
                 if td_c_val is not None:
                     assert (td_c[key] == td_1[key]).all()
                 else:
@@ -6558,8 +6556,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            # TODO: remove default None in v0.7
-            assert td._cache.get("sorted_keys", None) is not None
+            assert td._cache.get("sorted_keys") is not None
             td.unlock_()
             assert td._cache is None
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
@@ -6570,8 +6567,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert target._cache is None
             td.lock_()
             _ = td.sorted_keys
-            # TODO: remove default None in v0.7
-            assert target._cache.get("sorted_keys", None) is not None
+            assert target._cache.get("sorted_keys") is not None
             td.unlock_()
             assert target._cache is None
 
@@ -9795,7 +9791,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)
@@ -9819,7 +9815,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)
@@ -9846,7 +9842,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)
@@ -9873,7 +9869,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)
@@ -9900,7 +9896,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)
@@ -9927,7 +9923,7 @@ class TestErrors:
             assert get_defaults_to_none()
             run_assertions()
             set_get_defaults_to_none(None)
-            assert get_defaults_to_none() is None
+            assert get_defaults_to_none() is False
             run_assertions()
         finally:
             set_get_defaults_to_none(set_back)

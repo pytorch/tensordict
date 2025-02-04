@@ -10,7 +10,6 @@ from tensordict.nn.distributions.continuous import (
     AddStateIndependentNormalScale,
     Delta,
     NormalParamExtractor,
-    NormalParamWrapper,
 )
 from tensordict.nn.distributions.discrete import OneHotCategorical, rand_one_hot
 from tensordict.nn.distributions.truncated_normal import TruncatedNormal

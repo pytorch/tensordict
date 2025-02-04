@@ -1084,14 +1084,12 @@ class TensorDictModule(TensorDictModuleBase):
             if self._kwargs is not None:
                 kwargs.update(
                     {
-                        # TODO: v0.7: remove the None
-                        kwarg: tensordict.get(in_key, None)
+                        kwarg: tensordict.get(in_key)
                         for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
                 )
                 tensors = ()
             else:
-                # TODO: v0.7: remove the None
                 tensors = tuple(
                     tensordict._get_tuple_maybe_non_tensor(
                         _unravel_key_to_tuple(in_key), None
@@ -1121,8 +1119,7 @@ class TensorDictModule(TensorDictModuleBase):
                     keys = unravel_key_list(list(tensors.keys()))
                     values = tensors.values()
                     tensors = dict(_zip_strict(keys, values))
-                # TODO: v0.7: remove the None
-                tensors = tuple(tensors.get(key, None) for key in self.out_keys)
+                tensors = tuple(tensors.get(key) for key in self.out_keys)
             if not isinstance(tensors, tuple):
                 tensors = (tensors,)
             tensordict_out = self._write_to_tensordict(
