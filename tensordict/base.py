@@ -65,6 +65,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_warn,
     _make_dtype_promotion,
+    _maybe_correct_neg_dim,
     _parse_to,
     _pass_through,
     _pass_through_cls,
@@ -3343,13 +3344,7 @@ class TensorDictBase(MutableMapping):
             tensor([4, 5, 6, 7])
 
         """
-        batch_dims = self.batch_dims
-        if dim < -batch_dims or dim >= batch_dims:
-            raise RuntimeError(
-                f"the dimension provided ({dim}) is beyond the tensordict dimensions ({self.ndim})."
-            )
-        if dim < 0:
-            dim = batch_dims + dim
+        dim = _maybe_correct_neg_dim(dim, self.batch_size)
         results = self._unbind(dim)
         if self._is_memmap or self._is_shared:
             for result in results:
@@ -7385,12 +7380,7 @@ class TensorDictBase(MutableMapping):
             >>> td_unflat = td_flat.unflatten(0, [3, 4])
             >>> assert (td == td_unflat).all()
         """
-        if dim < 0:
-            dim = self.ndim + dim
-            if dim < 0:
-                raise ValueError(
-                    f"Incompatible dim {dim} for tensordict with shape {self.shape}."
-                )
+        dim = _maybe_correct_neg_dim(dim, self.batch_size)
 
         def unflatten(tensor):
             return torch.unflatten(
@@ -8935,11 +8925,7 @@ class TensorDictBase(MutableMapping):
         iterable: bool,
     ):
         num_workers = pool._processes
-        dim_orig = dim
-        if dim < 0:
-            dim = self.ndim + dim
-        if dim < 0 or dim >= self.ndim:
-            raise ValueError(f"Got incompatible dimension {dim_orig}")
+        dim = _maybe_correct_neg_dim(dim, self.batch_size)
 
         self_split = _split_tensordict(
             self,
@@ -9567,18 +9553,11 @@ class TensorDictBase(MutableMapping):
 
         """
         if isinstance(dim, int):
-            if dim < 0:
-                new_dim = self.ndim + dim
-            else:
-                new_dim = dim
+            dim = _maybe_correct_neg_dim(dim, self.batch_size)
         else:
             raise ValueError(f"Expected dim of type int, got {type(dim)}.")
-        if (new_dim < 0) or (new_dim >= self.ndim):
-            raise ValueError(
-                f"The dimension {dim} is incompatible with a tensordict with batch_size {self.batch_size}."
-            )
         return self._fast_apply(
-            lambda x: torch.softmax(x, dim=new_dim, dtype=dtype),
+            lambda x: torch.softmax(x, dim=dim, dtype=dtype),
         )
 
     def log10(self) -> T:
