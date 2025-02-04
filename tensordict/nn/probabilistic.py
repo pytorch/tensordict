@@ -143,29 +143,34 @@ class set_interaction_type(_DecoratorContextManager):
 class ProbabilisticTensorDictModule(TensorDictModuleBase):
     """A probabilistic TD Module.
 
-    `ProbabilisticTensorDictModule` is a non-parametric module representing a probability distribution.
-    It reads the distribution parameters from an input TensorDict using the specified `in_keys`.
-    The output is sampled given some rule, specified by the input :obj:`default_interaction_type` argument and the
-    :func:`~tensordict.nn.interaction_type` global function.
+    `ProbabilisticTensorDictModule` is a non-parametric module embedding a
+    probability distribution constructor. It reads the distribution parameters from an input
+    TensorDict using the specified `in_keys` and outputs a sample (loosely speaking) of the
+    distribution.
 
-    :obj:`ProbabilisticTensorDictModule` can be used to construct the distribution
+    The output "sample" is produced given some rule, specified by the input ``default_interaction_type``
+    argument and the ``interaction_type()`` global function.
+
+    `ProbabilisticTensorDictModule` can be used to construct the distribution
     (through the :meth:`~.get_dist` method) and/or sampling from this distribution
-    (through a regular :meth:`~.forward` to the module).
+    (through a regular :meth:`~.__call__` to the module).
 
-    A ``ProbabilisticTensorDictModule`` instance has two main features:
+    A `ProbabilisticTensorDictModule` instance has two main features:
 
-    - It reads and writes TensorDict objects
+    - It reads and writes from and to TensorDict objects;
     - It uses a real mapping R^n -> R^m to create a distribution in R^d from
-        which values can be sampled or computed.
+      which values can be sampled or computed.
 
-    When the :meth:`~.forward` method is called, a distribution is
-    created, and a value computed (using the 'mean', 'mode', 'median' attribute or
-    the 'rsample', 'sample' method). The sampling step is skipped if the supplied
-    TensorDict has all of the desired key-value pairs already.
+    When the :meth:`~.__call__` and :meth:`~.forward` method are called, a distribution is
+    created, and a value computed (depending on the ``interaction_type`` value, 'dist.mean',
+    'dist.mode', 'dist.median' attributes could be used, as well as
+    the 'dist.rsample', 'dist.sample' method). The sampling step is skipped if the supplied
+    TensorDict has all the desired key-value pairs already.
 
-    By default, the ``ProbabilisticTensorDictModule`` distribution class is a ``Delta``
-    distribution, making ``ProbabilisticTensorDictModule`` a simple wrapper around
+    By default, `ProbabilisticTensorDictModule` distribution class is a :class:`~torchrl.modules.distributions.Delta`
+    distribution, making `ProbabilisticTensorDictModule` a simple wrapper around
     a deterministic mapping function.
+
 
     Args:
         in_keys (NestedKey | List[NestedKey] | Dict[str, NestedKey]): key(s) that will be read from the input TensorDict
@@ -668,7 +673,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 return dist.deterministic_sample
             else:
                 # Fallbacks
-                interaction_type = DETERMINISTIC_REGISTER.get(type(dist))
+                tdist = type(dist)
+                if issubclass(tdist, D.Independent):
+                    tdist = type(dist.base_dist)
+                interaction_type = DETERMINISTIC_REGISTER.get(tdist)
                 if interaction_type is None:
                     try:
                         support = dist.support
@@ -971,6 +979,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             )
         else:
             modules_list = list(modules)
+        modules_list = self._convert_modules(modules_list)
 
         # if the modules not including the final probabilistic module return the sampled
         # key we won't be sampling it again, in that case
