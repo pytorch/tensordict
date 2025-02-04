@@ -304,22 +304,41 @@ class CompositeDistribution(d.Distribution):
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
             else:
-                try:
-                    support = dist.support
-                    fallback = (
-                        "mean"
-                        if isinstance(support, torch.distributions.constraints._Real)
-                        else "mode"
+                from tensordict.nn.probabilistic import (
+                    DETERMINISTIC_REGISTER,
+                )
+
+                # Fallbacks
+                tdist = type(dist)
+                if issubclass(tdist, d.Independent):
+                    tdist = type(dist.base_dist)
+                interaction_type = DETERMINISTIC_REGISTER.get(tdist)
+                if interaction_type == "mode":
+                    return dist.mode
+                if interaction_type == "mean":
+                    return dist.mean
+                if interaction_type == "random":
+                    return dist.rsample() if dist.has_rsample else dist.sample()
+                if interaction_type is None:
+                    try:
+                        support = dist.support
+                        fallback = (
+                            "mean"
+                            if isinstance(support, d.constraints._Real)
+                            else "mode"
+                        )
+                    except NotImplementedError:
+                        # Some custom dists don't have a support
+                        # We arbitrarily fall onto 'mean' in these cases
+                        fallback = "mean"
+                else:
+                    raise RuntimeError(
+                        f"InteractionType {interaction_type} is unaccounted for."
                     )
-                except NotImplementedError:
-                    # Some custom dists don't have a support
-                    # We arbitrarily fall onto 'mean' in these cases
-                    fallback = "mean"
                 try:
                     if fallback == "mean":
                         return dist.mean
                     elif fallback == "mode":
-                        # Categorical dists don't have an average
                         return dist.mode
                     else:
                         raise AttributeError
@@ -329,7 +348,7 @@ class CompositeDistribution(d.Distribution):
                     )
                 finally:
                     warnings.warn(
-                        f"deterministic_sample wasn't found when queried in {type(dist)}. "
+                        f"deterministic_sample wasn't found when queried on {type(dist)}. "
                         f"{type(self).__name__} is falling back on {fallback} instead. "
                         f"For better code quality and efficiency, make sure to either "
                         f"provide a distribution with a deterministic_sample attribute or "
@@ -423,7 +442,12 @@ class CompositeDistribution(d.Distribution):
             slp = 0.0
         d = {}
         for name, dist in self.dists.items():
-            d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
+            try:
+                d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
+            except AttributeError:
+                raise RuntimeError(
+                    f"Expected a tensordict sample, but got a {type(sample).__name__} instead."
+                )
             if include_sum:
                 if lp.ndim > sample.ndim:
                     lp = lp.flatten(sample.ndim, -1).sum(-1)
