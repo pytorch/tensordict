@@ -304,9 +304,7 @@ class CompositeDistribution(d.Distribution):
             if hasattr(dist, "deterministic_sample"):
                 return dist.deterministic_sample
             else:
-                from tensordict.nn.probabilistic import (
-                    DETERMINISTIC_REGISTER,
-                )
+                from tensordict.nn.probabilistic import DETERMINISTIC_REGISTER
 
                 # Fallbacks
                 tdist = type(dist)
