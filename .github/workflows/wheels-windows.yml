@@ -36,15 +36,35 @@ jobs:
             python3 -mpip install wheel
             TENSORDICT_BUILD_VERSION=0.7.0 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
+        id: wheel-upload-test
         uses: actions/upload-artifact@v4
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/tensordict-*.whl
+      - name: Delete Artifact (test)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.actions.deleteArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: ${{ steps.wheel-upload-test.outputs.artifact-id }}
+            });
       - name: Upload wheel for download
+        id: wheel-upload
         uses: actions/upload-artifact@v4
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
+      - name: Delete Artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.actions.deleteArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: ${{ steps.wheel-upload.outputs.artifact-id }}
+            });
 
   test-wheel-windows:
     needs: build-wheel-windows
