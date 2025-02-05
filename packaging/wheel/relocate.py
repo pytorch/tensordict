@@ -112,9 +112,10 @@ def patch_win():
     output_dir = osp.join(PACKAGE_ROOT, "dist", ".wheel-process")
 
     for wheel in wheels:
+        print(f"processing {wheel}")
         if osp.exists(output_dir):
             shutil.rmtree(output_dir)
-
+        print(f"creating output directory {output_dir}")
         os.makedirs(output_dir)
 
         # ("Unzipping wheel...")
@@ -122,8 +123,9 @@ def patch_win():
         wheel_dir = osp.dirname(wheel)
         # (f"{wheel_file}")
         wheel_name, _ = osp.splitext(wheel_file)
+        print(f"unzipping {wheel} in {output_dir}")
         unzip_file(wheel, output_dir)
-
+        print("compressing wheel")
         compress_wheel(output_dir, wheel, wheel_dir, wheel_name)
 
 
@@ -132,3 +134,5 @@ if __name__ == "__main__":
         pass
     elif sys.platform == "win32":
         patch_win()
+    else:
+        raise NotImplementedError
