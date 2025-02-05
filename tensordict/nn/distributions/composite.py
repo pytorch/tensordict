@@ -130,7 +130,9 @@ class CompositeDistribution(d.Distribution):
             dist_params = params.get(name)
             kwargs = extra_kwargs.get(name, {})
             if dist_params is None:
-                raise KeyError
+                raise KeyError(
+                    f"no param {name} found in params with keys {params.keys(True, True)}"
+                )
             dist = dist_class(**dist_params, **kwargs)
             dists[write_name] = dist
         self.dists = dists
