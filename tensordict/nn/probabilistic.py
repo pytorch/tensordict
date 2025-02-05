@@ -328,6 +328,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     """
 
+    # To be removed in v0.9
+    _trigger_warning_lpk: bool = False
+
     def __init__(
         self,
         in_keys: NestedKey | List[NestedKey] | Dict[str, NestedKey],
@@ -396,9 +399,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 "composite_lp_aggregate is set to True but log_prob_keys were passed. "
                 "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead."
             )
+        self._trigger_warning_lpk = len(self._out_keys) > 1
         if log_prob_key is None:
             if composite_lp_aggregate(nowarn=True):
                 log_prob_key = "sample_log_prob"
+                self._trigger_warning_lpk = True
             elif len(out_keys) == 1:
                 log_prob_key = _add_suffix(out_keys[0], "_log_prob")
         elif len(out_keys) > 1 and not composite_lp_aggregate(nowarn=True):
@@ -451,13 +456,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 f"unless there is one and only one element in log_prob_keys (got log_prob_keys={self.log_prob_keys}). "
                 f"When composite_lp_aggregate() returns ``False``, try to use {type(self).__name__}.log_prob_keys instead."
             )
-        if _composite_lp_aggregate.get_mode() is None:
+        if _composite_lp_aggregate.get_mode() is None and self._trigger_warning_lpk:
             warnings.warn(
                 f"You are querying the log-probability key of a {type(self).__name__} where the "
-                f"composite_lp_aggregate has not been set. "
+                f"composite_lp_aggregate has not been set and the log-prob key has not been chosen. "
                 f"Currently, it is assumed that composite_lp_aggregate() will return True: the log-probs will be aggregated "
-                f"in a {self._log_prob_key} entry. From v0.9, this behaviour will be changed and individual log-probs will "
-                f"be written in `('path', 'to', 'leaf', '<sample_name>_log_prob')`. To prepare for this change, "
+                f"in a {self._log_prob_key} entry. "
+                f"From v0.9, this behaviour will be changed and individual log-probs will "
+                f"be written in `('path', 'to', 'leaf', '<sample_name>_log_prob')`. "
+                f"To prepare for this change, "
                 f"call `set_composite_lp_aggregate(mode: bool).set()` at the beginning of your script (or set the "
                 f"COMPOSITE_LP_AGGREGATE env variable). Use mode=True "
                 f"to keep the current behaviour, and mode=False to use per-leaf log-probs.",
