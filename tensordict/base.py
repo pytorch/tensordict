@@ -6384,6 +6384,11 @@ class TensorDictBase(MutableMapping):
                 _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
             )
 
+    @overload
+    def get(self, key): ...
+    @overload
+    def get(self, key, default): ...
+
     def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType:
         """Gets the value stored with the input key.
 
@@ -6439,8 +6444,17 @@ class TensorDictBase(MutableMapping):
             return result.data
         return result
 
+    @overload
+    def get_at(self, key, index): ...
+
+    @overload
+    def get_at(self, key, index, default): ...
+
     def get_at(
-        self, key: NestedKey, index: IndexType, default: CompatibleType = NO_DEFAULT
+        self,
+        key: NestedKey,
+        *args,
+        **kwargs,
     ) -> CompatibleType:
         """Get the value of a tensordict from the key `key` at the index `idx`.
 
@@ -6463,7 +6477,30 @@ class TensorDictBase(MutableMapping):
         key = _unravel_key_to_tuple(key)
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        # must be a tuple
+
+        try:
+            if len(args):
+                index = args[0]
+                args = args[1:]
+            else:
+                index = kwargs.pop("index")
+        except KeyError:
+            raise TypeError("index argument missing from get_at")
+
+        # Find what the default is
+        if args:
+            default = args[0]
+            if len(args) > 1 or kwargs:
+                raise TypeError("only one (keyword) argument is allowed.")
+        elif kwargs:
+            default = kwargs.pop("default")
+            if args or kwargs:
+                raise TypeError("only one (keyword) argument is allowed.")
+        elif _GET_DEFAULTS_TO_NONE:
+            default = None
+        else:
+            default = NO_DEFAULT
+
         return self._get_at_tuple(key, index, default)
 
     def _get_at_str(self, key, idx, default):

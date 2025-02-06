@@ -49,6 +49,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
+from tensordict.base import _GENERIC_NESTED_ERR
 from torch import Tensor
 
 # Capture all warnings
@@ -233,6 +234,77 @@ except Exception:
 
 
 class TestTensorClass:
+    def test_get_default(self):
+        @tensorclass
+        class Data:
+            td: TensorDict
+            a: torch.Tensor
+
+        data = Data(td=TensorDict(), a=torch.zeros(()))
+        assert data.get("a") is not None
+        assert data.get("b") is None
+        assert data.get("b", "else") == "else"
+
+        with pytest.raises(KeyError, match=_GENERIC_NESTED_ERR.format(())):
+            data.get(("td", str))  # something unexpected!
+
+        assert data.get(("td", "missing"), "else") == "else"
+        assert data.get(("td", "missing")) is None
+
+        data = data.expand(10)
+        assert data.get_at("a", 0) is not None
+        assert data.get_at("b", 0) is None
+        assert data.get_at("b", 0, "else") == "else"
+
+        assert data.get_at(("td", "missing"), 0, "else") == "else"
+        assert data.get_at(("td", "missing"), 0) is None
+
+    def test_decorator(self):
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: Any
+
+        obj = MyClass(X=torch.zeros(2), y="a string!", batch_size=[])
+        assert not obj.is_locked
+        with obj.lock_():
+            assert obj.is_locked
+            with obj.unlock_():
+                assert not obj.is_locked
+            assert obj.is_locked
+        assert not obj.is_locked
+
+    def test_to_dict(self):
+        @tensorclass
+        class TestClass:
+            my_tensor: torch.Tensor
+            my_str: str
+
+        test_class = TestClass(
+            my_tensor=torch.tensor([1, 2, 3]), my_str="hello", batch_size=[3]
+        )
+
+        assert (
+            test_class
+            == TestClass.from_dict(test_class.to_dict(), auto_batch_size=True)
+        ).all()
+
+        # Currently we don't test non-tensor in __eq__ because __eq__ can break with arrays and such
+        # test_class2 = TestClass(
+        #     my_tensor=torch.tensor([1, 2, 3]), my_str="goodbye", batch_size=[3]
+        # )
+        #
+        # assert not (test_class == TestClass.from_dict(test_class2.to_dict())).all()
+
+        test_class3 = TestClass(
+            my_tensor=torch.tensor([1, 2, 0]), my_str="hello", batch_size=[3]
+        )
+
+        assert not (
+            test_class
+            == TestClass.from_dict(test_class3.to_dict(), auto_batch_size=True)
+        ).all()
+
     def test_all_any(self):
         @tensorclass
         class MyClass1:
@@ -2227,52 +2299,6 @@ class TestNesting:
         assert td_double is td
         assert td_double.dtype == torch.double
         assert td_double.device == torch.device("cpu")
-
-
-def test_decorator():
-    @tensorclass
-    class MyClass:
-        X: torch.Tensor
-        y: Any
-
-    obj = MyClass(X=torch.zeros(2), y="a string!", batch_size=[])
-    assert not obj.is_locked
-    with obj.lock_():
-        assert obj.is_locked
-        with obj.unlock_():
-            assert not obj.is_locked
-        assert obj.is_locked
-    assert not obj.is_locked
-
-
-def test_to_dict():
-    @tensorclass
-    class TestClass:
-        my_tensor: torch.Tensor
-        my_str: str
-
-    test_class = TestClass(
-        my_tensor=torch.tensor([1, 2, 3]), my_str="hello", batch_size=[3]
-    )
-
-    assert (
-        test_class == TestClass.from_dict(test_class.to_dict(), auto_batch_size=True)
-    ).all()
-
-    # Currently we don't test non-tensor in __eq__ because __eq__ can break with arrays and such
-    # test_class2 = TestClass(
-    #     my_tensor=torch.tensor([1, 2, 3]), my_str="goodbye", batch_size=[3]
-    # )
-    #
-    # assert not (test_class == TestClass.from_dict(test_class2.to_dict())).all()
-
-    test_class3 = TestClass(
-        my_tensor=torch.tensor([1, 2, 0]), my_str="hello", batch_size=[3]
-    )
-
-    assert not (
-        test_class == TestClass.from_dict(test_class3.to_dict(), auto_batch_size=True)
-    ).all()
 
 
 @tensorclass(autocast=True)

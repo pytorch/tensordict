@@ -41,11 +41,13 @@ from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorD
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
+    _GET_DEFAULTS_TO_NONE,
     _is_tensor_collection,
     _register_tensor_class,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _GENERIC_NESTED_ERR,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
@@ -2238,7 +2240,7 @@ def _set_at_(
     return self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
 
 
-def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
+def _get(self, key: NestedKey, *args, **kwargs):
     """Gets the value stored with the input key.
 
     Args:
@@ -2250,25 +2252,65 @@ def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
         value stored with the input key
 
     """
-    if isinstance(key, str):
-        key = (key,)
+    key = _unravel_key_to_tuple(key)
+    if not key:
+        raise KeyError(_GENERIC_NESTED_ERR.format(key))
 
-    if isinstance(key, tuple):
-        try:
-            if len(key) > 1:
-                return getattr(self, key[0]).get(key[1:])
-            return getattr(self, key[0])
-        except AttributeError:
-            if default is NO_DEFAULT:
-                raise
-            return default
-    raise ValueError(f"Supported type for key are str and tuple, got {type(key)}")
+    # Find what the default is
+    if args:
+        default = args[0]
+        if len(args) > 1 or kwargs:
+            raise TypeError("only one (keyword) argument is allowed.")
+    elif kwargs:
+        default = kwargs.pop("default")
+        if args or kwargs:
+            raise TypeError("only one (keyword) argument is allowed.")
+    elif _GET_DEFAULTS_TO_NONE:
+        default = None
+    else:
+        default = NO_DEFAULT
 
-
-def _get_at(self, key: NestedKey, idx, default: Any = NO_DEFAULT):
     try:
-        return self.get(key, NO_DEFAULT)[idx]
-    except AttributeError:
+        if len(key) > 1:
+            return getattr(self, key[0]).get(key[1:], default=default)
+        return getattr(self, key[0])
+    except (AttributeError, KeyError):
+        if default is NO_DEFAULT:
+            raise
+        return default
+
+
+def _get_at(self, key: NestedKey, *args, **kwargs):
+    key = _unravel_key_to_tuple(key)
+    if not key:
+        raise KeyError(_GENERIC_NESTED_ERR.format(key))
+
+    try:
+        if len(args):
+            index = args[0]
+            args = args[1:]
+        else:
+            index = kwargs.pop("index")
+    except KeyError:
+        raise TypeError("index argument missing from get_at")
+
+    # Find what the default is
+    if args:
+        default = args[0]
+        if len(args) > 1 or kwargs:
+            raise TypeError("only one (keyword) argument is allowed.")
+    elif kwargs:
+        default = kwargs.pop("default")
+        if args or kwargs:
+            raise TypeError("only one (keyword) argument is allowed.")
+    elif _GET_DEFAULTS_TO_NONE:
+        default = None
+    else:
+        default = NO_DEFAULT
+
+    try:
+        return self.get(key, NO_DEFAULT)[index]
+    except (AttributeError, KeyError):
         if default is NO_DEFAULT:
             raise
         return default
