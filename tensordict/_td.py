@@ -62,6 +62,7 @@ from tensordict.utils import (
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
+    _pass_through,
     _prune_selected_keys,
     _set_item,
     _set_max_batch_size,
@@ -3809,7 +3810,7 @@ class _SubTensorDict(TensorDictBase):
     def _get_str(self, key, default):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
             data = self._source._get_str(key, NO_DEFAULT)
-            if is_non_tensor(data):
+            if _pass_through(data):
                 return data[self.idx]
             return _SubTensorDict(data, self.idx)
         return self._source._get_at_str(key, self.idx, default=default)

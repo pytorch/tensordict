@@ -11813,6 +11813,13 @@ class TestSubclassing:
 
 
 class TestUnbatchedTensor:
+    def test_auto_batch_size(self):
+        td = TensorDict(a=UnbatchedTensor(0), b=torch.randn(2, 3)).auto_batch_size_(
+            batch_dims=2
+        )
+        assert td.shape == (2, 3)
+        assert td["a"] == 0
+
     def test_unbatched(self):
         assert UnbatchedTensor._pass_through
         td = TensorDict(
