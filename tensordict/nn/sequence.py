@@ -20,7 +20,7 @@ from tensordict.nn.common import (
 )
 from tensordict.nn.utils import _set_skip_existing_None
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import unravel_key_list
+from tensordict.utils import _zip_strict, unravel_key_list
 from torch import nn
 
 _has_functorch = False
@@ -205,7 +205,7 @@ class TensorDictSequential(TensorDictModule):
             in_keys, out_keys = self._compute_in_and_out_keys(modules_vals)
             self._complete_out_keys = list(out_keys)
             modules = collections.OrderedDict(
-                **{key: val for key, val in zip(modules[0], modules_vals)}
+                **{key: val for key, val in _zip_strict(modules[0], modules_vals)}
             )
             super().__init__(
                 module=nn.ModuleDict(modules), in_keys=in_keys, out_keys=out_keys
@@ -493,7 +493,7 @@ class TensorDictSequential(TensorDictModule):
         else:
             keys = [key for key in self.module if self.module[key] in modules]
             modules_dict = collections.OrderedDict(
-                **{key: val for key, val in zip(keys, modules)}
+                **{key: val for key, val in _zip_strict(keys, modules)}
             )
             return type(self)(modules_dict)
 

@@ -34,6 +34,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
+    _zip_strict,
     BufferLegacy,
     erase_cache,
     implement_for,
@@ -475,8 +476,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     buffer_keys.append(key)
                     buffers.append(value)
 
-            self._parameters.update(dict(zip(param_keys, params)))
-            self._buffers.update(dict(zip(buffer_keys, buffers)))
+            self._parameters.update(dict(_zip_strict(param_keys, params)))
+            self._buffers.update(dict(_zip_strict(buffer_keys, buffers)))
         else:
             self._parameters.update(params)
             self._buffers.update(buffers)

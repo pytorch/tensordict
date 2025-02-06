@@ -576,7 +576,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             return dist.log_prob(tensordict.get(self.out_keys[0]))
 
     def _update_td_lp(self, lp):
-        for out_key, lp_key in zip(self.dist_sample_keys, self.log_prob_keys):
+        for out_key, lp_key in _zip_strict(self.dist_sample_keys, self.log_prob_keys):
             lp_key_expected = _add_suffix(out_key, "_log_prob")
             if lp_key != lp_key_expected:
                 lp.rename_key_(lp_key_expected, lp_key)
@@ -637,7 +637,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)
                 tensordict_out.update(
-                    {key: value for key, value in zip(self.out_keys, out_tensors)}
+                    dict(_zip_strict(self.dist_sample_keys, out_tensors))
                 )
                 if self.return_log_prob:
                     log_prob = dist.log_prob(*out_tensors)
@@ -1155,8 +1155,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     if isinstance(tdm, ProbabilisticTensorDictModule):
                         if isinstance(sample, torch.Tensor):
                             sample = [sample]
-                        for val, key in zip(sample, tdm.out_keys):
-                            td_copy.set(key, val)
+                        td_copy.update(dict(_zip_strict(tdm.dist_sample_keys, sample)))
                     else:
                         td_copy.update(sample)
                 dists[tdm.out_keys[0]] = dist

@@ -22,7 +22,7 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import strtobool
+from tensordict.utils import _zip_strict, strtobool
 from torch import Tensor
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -296,7 +296,7 @@ class CudaGraphModule:
             def _call(*args: torch.Tensor, **kwargs: torch.Tensor):
                 if self.counter >= self._warmup:
                     srcs, dests = [], []
-                    for arg_src, arg_dest in zip(
+                    for arg_src, arg_dest in _zip_strict(
                         tree_leaves((args, kwargs)), self._flat_tree
                     ):
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
