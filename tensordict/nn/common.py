@@ -1055,7 +1055,7 @@ class TensorDictModule(TensorDictModuleBase):
                     tensordict_out = TensorDict()
             else:
                 tensordict_out = tensordict
-        for _out_key, _tensor in zip(out_keys, tensors):
+        for _out_key, _tensor in _zip_strict(out_keys, tensors):
             if _out_key != "_":
                 tensordict_out.set(_out_key, TensorDict.from_any(_tensor))
         return tensordict_out
@@ -1097,7 +1097,9 @@ class TensorDictModule(TensorDictModuleBase):
                     for in_key in self.in_keys
                 )
             try:
-                tensors = self._call_module(tensors, **kwargs)
+                tensors_out = self._call_module(tensors, **kwargs)
+                if tensors_out is None:
+                    tensors_out = ()
             except Exception as err:
                 if any(tensor is None for tensor in tensors) and "None" in str(err):
                     none_set = {
@@ -1112,18 +1114,18 @@ class TensorDictModule(TensorDictModuleBase):
                     ) from err
                 else:
                     raise err
-            if isinstance(tensors, (dict, TensorDictBase)) and all(
-                key in tensors for key in self.out_keys
+            if isinstance(tensors_out, (dict, TensorDictBase)) and all(
+                key in tensors_out for key in self.out_keys
             ):
-                if isinstance(tensors, dict):
-                    keys = unravel_key_list(list(tensors.keys()))
-                    values = tensors.values()
-                    tensors = dict(_zip_strict(keys, values))
-                tensors = tuple(tensors.get(key) for key in self.out_keys)
-            if not isinstance(tensors, tuple):
-                tensors = (tensors,)
+                if isinstance(tensors_out, dict):
+                    keys = unravel_key_list(list(tensors_out.keys()))
+                    values = tensors_out.values()
+                    tensors_out = dict(_zip_strict(keys, values))
+                tensors_out = tuple(tensors_out.get(key) for key in self.out_keys)
+            if not isinstance(tensors_out, tuple):
+                tensors_out = (tensors_out,)
             tensordict_out = self._write_to_tensordict(
-                tensordict, tensors, tensordict_out
+                tensordict, tensors_out, tensordict_out
             )
             return tensordict_out
         except Exception as err:
