@@ -2518,7 +2518,23 @@ class TensorDict(TensorDictBase):
         tensor_in = self._get_str(key, NO_DEFAULT)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
+            if isinstance(idx, tuple) and len(idx) == 1:
+                idx = idx[0]
             dest = tensor_in
+            if (
+                isinstance(idx, torch.Tensor)
+                and idx.shape == ()
+                and self.shape == ()
+                and idx.dtype == torch.bool
+                and idx
+            ):
+                self._set_str(
+                    key,
+                    dest.squeeze(0),
+                    validated=True,
+                    inplace=False,
+                    ignore_lock=True,
+                )
             is_diff = dest[idx].tolist() != value.tolist()
             if is_diff:
                 dest_val = dest.maybe_to_stack()

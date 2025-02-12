@@ -11299,6 +11299,18 @@ class TestNonTensorData:
             == "another string!"
         )
 
+    def test_setitem_edge_case(self):
+        s = NonTensorStack("a string")
+        t = NonTensorStack("another string")
+        s[0][True] = t
+        assert s[0].data == "another string"
+        for i in (None, True):
+            s = NonTensorStack("0", "1")
+            t = NonTensorStack(NonTensorStack("2", "3"), stack_dim=1)
+            assert t.batch_size == (2, 1)
+            s[:, i] = t
+            assert s.tolist() == ["2", "3"]
+
     def test_stack(self, non_tensor_data):
         assert (
             LazyStackedTensorDict.lazy_stack([non_tensor_data, non_tensor_data], 0).get(
