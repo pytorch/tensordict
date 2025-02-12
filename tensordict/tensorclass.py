@@ -1571,7 +1571,6 @@ def _wrap_td_method(
                 td = super(type(self), self).__getattribute__("_tensordict")
             else:
                 td = self._tensordict
-
             result = getattr(td, funcname)(*args, **kwargs)
             if no_wrap:
                 return result
@@ -1776,10 +1775,26 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         value (any): value to set for the item
 
     """
-    if isinstance(item, str) or (
-        isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
-    ):
-        raise ValueError(f"Invalid indexing arguments: {item}.")
+    istuple = isinstance(item, tuple)
+    if istuple or isinstance(item, str):
+        # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
+        idx_unravel = _unravel_key_to_tuple(item)
+        if idx_unravel:
+            raise ValueError(f"Invalid indexing arguments: {item}.")
+
+    if istuple and len(item) == 1:
+        return _setitem(self, item[0], value)
+    if (
+        (
+            isinstance(item, torch.Tensor)
+            and item.dtype == torch.bool
+            and not item.shape
+            and item
+        )
+        or (item is True)
+        or (item is None)
+    ) and self.batch_size == ():
+        return self.update(value.squeeze(0))
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor)

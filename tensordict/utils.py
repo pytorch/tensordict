@@ -1243,7 +1243,11 @@ def _as_context_manager(attr=None):
                 if out is not None:
                     if _attr_post is not _attr_pre:
                         ref = weakref.ref(_self)
-                        out._last_op = (
+                        if is_tensorclass(out):
+                            out_lo = out._tensordict
+                        else:
+                            out_lo = out
+                        out_lo._last_op = (
                             func.__name__,
                             (
                                 args,
@@ -1262,7 +1266,11 @@ def _as_context_manager(attr=None):
                 out = func(_self, *args, **kwargs)
                 if out is not None:
                     ref = weakref.ref(_self)
-                    out._last_op = (func.__name__, (args, kwargs, ref))
+                    if is_tensorclass(out):
+                        out_lo = out._tensordict
+                    else:
+                        out_lo = out
+                    out_lo._last_op = (func.__name__, (args, kwargs, ref))
                 return out
 
         return func_as_decorator
@@ -2023,7 +2031,7 @@ def _getitem_batch_size(batch_size, index):
     out = []
     count = -1
     for i, idx in enumerate(index):
-        if idx is None:
+        if idx is True or idx is None:
             out.append(1)
             continue
         count += 1 if not bools[i] else idx.ndim

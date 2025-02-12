@@ -6593,7 +6593,7 @@ class TensorDictBase(MutableMapping):
                 value = tree_map(torch.clone, value)
             # the key must be a string by now. Let's check if it is present
             if target is not None:
-                if not is_leaf(type(target)):
+                if not is_leaf(type(target)) and not is_leaf(type(value)):
                     if subkey:
                         sub_keys_to_update = _prune_selected_keys(
                             keys_to_update, firstkey
