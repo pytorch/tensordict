@@ -98,7 +98,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
 
     Keyword Args:
         scale_mapping (str, optional): positive mapping function to be used with the std.
-            Defaults to ``"biased_softplus_1.0"`` (i.e. softplus map with bias such that fn(0.0) = 1.0)
+            Defaults to ``"exp"``,
             choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"``.
         scale_lb (Number, optional): The minimum value that the variance can take.
             Defaults to ``1e-4``.
