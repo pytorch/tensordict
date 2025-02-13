@@ -1868,9 +1868,16 @@ def _repr(self) -> str:
             ",\n".join(non_tensor_fields),
             4 * " ",
         )
-        string = ",\n".join(field_str + [non_tensor_field_str, *medatada_fields])
-    else:
+        if field_str:
+            string = ",\n".join(field_str + [non_tensor_field_str, *medatada_fields])
+        else:
+            string = ",\n".join([non_tensor_field_str, *medatada_fields])
+    elif field_str:
         string = ",\n".join(field_str + medatada_fields)
+    elif len(medatada_fields) > 0:
+        string = ",\n".join(medatada_fields)
+    else:
+        string = ""
     return f"{type(self).__name__}({string})"
 
 
