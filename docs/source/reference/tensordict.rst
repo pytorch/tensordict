@@ -31,8 +31,9 @@ or ``cat``.
     :template: td_template.rst
 
     cat
-    from_consolidated
+    default_is_leaf
     from_any
+    from_consolidated
     from_dict
     from_h5
     from_module
@@ -43,6 +44,7 @@ or ``cat``.
     from_tuple
     fromkeys
     is_batchedtensor
+    is_leaf_nontensor
     lazy_stack
     load
     load_memmap

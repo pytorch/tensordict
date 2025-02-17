@@ -6554,6 +6554,8 @@ class TensorDictBase(MutableMapping):
                 whether an object type is to be considered a leaf and swapped
                 or a tensor collection.
 
+                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+
         Returns:
             self
 
@@ -6993,8 +6995,20 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
             leaves_only (bool, optional): if ``False``, only leaves will be
                 returned. Defaults to ``False``.
-            is_leaf: an optional callable that indicates if a class is to be considered a
-                leaf or not.
+            is_leaf (callable, optional): a callable over a class type returning
+                a bool indicating if this class has to be considered as a leaf.
+
+                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
+                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
+                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
+                    traversed if `include_nested=True`.
+                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
+                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
+                    be both a leaf and a node with children.
+                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
+                    from the leaf set.
+
+                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
 
         Keyword Args:
             sort (bool, optional): whether the keys should be sorted. For nested keys,
@@ -7073,8 +7087,20 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
             leaves_only (bool, optional): if ``False``, only leaves will be
                 returned. Defaults to ``False``.
-            is_leaf: an optional callable that indicates if a class is to be considered a
-                leaf or not.
+            is_leaf (callable, optional): a callable over a class type returning
+                a bool indicating if this class has to be considered as a leaf.
+
+                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
+                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
+                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
+                    traversed if `include_nested=True`.
+                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
+                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
+                    be both a leaf and a node with children.
+                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
+                    from the leaf set.
+
+                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
 
         Keyword Args:
             sort (bool, optional): whether the keys should be sorted. For nested keys,
@@ -7252,8 +7278,20 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
             leaves_only (bool, optional): if ``False``, only leaves will be
                 returned. Defaults to ``False``.
-            is_leaf: an optional callable that indicates if a class is to be considered a
-                leaf or not.
+            is_leaf (callable, optional): a callable over a class type returning
+                a bool indicating if this class has to be considered as a leaf.
+
+                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
+                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
+                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
+                    traversed if `include_nested=True`.
+                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
+                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
+                    be both a leaf and a node with children.
+                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
+                    from the leaf set.
+
+                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
 
         Keyword Args:
             sort (bool, optional): whether the keys shoulbe sorted. For nested keys,
@@ -8377,7 +8415,7 @@ class TensorDictBase(MutableMapping):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
@@ -8417,7 +8455,7 @@ class TensorDictBase(MutableMapping):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         num_threads: int,
         call_when_done: Callable | None = None,
@@ -8505,7 +8543,7 @@ class TensorDictBase(MutableMapping):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None: ...
@@ -8525,7 +8563,7 @@ class TensorDictBase(MutableMapping):
         # filter_empty must be False because we use _fast_apply for all sorts of ops like expand etc
         # and non-tensor data will disappear if we use True by default.
         filter_empty: bool | None = False,
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         propagate_lock: bool = False,
         out: TensorDictBase | None = None,
         num_threads: int = 0,
@@ -12207,6 +12245,18 @@ class TensorDictBase(MutableMapping):
             is_leaf (callable, optional): a callable over a class type returning
                 a bool indicating if this class has to be considered as a leaf.
 
+                .. note:: The purpose of `is_leaf` is not to prevent recursive calls into nested tensordicts, but
+                    rather to mark certain types as "leaves" for the purpose of filtering when `leaves_only=True`.
+                    Even if `is_leaf(cls)` returns `True`, the nested structure of the tensordict will still be
+                    traversed if `include_nested=True`.
+                    In other words, `is_leaf` does not control the recursion depth, but rather provides a way to filter
+                    out certain types from the result when `leaves_only=True`. This means that a node in the tree can
+                    be both a leaf and a node with children.
+                    In practice, the default value of ``is_leaf`` does exclude tensordict and tensorclass instances
+                    from the leaf set.
+
+                .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+
         Examples:
             >>> data = TensorDict({"a": 1, ("b", "c"): 2, ("e", "f", "g"): 3}, batch_size=[])
             >>> data.flatten_keys(separator=" - ")
@@ -13343,10 +13393,36 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
 
 def _default_is_leaf(cls: Type) -> bool:
+    """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass).
+
+    Examples:
+        >>> from tensordict import TensorDict, default_is_leaf
+        >>> import torch
+        >>> td = TensorDict(a={}, b="a string!", c=torch.randn(()))
+        >>> print(td.keys(leaves_only=True, is_leaf=default_is_leaf))
+        _TensorDictKeysView(['c'],
+            include_nested=False,
+            leaves_only=True)
+
+    .. seealso:: :meth:`~tensordict.is_leaf_nontensor`.
+    """
     return not _is_tensor_collection(cls)
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
+    """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.
+
+    Examples:
+        >>> from tensordict import TensorDict, default_is_leaf
+        >>> import torch
+        >>> td = TensorDict(a={}, b="a string!", c=torch.randn(()))
+        >>> print(td.keys(leaves_only=True, is_leaf=default_is_leaf))
+        _TensorDictKeysView(['b', 'c'],
+            include_nested=False,
+            leaves_only=True)
+
+    .. seealso:: :meth:`~tensordict.default_is_leaf`.
+    """
     if _is_tensor_collection(cls):
         return _pass_through_cls(cls)
     # if issubclass(cls, KeyedJaggedTensor):
