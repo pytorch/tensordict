@@ -638,7 +638,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,

@@ -26,6 +26,8 @@ from tensordict._td import (
 from tensordict._unbatched import UnbatchedTensor
 
 from tensordict.base import (
+    _default_is_leaf as default_is_leaf,
+    _is_leaf_nontensor as is_leaf_nontensor,
     from_any,
     from_dict,
     from_h5,
@@ -56,6 +58,7 @@ from tensordict.utils import (
     assert_allclose_td,
     assert_close,
     is_batchedtensor,
+    is_non_tensor,
     is_tensorclass,
     lazy_legacy,
     parse_tensor_dict_string,
