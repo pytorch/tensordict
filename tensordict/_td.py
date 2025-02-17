@@ -1108,7 +1108,7 @@ class TensorDict(TensorDictBase):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
-        is_leaf: Callable = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
@@ -1336,7 +1336,7 @@ class TensorDict(TensorDictBase):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
-        is_leaf: Callable | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
