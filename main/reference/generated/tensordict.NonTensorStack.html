@@ -1895,8 +1895,25 @@ the leaves will be expanded on a one-to-one basis.</p>
 <li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict will
 have the same identity as the one where the call has been made.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – a callable over a class type returning
-a bool indicating if this class has to be considered as a leaf.</p></li>
+<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
+a bool indicating if this class has to be considered as a leaf.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
+rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
+Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
+traversed if <cite>include_nested=True</cite>.
+In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
+out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
+be both a leaf and a node with children.
+In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
+from the leaf set.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 </dl>
@@ -3143,8 +3160,25 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>leaves_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, only leaves will be
 returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> – an optional callable that indicates if a class is to be considered a
-leaf or not.</p></li>
+<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
+a bool indicating if this class has to be considered as a leaf.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
+rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
+Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
+traversed if <cite>include_nested=True</cite>.
+In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
+out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
+be both a leaf and a node with children.
+In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
+from the leaf set.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -3174,8 +3208,25 @@ the keys later will return the new configuration of the keys.</p>
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>leaves_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, only leaves will be
 returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> – an optional callable that indicates if a class is to be considered a
-leaf or not.</p></li>
+<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
+a bool indicating if this class has to be considered as a leaf.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
+rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
+Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
+traversed if <cite>include_nested=True</cite>.
+In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
+out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
+be both a leaf and a node with children.
+In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
+from the leaf set.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -7250,9 +7301,14 @@ This is aimed at avoiding calls to
 <li><p><strong>non_blocking</strong> (<a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and this copy is between
 different devices, the copy may occur asynchronously with respect
 to the host.</p></li>
-<li><p><strong>is_leaf</strong> (<em>Callable</em><em>[</em><em>[</em><em>Type</em><em>]</em><em>, </em><a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>]</em><em>, </em><em>optional</em>) – a callable that indicates
+<li><p><strong>is_leaf</strong> (<em>Callable</em><em>[</em><em>[</em><em>Type</em><em>]</em><em>, </em><a class="reference internal" href="#tensordict.NonTensorStack.bool" title="tensordict.NonTensorStack.bool"><em>bool</em></a><em>]</em><em>, </em><em>optional</em>) – <p>a callable that indicates
 whether an object type is to be considered a leaf and swapped
-or a tensor collection.</p></li>
+or a tensor collection.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -7383,8 +7439,25 @@ the keys later will return the new configuration of the keys.</p>
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>leaves_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, only leaves will be
 returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> – an optional callable that indicates if a class is to be considered a
-leaf or not.</p></li>
+<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
+a bool indicating if this class has to be considered as a leaf.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
+rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
+Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
+traversed if <cite>include_nested=True</cite>.
+In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
+out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
+be both a leaf and a node with children.
+In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
+from the leaf set.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -7419,8 +7492,25 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>leaves_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, only leaves will be
 returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>is_leaf</strong> – an optional callable that indicates if a class is to be considered a
-leaf or not.</p></li>
+<li><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – <p>a callable over a class type returning
+a bool indicating if this class has to be considered as a leaf.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The purpose of <cite>is_leaf</cite> is not to prevent recursive calls into nested tensordicts, but
+rather to mark certain types as “leaves” for the purpose of filtering when <cite>leaves_only=True</cite>.
+Even if <cite>is_leaf(cls)</cite> returns <cite>True</cite>, the nested structure of the tensordict will still be
+traversed if <cite>include_nested=True</cite>.
+In other words, <cite>is_leaf</cite> does not control the recursion depth, but rather provides a way to filter
+out certain types from the result when <cite>leaves_only=True</cite>. This means that a node in the tree can
+be both a leaf and a node with children.
+In practice, the default value of <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> does exclude tensordict and tensorclass instances
+from the leaf set.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a> and <a class="reference internal" href="tensordict.default_is_leaf.html#tensordict.default_is_leaf" title="tensordict.default_is_leaf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">default_is_leaf()</span></code></a>.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
