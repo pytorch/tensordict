@@ -369,7 +369,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">torch.S
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>scale_mapping</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – positive mapping function to be used with the std.
-Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_1.0&quot;</span></code> (i.e. softplus map with bias such that fn(0.0) = 1.0)
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;exp&quot;</span></code>,
 choices: <code class="docutils literal notranslate"><span class="pre">&quot;softplus&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;exp&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;relu&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_1&quot;</span></code>.</p></li>
 <li><p><strong>scale_lb</strong> (<em>Number</em><em>, </em><em>optional</em>) – The minimum value that the variance can take.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1e-4</span></code>.</p></li>

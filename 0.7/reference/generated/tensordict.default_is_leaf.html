@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Computation times &mdash; tensordict 0.7 documentation</title>
+  <title>default_is_leaf &mdash; tensordict 0.7 documentation</title>
   
 
   
@@ -26,16 +26,18 @@
 
   
 
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/sg_gallery.css" type="text/css" />
-  <link rel="stylesheet" href="_static/sg_gallery-binder.css" type="text/css" />
-  <link rel="stylesheet" href="_static/sg_gallery-dataframe.css" type="text/css" />
-  <link rel="stylesheet" href="_static/sg_gallery-rendered-html.css" type="text/css" />
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="from_any" href="tensordict.from_any.html" />
+    <link rel="prev" title="cat" href="tensordict.cat.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -51,16 +53,16 @@
   
 
   
-  <script src="_static/js/modernizr.min.js"></script>
+  <script src="../../_static/js/modernizr.min.js"></script>
 
   <!-- Preload the theme fonts -->
 
-<link rel="preload" href="_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
 
 <!-- Preload the katex fonts -->
 
@@ -237,7 +239,7 @@
 
 
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
     <input type="text" name="q" placeholder="Search Docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -254,28 +256,28 @@
             
             
               <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
 </ul>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
-<li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a></li>
-<li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a></li>
-<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
 </ul>
 
             
@@ -308,7 +310,7 @@
   <ul class="pytorch-breadcrumbs">
     
       <li>
-        <a href="index.html">
+        <a href="../../index.html">
           
             Docs
           
@@ -316,13 +318,17 @@
       </li>
 
         
-      <li>Computation times</li>
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../tensordict.html">tensordict package</a> &gt;</li>
+        
+      <li>default_is_leaf</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="_sources/sg_execution_times.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.default_is_leaf.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -348,76 +354,14 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="computation-times">
-<span id="sphx-glr-sg-execution-times"></span><h1>Computation times<a class="headerlink" href="#computation-times" title="Permalink to this heading">¶</a></h1>
-<p><strong>02:27.911</strong> total execution time for 11 files <strong>from all galleries</strong>:</p>
-<div class="docutils container">
-<style scoped>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
-<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
-</style>
-<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script type="text/javascript" class="init">
-$(document).ready( function () {
-    $('table.sg-datatable').DataTable({order: [[1, 'desc']]});
-} );
-</script><table class="table table-striped sg-datatable docutils # Necessary for the generated by autosummary to look decent align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Example</p></th>
-<th class="head"><p>Time</p></th>
-<th class="head"><p>Mem (MB)</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py"><span class="std std-ref">Using tensorclasses for datasets</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensorclass_fashion.py</span></code>)</p></td>
-<td><p>01:01.168</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py"><span class="std std-ref">Using TensorDict for datasets</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/data_fashion.py</span></code>)</p></td>
-<td><p>00:55.637</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py"><span class="std std-ref">TensorDictModule</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_module.py</span></code>)</p></td>
-<td><p>00:16.899</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py"><span class="std std-ref">Building tensordicts from streams</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/streamed_tensordict.py</span></code>)</p></td>
-<td><p>00:11.021</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py"><span class="std std-ref">Batched data loading with tensorclasses</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensorclass_imagenet.py</span></code>)</p></td>
-<td><p>00:01.639</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="tutorials/export.html#sphx-glr-tutorials-export-py"><span class="std std-ref">Exporting tensordict modules</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/export.py</span></code>)</p></td>
-<td><p>00:01.517</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py"><span class="std std-ref">Manipulating the keys of a TensorDict</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_keys.py</span></code>)</p></td>
-<td><p>00:00.009</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py"><span class="std std-ref">Manipulating the shape of a TensorDict</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_shapes.py</span></code>)</p></td>
-<td><p>00:00.008</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py"><span class="std std-ref">Slicing, Indexing, and Masking</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_slicing.py</span></code>)</p></td>
-<td><p>00:00.005</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py"><span class="std std-ref">Simplifying PyTorch Memory Management with TensorDict</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_memory.py</span></code>)</p></td>
-<td><p>00:00.004</p></td>
-<td><p>0.0</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py"><span class="std std-ref">Pre-allocating memory with TensorDict</span></a> (<code class="docutils literal notranslate"><span class="pre">reference/generated/tutorials/tensordict_preallocation.py</span></code>)</p></td>
-<td><p>00:00.003</p></td>
-<td><p>0.0</p></td>
-</tr>
-</tbody>
-</table>
-</div>
+  <section id="default-is-leaf">
+<h1>default_is_leaf<a class="headerlink" href="#default-is-leaf" title="Permalink to this heading">¶</a></h1>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tensordict.default_is_leaf">
+<span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">default_is_leaf</span></span><a class="headerlink" href="#tensordict.default_is_leaf" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">_default_is_leaf</span></code></p>
+</dd></dl>
+
 </section>
 
 
@@ -425,6 +369,15 @@ $(document).ready( function () {
              
             </div>
             <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="tensordict.from_any.html" class="btn btn-neutral float-right" title="from_any" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="tensordict.cat.html" class="btn btn-neutral" title="cat" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
   
 
   
@@ -454,7 +407,7 @@ $(document).ready( function () {
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Computation times</a></li>
+<li><a class="reference internal" href="#">default_is_leaf</a></li>
 </ul>
 
             </div>
@@ -469,20 +422,20 @@ $(document).ready( function () {
   
 
      
-       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-         <script src="_static/jquery.js"></script>
-         <script src="_static/underscore.js"></script>
-         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-         <script src="_static/doctools.js"></script>
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
      
 
   
 
-  <script type="text/javascript" src="_static/js/vendor/popper.min.js"></script>
-  <script type="text/javascript" src="_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
-  <script type="text/javascript" src="_static/js/theme.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
 
   <script type="text/javascript">
       jQuery(function () {
@@ -587,7 +540,7 @@ $(document).ready( function () {
   <div class="cookie-banner-wrapper">
   <div class="container">
     <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="_static/images/pytorch-x.svg">
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
   </div>
 </div>
 
@@ -723,7 +676,7 @@ $(document).ready( function () {
 
   <!-- End Mobile Menu -->
 
-  <script type="text/javascript" src="_static/js/vendor/anchor.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
 
   <script type="text/javascript">
     $(document).ready(function() {
