@@ -12,7 +12,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _STRDTYPE2DTYPE
+from tensordict.utils import _is_tensorclass, _STRDTYPE2DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -130,7 +130,10 @@ def _rebuild_tensordict_files_consolidated(
         result = cls._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()
-        result._consolidated = consolidated
+        if _is_tensorclass(cls):
+            result._tensordict._consolidated = consolidated
+        else:
+            result._consolidated = consolidated
         return result
 
     return from_metadata()
