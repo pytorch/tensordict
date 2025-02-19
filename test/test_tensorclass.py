@@ -24,17 +24,6 @@ import numpy as np
 import pytest
 import tensordict.utils
 import torch
-from tensordict import TensorClass
-from tensordict.tensorclass import from_dataclass
-
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
 
 from _utils_internal import get_available_devices
 
@@ -44,13 +33,25 @@ from tensordict import (
     lazy_legacy,
     LazyStackedTensorDict,
     MemoryMappedTensor,
+    set_capture_non_tensor_stack,
     tensorclass,
+    TensorClass,
     TensorDict,
     TensorDictBase,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict.base import _GENERIC_NESTED_ERR
+from tensordict.tensorclass import from_dataclass
 from torch import Tensor
+
+try:
+    import torchsnapshot
+
+    _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
+except ImportError as err:
+    _has_torchsnapshot = False
+    TORCHSNAPSHOT_ERR = str(err)
 
 # Capture all warnings
 pytestmark = [
@@ -381,7 +382,8 @@ class TestTensorClass:
         data3 = MyData(D, B, A, C=C, E=E, batch_size=[3, 4])
         data4 = MyData(D, B, A, C, E=E, batch_size=[3, 4])
         data5 = MyData(D, B, A, C, E, batch_size=[3, 4])
-        data = torch.stack([data1, data2, data3, data4, data5], 0)
+        with set_capture_non_tensor_stack(True):
+            data = torch.stack([data1, data2, data3, data4, data5], 0)
         assert (data.A == A).all()
         assert (data.B == B).all()
         assert (data.C == C).all()
@@ -1857,7 +1859,8 @@ class TestTensorClass:
         if lazy:
             stacked_tc = LazyStackedTensorDict.lazy_stack([data1, data2], 0)
         else:
-            stacked_tc = torch.stack([data1, data2], 0)
+            with set_capture_non_tensor_stack(True):
+                stacked_tc = torch.stack([data1, data2], 0)
         assert type(stacked_tc) is type(data1)
         assert isinstance(stacked_tc.y, type(data1.y))
         assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
@@ -2145,7 +2148,8 @@ class TestTensorClass:
         y1 = Y(weakref.ref(obj), batch_size=[1])
         y = torch.cat([y0, y1])
         assert y.z.shape == torch.Size(())
-        y = torch.stack([y0, y1])
+        with set_capture_non_tensor_stack(True):
+            y = torch.stack([y0, y1])
         assert y.z.shape == torch.Size(())
 
 
@@ -2253,9 +2257,13 @@ class TestNesting:
     def get_nested(self):
         c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
 
-        td = torch.stack(
-            [TensorDict({"t": torch.ones(1), "c": c}, batch_size=[]) for _ in range(3)]
-        )
+        with set_capture_non_tensor_stack(True):
+            td = torch.stack(
+                [
+                    TensorDict({"t": torch.ones(1), "c": c}, batch_size=[])
+                    for _ in range(3)
+                ]
+            )
         return td
 
     def test_apply(self):
