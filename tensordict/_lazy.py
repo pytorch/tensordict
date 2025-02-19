@@ -2727,13 +2727,16 @@ class LazyStackedTensorDict(TensorDictBase):
             isinstance(input_dict_or_td, LazyStackedTensorDict)
             and input_dict_or_td.stack_dim == self.stack_dim
         ):
-            if len(input_dict_or_td.tensordicts) != len(self.tensordicts):
+            tds = list(self.tensordicts)
+            if len(input_dict_or_td.tensordicts) > len(self.tensordicts):
+                tds.extend(
+                    [td.copy() for td in input_dict_or_td.tensordicts[len(tds) :]]
+                )
+            elif len(input_dict_or_td.tensordicts) != len(self.tensordicts):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 )
-            for td_dest, td_source in _zip_strict(
-                self.tensordicts, input_dict_or_td.tensordicts
-            ):
+            for td_dest, td_source in _zip_strict(tds, input_dict_or_td.tensordicts):
                 td_dest.update(
                     td_source,
                     clone=clone,

@@ -6556,6 +6556,11 @@ class TensorDictBase(MutableMapping):
 
                 .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
 
+        .. note:: When updating a :class:`~tensordict.LazyStackedTensorDict` with N elements with another
+            :class:`~tensordict.LazyStackedTensorDict` with M elements, with M > N, along the stack dimension,
+            the ``update`` method will append copies of the extra tensordicts to the dest (self) lazy stack.
+            This allows users to rely on ``update`` to increment lazy stacks progressively.
+
         Returns:
             self
 
