@@ -56,6 +56,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
     _zip_strict,
+    capture_non_tensor_stack,
     DeviceType,
     IndexType,
     is_tensorclass,
@@ -3219,7 +3220,7 @@ class NonTensorData:
 
         ids = set()
         firstdata = NO_DEFAULT
-        return_stack = False
+        return_stack = capture_non_tensor_stack(allow_none=True)
         for data in list_of_non_tensor:
             if not isinstance(data, NonTensorData):
                 if raise_if_non_unique:
@@ -3242,8 +3243,18 @@ class NonTensorData:
                 return_stack = True
                 break
         else:
-            return_stack = False
+            return_stack = capture_non_tensor_stack(allow_none=True)
         if not return_stack:
+            if return_stack is None:
+                warnings.warn(
+                    "The default behavior of stacking non-tensor data will change in "
+                    "version v0.9 and switch from True to False (current default). "
+                    "To prepare for this change, use set_capture_non_tensor_stack(val: bool) as a decorator or context "
+                    "manager, or set the environment variable CAPTURE_NONTENSOR_STACK "
+                    "to 'False'.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
             return NonTensorData(
