@@ -82,6 +82,7 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
     cache,
+    capture_non_tensor_stack,
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
@@ -6229,6 +6230,10 @@ class TensorDictBase(MutableMapping):
         value = self._get_str(key, default=default)
 
         if is_non_tensor(value):
+            from tensordict import NonTensorStack
+
+            if isinstance(value, NonTensorStack) and not capture_non_tensor_stack():
+                return value.tolist()
             data = getattr(value, "data", None)
             if data is None:
                 return value.tolist()

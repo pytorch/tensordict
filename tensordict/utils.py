@@ -2098,7 +2098,7 @@ class set_lazy_legacy(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LAZY_OP
-        _LAZY_OP = bool(self._old_mode)
+        _LAZY_OP = self._old_mode
         os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
 
 
@@ -2122,7 +2122,7 @@ def _legacy_lazy(func):
 
 
 # non tensor stack control
-_DEFAULT_CAPTURE_NONTENSOR_STACK = False
+_DEFAULT_CAPTURE_NONTENSOR_STACK = True
 _CAPTURE_NONTENSOR_STACK = os.environ.get("CAPTURE_NONTENSOR_STACK")
 
 
@@ -2133,14 +2133,17 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
         mode (bool): Whether to capture non-tensor stacks. If ``True``, identical
             non-tensor data will be stacked into a :class:`~tensordict.NonTensorStack`. If ``False``,
             a single NonTensorData object will contain the unique value, but with the desired batch-size.
-            Defaults to ``False``.
+            Defaults to ``True``.
 
     .. note:: Until v0.9, this will raise a warning if the same value is encountered and the value is not set
-        explicitly. You can set the value of :func:`~tensordict.capture_non_tensor_stack` through:
+        explicitly (`capture_non_tensor_stack() = True` default behavior).
+        You can set the value of :func:`~tensordict.capture_non_tensor_stack` through:
 
         - The ``CAPTURE_NON_TENSOR_STACK`` environment variable;
         - By setting ``set_capture_non_tensor_stack(val: bool).set()`` at the beginning of your script;
         - By using ``set_capture_non_tensor_stack(val: bool)`` as a context manager or a decorator.
+
+        It is recommended to use the `set_capture_non_tensor_stack(False)` behavior.
 
     .. seealso:: :class:`~tensordict.capture_non_tensor_stack`
 
@@ -2175,7 +2178,7 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _CAPTURE_NONTENSOR_STACK
-        _CAPTURE_NONTENSOR_STACK = bool(self._old_mode)
+        _CAPTURE_NONTENSOR_STACK = self._old_mode
         os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
 
 
