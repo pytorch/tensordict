@@ -4994,7 +4994,7 @@ class TensorDictBase(MutableMapping):
         if requires_metadata:
             # metadata is nested
             metadata_dict = {
-                "cls": type(self).__name__,
+                "cls": type(self),
                 "non_tensors": {},
                 "leaves": {},
                 "cls_metadata": self._reduce_get_metadata(),
@@ -5055,7 +5055,7 @@ class TensorDictBase(MutableMapping):
                 metadata_dict_key = None
                 if requires_metadata:
                     metadata_dict_key = metadata_dict[key] = {
-                        "cls": cls.__name__,
+                        "cls": cls,
                         "non_tensors": {},
                         "leaves": {},
                         "cls_metadata": value._reduce_get_metadata(),

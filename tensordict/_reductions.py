@@ -11,12 +11,14 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _STRDTYPE2DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
     "LazyStackedTensorDict": LazyStackedTensorDict,
+    "NonTensorData": NonTensorData,
+    "NonTensorStack": NonTensorStack,
 }
 
 
@@ -57,7 +59,9 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = 
             d[k] = from_metadata(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
-        result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
+        if isinstance(cls, str):
+            cls = CLS_MAP[cls]
+        result = cls._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result.lock_()
         # if is_shared:
@@ -121,7 +125,9 @@ def _rebuild_tensordict_files_consolidated(
             d[k] = from_metadata(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
-        result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
+        if isinstance(cls, str):
+            cls = CLS_MAP[cls]
+        result = cls._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()
         result._consolidated = consolidated
