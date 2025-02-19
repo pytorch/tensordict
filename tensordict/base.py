@@ -82,6 +82,7 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     _zip_strict,
     cache,
+    capture_non_tensor_stack,
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
@@ -6229,6 +6230,10 @@ class TensorDictBase(MutableMapping):
         value = self._get_str(key, default=default)
 
         if is_non_tensor(value):
+            from tensordict import NonTensorStack
+
+            if isinstance(value, NonTensorStack) and not capture_non_tensor_stack():
+                return value.tolist()
             data = getattr(value, "data", None)
             if data is None:
                 return value.tolist()
@@ -6555,6 +6560,11 @@ class TensorDictBase(MutableMapping):
                 or a tensor collection.
 
                 .. seealso:: :meth:`~tensordict.is_leaf_nontensor` and :meth:`~tensordict.default_is_leaf`.
+
+        .. note:: When updating a :class:`~tensordict.LazyStackedTensorDict` with N elements with another
+            :class:`~tensordict.LazyStackedTensorDict` with M elements, with M > N, along the stack dimension,
+            the ``update`` method will append copies of the extra tensordicts to the dest (self) lazy stack.
+            This allows users to rely on ``update`` to increment lazy stacks progressively.
 
         Returns:
             self
