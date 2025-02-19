@@ -2130,9 +2130,9 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
     """A context manager or decorator to control whether identical non-tensor data should be stacked into a single NonTensorData object or a NonTensorStack.
 
     Args:
-        mode (bool): Whether to capture non-tensor stacks. If ``True``, identical
-            non-tensor data will be stacked into a :class:`~tensordict.NonTensorStack`. If ``False``,
-            a single NonTensorData object will contain the unique value, but with the desired batch-size.
+        mode (bool): Whether to capture non-tensor stacks. If ``False``, identical
+            non-tensor data will be stacked into a :class:`~tensordict.NonTensorStack`. If ``True``,
+            a single :class:`~tensordict.NonTensorData` object will contain the unique value, but with the desired batch-size.
             Defaults to ``True``.
 
     .. note:: Until v0.9, this will raise a warning if the same value is encountered and the value is not set
@@ -2151,7 +2151,7 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
         >>> with set_capture_non_tensor_stack(False):
         ...     torch.stack([NonTensorData("a"), NonTensorData("a")])
         NonTensorData("a", batch_size=[2])
-        >>> @set_capture_non_tensor_stack(True)
+        >>> @set_capture_non_tensor_stack(False)
         ... def my_function():
         ...     return torch.stack([NonTensorData("a"), NonTensorData("a")])
         >>> my_function()
