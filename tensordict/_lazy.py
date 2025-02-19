@@ -1992,11 +1992,14 @@ class LazyStackedTensorDict(TensorDictBase):
         if all(r is None for r in results) and filter_empty in (None, True):
             return
         if not inplace:
-            out = type(self)(
-                *results,
-                stack_dim=self.stack_dim,
-                stack_dim_name=self._td_dim_name,
-            )
+            if results:
+                out = type(self)(
+                    *results,
+                    stack_dim=self.stack_dim,
+                    stack_dim_name=self._td_dim_name,
+                )
+            else:
+                out = None
         else:
             out = self
         if names is not NO_DEFAULT:
