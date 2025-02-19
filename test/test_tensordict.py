@@ -38,10 +38,12 @@ from _utils_internal import (
 from packaging import version
 
 from tensordict import (
+    capture_non_tensor_stack,
     get_defaults_to_none,
     LazyStackedTensorDict,
     make_tensordict,
     PersistentTensorDict,
+    set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     TensorClass,
     TensorDict,
@@ -6814,7 +6816,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 LazyStackedTensorDict.lazy_stack([td0, td1], 0, out=td_out)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td_out)}
-        LazyStackedTensorDict.lazy_stack([td0, td1], 1, out=td_out)
+        with (
+            pytest.warns(
+                FutureWarning,
+                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+            )
+            if td_name in ("nested_tensorclass", "td_with_non_tensor")
+            else contextlib.nullcontext()
+        ):
+            LazyStackedTensorDict.lazy_stack([td0, td1], 1, out=td_out)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td_out)}
         assert data_ptr_set_before == data_ptr_set_after
         assert (td_stack == td_out).all()
@@ -6831,7 +6841,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
-        stacked_td = stack_td(tds_list, 0, out=td)
+        with (
+            pytest.warns(
+                FutureWarning,
+                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+            )
+            if td_name in ("nested_tensorclass", "td_with_non_tensor")
+            else contextlib.nullcontext()
+        ):
+            stacked_td = stack_td(tds_list, 0, out=td)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td)}
         assert data_ptr_set_before == data_ptr_set_after
         assert stacked_td.batch_size == td.batch_size
@@ -7165,7 +7183,15 @@ class TestTensorDicts(TestTensorDictsBase):
             torch.manual_seed(1)
             td = getattr(self, td_name)(device)
             td_unbind = torch.unbind(td, dim=dim)
-            assert (td == stack_td(td_unbind, dim).contiguous()).all()
+            with (
+                pytest.warns(
+                    FutureWarning,
+                    match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+                )
+                if td_name in ("nested_tensorclass", "td_with_non_tensor")
+                else contextlib.nullcontext()
+            ):
+                assert (td == stack_td(td_unbind, dim).contiguous()).all()
             idx = (slice(None),) * dim + (0,)
             assert (td[idx] == td_unbind[0]).all()
 
@@ -9455,7 +9481,11 @@ class TestLazyStackedTensorDict:
             )
             td_a = TensorDict.maybe_dense_stack([td0, td1])
             td_b = TensorDict.maybe_dense_stack([td0, td1]).clone()
-            td = TensorDict.maybe_dense_stack([td_a, td_b])
+            with pytest.warns(
+                FutureWarning,
+                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+            ):
+                td = TensorDict.maybe_dense_stack([td_a, td_b])
             return (td, td_a, td_b, td0, td1)
 
         td, td_a, td_b, td0, td1 = make_tds()
@@ -11318,22 +11348,61 @@ class TestNonTensorData:
             )
             == NonTensorData(3, batch_size=[2])
         ).all()
-        assert (
-            torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
-                ("nested", "int")
+        with pytest.warns(
+            FutureWarning,
+            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+        ):
+            assert (
+                torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+                    ("nested", "int")
+                )
+                == 3
             )
-            == 3
-        )
-        assert isinstance(
-            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int")),
-            NonTensorData,
-        )
+        with set_capture_non_tensor_stack(True):
+            assert capture_non_tensor_stack()
+            assert (
+                torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+                    ("nested", "int")
+                )
+                == 3
+            )
+        with set_capture_non_tensor_stack(False):
+            assert not capture_non_tensor_stack()
+            assert torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+                ("nested", "int")
+            ) == [3, 3]
+
+        assert capture_non_tensor_stack(allow_none=True) is None
+        with pytest.warns(
+            FutureWarning,
+            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+        ):
+            assert isinstance(
+                torch.stack([non_tensor_data, non_tensor_data], 0).get(
+                    ("nested", "int")
+                ),
+                NonTensorData,
+            )
+        with set_capture_non_tensor_stack(False):
+            assert isinstance(
+                torch.stack([non_tensor_data, non_tensor_data], 0).get(
+                    ("nested", "int")
+                ),
+                NonTensorStack,
+            )
+
         non_tensor_copy = non_tensor_data.clone()
         non_tensor_copy.get(("nested", "int")).data = 4
-        assert isinstance(
-            torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
-            LazyStackedTensorDict,
-        )
+        with pytest.warns(
+            FutureWarning,
+            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
+        ):
+            assert isinstance(
+                torch.stack([non_tensor_data, non_tensor_copy], 0).get(
+                    ("nested", "int")
+                ),
+                LazyStackedTensorDict,
+            )
 
     def test_assign_non_tensor(self):
         data = TensorDict({}, [1, 10])
@@ -11591,6 +11660,9 @@ class TestNonTensorData:
         with pytest.warns(
             UserWarning,
             match="The content of the stacked NonTensorData objects matched in value but not identity",
+        ), pytest.warns(
+            FutureWarning,
+            match="The default behavior of stacking non-tensor data will change in version v0.9",
         ):
             data = torch.stack(
                 [

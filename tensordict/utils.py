@@ -2098,7 +2098,7 @@ class set_lazy_legacy(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _LAZY_OP
-        _LAZY_OP = bool(self._old_mode)
+        _LAZY_OP = self._old_mode
         os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
 
 
@@ -2119,6 +2119,92 @@ def _legacy_lazy(func):
         )
     func.LEGACY = True
     return func
+
+
+# non tensor stack control
+_DEFAULT_CAPTURE_NONTENSOR_STACK = True
+_CAPTURE_NONTENSOR_STACK = os.environ.get("CAPTURE_NONTENSOR_STACK")
+
+
+class set_capture_non_tensor_stack(_DecoratorContextManager):
+    """A context manager or decorator to control whether identical non-tensor data should be stacked into a single NonTensorData object or a NonTensorStack.
+
+    Args:
+        mode (bool): Whether to capture non-tensor stacks. If ``False``, identical
+            non-tensor data will be stacked into a :class:`~tensordict.NonTensorStack`. If ``True``,
+            a single :class:`~tensordict.NonTensorData` object will contain the unique value, but with the desired batch-size.
+            Defaults to ``True``.
+
+    .. note:: Until v0.9, this will raise a warning if the same value is encountered and the value is not set
+        explicitly (`capture_non_tensor_stack() = True` default behavior).
+        You can set the value of :func:`~tensordict.capture_non_tensor_stack` through:
+
+        - The ``CAPTURE_NON_TENSOR_STACK`` environment variable;
+        - By setting ``set_capture_non_tensor_stack(val: bool).set()`` at the beginning of your script;
+        - By using ``set_capture_non_tensor_stack(val: bool)`` as a context manager or a decorator.
+
+        It is recommended to use the `set_capture_non_tensor_stack(False)` behavior.
+
+    .. seealso:: :class:`~tensordict.capture_non_tensor_stack`
+
+    Examples:
+        >>> with set_capture_non_tensor_stack(False):
+        ...     torch.stack([NonTensorData("a"), NonTensorData("a")])
+        NonTensorData("a", batch_size=[2])
+        >>> @set_capture_non_tensor_stack(False)
+        ... def my_function():
+        ...     return torch.stack([NonTensorData("a"), NonTensorData("a")])
+        >>> my_function()
+        NonTensorStack(["a", "a"], stack_dim=0)
+    """
+
+    def __init__(self, mode: bool) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_capture_non_tensor_stack:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
+        global _CAPTURE_NONTENSOR_STACK
+        self._old_mode = _CAPTURE_NONTENSOR_STACK
+        _CAPTURE_NONTENSOR_STACK = bool(self.mode)
+        # we do this such that sub-processes see the same lazy op than the main one
+        os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _CAPTURE_NONTENSOR_STACK
+        _CAPTURE_NONTENSOR_STACK = self._old_mode
+        os.environ["CAPTURE_NONTENSOR_STACK"] = str(_CAPTURE_NONTENSOR_STACK)
+
+
+def capture_non_tensor_stack(allow_none=False):
+    """Get the current setting for capturing non-tensor stacks.
+
+    Args:
+        allow_none (bool, optional): If ``True``, returns ``None`` if no setting has been
+            specified. Otherwise, returns the default setting. Defaults to ``False``.
+
+    seealso: :func:`~tensordict.set_capture_non_tensor_stack`
+
+    Returns:
+        bool or None: The current setting for capturing non-tensor stacks.
+
+    """
+    global _CAPTURE_NONTENSOR_STACK
+    if _CAPTURE_NONTENSOR_STACK is None and allow_none:
+        return None
+    elif _CAPTURE_NONTENSOR_STACK is None:
+        return _DEFAULT_CAPTURE_NONTENSOR_STACK
+    return (
+        strtobool(_CAPTURE_NONTENSOR_STACK)
+        if isinstance(_CAPTURE_NONTENSOR_STACK, str)
+        else _CAPTURE_NONTENSOR_STACK
+    )
 
 
 # Process initializer for map

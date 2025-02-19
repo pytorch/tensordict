@@ -57,11 +57,13 @@ from tensordict.tensorclass import (
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
+    capture_non_tensor_stack,
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
     parse_tensor_dict_string,
+    set_capture_non_tensor_stack,
     set_lazy_legacy,
     unravel_key,
     unravel_key_list,
