@@ -11335,6 +11335,17 @@ class TestNonTensorData:
             LazyStackedTensorDict,
         )
 
+    def test_stack_consolidate(self):
+        td = torch.stack(
+            [
+                TensorDict(a="a string", b="b string"),
+                TensorDict(a="another string", b="bnother string"),
+            ]
+        )
+        tdc = td.consolidate()
+        assert (tdc == td).all()
+        assert tdc["a"] == ["a string", "another string"]
+
     def test_assign_non_tensor(self):
         data = TensorDict({}, [1, 10])
 

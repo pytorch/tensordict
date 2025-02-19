@@ -5042,7 +5042,8 @@ class TensorDictBase(MutableMapping):
             cls = type(value)
             if issubclass(cls, torch.Tensor):
                 pass
-            elif _is_non_tensor(cls):
+            # We want to skip NonTensorStacks
+            elif _is_non_tensor(cls) and not issubclass(cls, TensorDictBase):
                 if requires_metadata:
                     metadata_dict["non_tensors"][key] = (
                         value.data,
@@ -5410,7 +5411,8 @@ class TensorDictBase(MutableMapping):
             if non_blocking and device.type != "cuda":
                 # sync if needed
                 self._sync_all()
-            torch.cat(items, out=storage)
+            if items:
+                torch.cat(items, out=storage)
             for v, (k, oldv) in _zip_strict(
                 storage.split(flat_size), list(flat_dict.items())
             ):
