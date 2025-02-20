@@ -381,17 +381,6 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim_name=None,
         stack_dim=0,
     ):
-        # if batch_size is not None:
-        #     batch_size = list(batch_size)
-        #     if stack_dim is None:
-        #         stack_dim = 0
-        #     n = batch_size.pop(stack_dim)
-        #     if n != len(input_dict):
-        #         raise ValueError(
-        #             "The number of dicts and the corresponding batch-size must match, "
-        #             f"got len(input_dict)={len(input_dict)} and batch_size[{stack_dim}]={n}."
-        #         )
-        #     batch_size = torch.Size(batch_size)
         return LazyStackedTensorDict(
             *(
                 TensorDict.from_dict(
@@ -1992,11 +1981,22 @@ class LazyStackedTensorDict(TensorDictBase):
         if all(r is None for r in results) and filter_empty in (None, True):
             return
         if not inplace:
-            out = type(self)(
-                *results,
-                stack_dim=self.stack_dim,
-                stack_dim_name=self._td_dim_name,
-            )
+            if not results or any(r is not None for r in results):
+                try:
+                    out = type(self)(
+                        *results,
+                        stack_dim=self.stack_dim,
+                        stack_dim_name=self._td_dim_name,
+                    )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to reconstruct the lazy stack of tensordicts with class: {type(self)}. "
+                        f"One common issue is that the outputs of apply are a mix of None and non-None "
+                        f"values. Check that the outputs of apply() are all None or all non-None. "
+                        f"Otherwise, please report this bug on tensordict github."
+                    ) from e
+            else:
+                out = None
         else:
             out = self
         if names is not NO_DEFAULT:
