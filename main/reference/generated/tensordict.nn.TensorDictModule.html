@@ -363,7 +363,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>module</strong> (<em>Callable</em>) – a callable, typically a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>,
+<li><p><strong>module</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Any</em><em>]</em>) – a callable, typically a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>,
 used to map the input to the output parameter space. Its forward method
 can return a single tensor, a tuple of tensors or even a dictionary.
 In the latter case, the output keys of the <a class="reference internal" href="#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>
@@ -414,6 +414,8 @@ the <code class="docutils literal notranslate"><span class="pre">tensordict_out<
 be a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p>
 </div>
 </p></li>
+<li><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – the method to be called in the module, if any. Defaults to <cite>__call__</cite>.</p></li>
+<li><p><strong>method_kwargs</strong> (<em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – additional keyword arguments to be passed to the module’s method being called.</p></li>
 </ul>
 </dd>
 </dl>
@@ -499,6 +501,31 @@ one can use the same input key for different keyword arguments.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s1">&#39;1&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()),</span> <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())</span><span class="o">*</span><span class="mi">2</span><span class="p">},</span> <span class="p">[]))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span>
 <span class="go">tensor(5.)</span>
+</pre></div>
+</div>
+<p>We can specify the method to be called within a module. Compared to using a lambda function or similar around the
+module’s method, this has the advantage that the module attributes (params, buffers, submodules) will be exposed.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictSequential</span> <span class="k">as</span> <span class="n">Seq</span><span class="p">,</span> <span class="n">TensorDictModule</span> <span class="k">as</span> <span class="n">Mod</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyNet</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">my_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">an_integer</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">tensor</span> <span class="o">+</span> <span class="n">an_integer</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">Mod</span><span class="p">(</span><span class="n">MyNet</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;my_func&quot;</span><span class="p">,</span> <span class="n">method_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;an_integer&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">}),</span>
+<span class="gp">... </span>    <span class="p">}</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">s</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">4</span>
 </pre></div>
 </div>
 <p>Functional calls to a tensordict module is easy:</p>

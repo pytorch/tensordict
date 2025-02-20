@@ -368,6 +368,34 @@ convention:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict_in</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>Unlike <a class="reference internal" href="tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, <cite>TensorDictModuleBase</cite> is typically used via subclassing:
+you can wrap any python function in a <cite>TensorDictModuleBase</cite> subclass, as long as the subclass forward reads and
+writes tensordict (or related types) instances.</p>
+<p>The <cite>in_keys</cite> and <cite>out_keys</cite> should be properly specified. For example, <cite>out_keys</cite> can be dynamically reduced using
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Mod</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="c1"># can also be specified during __init__</span>
+<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">b</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="n">c</span> <span class="o">=</span> <span class="n">b</span> <span class="o">+</span> <span class="mi">1</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">b</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">c</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">Mod</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">mod</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span>
+<span class="go">tensor(0)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]</span>
+<span class="go">tensor(1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">mod</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]</span>
+<span class="go">tensor(1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="s2">&quot;b&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">td</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.TensorDictModuleBase.is_tdmodule_compatible">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_tdmodule_compatible</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorDictModuleBase.is_tdmodule_compatible" title="Permalink to this definition">¶</a></dt>

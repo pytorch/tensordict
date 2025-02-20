@@ -369,7 +369,8 @@ buffers) will be concatenated in a single list.</p>
 <dd class="field-odd"><p><strong>modules</strong> (<em>OrderedDict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>] </em><em>| </em><em>List</em><em>[</em><em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>]</em>) – ordered sequence of callables that take a TensorDictBase as input and return a TensorDictBase.
 These can be instances of TensorDictModuleBase or any other function that matches this signature.
 Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
-and thus will not affect the <cite>in_keys</cite> and <cite>out_keys</cite> attributes of the TensorDictSequential.</p>
+and thus will not affect the <cite>in_keys</cite> and <cite>out_keys</cite> attributes of the TensorDictSequential.
+Regular <code class="docutils literal notranslate"><span class="pre">dict</span></code> inputs will be converted to <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> if necessary.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -416,8 +417,8 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;AddBackward0&gt;))</span>
 </pre></div>
 </div>
-<p>TensorDictSequence supports functional, modular and vmap coding:
-.. rubric:: Examples</p>
+<p>TensorDictSequence supports functional, modular and vmap coding.</p>
+<p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
