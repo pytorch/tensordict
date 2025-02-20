@@ -39,6 +39,8 @@ from packaging import version
 
 from tensordict import (
     get_defaults_to_none,
+    lazy_legacy,
+    lazy_stack,
     LazyStackedTensorDict,
     make_tensordict,
     PersistentTensorDict,
@@ -65,7 +67,6 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
-    lazy_legacy,
     logger as tdlogger,
     set_lazy_legacy,
 )
@@ -11190,6 +11191,11 @@ class TestMap:
 
 
 class TestNonTensorData:
+    @tensorclass
+    class SomeTensorClass:
+        a: str
+        b: torch.Tensor
+
     @pytest.fixture
     def non_tensor_data(self):
         return TensorDict(
@@ -11203,6 +11209,27 @@ class TestNonTensorData:
             },
             batch_size=[],
         )
+
+    @set_capture_non_tensor_stack(False)
+    def test_consolidate_nested(self):
+        import pickle
+
+        td = TensorDict(
+            a=TensorDict(b=self.SomeTensorClass(a="a string!", b=torch.randn(10))),
+            c=TensorDict(d=NonTensorData("another string!")),
+        )
+        td = lazy_stack([td.clone(), td.clone()])
+        td = lazy_stack([td.clone(), td.clone()], -1)
+
+        tdc = td.consolidate()
+
+        assert (tdc == td).all()
+
+        tdr = pickle.loads(pickle.dumps(td))
+        assert (tdr == td).all()
+
+        tdcr = pickle.loads(pickle.dumps(tdc))
+        assert (tdcr == td).all()
 
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))

@@ -96,6 +96,7 @@ from tensordict.utils import (
     lazy_legacy,
     lock_blocked,
     prod,
+    set_capture_non_tensor_stack,
     set_lazy_legacy,
     strtobool,
     TensorDictFuture,
@@ -9078,7 +9079,8 @@ class TensorDictBase(MutableMapping):
                     from tensordict._lazy import LazyStackedTensorDict
 
                     # We want to be able to return whichever data structure
-                    out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
+                    with set_capture_non_tensor_stack(False):
+                        out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
                 else:
                     out = torch.cat(imaplist, dim)
             return out
