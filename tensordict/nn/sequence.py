@@ -58,6 +58,8 @@ class TensorDictSequential(TensorDictModule):
             These can be instances of TensorDictModuleBase or any other function that matches this signature.
             Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
             and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
+            Regular ``dict`` inputs will be converted to ``OrderedDict`` if necessary.
+
     Keyword Args:
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
@@ -98,7 +100,8 @@ class TensorDictSequential(TensorDictModule):
         >>> module(torch.zeros(3))
         (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<AddBackward0>))
 
-    TensorDictSequence supports functional, modular and vmap coding:
+    TensorDictSequence supports functional, modular and vmap coding.
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -218,6 +221,12 @@ class TensorDictSequential(TensorDictModule):
             self._complete_out_keys = list(out_keys)
             super().__init__(
                 module=nn.ModuleList(modules), in_keys=in_keys, out_keys=out_keys
+            )
+        elif len(modules) == 1 and isinstance(modules[0], dict):
+            return self.__init__(
+                collections.OrderedDict(modules[0]),
+                partial_tolerant=partial_tolerant,
+                selected_out_keys=selected_out_keys,
             )
         else:
             modules = self._convert_modules(modules)
@@ -521,6 +530,20 @@ class TensorDictSequential(TensorDictModule):
         else:
             yield from self.module
 
+    def _get_module_num_or_key(self, mod: nn.Module) -> int | str:
+        if isinstance(self.module, nn.ModuleDict):
+            for name, m in self.module.named_children():
+                if m is mod:
+                    return name
+            else:
+                raise RuntimeError("module not found.")
+        else:
+            for i, m in enumerate(self.module):
+                if m is mod:
+                    return i
+            else:
+                raise RuntimeError("module not found.")
+
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()
     def forward(
@@ -537,7 +560,15 @@ class TensorDictSequential(TensorDictModule):
             tensordict_exec = tensordict
         if not len(kwargs):
             for module in self._module_iter():
-                tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
+                try:
+                    tensordict_exec = self._run_module(
+                        module, tensordict_exec, **kwargs
+                    )
+                except Exception as e:
+                    module_num_or_key = self._get_module_num_or_key(module)
+                    raise RuntimeError(
+                        f"Failed while executing module '{module_num_or_key}'. Scroll up for more info."
+                    ) from e
         else:
             raise RuntimeError(
                 f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
