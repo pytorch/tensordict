@@ -273,6 +273,29 @@ class TestTDModule:
         def insert(self, index, value):
             self._data.insert(index, value)
 
+    def test_module_method_and_kwargs(self):
+
+        class MyNet(nn.Module):
+            def my_func(self, tensor: torch.Tensor, *, an_integer: int):
+                return tensor + an_integer
+
+        s = TensorDictSequential(
+            {
+                "a": lambda td: td + 1,
+                "b": lambda td: td * 2,
+                "c": TensorDictModule(
+                    MyNet(),
+                    in_keys=["a"],
+                    out_keys=["b"],
+                    method="my_func",
+                    method_kwargs={"an_integer": 2},
+                ),
+            }
+        )
+        td = s(TensorDict(a=0))
+
+        assert td["b"] == 4
+
     def test_mutable_sequence(self):
         in_keys = self.MyMutableSequence(["a", "b", "c"])
         out_keys = self.MyMutableSequence(["d", "e", "f"])

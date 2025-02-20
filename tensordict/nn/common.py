@@ -800,7 +800,7 @@ class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
     Args:
-        module (Callable): a callable, typically a :class:`torch.nn.Module`,
+        module (Callable[[Any], Any]): a callable, typically a :class:`torch.nn.Module`,
             used to map the input to the output parameter space. Its forward method
             can return a single tensor, a tuple of tensors or even a dictionary.
             In the latter case, the output keys of the :class:`TensorDictModule`
@@ -846,6 +846,8 @@ class TensorDictModule(TensorDictModuleBase):
                 :class:`~tensordict.TensorDictBase` subclass than :class:`~tensordict.TensorDict`, the output will still
                 be a :class:`~tensordict.TensorDict` instance.
 
+        method (str, optional): the method to be called in the module, if any. Defaults to `__call__`.
+        method_kwargs (Dict[str, Any], optional): additional keyword arguments to be passed to the module's method being called.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input
     and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
@@ -931,6 +933,30 @@ class TensorDictModule(TensorDictModuleBase):
         >>> td['t']
         tensor(5.)
 
+    We can specify the method to be called within a module. Compared to using a lambda function or similar around the
+    module's method, this has the advantage that the module attributes (params, buffers, submodules) will be exposed.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
+        >>> from torch import nn
+        >>> import torch
+        >>>
+        >>> class MyNet(nn.Module):
+        ...     def my_func(self, tensor: torch.Tensor, *, an_integer: int):
+        ...         return tensor + an_integer
+        ...
+        >>> s = Seq(
+        ...     {
+        ...         "a": lambda td: td+1,
+        ...         "b": lambda td: td * 2,
+        ...         "c": Mod(MyNet(), in_keys=["a"], out_keys=["b"], method="my_func", method_kwargs={"an_integer": 2}),
+        ...     }
+        ... )
+        >>> td = s(TensorDict(a=0))
+        >>> print(td)
+        >>>
+        >>> assert td["b"] == 4
 
     Functional calls to a tensordict module is easy:
 
@@ -986,6 +1012,8 @@ class TensorDictModule(TensorDictModuleBase):
         *,
         out_to_in_map: bool | None = None,
         inplace: bool | str = True,
+        method: str | None = None,
+        method_kwargs: dict | None = None,
     ) -> None:
         super().__init__()
 
@@ -1059,6 +1087,8 @@ class TensorDictModule(TensorDictModuleBase):
                 "instead."
             )
         self.inplace = inplace
+        self.method = method
+        self.method_kwargs = method_kwargs if method_kwargs is not None else {}
 
     @property
     def is_functional(self) -> bool:
@@ -1106,7 +1136,11 @@ class TensorDictModule(TensorDictModuleBase):
     def _call_module(
         self, tensors: Sequence[Tensor], **kwargs: Any
     ) -> Tensor | Sequence[Tensor]:
-        out = self.module(*tensors, **kwargs)
+        kwargs.update(self.method_kwargs)
+        if self.method is None:
+            out = self.module(*tensors, **kwargs)
+        else:
+            out = getattr(self.module, self.method)(*tensors, **kwargs)
         return out
 
     @dispatch(auto_batch_size=False)
