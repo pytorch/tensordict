@@ -1299,14 +1299,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_exec = tensordict
         if self.return_composite:
             for m in self._module_iter():
-                if isinstance(
-                    m, (ProbabilisticTensorDictModule, ProbabilisticTensorDictModule)
-                ):
-                    tensordict_exec = m(
-                        tensordict_exec, _requires_sample=self._requires_sample
-                    )
-                else:
-                    tensordict_exec = m(tensordict_exec, **kwargs)
+                try:
+                    if isinstance(
+                        m,
+                        (ProbabilisticTensorDictModule, ProbabilisticTensorDictModule),
+                    ):
+                        tensordict_exec = m(
+                            tensordict_exec, _requires_sample=self._requires_sample
+                        )
+                    else:
+                        tensordict_exec = m(tensordict_exec, **kwargs)
+                except Exception as e:
+                    module_num_or_key = self._get_module_num_or_key(m)
+                    raise RuntimeError(
+                        f"Failed while executing module '{module_num_or_key}'. Scroll up for more info."
+                    ) from e
         else:
             tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
             tensordict_exec = self._last_module(
