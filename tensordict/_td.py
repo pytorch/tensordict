@@ -2064,6 +2064,8 @@ class TensorDict(TensorDictBase):
         batch_dims=None,
         names=None,
     ):
+        if _is_tensor_collection(type(input_dict)):
+            return input_dict
         if others:
             if batch_size is not None:
                 raise TypeError(
@@ -2120,14 +2122,7 @@ class TensorDict(TensorDictBase):
         )
         if batch_size is None:
             if auto_batch_size is None and batch_dims is None:
-                warn(
-                    "The batch-size was not provided and auto_batch_size isn't set either. "
-                    "Currently, from_dict will call set auto_batch_size=True but this behaviour "
-                    "will be changed in v0.8 and auto_batch_size will be False onward. "
-                    "To silence this warning, pass auto_batch_size directly.",
-                    category=DeprecationWarning,
-                )
-                auto_batch_size = True
+                auto_batch_size = False
             elif auto_batch_size is None:
                 auto_batch_size = True
             if auto_batch_size:
