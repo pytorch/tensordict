@@ -40,6 +40,7 @@ from packaging import version
 from tensordict import (
     capture_non_tensor_stack,
     get_defaults_to_none,
+    lazy_stack,
     LazyStackedTensorDict,
     make_tensordict,
     PersistentTensorDict,
@@ -11233,6 +11234,32 @@ class TestNonTensorData:
             },
             batch_size=[],
         )
+
+    @set_capture_non_tensor_stack(False)
+    def test_consolidate_nested(self):
+        import pickle
+
+        @tensorclass
+        class A:
+            a: str
+            b: torch.Tensor
+
+        td = TensorDict(
+            a=TensorDict(b=A(a="a string!", b=torch.randn(10))),
+            c=TensorDict(d=NonTensorData("another string!")),
+        )
+        td = lazy_stack([td.clone(), td.clone()])
+        td = lazy_stack([td.clone(), td.clone()], -1)
+
+        tdc = td.consolidate()
+
+        assert (tdc == td).all()
+
+        tdr = pickle.loads(pickle.dumps(td))
+        assert (tdr == td).all()
+
+        tdcr = pickle.loads(pickle.dumps(tdc))
+        assert (tdcr == td).all()
 
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
