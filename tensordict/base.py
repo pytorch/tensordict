@@ -23,7 +23,7 @@ from collections.abc import MutableMapping
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
-from functools import partial, wraps
+from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import Thread
@@ -2188,7 +2188,6 @@ class TensorDictBase(MutableMapping):
 
         By default, falls back on :meth:`~.from_dict`.
         """
-        kwargs.setdefault("auto_batch_size", True)
         return cls.from_dict(*args, **kwargs)
 
     @abc.abstractmethod
@@ -4994,8 +4993,15 @@ class TensorDictBase(MutableMapping):
 
         if requires_metadata:
             # metadata is nested
+            cls = type(self)
+            from tensordict._reductions import CLS_MAP
+
+            if cls.__name__ in CLS_MAP:
+                cls = cls.__name__
+            else:
+                pass
             metadata_dict = {
-                "cls": type(self).__name__,
+                "cls": cls,
                 "non_tensors": {},
                 "leaves": {},
                 "cls_metadata": self._reduce_get_metadata(),
@@ -5055,18 +5061,27 @@ class TensorDictBase(MutableMapping):
             elif _is_tensor_collection(cls):
                 metadata_dict_key = None
                 if requires_metadata:
+                    from tensordict._reductions import CLS_MAP
+
+                    if cls.__name__ in CLS_MAP:
+                        cls = cls.__name__
+                    else:
+                        pass
                     metadata_dict_key = metadata_dict[key] = {
-                        "cls": cls.__name__,
+                        "cls": cls,
                         "non_tensors": {},
                         "leaves": {},
                         "cls_metadata": value._reduce_get_metadata(),
                     }
-                local_assign = partial(
-                    assign,
-                    track_key=total_key,
-                    metadata_dict=metadata_dict_key,
-                    flat_size=flat_size,
-                )
+
+                def local_assign(*t):
+                    return assign(
+                        *t,
+                        track_key=total_key,
+                        metadata_dict=metadata_dict_key,
+                        flat_size=flat_size,
+                    )
+
                 value._fast_apply(
                     local_assign,
                     named=True,
@@ -5254,7 +5269,15 @@ class TensorDictBase(MutableMapping):
                 storage.share_memory_()
         else:
             # Convert the dict to json
-            metadata_dict_json = json.dumps(metadata_dict)
+            try:
+                metadata_dict_json = json.dumps(metadata_dict)
+            except TypeError as e:
+                raise RuntimeError(
+                    "Failed to convert the metatdata to json. "
+                    "This is usually due to a nested class that is unaccounted for by the serializer, "
+                    "such as custom TensorClass. "
+                    "If you encounter this error, please file an issue on github."
+                ) from e
             # Represent as a tensor
             metadata_dict_json = torch.as_tensor(
                 bytearray(metadata_dict_json), dtype=torch.uint8
