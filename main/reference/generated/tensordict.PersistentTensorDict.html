@@ -7170,6 +7170,15 @@ or a tensor collection.</p>
 </p></li>
 </ul>
 </dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When updating a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> with N elements with another
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> with M elements, with M &gt; N, along the stack dimension,
+the <code class="docutils literal notranslate"><span class="pre">update</span></code> method will append copies of the extra tensordicts to the dest (self) lazy stack.
+This allows users to rely on <code class="docutils literal notranslate"><span class="pre">update</span></code> to increment lazy stacks progressively.</p>
+</div>
+<dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>self</p>
 </dd>

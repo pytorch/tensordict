@@ -626,35 +626,41 @@ In all other cases, <code class="docutils literal notranslate"><span class="pre"
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.utils.remove_duplicates.html#tensordict.utils.remove_duplicates" title="tensordict.utils.remove_duplicates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">utils.remove_duplicates</span></code></a>(input, key[, dim, ...])</p></td>
 <td><p>Removes indices duplicated in <cite>key</cite> along the specified dimension.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.capture_non_tensor_stack.html#tensordict.capture_non_tensor_stack" title="tensordict.capture_non_tensor_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">capture_non_tensor_stack</span></code></a>([allow_none])</p></td>
+<td><p>Get the current setting for capturing non-tensor stacks.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.dense_stack_tds.html#tensordict.dense_stack_tds" title="tensordict.dense_stack_tds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dense_stack_tds</span></code></a>(td_list[, dim])</p></td>
+<td><p>Densely stack a list of <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> objects (or a <a class="reference internal" href="generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>) given that they have the same structure.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.is_batchedtensor.html#tensordict.is_batchedtensor" title="tensordict.is_batchedtensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_batchedtensor</span></code></a>(arg0)</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.is_tensor_collection.html#tensordict.is_tensor_collection" title="tensordict.is_tensor_collection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_tensor_collection</span></code></a>(datatype)</p></td>
 <td><p>Checks if a data object or a type is a tensor container from the tensordict lib.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.make_tensordict.html#tensordict.make_tensordict" title="tensordict.make_tensordict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tensordict</span></code></a>([input_dict, batch_size, ...])</p></td>
-<td><p>Returns a TensorDict created from the keyword arguments or an input dictionary.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts" title="tensordict.merge_tensordicts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">merge_tensordicts</span></code></a>(*tensordicts[, callback_exist])</p></td>
-<td><p>Merges tensordicts together.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.pad.html#tensordict.pad" title="tensordict.pad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pad</span></code></a>(tensordict, pad_size[, value])</p></td>
-<td><p>Pads all tensors in a tensordict along the batch dimensions with a constant value, returning a new tensordict.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.pad_sequence.html#tensordict.pad_sequence" title="tensordict.pad_sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pad_sequence</span></code></a>(list_of_tensordicts[, pad_dim, ...])</p></td>
-<td><p>Pads a list of tensordicts in order for them to be stacked together in a contiguous format.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.dense_stack_tds.html#tensordict.dense_stack_tds" title="tensordict.dense_stack_tds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dense_stack_tds</span></code></a>(td_list[, dim])</p></td>
-<td><p>Densely stack a list of <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> objects (or a <a class="reference internal" href="generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>) given that they have the same structure.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>(mode)</p></td>
-<td><p>Sets the behaviour of some methods to a lazy transform.</p></td>
-</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.lazy_legacy.html#tensordict.lazy_legacy" title="tensordict.lazy_legacy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lazy_legacy</span></code></a>([allow_none])</p></td>
 <td><p>Returns <cite>True</cite> if lazy representations will be used for selected methods.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.make_tensordict.html#tensordict.make_tensordict" title="tensordict.make_tensordict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_tensordict</span></code></a>([input_dict, batch_size, ...])</p></td>
+<td><p>Returns a TensorDict created from the keyword arguments or an input dictionary.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts" title="tensordict.merge_tensordicts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">merge_tensordicts</span></code></a>(*tensordicts[, callback_exist])</p></td>
+<td><p>Merges tensordicts together.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.pad.html#tensordict.pad" title="tensordict.pad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pad</span></code></a>(tensordict, pad_size[, value])</p></td>
+<td><p>Pads all tensors in a tensordict along the batch dimensions with a constant value, returning a new tensordict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.pad_sequence.html#tensordict.pad_sequence" title="tensordict.pad_sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pad_sequence</span></code></a>(list_of_tensordicts[, pad_dim, ...])</p></td>
+<td><p>Pads a list of tensordicts in order for them to be stacked together in a contiguous format.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string" title="tensordict.parse_tensor_dict_string"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_tensor_dict_string</span></code></a>(s)</p></td>
 <td><p>Parse a TensorDict repr to a TensorDict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.set_capture_non_tensor_stack.html#tensordict.set_capture_non_tensor_stack" title="tensordict.set_capture_non_tensor_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack</span></code></a>(mode)</p></td>
+<td><p>A context manager or decorator to control whether identical non-tensor data should be stacked into a single NonTensorData object or a NonTensorStack.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>(mode)</p></td>
+<td><p>Sets the behaviour of some methods to a lazy transform.</p></td>
 </tr>
 </tbody>
 </table>

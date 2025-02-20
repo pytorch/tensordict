@@ -231,13 +231,15 @@ Utils
     utils.expand_right
     utils.isin
     utils.remove_duplicates
+    capture_non_tensor_stack
+    dense_stack_tds
     is_batchedtensor
     is_tensor_collection
+    lazy_legacy
     make_tensordict
     merge_tensordicts
     pad
     pad_sequence
-    dense_stack_tds
-    set_lazy_legacy
-    lazy_legacy
     parse_tensor_dict_string
+    set_capture_non_tensor_stack
+    set_lazy_legacy
