@@ -6681,15 +6681,57 @@ Each new tensor will be a view on the consolidated storage cast to the desired d
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict.to_dict">
-<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retain_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.to_dict" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retain_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.to_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a dictionary with key-value pairs matching those of the tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>retain_none</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="docutils literal notranslate"><span class="pre">None</span></code> values from tensorclass instances
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>retain_none</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="docutils literal notranslate"><span class="pre">None</span></code> values from tensorclass instances
 will be written in the dictionary.
-Otherwise, they will be discarded. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+Otherwise, they will be discarded. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>convert_tensors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, tensors will be converted to lists when creating the dictionary.
+Otherwise, they will remain as tensors. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A dictionary representation of the tensordict.</p>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.tolist" title="tensordict.TensorDictBase.tolist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tolist()</span></code></a></p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
+<span class="go">{&#39;a&#39;: tensor([[[ 0,  1,  2,  3],</span>
+<span class="go">         [ 4,  5,  6,  7],</span>
+<span class="go">         [ 8,  9, 10, 11]],</span>
+</pre></div>
+</div>
+<blockquote>
+<div><dl class="simple">
+<dt>[[12, 13, 14, 15],</dt><dd><p>[16, 17, 18, 19],
+[20, 21, 22, 23]]]), ‘b’: {‘c’: tensor([[[ 0,  1],
+[ 2,  3],
+[ 4,  5]],</p>
+</dd>
+<dt>[[ 6,  7],</dt><dd><p>[ 8,  9],
+[10, 11]]])}}</p>
+</dd>
+</dl>
+</div></blockquote>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">convert_tensors</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">{&#39;a&#39;: [[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], [[12, 13, 14, 15], [16, 17, 18, 19], [20, 21, 22, 23]]], &#39;b&#39;: {&#39;c&#39;: [[[0, 1], [2, 3], [4, 5]], [[6, 7], [8, 9], [10, 11]]]}}</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -6889,6 +6931,75 @@ Otherwise they will be discarded. Default: <code class="docutils literal notrans
 <dd class="field-even"><p>a new TensorDict object containing the same values.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.tolist">
+<span class="sig-name descname"><span class="pre">tolist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_nodes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.tolist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a nested list representation of the tensordict.</p>
+<p>If the tensordict has no batch dimensions, this method returns a single list or dictionary.
+Otherwise, it returns a nested list where each inner list represents a batch dimension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>convert_nodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, leaf nodes will be converted to dictionaries.
+Otherwise, they will be returned as lists of values. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>convert_tensors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, tensors will be converted to lists when creating the dictionary.
+Otherwise, they will remain as tensors. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A nested list representation of the tensordict.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+<span class="go">[[{&#39;a&#39;: tensor([0, 1, 2, 3]), &#39;b&#39;: {&#39;c&#39;: tensor([0, 1])}}, {&#39;a&#39;: tensor([4, 5, 6, 7]), &#39;b&#39;: {&#39;c&#39;: tensor([2, 3])}}, {&#39;a&#39;: tensor([ 8,  9, 10, 11]), &#39;b&#39;: {&#39;c&#39;: tensor([4, 5])}}], [{&#39;a&#39;: tensor([12, 13, 14, 15]), &#39;b&#39;: {&#39;c&#39;: tensor([6, 7])}}, {&#39;a&#39;: tensor([16, 17, 18, 19]), &#39;b&#39;: {&#39;c&#39;: tensor([8, 9])}}, {&#39;a&#39;: tensor([20, 21, 22, 23]), &#39;b&#39;: {&#39;c&#39;: tensor([10, 11])}}]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">tolist</span><span class="p">(</span><span class="n">convert_tensors</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[[{&#39;a&#39;: [0, 1, 2, 3], &#39;b&#39;: {&#39;c&#39;: [0, 1]}}, {&#39;a&#39;: [4, 5, 6, 7], &#39;b&#39;: {&#39;c&#39;: [2, 3]}}, {&#39;a&#39;: [8, 9, 10, 11], &#39;b&#39;: {&#39;c&#39;: [4, 5]}}], [{&#39;a&#39;: [12, 13, 14, 15], &#39;b&#39;: {&#39;c&#39;: [6, 7]}}, {&#39;a&#39;: [16, 17, 18, 19], &#39;b&#39;: {&#39;c&#39;: [8, 9]}}, {&#39;a&#39;: [20, 21, 22, 23], &#39;b&#39;: {&#39;c&#39;: [10, 11]}}]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">tolist</span><span class="p">(</span><span class="n">convert_nodes</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+<span class="go">[[[tensor([0, 1, 2, 3]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)], [tensor([4, 5, 6, 7]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)], [tensor([ 8,  9, 10, 11]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)]], [[tensor([12, 13, 14, 15]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)], [tensor([16, 17, 18, 19]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)], [tensor([20, 21, 22, 23]), TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)]]]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
