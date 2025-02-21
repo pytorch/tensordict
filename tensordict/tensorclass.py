@@ -200,6 +200,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "size",
     "sorted_keys",
     "to_struct_array",
+    "tolist",
     "values",
 ]
 
@@ -1888,8 +1889,10 @@ def _len(self) -> int:
     return len(self._tensordict)
 
 
-def _to_dict(self, *, retain_none: bool = True) -> dict:
-    td_dict = self._tensordict.to_dict(retain_none=retain_none)
+def _to_dict(self, *, retain_none: bool = True, convert_tensors: bool = False) -> dict:
+    td_dict = self._tensordict.to_dict(
+        retain_none=retain_none, convert_tensors=convert_tensors
+    )
     if self._non_tensordict:
         if retain_none:
             td_dict.update(self._non_tensordict)
@@ -3207,7 +3210,9 @@ class NonTensorData:
             names=kwargs.get("names"),
         )
 
-    def to_dict(self, *, retain_none: bool = True):
+    def to_dict(
+        self, *, retain_none: bool = True, convert_tensors: bool = False
+    ) -> dict[str, Any]:
         # override to_dict to return just the data
         return self.data
 
@@ -3528,8 +3533,10 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return result
 
-    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]:
-        return self.tolist()
+    def to_dict(
+        self, *, retain_none: bool = True, convert_tensors: bool = False
+    ) -> dict[str, Any]:
+        return self.tolist(convert_tensors=convert_tensors)
 
     def to_tensordict(self, *, retain_none: bool | None = None):
         return self

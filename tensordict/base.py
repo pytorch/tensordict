@@ -11509,13 +11509,48 @@ class TensorDictBase(MutableMapping):
 
         return self._fast_apply(as_tensor, propagate_lock=True)
 
-    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]:
+    def to_dict(
+        self, *, retain_none: bool = True, convert_tensors: bool = False
+    ) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict.
 
         Args:
             retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
                 will be written in the dictionary.
                 Otherwise, they will be discarded. Default: ``True``.
+            convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
+                Otherwise, they will remain as tensors. Default: ``False``.
+
+        Returns:
+            A dictionary representation of the tensordict.
+
+        .. seealso:: :meth:`~tensordict.TensorDictBase.tolist`
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     a=torch.arange(24).view(2, 3, 4),
+            ...     b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
+            ...     batch_size=(2, 3)
+            ... )
+            >>> print(td.to_dict())
+            {'a': tensor([[[ 0,  1,  2,  3],
+                     [ 4,  5,  6,  7],
+                     [ 8,  9, 10, 11]],
+
+                    [[12, 13, 14, 15],
+                     [16, 17, 18, 19],
+                     [20, 21, 22, 23]]]), 'b': {'c': tensor([[[ 0,  1],
+                     [ 2,  3],
+                     [ 4,  5]],
+
+                    [[ 6,  7],
+                     [ 8,  9],
+                     [10, 11]]])}}
+            >>> print(td.to_dict(convert_tensors=True))
+            {'a': [[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], [[12, 13, 14, 15], [16, 17, 18, 19], [20, 21, 22, 23]]], 'b': {'c': [[[0, 1], [2, 3], [4, 5]], [[6, 7], [8, 9], [10, 11]]]}}
 
         """
         result = {}
@@ -11527,8 +11562,103 @@ class TensorDictBase(MutableMapping):
                     and value.data is None
                 ):
                     continue
-                value = value.to_dict(retain_none=retain_none)
+                value = value.to_dict(
+                    retain_none=retain_none, convert_tensors=convert_tensors
+                )
+            elif convert_tensors and hasattr(value, "tolist"):
+                value = value.tolist()
             result[key] = value
+        return result
+
+    def tolist(
+        self, *, convert_nodes: bool = True, convert_tensors: bool = False
+    ) -> List[Any]:
+        """Returns a nested list representation of the tensordict.
+
+        If the tensordict has no batch dimensions, this method returns a single list or dictionary.
+        Otherwise, it returns a nested list where each inner list represents a batch dimension.
+
+        Args:
+            convert_nodes (bool): if ``True``, leaf nodes will be converted to dictionaries.
+                Otherwise, they will be returned as lists of values. Default: ``True``.
+            convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
+                Otherwise, they will remain as tensors. Default: ``False``.
+
+        Returns:
+            A nested list representation of the tensordict.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>>
+            >>> td = TensorDict(
+            ...     a=torch.arange(24).view(2, 3, 4),
+            ...     b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
+            ...     batch_size=(2, 3)
+            ... )
+            >>>
+            >>> print(td.tolist())
+            [[{'a': tensor([0, 1, 2, 3]), 'b': {'c': tensor([0, 1])}}, {'a': tensor([4, 5, 6, 7]), 'b': {'c': tensor([2, 3])}}, {'a': tensor([ 8,  9, 10, 11]), 'b': {'c': tensor([4, 5])}}], [{'a': tensor([12, 13, 14, 15]), 'b': {'c': tensor([6, 7])}}, {'a': tensor([16, 17, 18, 19]), 'b': {'c': tensor([8, 9])}}, {'a': tensor([20, 21, 22, 23]), 'b': {'c': tensor([10, 11])}}]]
+            >>> print(td.tolist(convert_tensors=True))
+            [[{'a': [0, 1, 2, 3], 'b': {'c': [0, 1]}}, {'a': [4, 5, 6, 7], 'b': {'c': [2, 3]}}, {'a': [8, 9, 10, 11], 'b': {'c': [4, 5]}}], [{'a': [12, 13, 14, 15], 'b': {'c': [6, 7]}}, {'a': [16, 17, 18, 19], 'b': {'c': [8, 9]}}, {'a': [20, 21, 22, 23], 'b': {'c': [10, 11]}}]]
+            >>> print(td.tolist(convert_nodes=False))
+            [[[tensor([0, 1, 2, 3]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)], [tensor([4, 5, 6, 7]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)], [tensor([ 8,  9, 10, 11]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)]], [[tensor([12, 13, 14, 15]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)], [tensor([16, 17, 18, 19]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)], [tensor([20, 21, 22, 23]), TensorDict(
+                fields={
+                    c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)]]]
+
+        """
+        if convert_tensors and not convert_nodes:
+            raise TypeError("convert_tensors requires convert_nodes to be set to True")
+        if not self.batch_dims:
+            if convert_nodes:
+                return self.to_dict(convert_tensors=convert_tensors)
+            return self
+
+        q = collections.deque()
+        result = []
+        q.append((self, result))
+        while len(q):
+            val, _result = q.popleft()
+            vals = val.unbind(0)
+            if val.ndim == 1:
+                if convert_nodes:
+                    vals = [v.to_dict(convert_tensors=convert_tensors) for v in vals]
+                else:
+                    vals = list(vals)
+                _result.extend(vals)
+            else:
+                for local_val in vals:
+                    local_res = []
+                    _result.append(local_res)
+                    q.append((local_val, local_res))
         return result
 
     def numpy(self):

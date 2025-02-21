@@ -360,7 +360,9 @@ class LazyStackedTensorDict(TensorDictBase):
             return False
 
     @_fails_exclusive_keys
-    def to_dict(self, *, retain_none: bool = True) -> dict[str, Any]: ...
+    def to_dict(
+        self, *, retain_none: bool = True, convert_tensors: bool = False
+    ) -> dict[str, Any]: ...
 
     def _reduce_get_metadata(self):
         metadata = {}
