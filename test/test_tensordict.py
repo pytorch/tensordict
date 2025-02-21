@@ -3039,6 +3039,37 @@ class TestGeneric:
         if mask_key:
             assert (td_padded[td_padded["mask"]] != 0).all()
 
+    @pytest.mark.parametrize("convert_nodes", [False, True])
+    @pytest.mark.parametrize("convert_tensors", [False, True])
+    def test_tolist(self, convert_nodes, convert_tensors):
+        td = TensorDict(
+            a=torch.arange(120).view(4, 5, 6),
+            b=TensorDict(c=torch.arange(40).reshape(4, 5, 2), batch_size=(4, 5, 2)),
+            batch_size=(4, 5),
+        )
+        with (
+            pytest.raises(TypeError, match="convert_tensors")
+            if convert_tensors and not convert_nodes
+            else contextlib.nullcontext()
+        ):
+            tdlist = td.tolist(
+                convert_nodes=convert_nodes, convert_tensors=convert_tensors
+            )
+            assert isinstance(tdlist, list)
+            assert len(tdlist) == 4
+            for i in range(4):
+                assert len(tdlist[i]) == 5
+            if not convert_tensors:
+                assert (tdlist[0][0]["a"] == torch.arange(6)).all()
+                assert (tdlist[0][0]["b"]["c"] == torch.arange(2)).all()
+            else:
+                assert tdlist[0][0]["a"] == torch.arange(6).tolist()
+                assert tdlist[0][0]["b"]["c"] == torch.arange(2).tolist()
+            if convert_nodes:
+                assert isinstance(tdlist[0][0]["b"], dict)
+            else:
+                assert isinstance(tdlist[0][0]["b"], TensorDict)
+
     def test_unbind_batchsize(self):
         td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
         td["a"].batch_size
