@@ -1887,6 +1887,20 @@ class TestTensorClass:
         ):
             torch.stack([data1, data3], dim=0)
 
+    def test_stack_keyorder(self):
+
+        class MyTensorClass(TensorClass):
+            foo: Tensor
+            bar: Tensor
+
+        tc1 = MyTensorClass(foo=torch.zeros((1,)), bar=torch.ones((1,)))
+
+        for _ in range(10000):
+            assert list(torch.stack([tc1, tc1], dim=0)._tensordict.keys()) == [
+                "foo",
+                "bar",
+            ]
+
     def test_statedict_errors(self):
         @tensorclass
         class MyClass:

@@ -1757,7 +1757,7 @@ def _check_keys(
     strict: bool = False,
     include_nested: bool = False,
     leaves_only: bool = False,
-) -> set[str]:
+) -> set[str] | list[str]:
     from tensordict.base import _is_leaf_nontensor
 
     if not len(list_of_tensordicts):
@@ -1769,9 +1769,9 @@ def _check_keys(
     )
     # TODO: compile doesn't like set() over an arbitrary object
     if is_compiling():
-        keys = {k for k in keys}  # noqa: C416
+        keys_set = {k for k in keys}  # noqa: C416
     else:
-        keys: set[str] = set(keys)
+        keys_set: set[str] = set(keys)
     for td in list_of_tensordicts[1:]:
         k = td.keys(
             include_nested=include_nested,
@@ -1779,17 +1779,19 @@ def _check_keys(
             is_leaf=_is_leaf_nontensor,
         )
         if not strict:
-            keys = keys.intersection(k)
+            keys_set = keys_set.intersection(k)
         else:
             if is_compiling():
                 k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
-            if k != keys:
+            if k != keys_set:
                 raise KeyError(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
-    return keys
+    if strict:
+        return keys
+    return keys_set
 
 
 def _set_max_batch_size(source: T, batch_dims=None):
