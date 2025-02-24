@@ -3219,7 +3219,9 @@ class NonTensorData:
 
         ids = set()
         firstdata = NO_DEFAULT
-        return_stack = False
+        return_stack = not capture_non_tensor_stack()
+        if return_stack:
+            return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
         for data in list_of_non_tensor:
             if not isinstance(data, NonTensorData):
                 if raise_if_non_unique:
