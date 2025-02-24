@@ -26,7 +26,7 @@ import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
 from tensordict._td import TensorDict
 
-from tensordict.base import is_tensor_collection, TensorDictBase
+from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
 from tensordict.functional import make_tensordict
 from tensordict.nn.utils import _dispatch_td_nn_modules, _set_skip_existing_None
 from tensordict.utils import (
@@ -848,6 +848,8 @@ class TensorDictModule(TensorDictModuleBase):
 
         method (str, optional): the method to be called in the module, if any. Defaults to `__call__`.
         method_kwargs (Dict[str, Any], optional): additional keyword arguments to be passed to the module's method being called.
+        strict (bool, optional): if ``True``, the module will raise an exception if any of the inputs is missing from
+            the input tensordict. Otherwise, a `None` value will be used as placeholder. Defaults to ``False``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input
     and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
@@ -1014,6 +1016,7 @@ class TensorDictModule(TensorDictModuleBase):
         inplace: bool | str = True,
         method: str | None = None,
         method_kwargs: dict | None = None,
+        strict: bool = False,
     ) -> None:
         super().__init__()
 
@@ -1073,6 +1076,8 @@ class TensorDictModule(TensorDictModuleBase):
             )
         self.out_keys = out_keys
         self.in_keys = in_keys
+
+        self.strict = strict
 
         if "_" in self.in_keys:
             warnings.warn(
@@ -1158,10 +1163,11 @@ class TensorDictModule(TensorDictModuleBase):
                 raise ValueError(
                     "Got a non-empty list of extra agruments, when none was expected."
                 )
+            default = None if not self.strict else NO_DEFAULT
             if self._kwargs is not None:
                 kwargs.update(
                     {
-                        kwarg: tensordict.get(in_key)
+                        kwarg: tensordict.get(in_key, default=default)
                         for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
                 )
@@ -1169,7 +1175,7 @@ class TensorDictModule(TensorDictModuleBase):
             else:
                 tensors = tuple(
                     tensordict._get_tuple_maybe_non_tensor(
-                        _unravel_key_to_tuple(in_key), None
+                        _unravel_key_to_tuple(in_key), default
                     )
                     for in_key in self.in_keys
                 )

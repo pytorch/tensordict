@@ -659,6 +659,23 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_strict(self, strict):
+        def check(a, b):
+            assert b is None
+            return a
+
+        tdm = TensorDictModule(
+            check,
+            in_keys=["present", "missing"],
+            out_keys=["new_present"],
+            strict=strict,
+        )
+        td = TensorDict(present=0)
+        with pytest.raises(KeyError) if strict else contextlib.nullcontext():
+            tdout = tdm(td)
+            assert tdout["new_present"] is td["present"]
+
     def test_nontensor(self):
         tdm = TensorDictModule(
             lambda: NonTensorStack(NonTensorData(1), NonTensorData(2)),
