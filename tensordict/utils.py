@@ -2582,17 +2582,20 @@ def _is_non_tensor(cls: type):
     return out
 
 
+_PASSTHROUGH_MEMO = {}
+
+
 def _pass_through_cls(cls: type):
     out = None
     is_dynamo = is_compiling()
     if not is_dynamo:
-        out = _NON_TENSOR_MEMO.get(cls)
+        out = _PASSTHROUGH_MEMO.get(cls)
     if out is None:
         out = bool(getattr(cls, "_is_non_tensor", False)) or getattr(
             cls, "_pass_through", False
         )
         if not is_dynamo:
-            _NON_TENSOR_MEMO[cls] = out
+            _PASSTHROUGH_MEMO[cls] = out
     return out
 
 
