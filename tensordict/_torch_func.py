@@ -626,7 +626,6 @@ def _stack(
                 key: stack_fn(key, values, is_not_init, is_tensor)
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
-
             result = clz._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
