@@ -1790,7 +1790,7 @@ def _check_keys(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
     if strict:
-        return keys
+        return list(keys)
     return keys_set
 
 
