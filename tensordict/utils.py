@@ -2568,7 +2568,6 @@ def _pass_through(data) -> bool:
 
 
 _NON_TENSOR_MEMO = {}
-_PASSTHROUGH_MEMO = {}
 
 
 def _is_non_tensor(cls: type):
@@ -2581,6 +2580,9 @@ def _is_non_tensor(cls: type):
         if not is_dynamo:
             _NON_TENSOR_MEMO[cls] = out
     return out
+
+
+_PASSTHROUGH_MEMO = {}
 
 
 def _pass_through_cls(cls: type):
