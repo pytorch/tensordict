@@ -3141,6 +3141,67 @@ class TestGeneric:
         td_source = TensorDict(a=0)
         td_dest.update_(td_source)
 
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("flip", [False, True])
+    def test_update_batch_size(self, flip):
+        @tensorclass
+        class TC:
+            a: str
+            b: torch.Tensor
+
+        tdc_source = torch.stack(
+            [
+                TC(a="a string", b=torch.zeros(())),
+                TC(a="another string", b=torch.zeros(())),
+                TC(a="yet another string", b=torch.zeros(())),
+            ]
+        )
+        tdc_dest = torch.stack(
+            [
+                TC(a="a fourth string", b=torch.ones(())),
+                TC(a="and our fifth string", b=torch.ones(())),
+            ]
+        )
+        td_source = TensorDict(
+            td=TensorDict(
+                foo=torch.ones((2,)),
+                nested=TensorDict(bar=torch.ones((2, 4)), batch_size=(2, 4)),
+                batch_size=(2,),
+            ),
+            tc=tdc_source,
+        )
+        td_dest = TensorDict(
+            td=TensorDict(
+                foo=torch.ones((3,)),
+                nested=TensorDict(bar=torch.ones((3, 5)), batch_size=(3, 5)),
+                batch_size=(3,),
+            ),
+            tc=tdc_dest,
+        )
+        if not flip:
+            ref = td_source.clone()
+            td_dest.update(td_source, update_batch_size=True)
+            # Check that source is unaltered
+            assert (ref == td_source).all()
+        else:
+            ref = td_dest.clone()
+            td_source.update(td_dest, update_batch_size=True)
+            # Check that source is unaltered
+            assert (ref == td_dest).all()
+        assert td_dest.batch_size == td_source.batch_size
+        assert td_dest["td"].batch_size == td_source["td"].batch_size
+        assert td_dest["td", "foo"].shape == td_source["td", "foo"].shape
+        assert (
+            td_dest["td", "nested"].batch_size == td_source["td", "nested"].batch_size
+        )
+        assert (
+            td_dest["td", "nested", "bar"].shape
+            == td_source["td", "nested", "bar"].shape
+        )
+        assert td_dest["tc"].batch_size == td_source["tc"].batch_size
+        assert td_dest["tc"].a == td_source["tc"].a
+        assert (td_dest["tc"].b == td_source["tc"].b).all()
+
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)

@@ -3838,6 +3838,7 @@ class _SubTensorDict(TensorDictBase):
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
@@ -3882,6 +3883,7 @@ class _SubTensorDict(TensorDictBase):
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
                             is_leaf=is_leaf,
+                            update_batch_size=update_batch_size,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(type(value)):
@@ -3892,6 +3894,7 @@ class _SubTensorDict(TensorDictBase):
                             value,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
+                            update_batch_size=update_batch_size,
                         )
                         continue
                     raise ValueError(

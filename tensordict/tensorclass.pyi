@@ -620,6 +620,7 @@ class TensorClass:
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[type], bool] | None = None,
+        update_batch_size: bool = False,
     ) -> T: ...
     def update_(
         self,

@@ -1655,6 +1655,7 @@ def _update(
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
+    update_batch_size: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
@@ -1665,7 +1666,14 @@ def _update(
             for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
             if v is not None
         }
-        self._tensordict.update(input_dict_or_td.__dict__["_tensordict"])
+        self._tensordict.update(
+            input_dict_or_td.__dict__["_tensordict"],
+            clone=clone,
+            inplace=inplace,
+            keys_to_update=keys_to_update,
+            non_blocking=non_blocking,
+            update_batch_size=update_batch_size,
+        )
         self._non_tensordict.update(non_tensordict)
         return self
 
@@ -1675,6 +1683,7 @@ def _update(
         inplace=inplace,
         keys_to_update=keys_to_update,
         non_blocking=non_blocking,
+        update_batch_size=update_batch_size,
     )
     return self
 
@@ -3052,6 +3061,7 @@ class NonTensorData:
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
@@ -3059,6 +3069,7 @@ class NonTensorData:
             inplace=inplace,
             keys_to_update=keys_to_update,
             is_leaf=is_leaf,
+            update_batch_size=update_batch_size,
         )
 
     def _update(
@@ -3070,6 +3081,7 @@ class NonTensorData:
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
@@ -3660,6 +3672,7 @@ class NonTensorStack(LazyStackedTensorDict):
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
@@ -3667,6 +3680,7 @@ class NonTensorStack(LazyStackedTensorDict):
             inplace=inplace,
             keys_to_update=keys_to_update,
             is_leaf=is_leaf,
+            update_batch_size=update_batch_size,
         )
 
     def update_(
@@ -3694,6 +3708,7 @@ class NonTensorStack(LazyStackedTensorDict):
         break_on_memmap: bool = None,
         non_blocking: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
     ) -> T:
         if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
             raise RuntimeError(_LOCK_ERROR)
@@ -3711,6 +3726,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 inplace=inplace,
                 keys_to_update=keys_to_update,
                 is_leaf=is_leaf,
+                update_batch_size=update_batch_size,
             )
 
         memmap = False
@@ -3741,6 +3757,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     keys_to_update=keys_to_update,
                     break_on_memmap=break_on_memmap,
                     is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
                 )
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)
