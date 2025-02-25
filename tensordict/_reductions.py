@@ -91,7 +91,11 @@ def _rebuild_tensordict_files_consolidated(
         _ = metadata.pop("size", None)
 
         d = {
-            key: NonTensorData(data, batch_size=batch_size, device=device)
+            key: NonTensorData(
+                data,
+                batch_size=batch_size,
+                device=torch.device(device) if device is not None else None,
+            )
             for (key, (data, batch_size, device)) in non_tensor.items()
         }
         for key, (dtype, local_shape, start, stop, pad) in leaves.items():
