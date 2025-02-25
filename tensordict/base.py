@@ -5056,6 +5056,7 @@ class TensorDictBase(MutableMapping):
                     metadata_dict["non_tensors"][key] = (
                         value.data,
                         list(value.batch_size),
+                        value.device,
                     )
                 return
             elif _is_tensor_collection(cls):
