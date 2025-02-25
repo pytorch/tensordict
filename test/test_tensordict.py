@@ -199,7 +199,7 @@ class TestGeneric:
         with pytest.raises(
             RuntimeError,
             match=re.escape(
-                "the tensor a has shape torch.Size([3, 4, 5, 6]) which is incompatible with the batch-size torch.Size([3, 5])."
+                "the Tensor a has shape torch.Size([3, 4, 5, 6]) which is incompatible with the batch-size torch.Size([3, 5])."
             ),
         ):
             td.batch_size = [3, 5]
