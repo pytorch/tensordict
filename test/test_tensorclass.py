@@ -1258,18 +1258,16 @@ class TestTensorClass:
 
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
-        with set_capture_non_tensor_stack(False):
+        tc = TCStrings(a="a", b="b")
 
-            tc = TCStrings(a="a", b="b")
-
-            tcstack = TensorDict(tc=torch.stack([tc, tc.clone()]))
-            if consolidate:
-                tcstack = tcstack.consolidate()
-            assert isinstance(tcstack["tc"], TCStrings)
-            loaded = pickle.loads(pickle.dumps(tcstack))
-            assert isinstance(loaded["tc"], TCStrings)
-            assert loaded["tc"].a == tcstack["tc"].a
-            assert loaded["tc"].b == tcstack["tc"].b
+        tcstack = TensorDict(tc=torch.stack([tc, tc.clone()]))
+        if consolidate:
+            tcstack = tcstack.consolidate()
+        assert isinstance(tcstack["tc"], TCStrings)
+        loaded = pickle.loads(pickle.dumps(tcstack))
+        assert isinstance(loaded["tc"], TCStrings)
+        assert loaded["tc"].a == tcstack["tc"].a
+        assert loaded["tc"].b == tcstack["tc"].b
 
     def test_post_init(self):
         @tensorclass

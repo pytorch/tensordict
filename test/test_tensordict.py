@@ -11210,7 +11210,6 @@ class TestNonTensorData:
             batch_size=[],
         )
 
-    @set_capture_non_tensor_stack(False)
     def test_consolidate_nested(self):
         import pickle
 
