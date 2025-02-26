@@ -381,7 +381,7 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim_name=None,
         stack_dim=0,
     ):
-        return LazyStackedTensorDict(
+        return cls._new_lazy_unsafe(
             *(
                 TensorDict.from_dict(
                     input_dict[str(i)],
