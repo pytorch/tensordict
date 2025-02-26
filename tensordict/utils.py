@@ -1772,7 +1772,8 @@ def _check_keys(
         is_leaf=_is_leaf_nontensor,
     )
     # TODO: compile doesn't like set() over an arbitrary object
-    if is_compiling():
+    is_comp = is_compiling()
+    if is_comp:
         keys_set = {k for k in keys}  # noqa: C416
     else:
         keys_set: set[str] = set(keys)
@@ -1794,7 +1795,10 @@ def _check_keys(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
     if strict:
-        return list(keys)
+        if is_comp:
+            return [key for key in keys]  # noqa: C416
+        else:
+            return list(keys)
     return keys_set
 
 
