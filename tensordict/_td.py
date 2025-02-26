@@ -2432,7 +2432,12 @@ class TensorDict(TensorDictBase):
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
                 if best_attempt and _is_tensor_collection(type(dest)):
-                    dest.update(value, inplace=True, non_blocking=non_blocking)
+                    dest.update(
+                        value,
+                        inplace=True,
+                        non_blocking=non_blocking,
+                        ignore_lock=ignore_lock,
+                    )
                 else:
                     if dest is not value:
                         try:
@@ -3829,6 +3834,7 @@ class _SubTensorDict(TensorDictBase):
     def _get_tuple(self, key, default):
         return self._source._get_at_tuple(key, self.idx, default=default)
 
+    @lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -3839,6 +3845,7 @@ class _SubTensorDict(TensorDictBase):
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
+        ignore_lock: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
@@ -3884,6 +3891,7 @@ class _SubTensorDict(TensorDictBase):
                             non_blocking=non_blocking,
                             is_leaf=is_leaf,
                             update_batch_size=update_batch_size,
+                            ignore_lock=ignore_lock,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(type(value)):
@@ -3895,6 +3903,7 @@ class _SubTensorDict(TensorDictBase):
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
                             update_batch_size=update_batch_size,
+                            ignore_lock=ignore_lock,
                         )
                         continue
                     raise ValueError(

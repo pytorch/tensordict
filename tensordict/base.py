@@ -6551,6 +6551,7 @@ class TensorDictBase(MutableMapping):
         """Returns the shape of the entry, possibly avoiding recurring to :meth:`~.get`."""
         return _shape(self.get(key))
 
+    @lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
@@ -6561,8 +6562,12 @@ class TensorDictBase(MutableMapping):
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
+        ignore_lock: bool = False,
     ) -> T:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
+
+        .. warning:: `update` will corrupt the data if called within a try/except block. Do not user this method within
+            such blocks hoping to catch and patch errors that occur during the execution.
 
         Args:
             input_dict_or_td (TensorDictBase or dict): input data to be written
@@ -6601,6 +6606,9 @@ class TensorDictBase(MutableMapping):
                     an exception will be raised, as TensorDict will be unable to infer what to do with the extra
                     destination entries.
 
+            ignore_lock (bool, optional): if ``True``, any tensordict can be updated regardless of its locked status.
+                Defaults to `False`.
+
         .. note:: When updating a :class:`~tensordict.LazyStackedTensorDict` with N elements with another
             :class:`~tensordict.LazyStackedTensorDict` with M elements, with M > N, along the stack dimension,
             the ``update`` method will append copies of the extra tensordicts to the dest (self) lazy stack.
@@ -6633,10 +6641,18 @@ class TensorDictBase(MutableMapping):
             keys_to_update = unravel_key_list(keys_to_update)
 
         if (
-            update_batch_size
-            and _is_tensor_collection(type(input_dict_or_td))
-            and input_dict_or_td.batch_size != self.batch_size
+            _is_tensor_collection(type(input_dict_or_td))
+            # here, we do a loose check on the batch sizes: it could be that the source has batch_size (1,) and self (1, 2)
+            # and that all the values have an appropriate shape for the new batch size.
+            # What we want to catch is any batch size item that is obviously mismatching, like (1, 2, 3) and (1, 4, 3).
+            and self.batch_size[: input_dict_or_td.batch_dims]
+            != input_dict_or_td.batch_size[: self.batch_dims]
         ):
+            if not update_batch_size:
+                raise RuntimeError(
+                    "update_batch_size must be set to True to be able to update "
+                    "tensordicts of different batch size. Got sizes {}"
+                )
             if inplace:
                 raise RuntimeError(
                     "Source and destination tensor collection shapes mismatch, but "
@@ -6647,9 +6663,6 @@ class TensorDictBase(MutableMapping):
                     "Updating tensordicts of different batch-size with keys_to_update "
                     "is currently not supported."
                 )
-            # Signal that the root batch-size will need to be recomputed
-            batch_size_changed = True
-
             # This could be expensive but we must run it
             keys_source = set(input_dict_or_td.keys(True))
             keys_dest = set(self.keys(True))
@@ -6660,27 +6673,14 @@ class TensorDictBase(MutableMapping):
                     f"batch_size of source={input_dict_or_td.batch_size}, batch_size of dest={self.batch_size}, "
                     f"keys in dest but not in source: {{{keys_dest - keys_source}}}."
                 )
-
-            from tensordict import LazyStackedTensorDict
-
             # We can swap target with value if the batch sizes are incongruent. We must make sure the id of target
             # stays the same though
-            if isinstance(self, LazyStackedTensorDict):
-                # We don't want any entry to disappear, but there can be more entries
-                self.__init__(
-                    *input_dict_or_td.unbind(self.stack_dim),
-                    stack_dim=self.stack_dim,
-                    hook_out=self.hook_out,
-                    hook_in=self.hook_in,
-                    stack_dim_name=self._td_dim_name,
-                )
-            else:
-                self.batch_size = ()
-                # Remove all leaves, and update
-                ks = self.keys(True, True, is_leaf=is_leaf)
-                self.exclude(*ks, inplace=True)
-                self.batch_size = input_dict_or_td.batch_size
-                self.update(input_dict_or_td, update_batch_size=True)
+            self.batch_size = ()
+            # Remove all leaves, and update
+            ks = self.keys(True, True, is_leaf=is_leaf)
+            self.exclude(*ks, inplace=True)
+            self.batch_size = input_dict_or_td.batch_size
+            self.update(input_dict_or_td, update_batch_size=True)
             return self
 
         for key, value in input_dict_or_td.items():
@@ -6710,6 +6710,7 @@ class TensorDictBase(MutableMapping):
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
                             update_batch_size=update_batch_size,
+                            ignore_lock=ignore_lock,
                         )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
@@ -6735,6 +6736,7 @@ class TensorDictBase(MutableMapping):
                                     keys_to_update=sub_keys_to_update,
                                     non_blocking=non_blocking,
                                     update_batch_size=update_batch_size,
+                                    ignore_lock=ignore_lock,
                                 ),
                                 validated=True,
                                 inplace=False,
@@ -6752,6 +6754,7 @@ class TensorDictBase(MutableMapping):
                                 non_blocking=non_blocking,
                                 keys_to_update=sub_keys_to_update,
                                 update_batch_size=update_batch_size,
+                                ignore_lock=ignore_lock,
                             )
                         continue
                 # A tensor collection may still be a leaf so we need to duplicate the logic here

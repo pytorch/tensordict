@@ -1210,7 +1210,11 @@ def lock_blocked(func):
 
     @wraps(func)
     def new_func(self, *args, **kwargs):
-        if self.is_locked:
+        if (
+            not kwargs.get("ignore_lock", False)
+            and self.is_locked
+            and not kwargs.get("inplace")
+        ):
             raise RuntimeError(_LOCK_ERROR)
         return func(self, *args, **kwargs)
 

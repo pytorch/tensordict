@@ -621,6 +621,7 @@ class TensorClass:
         keys_to_update: Sequence[NestedKey] | None = None,
         is_leaf: Callable[[type], bool] | None = None,
         update_batch_size: bool = False,
+        ignore_lock: bool = False,
     ) -> T: ...
     def update_(
         self,
