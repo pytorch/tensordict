@@ -416,6 +416,8 @@ be a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.T
 </p></li>
 <li><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – the method to be called in the module, if any. Defaults to <cite>__call__</cite>.</p></li>
 <li><p><strong>method_kwargs</strong> (<em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – additional keyword arguments to be passed to the module’s method being called.</p></li>
+<li><p><strong>strict</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the module will raise an exception if any of the inputs is missing from
+the input tensordict. Otherwise, a <cite>None</cite> value will be used as placeholder. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
