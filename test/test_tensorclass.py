@@ -1400,7 +1400,7 @@ class TestTensorClass:
         # check that you can't mess up the batch_size
         with pytest.raises(
             RuntimeError,
-            match=re.escape("the tensor smth has shape torch.Size([1]) which"),
+            match=re.escape("the Tensor smth has shape torch.Size([1]) which"),
         ):
             data.set("z", TensorDict({"smth": torch.zeros(1)}, []))
         # check that you can't write any attribute
@@ -1512,7 +1512,7 @@ class TestTensorClass:
         # check that you can't mess up the batch_size
         with pytest.raises(
             RuntimeError,
-            match=re.escape("the tensor smth has shape torch.Size([1]) which"),
+            match=re.escape("the Tensor smth has shape torch.Size([1]) which"),
         ):
             data.z = TensorDict({"smth": torch.zeros(1)}, [])
         # check that you can't write any attribute
