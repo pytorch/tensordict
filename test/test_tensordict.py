@@ -18,6 +18,7 @@ import re
 import sys
 import uuid
 import warnings
+import weakref
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -199,7 +200,7 @@ class TestGeneric:
         with pytest.raises(
             RuntimeError,
             match=re.escape(
-                "the tensor a has shape torch.Size([3, 4, 5, 6]) which is incompatible with the batch-size torch.Size([3, 5])."
+                "the Tensor a has shape torch.Size([3, 4, 5, 6]) which is incompatible with the batch-size torch.Size([3, 5])."
             ),
         ):
             td.batch_size = [3, 5]
@@ -3141,6 +3142,121 @@ class TestGeneric:
         td_source = TensorDict(a=0)
         td_dest.update_(td_source)
 
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("flip", [False, True])
+    def test_update_batch_size(self, flip):
+        @tensorclass
+        class TC:
+            a: str
+            b: torch.Tensor
+
+        tdc_source = torch.stack(
+            [
+                TC(a="a string", b=torch.zeros(())),
+                TC(a="another string", b=torch.zeros(())),
+                TC(a="yet another string", b=torch.zeros(())),
+            ]
+        )
+        tdc_dest = torch.stack(
+            [
+                TC(a="a fourth string", b=torch.ones(())),
+                TC(a="and our fifth string", b=torch.ones(())),
+            ]
+        )
+        td_source = TensorDict(
+            td=TensorDict(
+                foo=torch.ones((2,)),
+                nested=TensorDict(bar=torch.ones((2, 4)), batch_size=(2, 4)),
+                batch_size=(2,),
+            ),
+            tc=tdc_source,
+            td_lazy_stack=lazy_stack(
+                [
+                    TensorDict(ragged=torch.ones((3,)), batch_size=(3,)),
+                    TensorDict(ragged=torch.ones((4,)), batch_size=(4,)),
+                ],
+                -1,
+            ),
+        )
+        td_dest = TensorDict(
+            td=TensorDict(
+                foo=torch.ones((3,)),
+                nested=TensorDict(bar=torch.ones((3, 5)), batch_size=(3, 5)),
+                batch_size=(3,),
+            ),
+            tc=tdc_dest,
+            td_lazy_stack=lazy_stack(
+                [
+                    TensorDict(ragged=torch.ones((3,)), batch_size=(3,)),
+                    TensorDict(ragged=torch.ones((4,)), batch_size=(4,)),
+                    TensorDict(ragged=torch.ones((5,)), batch_size=(5,)),
+                ],
+                -1,
+            ),
+        )
+
+        def make_weakrefs(td):
+            return {
+                "td": weakref.ref(td["td"]),
+                ("td", "nested"): weakref.ref(td["td", "nested"]),
+                "tc": weakref.ref(td["tc"]),
+                "td_lazy_stack": weakref.ref(td["td_lazy_stack"]),
+            }
+
+        if not flip:
+            ref = td_source.clone()
+            wr_dict = make_weakrefs(td_dest)
+            td_dest.update(td_source, update_batch_size=True)
+            for k, r in wr_dict.items():
+                assert r() is td_dest[k]
+            # Check that source is unaltered
+            assert (ref == td_source).all()
+        else:
+            ref = td_dest.clone()
+            wr_dict = make_weakrefs(td_source)
+            td_source.update(td_dest, update_batch_size=True)
+            for k, r in wr_dict.items():
+                assert r() is td_source[k]
+            # Check that source is unaltered
+            assert (ref == td_dest).all()
+        assert td_dest.batch_size == td_source.batch_size
+        assert td_dest["td"].batch_size == td_source["td"].batch_size
+        assert td_dest["td", "foo"].shape == td_source["td", "foo"].shape
+        assert (
+            td_dest["td", "nested"].batch_size == td_source["td", "nested"].batch_size
+        )
+        assert (
+            td_dest["td", "nested", "bar"].shape
+            == td_source["td", "nested", "bar"].shape
+        )
+        assert td_dest["tc"].batch_size == td_source["tc"].batch_size
+        assert td_dest["tc"].a == td_source["tc"].a
+        assert (td_dest["tc"].b == td_source["tc"].b).all()
+
+    def test_update_batch_size_errors(self):
+        td0 = TensorDict(batch_size=(3,))
+        td1 = TensorDict(batch_size=(4,))
+        with pytest.raises(RuntimeError, match="update_batch_size"):
+            td0.update(td1)
+        td0.update(td1, update_batch_size=True)
+        assert td0.batch_size == td1.batch_size
+        td0 = TensorDict(batch_size=(3,))
+        with pytest.raises(RuntimeError, match="inplace"):
+            td0.update(td1, update_batch_size=True, inplace=True)
+
+        td0 = TensorDict(batch_size=(3,), lock=True)
+        with pytest.raises(RuntimeError, match="lock"):
+            td0.update(td1, update_batch_size=True)
+        td0_stack = lazy_stack([td0, td0]).lock_()
+        td1_stack = lazy_stack([td1, td1]).lock_()
+        with pytest.raises(RuntimeError, match="lock"):
+            td0_stack.update(td1_stack, update_batch_size=True)
+
+        td0 = TensorDict(a=torch.zeros((3,)), batch_size=(3,))
+        td1 = TensorDict(a=torch.zeros((4,)), batch_size=(4,))
+        with pytest.raises(RuntimeError, match="keys_to_update"):
+            td0.update(td1, update_batch_size=True, keys_to_update=[("a",)])
+
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)
@@ -3825,7 +3941,8 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(ValueError, match="Failed to update"):
                 td.apply(get_old_val, td_c, inplace=inplace, default=None)
             return
-        td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
+        with td.unlock_() if inplace else contextlib.nullcontext():
+            td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
         if inplace:
             for key in td.keys(True, True):
                 td_c_val = td_c.get(key)
@@ -7496,7 +7613,8 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="a leaf Variable"):
                 sub_td.update(td0)
             return
-        sub_td.update(td0)
+        with td.unlock_():
+            sub_td.update(td0)
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
 

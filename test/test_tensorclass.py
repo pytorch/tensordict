@@ -234,6 +234,12 @@ except Exception:
     MyTensorClass_autocast = MyTensorClass_nocast = MyTensorClass = None
 
 
+@tensorclass
+class TCStrings:
+    a: str
+    b: str
+
+
 class TestTensorClass:
     def test_get_default(self):
         @tensorclass
@@ -1252,6 +1258,21 @@ class TestTensorClass:
         assert isinstance(data2, MyData)
         assert data2.z == data.z
 
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_pickle_consolidate(self, consolidate):
+        with set_capture_non_tensor_stack(False):
+
+            tc = TCStrings(a="a", b="b")
+
+            tcstack = TensorDict(tc=torch.stack([tc, tc.clone()]))
+            if consolidate:
+                tcstack = tcstack.consolidate()
+            assert isinstance(tcstack["tc"], TCStrings)
+            loaded = pickle.loads(pickle.dumps(tcstack))
+            assert isinstance(loaded["tc"], TCStrings)
+            assert loaded["tc"].a == tcstack["tc"].a
+            assert loaded["tc"].b == tcstack["tc"].b
+
     def test_post_init(self):
         @tensorclass
         class MyDataPostInit:
@@ -1379,7 +1400,7 @@ class TestTensorClass:
         # check that you can't mess up the batch_size
         with pytest.raises(
             RuntimeError,
-            match=re.escape("the tensor smth has shape torch.Size([1]) which"),
+            match=re.escape("the Tensor smth has shape torch.Size([1]) which"),
         ):
             data.set("z", TensorDict({"smth": torch.zeros(1)}, []))
         # check that you can't write any attribute
@@ -1491,7 +1512,7 @@ class TestTensorClass:
         # check that you can't mess up the batch_size
         with pytest.raises(
             RuntimeError,
-            match=re.escape("the tensor smth has shape torch.Size([1]) which"),
+            match=re.escape("the Tensor smth has shape torch.Size([1]) which"),
         ):
             data.z = TensorDict({"smth": torch.zeros(1)}, [])
         # check that you can't write any attribute

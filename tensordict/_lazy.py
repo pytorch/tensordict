@@ -383,7 +383,7 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim_name=None,
         stack_dim=0,
     ):
-        return LazyStackedTensorDict(
+        return cls._new_lazy_unsafe(
             *(
                 TensorDict.from_dict(
                     input_dict[str(i)],
@@ -2696,6 +2696,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=stack_dim)
 
+    @lock_blocked
     def update(
         self,
         input_dict_or_td: T,
@@ -2704,6 +2705,7 @@ class LazyStackedTensorDict(TensorDictBase):
         keys_to_update: Sequence[NestedKey] | None = None,
         non_blocking: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
         **kwargs: Any,
     ) -> T:
         # This implementation of update is compatible with exclusive keys
@@ -2735,9 +2737,29 @@ class LazyStackedTensorDict(TensorDictBase):
                     [td.copy() for td in input_dict_or_td.tensordicts[len(tds) :]]
                 )
             elif len(input_dict_or_td.tensordicts) != len(self.tensordicts):
-                raise ValueError(
-                    "cannot update stacked tensordicts with different shapes."
-                )
+                if update_batch_size:
+                    keys_source = set(input_dict_or_td.keys(True))
+                    keys_dest = set(self.keys(True))
+                    if not keys_dest.issubset(keys_source):
+                        raise RuntimeError(
+                            "Some keys of the dest tensordict are not present in the source "
+                            "during update with mismatching batch-size. "
+                            f"batch_size of source={input_dict_or_td.batch_size}, batch_size of dest={self.batch_size}, "
+                            f"keys in dest but not in source: {{{keys_dest - keys_source}}}."
+                        )
+                    self.__init__(
+                        *input_dict_or_td.tensordicts,
+                        stack_dim=self.stack_dim,
+                        hook_out=self.hook_out,
+                        hook_in=self.hook_in,
+                        stack_dim_name=self._td_dim_name,
+                    )
+                    return self
+
+                else:
+                    raise ValueError(
+                        "cannot update stacked tensordicts with different shapes when update_batch_size=False."
+                    )
             for td_dest, td_source in _zip_strict(tds, input_dict_or_td.tensordicts):
                 td_dest.update(
                     td_source,
