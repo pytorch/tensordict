@@ -1786,7 +1786,7 @@ def _check_keys(
         if not strict:
             keys_set = keys_set.intersection(k)
         else:
-            if is_compiling():
+            if is_comp:
                 k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
