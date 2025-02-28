@@ -1076,7 +1076,8 @@ class TensorDictModule(TensorDictModuleBase):
                     f"Typical accepted types are nn.Module or TensorDictModule."
                 )
         else:
-            if not hasattr(module, method) and callable(getattr(module, method)):
+            breakpoint()
+            if not (hasattr(module, method) and callable(getattr(module, method))):
                 raise ValueError(
                     f"Module {module} does not have a callable method {method}. "
                 )
