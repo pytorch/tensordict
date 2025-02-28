@@ -9395,6 +9395,19 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
 
+    def test_neg_dim_lazystack(self):
+        td0 = TensorDict(batch_size=(3, 5))
+        td1 = TensorDict(batch_size=(4, 5))
+        assert lazy_stack([td0, td1], -1).shape == (-1, 5, 2)
+        assert lazy_stack([td0, td1], -2).shape == (-1, 2, 5)
+        assert lazy_stack([td0, td1], -3).shape == (2, -1, 5)
+        with pytest.raises(RuntimeError):
+            assert lazy_stack([td0, td1], -4)
+        with pytest.raises(RuntimeError):
+            assert lazy_stack([td0, td1, TensorDict()])
+        with pytest.raises(RuntimeError):
+            assert lazy_stack([TensorDict(), td0, td1])
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )
