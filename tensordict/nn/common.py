@@ -1072,14 +1072,12 @@ class TensorDictModule(TensorDictModuleBase):
         if method is None:
             if type(module) is type or not callable(module):
                 raise ValueError(
-                    f"Module {module} if type {type(module)} is not callable. "
+                    f"Module {module} of type {type(module)} is not callable. "
                     f"Typical accepted types are nn.Module or TensorDictModule."
                 )
         else:
             if not (hasattr(module, method) and callable(getattr(module, method))):
-                raise ValueError(
-                    f"Module {module} does not have a callable method {method}. "
-                )
+                raise ValueError(f"Module {module} does not have a method {method}. ")
         self.out_keys = out_keys
         self.in_keys = in_keys
 
