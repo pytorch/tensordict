@@ -250,9 +250,13 @@ class LazyStackedTensorDict(TensorDictBase):
             td0 = tensordicts[0]
             device = td0.device
         if stack_dim < 0:
-            raise RuntimeError(
-                f"stack_dim must be non negative, got stack_dim={stack_dim}"
-            )
+            ndim = td0.ndim
+            try:
+                stack_dim = _maybe_correct_neg_dim(stack_dim, ndim=ndim + 1, shape=None)
+            except Exception:
+                raise RuntimeError(
+                    f"Couldn't infer stack dim from negative value, got stack_dim={stack_dim}"
+                )
         _batch_size = td0.batch_size
         if stack_dim > len(_batch_size):
             raise RuntimeError(
