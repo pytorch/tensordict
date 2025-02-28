@@ -2214,6 +2214,8 @@ def capture_non_tensor_stack(allow_none=False):
         return None
     elif _CAPTURE_NONTENSOR_STACK is None:
         return _DEFAULT_CAPTURE_NONTENSOR_STACK
+    elif _CAPTURE_NONTENSOR_STACK == "none":
+        return _DEFAULT_CAPTURE_NONTENSOR_STACK
     return (
         strtobool(_CAPTURE_NONTENSOR_STACK)
         if isinstance(_CAPTURE_NONTENSOR_STACK, str)
