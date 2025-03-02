@@ -63,8 +63,8 @@ def write_version_file(version):
 
 
 def _get_pytorch_version(is_nightly, is_local):
-    # if "PYTORCH_VERSION" in os.environ:
-    #     return f"torch=={os.environ['PYTORCH_VERSION']}"
+    if "PYTORCH_VERSION" in os.environ:
+         return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
         return "torch>=2.7.0.dev"
     if is_local:
