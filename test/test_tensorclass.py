@@ -15,6 +15,7 @@ import pickle
 import re
 import sys
 import weakref
+from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -743,6 +744,17 @@ class TestTensorClass:
 
         assert (a != c.clone().zero_()).any()
         assert (c != a.clone().zero_()).any()
+
+    def test_field(self):
+        class Cls(TensorClass):
+            a: torch.Tensor
+            b: str
+            c: dict = field(default_factory=dict)
+
+        obj = Cls(a=torch.arange(3), b="abc", batch_size=[3])
+        assert obj[0].a == obj[1].a - 1
+        assert obj[0].b == obj[1].b
+        assert obj[0].c is obj[1].c
 
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)
