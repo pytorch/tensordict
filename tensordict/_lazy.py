@@ -1538,7 +1538,9 @@ class LazyStackedTensorDict(TensorDictBase):
                             list_of_entries, layout=layout
                         )
                     else:
-                        raise NotImplementedError
+                        raise NotImplementedError(
+                            f"stack_dim is {self.stack_dim} but not 0. Densify canot be done."
+                        )
             else:
                 tensor = self._get_str(key, None)
                 if tensor is not None:
