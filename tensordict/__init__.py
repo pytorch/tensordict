@@ -69,7 +69,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from tensordict._pytree import *
-from tensordict.nn import TensorDictParams
+from tensordict.nn import as_tensordict_module, TensorDictParams
 
 try:
     from tensordict.version import __version__  # @manual=//pytorch/tensordict:version

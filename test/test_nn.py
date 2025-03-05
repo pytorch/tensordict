@@ -26,6 +26,7 @@ from tensordict import (
 )
 from tensordict._C import unravel_key_list
 from tensordict.nn import (
+    as_tensordict_module,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -3949,6 +3950,28 @@ class TestToModule:
             linear(torch.randn(3))
         assert len(list(linear.parameters())) == 2
         assert (TensorDict.from_module(linear) == params).all()
+
+
+class TestAsTDM:
+    @pytest.mark.parametrize("in_keys", ["c", ["c"]])
+    @pytest.mark.parametrize("out_keys", ["d", ["d"]])
+    def test_module(self, in_keys, out_keys):
+        class A:
+            @as_tensordict_module(in_keys=in_keys, out_keys=out_keys)
+            def func(self, c):
+                return c + 1
+
+        a = A()
+        assert a.func(TensorDict(c=0))["d"] == 1
+
+    @pytest.mark.parametrize("in_keys", ["c", ["c"]])
+    @pytest.mark.parametrize("out_keys", ["d", ["d"]])
+    def test_free_func(self, in_keys, out_keys):
+        @as_tensordict_module(in_keys=in_keys, out_keys=out_keys)
+        def func(c):
+            return c + 1
+
+        assert func(TensorDict(c=0))["d"] == 1
 
 
 if __name__ == "__main__":
