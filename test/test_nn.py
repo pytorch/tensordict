@@ -689,6 +689,24 @@ class TestTDModule:
             out_keys=["out"],
         )
         assert tdm(TensorDict())["out"] == "a string!"
+        tdm = TensorDictModule(
+            lambda a_string: a_string + " is a string!",
+            in_keys=["string"],
+            out_keys=["another string"],
+        )
+        assert (
+            tdm(TensorDict(string="a string"))["another string"]
+            == "a string is a string!"
+        )
+        tdm = TensorDictModule(
+            lambda string: string + " is a string!",
+            in_keys={"string": "key"},
+            out_keys=["another string"],
+            out_to_in_map=True,
+        )
+        assert (
+            tdm(TensorDict(key="a string"))["another string"] == "a string is a string!"
+        )
 
     @pytest.mark.parametrize(
         "out_keys",
