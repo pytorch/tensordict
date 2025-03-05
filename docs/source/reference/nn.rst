@@ -201,6 +201,7 @@ to build distributions from network outputs and get summary statistics or sample
     WrapModule
     set_composite_lp_aggregate
     composite_lp_aggregate
+    as_tensordict_module
 
 Ensembles
 ---------

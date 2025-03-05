@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
+from functools import wraps
 from textwrap import indent
 from typing import (
     Any,
@@ -1432,3 +1433,76 @@ class WrapModule(TensorDictModuleBase):
         if self.inplace and result is not data:
             return data.update(result)
         return result
+
+
+class as_tensordict_module:
+    """A decorator that converts a function into a TensorDictModule.
+
+    Args:
+        in_keys (List[NestedKey] | NestedKey | None, optional): The input keys of the resulting TensorDictModule.
+        out_keys (List[NestedKey] | NestedKey | None, optional): The output keys of the resulting TensorDictModule.
+
+    Returns:
+        Callable: A decorator that can be applied to a function to convert it into a TensorDictModule.
+
+    Examples:
+        >>> class MyClass:
+        ...     @as_tensordict_module(in_keys="c", out_keys="d")
+        ...     def my_method(self, c):
+        ...         return c + 1
+        >>> obj = MyClass()
+        >>> result = obj.my_method(TensorDict(c=0))
+        >>> print(result["d"])  # prints: 1
+        >>> @as_tensordict_module(in_keys="c", out_keys="d")
+        ... def my_function(c):
+        ...     return c + 1
+        >>> result = my_function(TensorDict(c=0))
+        >>> print(result["d"])  # prints: 1
+    """
+
+    def __init__(
+        self,
+        *,
+        in_keys: List[NestedKey] | NestedKey,
+        out_keys: List[NestedKey] | NestedKey,
+    ) -> None:
+        if isinstance(in_keys, NestedKey):
+            in_keys = [in_keys]
+        if isinstance(out_keys, NestedKey):
+            out_keys = [out_keys]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    def __call__(self, func):
+        tdmodule = None
+        is_bound_method = inspect.ismethod(func) or (
+            inspect.isfunction(func) and "self" in inspect.signature(func).parameters
+        )
+
+        if is_bound_method:
+
+            @wraps(func)
+            def wrapped(_self, *args, **kwargs):
+                nonlocal tdmodule
+                if tdmodule is None:
+
+                    def newfunc(*args, **kwargs):
+                        return func(_self, *args, **kwargs)
+
+                    tdmodule = TensorDictModule(
+                        newfunc, in_keys=self.in_keys, out_keys=self.out_keys
+                    )
+                return tdmodule(*args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapped(*args, **kwargs):
+                nonlocal tdmodule
+                if tdmodule is None:
+                    tdmodule = TensorDictModule(
+                        func, in_keys=self.in_keys, out_keys=self.out_keys
+                    )
+                return tdmodule(*args, **kwargs)
+
+        return wrapped
