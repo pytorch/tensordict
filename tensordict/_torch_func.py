@@ -464,6 +464,7 @@ def _stack(
         return type(list_of_tensordicts[0])._stack_non_tensor(
             list_of_tensordicts, dim=dim
         )
+    list_of_tensordicts_orig = list_of_tensordicts
     if is_tc:
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
         clz = type(list_of_tensordicts[0])
@@ -503,7 +504,7 @@ def _stack(
                     if maybe_dense_stack:
                         with set_lazy_legacy(True):
                             return _stack(
-                                list_of_tensordicts,
+                                list_of_tensordicts_orig,
                                 dim=dim,
                                 maybe_dense_stack=maybe_dense_stack,
                             )
@@ -537,7 +538,7 @@ def _stack(
                             lazy_stack_dim += 1
                         else:
                             dim = dim - 1
-                        return LazyStackedTensorDict(
+                        result = LazyStackedTensorDict(
                             *[
                                 _stack(
                                     list(subtds),
@@ -550,12 +551,16 @@ def _stack(
                             ],
                             stack_dim=lazy_stack_dim,
                         )
+                        if is_tc:
+                            return clz._from_tensordict(result)
+                        return result
+
                 lazy_stack_dim = list_of_tensordicts[0].stack_dim
                 if dim <= lazy_stack_dim:
                     lazy_stack_dim += 1
                 else:
                     dim = dim - 1
-                return LazyStackedTensorDict(
+                result = LazyStackedTensorDict(
                     *[
                         _stack(list_of_td, dim, maybe_dense_stack=maybe_dense_stack)
                         for list_of_td in _zip_strict(
@@ -564,6 +569,9 @@ def _stack(
                     ],
                     stack_dim=lazy_stack_dim,
                 )
+                if is_tc:
+                    return clz._from_tensordict(result)
+                return result
 
             out = {}
             for key in keys:
@@ -594,7 +602,7 @@ def _stack(
                                 if maybe_dense_stack:
                                     with set_lazy_legacy(True):
                                         return _stack(
-                                            list_of_tensordicts,
+                                            list_of_tensordicts_orig,
                                             dim=dim,
                                             maybe_dense_stack=maybe_dense_stack,
                                         )
@@ -641,6 +649,9 @@ def _stack(
                 *list_of_tensordicts,
                 stack_dim=dim,
             )
+            if is_tc:
+                return td_types[0]._from_tensordict(out)
+            return out
     else:
         keys = _check_keys(list_of_tensordicts)
         batch_size = list(batch_size)
