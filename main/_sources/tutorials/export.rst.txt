@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.5596, 1.0007, 0.0000, 0.2466]], grad_fn=<ReluBackward0>), tensor([[-0.1685,  0.5548,  0.5167,  0.0693]], grad_fn=<AddmmBackward0>), tensor([[-0.1685,  0.5548]], grad_fn=<SplitBackward0>), tensor([[1.3543, 1.0441]], grad_fn=<ClampMinBackward0>), tensor([[-0.1685,  0.5548]], grad_fn=<SplitBackward0>))
+    (tensor([[0.4563, 0.4852, 0.0000, 0.6236]], grad_fn=<ReluBackward0>), tensor([[ 0.1332,  0.5585, -0.2093,  0.7419]], grad_fn=<AddmmBackward0>), tensor([[0.1332, 0.5585]], grad_fn=<SplitBackward0>), tensor([[0.8737, 1.5254]], grad_fn=<ClampMinBackward0>), tensor([[0.1332, 0.5585]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  548.84 micro-seconds
-    Time for exported module:  346.42 micro-seconds
+    Time for TDModule:  530.96 micro-seconds
+    Time for exported module:  360.97 micro-seconds
 
 
 
@@ -292,7 +292,7 @@ and the FX graph:
 
     class GraphModule(torch.nn.Module):
         def forward(self, p_l__args___0_module_0_module_weight: "f32[4, 3]", p_l__args___0_module_0_module_bias: "f32[4]", p_l__args___0_module_2_module_weight: "f32[4, 4]", p_l__args___0_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-             # File: /pytorch/tensordict/tensordict/nn/common.py:1146 in _call_module, code: out = self.module(*tensors, **kwargs)
+             # File: /pytorch/tensordict/tensordict/nn/common.py:1149 in _call_module, code: out = self.module(*tensors, **kwargs)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
@@ -318,7 +318,7 @@ and the FX graph:
         
     fx graph: class GraphModule(torch.nn.Module):
         def forward(self, p_l__args___0_module_0_module_weight: "f32[4, 3]", p_l__args___0_module_0_module_bias: "f32[4]", p_l__args___0_module_2_module_weight: "f32[4, 4]", p_l__args___0_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-             # File: /pytorch/tensordict/tensordict/nn/common.py:1146 in _call_module, code: out = self.module(*tensors, **kwargs)
+             # File: /pytorch/tensordict/tensordict/nn/common.py:1149 in _call_module, code: out = self.module(*tensors, **kwargs)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[-0.1685,  0.5548]], grad_fn=<SplitBackward0>)
+    tensor([[0.1332, 0.5585]], grad_fn=<SplitBackward0>)
 
 
 
@@ -657,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.594 seconds)
+   **Total running time of the script:** (0 minutes 1.571 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

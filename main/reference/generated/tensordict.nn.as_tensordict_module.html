@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>composite_lp_aggregate &mdash; tensordict main documentation</title>
+  <title>as_tensordict_module &mdash; tensordict main documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="as_tensordict_module" href="tensordict.nn.as_tensordict_module.html" />
-    <link rel="prev" title="set_composite_lp_aggregate" href="tensordict.nn.set_composite_lp_aggregate.html" />
+    <link rel="next" title="tensordict.nn.EnsembleModule" href="tensordict.nn.EnsembleModule.html" />
+    <link rel="prev" title="composite_lp_aggregate" href="tensordict.nn.composite_lp_aggregate.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -322,13 +322,13 @@
         
           <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
         
-      <li>composite_lp_aggregate</li>
+      <li>as_tensordict_module</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/tensordict.nn.composite_lp_aggregate.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.nn.as_tensordict_module.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -354,20 +354,40 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="composite-lp-aggregate">
-<h1>composite_lp_aggregate<a class="headerlink" href="#composite-lp-aggregate" title="Permalink to this heading">¶</a></h1>
+  <section id="as-tensordict-module">
+<h1>as_tensordict_module<a class="headerlink" href="#as-tensordict-module" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="tensordict.nn.composite_lp_aggregate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nowarn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.composite_lp_aggregate" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns whether a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p>
+<dt class="sig sig-object py" id="tensordict.nn.as_tensordict_module">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">as_tensordict_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.as_tensordict_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>A decorator that converts a function into a TensorDictModule.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>nowarn</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – whether to ignore warnings. Defaults to False.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The input keys of the resulting TensorDictModule.</p></li>
+<li><p><strong>out_keys</strong> (<em>List</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The output keys of the resulting TensorDictModule.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A decorator that can be applied to a function to convert it into a TensorDictModule.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Callable</p>
 </dd>
 </dl>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_composite_lp_aggregate()</span></code></a></p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="nd">@as_tensordict_module</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="s2">&quot;d&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">my_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">my_method</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">])</span>  <span class="c1"># prints: 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@as_tensordict_module</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="s2">&quot;d&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">my_function</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">my_function</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">])</span>  <span class="c1"># prints: 1</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -381,10 +401,10 @@
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.nn.as_tensordict_module.html" class="btn btn-neutral float-right" title="as_tensordict_module" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.EnsembleModule.html" class="btn btn-neutral float-right" title="tensordict.nn.EnsembleModule" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.nn.set_composite_lp_aggregate.html" class="btn btn-neutral" title="set_composite_lp_aggregate" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.composite_lp_aggregate.html" class="btn btn-neutral" title="composite_lp_aggregate" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -416,7 +436,7 @@
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">composite_lp_aggregate</a></li>
+<li><a class="reference internal" href="#">as_tensordict_module</a></li>
 </ul>
 
             </div>
