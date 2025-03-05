@@ -787,8 +787,23 @@ class TestTensorClass:
         assert isinstance(x["a"], torch.Tensor)
         assert isinstance(x["b"], torch.Tensor)
         assert isinstance(x["c"], torch.Tensor)
+
         x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
         assert is_tensorclass(x)
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, torch.Tensor)
+
+        @dataclasses.dataclass
+        class MyOtherDataClass:
+            a: int = 0
+            b: int = 0
+            c: int = 0
+
+        cls = from_dataclass(MyOtherDataClass)
+        x = from_dataclass(MyOtherDataClass(), dest_cls=cls)
+        assert is_tensorclass(x)
+        assert type(x) is cls
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
         assert isinstance(x.c, torch.Tensor)

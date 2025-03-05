@@ -12023,6 +12023,7 @@ class TensorDictBase(MutableMapping):
         cls,
         dataclass,
         *,
+        dest_cls: Type | None = None,
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
         as_tensorclass: bool = False,
@@ -12035,6 +12036,8 @@ class TensorDictBase(MutableMapping):
             dataclass: The dataclass instance to be converted.
 
         Keyword Args:
+            dest_cls (tensorclass, optional): A tensorclass type to be used to map the data. If not provided, a new
+                class is created. Without effect if :attr:`obj` is a type or as_tensorclass is `False`.
             auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the
                 resulting TensorDict. Defaults to ``False``.
             batch_dims (int, optional): If ``auto_batch_size`` is ``True``, defines how many dimensions the output
@@ -12067,7 +12070,14 @@ class TensorDictBase(MutableMapping):
         if as_tensorclass:
             from tensordict.tensorclass import from_dataclass
 
-            return from_dataclass(dataclass, auto_batch_size=auto_batch_size)
+            return from_dataclass(
+                dataclass,
+                auto_batch_size=auto_batch_size,
+                dest_cls=dest_cls,
+                batch_dims=batch_dims,
+                batch_size=batch_size,
+                device=device,
+            )
         from dataclasses import fields
 
         from tensordict import TensorDict
