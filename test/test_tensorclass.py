@@ -1889,7 +1889,8 @@ class TestTensorClass:
         assert squeeze_tc.y.X.shape == torch.Size([4, 5])
         assert squeeze_tc.z == squeeze_tc.y.z == z
 
-    @pytest.mark.parametrize("lazy", [True, False])
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("lazy", [True, False, "maybe"])
     def test_stack(self, lazy):
         @tensorclass
         class MyDataNested:
@@ -1898,23 +1899,40 @@ class TestTensorClass:
             y: "MyDataNested" = None
 
         X = torch.ones(3, 4, 5)
+        if lazy:
+            Xb = torch.randn(3, 4, 4)
+        else:
+            Xb = X.clone()
         z = "test_tensorclass"
         batch_size = [3, 4]
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data_nest_b = MyDataNested(X=Xb, z=z, batch_size=batch_size)
         data1 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        data2 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+        data2 = MyDataNested(X=Xb, y=data_nest_b, z=z, batch_size=batch_size)
 
-        if lazy:
+        if lazy is True:
             stacked_tc = LazyStackedTensorDict.lazy_stack([data1, data2], 0)
+        elif lazy == "maybe":
+            stacked_tc = LazyStackedTensorDict.maybe_dense_stack([data1, data2], 0)
         else:
             with set_capture_non_tensor_stack(True):
                 stacked_tc = torch.stack([data1, data2], 0)
         assert type(stacked_tc) is type(data1)
         assert isinstance(stacked_tc.y, type(data1.y))
-        assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
-        assert stacked_tc.y.X.shape == torch.Size([2, 3, 4, 5])
-        assert (stacked_tc.X == 1).all()
-        assert (stacked_tc.y.X == 1).all()
+        if not lazy:
+            assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
+            assert stacked_tc.y.X.shape == torch.Size([2, 3, 4, 5])
+
+            assert (stacked_tc.X == 1).all()
+            assert (stacked_tc.y.X == 1).all()
+        else:
+            assert stacked_tc[0].X.shape == torch.Size([3, 4, 5])
+            assert stacked_tc[0].y.X.shape == torch.Size([3, 4, 5])
+            assert stacked_tc[1].X.shape == torch.Size([3, 4, 4])
+            assert stacked_tc[1].y.X.shape == torch.Size([3, 4, 4])
+            assert (stacked_tc[0].X == 1).all()
+            assert (stacked_tc[0].y.X == 1).all()
+
         if lazy_legacy() or lazy:
             assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
             assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
