@@ -1169,7 +1169,9 @@ class TensorDictModule(TensorDictModuleBase):
             if self._kwargs is not None:
                 kwargs.update(
                     {
-                        kwarg: tensordict.get(in_key, default=default)
+                        kwarg: tensordict._get_tuple_maybe_non_tensor(
+                            _unravel_key_to_tuple(in_key), default=default
+                        )
                         for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
                 )
