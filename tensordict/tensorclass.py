@@ -558,6 +558,7 @@ class _tensorclass_dec:
 def from_dataclass(
     obj: Any,
     *,
+    dest_cls: Type | None = None,
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
     batch_size: torch.Size | None = None,
@@ -577,6 +578,8 @@ def from_dataclass(
         obj (Any): The dataclass instance or type to be converted. If a type is provided, a new class is returned.
 
     Keyword Args:
+        dest_cls (tensorclass, optional): A tensorclass type to be used to map the data. If not provided, a new
+            class is created. Without effect if :attr:`obj` is a type.
         auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the resulting object. Defaults to ``False``.
         batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output tensordict should have. Defaults to ``None`` (full batch-size at each level).
         batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
@@ -655,15 +658,18 @@ def from_dataclass(
     if not is_dataclass(obj):
         raise TypeError(f"Expected a obj input, got a {type(obj)} input instead.")
     name = obj.__class__.__name__ + "_tc"
-    clz = _tensorclass(
-        make_dataclass(name, fields=obj.__dataclass_fields__),
-        frozen=frozen,
-        shadow=shadow,
-    )
-    clz._autocast = autocast
-    clz._nocast = nocast
-    clz._shadow = shadow
-    clz._frozen = frozen
+    if dest_cls is None:
+        clz = _tensorclass(
+            make_dataclass(name, fields=obj.__dataclass_fields__),
+            frozen=frozen,
+            shadow=shadow,
+        )
+        clz._autocast = autocast
+        clz._nocast = nocast
+        clz._shadow = shadow
+        clz._frozen = frozen
+    else:
+        clz = dest_cls
     result = clz(**asdict(obj), batch_size=batch_size, device=device)
     if auto_batch_size:
         if batch_size is not None:
