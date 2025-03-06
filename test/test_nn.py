@@ -1009,6 +1009,41 @@ class TestTDModule:
 
 
 class TestTDSequence:
+    @pytest.mark.parametrize("inplace", [True, False, None])
+    @pytest.mark.parametrize("module_inplace", [True, False])
+    def test_tdseq_inplace(self, inplace, module_inplace):
+        model = TensorDictSequential(
+            TensorDictModule(
+                lambda x: (x + 1, x - 1),
+                in_keys=["input"],
+                out_keys=[("intermediate", "0"), ("intermediate", "1")],
+                inplace=module_inplace,
+            ),
+            TensorDictModule(
+                lambda y0, y1: y0 * y1,
+                in_keys=[("intermediate", "0"), ("intermediate", "1")],
+                out_keys=["output"],
+                inplace=module_inplace,
+            ),
+            inplace=inplace,
+        )
+        input = TensorDict(input=torch.zeros(()))
+        output = model(input)
+        if inplace:
+            assert output is input
+            assert "input" in output
+        else:
+            if not module_inplace or inplace is False:
+                # In this case, inplace=False and inplace=None have the same behavior
+                assert output is not input, (module_inplace, inplace)
+                assert "input" not in output, (module_inplace, inplace)
+            else:
+                # In this case, inplace=False and inplace=None have the same behavior
+                assert output is input, (module_inplace, inplace)
+                assert "input" in output, (module_inplace, inplace)
+
+        assert "output" in output
+
     def test_ordered_dict(self):
         linear = nn.Linear(3, 4)
         linear.weight.data.fill_(0)
