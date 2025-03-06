@@ -1089,9 +1089,9 @@ class TensorDictModule(TensorDictModuleBase):
             )
 
         self.module = module
-        if inplace not in (True, False, "empty"):
+        if inplace not in (None, True, False, "empty"):
             raise ValueError(
-                f"The only accepted valued for inplace is `True`, `False`, or `'empty'`. Got inplace={inplace} "
+                f"The only accepted valued for inplace is `None`, `True`, `False`, or `'empty'`. Got inplace={inplace} "
                 "instead."
             )
         self.inplace = inplace

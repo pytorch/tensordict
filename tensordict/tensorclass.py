@@ -1694,6 +1694,12 @@ def _update(
         update_batch_size=update_batch_size,
         ignore_lock=ignore_lock,
     )
+    # We also need to remove things from non_tensordict
+    if self._non_tensordict:
+        keys = set(self._tensordict.keys())
+        ntd = {k: val for k, val in self._non_tensordict.items() if k not in keys}
+        self._non_tensordict.clear()
+        self._non_tensordict.update(ntd)
     return self
 
 
