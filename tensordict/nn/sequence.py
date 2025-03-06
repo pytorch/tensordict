@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterable, List, OrderedDict, overload
 
 from tensordict._nestedkey import NestedKey
+from tensordict._td import TensorDict
 
 from tensordict.nn.common import (
     dispatch,
@@ -61,14 +62,17 @@ class TensorDictSequential(TensorDictModule):
             Regular ``dict`` inputs will be converted to ``OrderedDict`` if necessary.
 
     Keyword Args:
-         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
+        partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any. Defaults to False.
-         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
+        selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
+        inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
+            output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
 
     .. note::
         A :class:`TensorDictSequential` instance may have a long list of output keys, and one may wish to remove
@@ -185,6 +189,7 @@ class TensorDictSequential(TensorDictModule):
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
+        inplace: bool | None = None,
     ) -> None: ...
 
     @overload
@@ -194,6 +199,7 @@ class TensorDictSequential(TensorDictModule):
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
+        inplace: bool | None = None,
     ) -> None: ...
 
     def __init__(
@@ -201,6 +207,7 @@ class TensorDictSequential(TensorDictModule):
         *modules: Callable[[TensorDictBase], TensorDictBase],
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
+        inplace: bool | None = None,
     ) -> None:
 
         if len(modules) == 1 and isinstance(modules[0], collections.OrderedDict):
@@ -236,6 +243,7 @@ class TensorDictSequential(TensorDictModule):
                 module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
             )
 
+        self.inplace = inplace
         self.partial_tolerant = partial_tolerant
         if selected_out_keys:
             self._select_before_return = True
@@ -452,6 +460,43 @@ class TensorDictSequential(TensorDictModule):
                 in_keys=['b'],
                 out_keys=['d', 'e'])
 
+        The `inplace` argument allows for a fine-grained control over the output type, allowing for instance to write
+        the result of the computational graph in the input object without tracking the intermediate tensors.
+
+        Example:
+            >>> import torch
+            >>> from tensordict import TensorClass
+            >>> from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+            >>>
+            >>> class MyClass(TensorClass):
+            ...     input: torch.Tensor
+            ...     output: torch.Tensor | None = None
+            >>>
+            >>> obj = MyClass(torch.randn(2, 3), batch_size=(2,))
+            >>>
+            >>> model = Seq(
+            ...     Mod(
+            ...         lambda x: (x + 1, x - 1),
+            ...         in_keys=["input"],
+            ...         out_keys=[("intermediate", "0"), ("intermediate", "1")],
+            ...         inplace=False
+            ...         ),
+            ...     Mod(
+            ...         lambda y0, y1: y0 * y1,
+            ...         in_keys=[("intermediate", "0"), ("intermediate", "1")],
+            ...         out_keys=["output"],
+            ...         inplace=False
+            ...         ),
+            ...     inplace=True, )
+            >>> print(model(obj))
+            MyClass(
+                input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                output=None,
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
+
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
@@ -558,6 +603,14 @@ class TensorDictSequential(TensorDictModule):
             tensordict_exec = tensordict.copy()
         else:
             tensordict_exec = tensordict
+        if tensordict_out is None:
+            if self.inplace is True:
+                tensordict_out = tensordict
+            elif self.inplace is False:
+                tensordict_out = TensorDict()
+            elif self.inplace == "empty":
+                tensordict_out = tensordict.empty()
+
         if not len(kwargs):
             for module in self._module_iter():
                 try:

@@ -1939,7 +1939,8 @@ def _from_dict(
         # We don't want to enforce them to be tensorclasses so we can't do much about it...
         return cls.from_tensordict(
             tensordict=TensorDict(
-                batch_size=batch_size, device=device, batch_dims=batch_dims
+                batch_size=batch_size,
+                device=device,
             ),
             non_tensordict=input_dict,
         )
