@@ -2696,10 +2696,9 @@ class TensorDict(TensorDictBase):
         return self
 
     def _get_str(self, key, default):
-        first_key = key
-        out = self._tensordict.get(first_key)
+        out = self._tensordict.get(key)
         if out is None:
-            return self._default_get(first_key, default)
+            return self._default_get(key, default)
         return out
 
     def _get_tuple(self, key, default):
