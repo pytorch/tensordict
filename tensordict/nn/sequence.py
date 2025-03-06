@@ -218,7 +218,10 @@ class TensorDictSequential(TensorDictModule):
                 **{key: val for key, val in _zip_strict(modules[0], modules_vals)}
             )
             super().__init__(
-                module=nn.ModuleDict(modules), in_keys=in_keys, out_keys=out_keys
+                module=nn.ModuleDict(modules),
+                in_keys=in_keys,
+                out_keys=out_keys,
+                inplace=inplace,
             )
         elif len(modules) == 1 and isinstance(
             modules[0], collections.abc.MutableSequence
@@ -227,20 +230,27 @@ class TensorDictSequential(TensorDictModule):
             in_keys, out_keys = self._compute_in_and_out_keys(modules)
             self._complete_out_keys = list(out_keys)
             super().__init__(
-                module=nn.ModuleList(modules), in_keys=in_keys, out_keys=out_keys
+                module=nn.ModuleList(modules),
+                in_keys=in_keys,
+                out_keys=out_keys,
+                inplace=inplace,
             )
         elif len(modules) == 1 and isinstance(modules[0], dict):
             return self.__init__(
                 collections.OrderedDict(modules[0]),
                 partial_tolerant=partial_tolerant,
                 selected_out_keys=selected_out_keys,
+                inplace=inplace,
             )
         else:
             modules = self._convert_modules(modules)
             in_keys, out_keys = self._compute_in_and_out_keys(modules)
             self._complete_out_keys = list(out_keys)
             super().__init__(
-                module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
+                module=nn.ModuleList(list(modules)),
+                in_keys=in_keys,
+                out_keys=out_keys,
+                inplace=inplace,
             )
 
         self.inplace = inplace
@@ -628,6 +638,7 @@ class TensorDictSequential(TensorDictModule):
             )
         if tensordict_out is not None:
             result = tensordict_out
+            print('here! update')
             result.update(tensordict_exec, keys_to_update=self.out_keys)
         else:
             result = tensordict_exec
