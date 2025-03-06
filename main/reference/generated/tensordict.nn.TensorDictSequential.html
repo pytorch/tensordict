@@ -382,6 +382,9 @@ stack does not have the required keys, then TensorDictSequential will scan throu
 looking for those that have the required keys, if any. Defaults to False.</p></li>
 <li><p><strong>selected_out_keys</strong> (<em>iterable of NestedKeys</em><em>, </em><em>optional</em>) – the list of out-keys to select. If not provided, all
 <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> will be written.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, the input tensordict is modified in-place. If <cite>False</cite>, a new empty
+<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance is created. If <cite>“empty”</cite>, <cite>input.empty()</cite> is used instead (ie, the
+output preserves type, device and batch-size). Defaults to <cite>None</cite> (relies on sub-modules).</p></li>
 </ul>
 </dd>
 </dl>
@@ -779,6 +782,43 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">    device=cpu,</span>
 <span class="go">    in_keys=[&#39;b&#39;],</span>
 <span class="go">    out_keys=[&#39;d&#39;, &#39;e&#39;])</span>
+</pre></div>
+</div>
+<p>The <cite>inplace</cite> argument allows for a fine-grained control over the output type, allowing for instance to write
+the result of the computational graph in the input object without tracking the intermediate tensors.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span> <span class="k">as</span> <span class="n">Mod</span><span class="p">,</span> <span class="n">TensorDictSequential</span> <span class="k">as</span> <span class="n">Seq</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">output</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">x</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)],</span>
+<span class="gp">... </span>        <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+<span class="gp">... </span>        <span class="p">),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="k">lambda</span> <span class="n">y0</span><span class="p">,</span> <span class="n">y1</span><span class="p">:</span> <span class="n">y0</span> <span class="o">*</span> <span class="n">y1</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)],</span>
+<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+<span class="gp">... </span>        <span class="p">),</span>
+<span class="gp">... </span>    <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+<span class="go">MyClass(</span>
+<span class="go">    input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">    output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">    output=None,</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
 </dd></dl>
