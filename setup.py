@@ -5,7 +5,6 @@
 
 import argparse
 import distutils.command.clean
-import glob
 import logging
 import os
 import shutil
@@ -15,10 +14,22 @@ from datetime import date
 from pathlib import Path
 from typing import List
 
-from setuptools import find_packages, setup
-from torch.utils.cpp_extension import BuildExtension, CppExtension
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = Path(__file__).parent.resolve()
+
+
+def get_python_executable():
+    # Check if we're running in a virtual environment
+    if "VIRTUAL_ENV" in os.environ:
+        # Get the virtual environment's Python executable
+        python_executable = os.path.join(os.environ["VIRTUAL_ENV"], "bin", "python")
+    else:
+        # Fall back to sys.executable
+        python_executable = sys.executable
+    return python_executable
+
 
 try:
     sha = (
@@ -69,7 +80,7 @@ def _get_pytorch_version(is_nightly, is_local):
         return "torch>=2.7.0.dev"
     if is_local:
         return "torch"
-    return "torch>=2.6.0"
+    return "torch>=2.5.0"
 
 
 def _get_packages():
@@ -99,51 +110,38 @@ class clean(distutils.command.clean.clean):
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
-def get_extensions():
-    extension = CppExtension
+class CMakeExtension(Extension):
+    def __init__(self, name, sourcedir=""):
+        super().__init__(name, sources=[])
+        self.sourcedir = os.path.abspath(sourcedir)
 
-    extra_link_args = []
-    extra_compile_args = {
-        "cxx": [
-            "-O3",
-            "-std=c++17",
-            "-fdiagnostics-color=always",
+
+class CMakeBuild(build_ext):
+    def run(self):
+        for ext in self.extensions:
+            self.build_extension(ext)
+
+    def build_extension(self, ext):
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+        cmake_args = [
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            f"-DPYTHON_EXECUTABLE={get_python_executable()}",
+            f"-DPython3_EXECUTABLE={get_python_executable()}",
         ]
-    }
-    debug_mode = os.getenv("DEBUG", "0") == "1"
-    if debug_mode:
-        logging.info("Compiling in debug mode")
-        extra_compile_args = {
-            "cxx": [
-                "-O0",
-                "-fno-inline",
-                "-g",
-                "-std=c++17",
-                "-fdiagnostics-color=always",
-            ]
-        }
-        extra_link_args = ["-O0", "-g"]
-
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    extensions_dir = os.path.join(this_dir, "tensordict", "csrc")
-
-    extension_sources = {
-        os.path.join(extensions_dir, p)
-        for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
-    }
-    sources = list(extension_sources)
-
-    ext_modules = [
-        extension(
-            "tensordict._C",
-            sources,
-            include_dirs=[this_dir],
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
+        build_args = []
+        if not os.path.exists(self.build_temp):
+            os.makedirs(self.build_temp)
+        subprocess.check_call(
+            ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp
         )
-    ]
+        subprocess.check_call(
+            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
+        )
 
-    return ext_modules
+
+def get_extensions():
+    extensions_dir = os.path.join(ROOT_DIR, "tensordict", "csrc")
+    return [CMakeExtension("tensordict._C", sourcedir=extensions_dir)]
 
 
 def _main(argv):
@@ -181,7 +179,7 @@ def _main(argv):
         ),
         ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+            "build_ext": CMakeBuild,
             "clean": clean,
         },
         install_requires=[
