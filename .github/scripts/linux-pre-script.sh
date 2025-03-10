@@ -1,5 +1,6 @@
 #!/bin/bash
 
-export TENSORDICT_BUILD_VERSION=0.7.0
+yum update gcc
+yum update libstdc++
 
 ${CONDA_RUN} python -m pip install cmake pybind11 -U

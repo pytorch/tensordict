@@ -16,3 +16,6 @@ dependencies:
     - pyyaml
     - scipy
     - orjson
+    - cmake
+    - ninja
+    - pybind11
