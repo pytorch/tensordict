@@ -6,7 +6,7 @@ if "%CONDA_RUN%"=="" (
 )
 
 :: Run the pip install command
-%CONDA_RUN% pip install cmake pybind11
+%CONDA_RUN% python -m pip install cmake pybind11 -U
 
 :: Check if the installation was successful
 if errorlevel 1 (
