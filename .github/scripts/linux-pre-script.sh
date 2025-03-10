@@ -3,4 +3,4 @@
 yum update gcc
 yum update libstdc++
 
-${CONDA_RUN} pip install cmake pybind11
+${CONDA_RUN} python -m pip install cmake pybind11 -U
