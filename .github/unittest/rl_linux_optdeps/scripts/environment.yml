@@ -16,3 +16,5 @@ dependencies:
     - pyyaml
     - scipy
     - orjson
+    - cmake
+    - ninja
