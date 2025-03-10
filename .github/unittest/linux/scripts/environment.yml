@@ -19,3 +19,6 @@ dependencies:
     - coverage
     - h5py
     - orjson
+    - ninja
+    - pybind11
+    - cmake
