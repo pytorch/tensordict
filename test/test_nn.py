@@ -3811,6 +3811,20 @@ class TestAddStateIndependentNormalScale:
         assert scale.shape == (4, 2, num_outputs)
         assert (scale > 0).all()
 
+    def test_add_scale_init_value(self, num_outputs=4):
+        module = nn.Linear(3, num_outputs)
+        init_value = 1.0
+        module_normal = AddStateIndependentNormalScale(
+            num_outputs,
+            scale_mapping="relu",
+            init_value=init_value,
+        )
+        tensor = torch.randn(3)
+        loc, scale = module_normal(module(tensor))
+        assert loc.shape == (num_outputs,)
+        assert scale.shape == (num_outputs,)
+        assert (scale == init_value).all()
+
 
 class TestStateDict:
     @pytest.mark.parametrize("detach", [True, False])
