@@ -4,6 +4,8 @@ echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
 
 @echo on
 
+pip install cmake pybind11
+
 set VC_VERSION_LOWER=17
 set VC_VERSION_UPPER=18
 if "%VC_YEAR%" == "2019" (
