@@ -52,6 +52,8 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
+conda install conda-forge pybind11 -y
+
 #if [[ $OSTYPE == 'darwin'* ]]; then
 #  printf "* Installing C++ for OSX\n"
 #  conda install -c conda-forge cxx-compiler -y
