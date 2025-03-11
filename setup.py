@@ -5,6 +5,7 @@
 
 import argparse
 import distutils.command.clean
+import glob
 import logging
 import os
 import shutil
@@ -139,7 +140,9 @@ class CMakeBuild(build_ext):
             # Find pybind11
             pybind11_dir = None
             for config_file in ["pybind11Config.cmake", "pybind11-config.cmake"]:
-                config_path = glob.glob(os.path.join(CONDA_PREFIX, "**", config_file), recursive=True)
+                config_path = glob.glob(
+                    os.path.join(CONDA_PREFIX, "**", config_file), recursive=True
+                )
                 if config_path:
                     pybind11_dir = os.path.dirname(config_path[0])
                     break
