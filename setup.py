@@ -202,7 +202,7 @@ def _main(argv):
         packages=find_packages(
             exclude=("test", "tutorials", "packaging", "gallery", "docs")
         ),
-        include_package_data=True,
+        # include_package_data=True,
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": CMakeBuild,
@@ -235,6 +235,9 @@ def _main(argv):
             "Programming Language :: Python :: 3.12",
             "Development Status :: 4 - Beta",
         ],
+        package_data={
+            "tensordict": ["*.so", "*.pyd"],
+        },
     )
 
 
