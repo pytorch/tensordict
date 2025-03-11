@@ -135,29 +135,29 @@ class CMakeBuild(build_ext):
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
             f"-DPython3_EXECUTABLE={get_python_executable()}",
         ]
-        CONDA_PREFIX = os.environ.get("CONDA_PREFIX")
-        # if CONDA_PREFIX:
-        #     CMAKE_PREFIX_PATH = os.environ.get("CMAKE_PREFIX_PATH")
-        #     if CMAKE_PREFIX_PATH:
-        #         cmake_args.append(f"-DCMAKE_PREFIX_PATH={CONDA_PREFIX}:{CMAKE_PREFIX_PATH}")
+        # CONDA_PREFIX = os.environ.get("CONDA_PREFIX")
+        # # if CONDA_PREFIX:
+        # #     CMAKE_PREFIX_PATH = os.environ.get("CMAKE_PREFIX_PATH")
+        # #     if CMAKE_PREFIX_PATH:
+        # #         cmake_args.append(f"-DCMAKE_PREFIX_PATH={CONDA_PREFIX}:{CMAKE_PREFIX_PATH}")
+        # #     else:
+        # #         cmake_args.append(f"-DCMAKE_PREFIX_PATH={CONDA_PREFIX}")
+        # if not is_develop and CONDA_PREFIX:
+        #     # Find pybind11
+        #     pybind11_dir = None
+        #     for config_file in ["pybind11Config.cmake", "pybind11-config.cmake"]:
+        #         config_path = glob.glob(
+        #             os.path.join(CONDA_PREFIX, "**", config_file), recursive=True
+        #         )
+        #         if config_path:
+        #             pybind11_dir = os.path.dirname(config_path[0])
+        #             break
         #     else:
-        #         cmake_args.append(f"-DCMAKE_PREFIX_PATH={CONDA_PREFIX}")
-        if CONDA_PREFIX:
-            # Find pybind11
-            pybind11_dir = None
-            for config_file in ["pybind11Config.cmake", "pybind11-config.cmake"]:
-                config_path = glob.glob(
-                    os.path.join(CONDA_PREFIX, "**", config_file), recursive=True
-                )
-                if config_path:
-                    pybind11_dir = os.path.dirname(config_path[0])
-                    break
-            else:
-                raise RuntimeError(
-                    f"could not find any of 'pybind11Config.cmake', 'pybind11-config.cmake' in {CONDA_PREFIX}"
-                )
-            if pybind11_dir:
-                cmake_args.append(f"-DPYBIND11_DIR={pybind11_dir}")
+        #         raise RuntimeError(
+        #             f"could not find any of 'pybind11Config.cmake', 'pybind11-config.cmake' in {CONDA_PREFIX}"
+        #         )
+        #     if pybind11_dir:
+        #         cmake_args.append(f"-DPYBIND11_DIR={pybind11_dir}")
 
         build_args = []
         if not os.path.exists(self.build_temp):
