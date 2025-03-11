@@ -202,6 +202,7 @@ def _main(argv):
         packages=find_packages(
             exclude=("test", "tutorials", "packaging", "gallery", "docs")
         ),
+        package_data={"tensordict": ["_C.so"]},
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": CMakeBuild,
