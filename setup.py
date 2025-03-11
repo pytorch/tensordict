@@ -128,6 +128,10 @@ class CMakeBuild(build_ext):
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
             f"-DPython3_EXECUTABLE={get_python_executable()}",
         ]
+        CONDA_PREFIX = os.environ.get("CONDA_PREFIX")
+        if CONDA_PREFIX:
+            CMAKE_PREFIX_PATH = os.environ.get("CMAKE_PREFIX_PATH")
+            cmake_args.append(f"-DCMAKE_PREFIX_PATH={CONDA_PREFIX}:{CMAKE_PREFIX_PATH}")
         build_args = []
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
