@@ -123,7 +123,13 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+        # extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+        is_develop = self.distribution.get_command_obj("develop").finalized
+        # Set the output directory based on the mode
+        if is_develop:
+            extdir = os.path.abspath(os.path.join(ROOT_DIR, "tensordict"))
+        else:
+            extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
@@ -202,7 +208,6 @@ def _main(argv):
         packages=find_packages(
             exclude=("test", "tutorials", "packaging", "gallery", "docs")
         ),
-        # include_package_data=True,
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": CMakeBuild,
@@ -232,8 +237,10 @@ def _main(argv):
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
             "Development Status :: 4 - Beta",
         ],
+        # include_package_data=True,
         package_data={
             "tensordict": ["*.so", "*.pyd"],
         },
