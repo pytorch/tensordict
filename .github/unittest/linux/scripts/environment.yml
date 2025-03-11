@@ -20,5 +20,4 @@ dependencies:
     - h5py
     - orjson
     - ninja
-    - pybind11
     - cmake

@@ -18,4 +18,3 @@ dependencies:
     - orjson
     - cmake
     - ninja
-    - pybind11
