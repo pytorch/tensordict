@@ -3,4 +3,4 @@
 yum update gcc
 yum update libstdc++
 
-conda install conda-forge::pybind11 -y
+${CONDA_RUN} install conda-forge::pybind11 -y
