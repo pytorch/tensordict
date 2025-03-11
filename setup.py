@@ -146,6 +146,8 @@ class CMakeBuild(build_ext):
                 if config_path:
                     pybind11_dir = os.path.dirname(config_path[0])
                     break
+            else:
+                raise RuntimeError(f"could not find any of 'pybind11Config.cmake', 'pybind11-config.cmake'")
             if pybind11_dir:
                 cmake_args.append(f"-DPYBIND11_DIR={pybind11_dir}")
 
