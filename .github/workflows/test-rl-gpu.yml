@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     permissions:
@@ -31,6 +31,7 @@ jobs:
       contents: read
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
+      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
