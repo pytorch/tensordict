@@ -5,7 +5,6 @@
 
 import argparse
 import distutils.command.clean
-import glob
 import logging
 import os
 import shutil
