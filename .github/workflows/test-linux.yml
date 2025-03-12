@@ -31,6 +31,7 @@ jobs:
       contents: read
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
@@ -65,6 +66,7 @@ jobs:
       contents: read
     with:
       runner: linux.12xlarge
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       timeout: 90
       script: |
@@ -95,6 +97,7 @@ jobs:
       contents: read
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
