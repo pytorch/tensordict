@@ -151,11 +151,21 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         self.scale_mapping = scale_mapping
         if make_param:
             self.state_independent_scale = torch.nn.Parameter(
-                torch.ones(scale_shape, device=device) * init_value
+                torch.full(
+                    scale_shape,
+                    init_value,
+                    dtype=torch.get_default_dtype(),
+                    device=device,
+                )
             )
         else:
             self.state_independent_scale = torch.nn.Buffer(
-                torch.ones(scale_shape, device=device) * init_value
+                torch.full(
+                    scale_shape,
+                    init_value,
+                    dtype=torch.get_default_dtype(),
+                    device=device,
+                )
             )
 
     def forward(
