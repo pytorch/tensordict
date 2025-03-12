@@ -16,3 +16,4 @@ dependencies:
     - pyyaml
     - scipy
     - orjson
+    - numpy<2.0.0
