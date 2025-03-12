@@ -7,6 +7,8 @@
 
 set -e
 
+apt update -y && apt install git wget gcc -y
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 apt-get update && apt-get install -y git wget gcc g++
