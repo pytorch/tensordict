@@ -9395,6 +9395,32 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
 
+    def test_lazy_stack_view_full_size(self):
+        tds = LazyStackedTensorDict(*[TensorDict(a=i) for i in range(60)], stack_dim=0)
+        tdview = tds.view(3, 4, 5)
+        assert isinstance(tdview, LazyStackedTensorDict)
+        assert isinstance(tdview[0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0], LazyStackedTensorDict)
+        assert (tdview["a"].view(60) == tds["a"]).all()
+        assert (tdview.view(tds.shape) == tds).all()
+        assert (tdview == tds.unflatten(0, (3, 4, 5))).all()
+        assert (tds == tdview.flatten()).all()
+
+    def test_lazy_stack_view_part_size(self):
+        tds = LazyStackedTensorDict(
+            *[TensorDict(a=a, batch_size=(2,)) for a in torch.arange(120).chunk(60)],
+            stack_dim=1,
+        )
+        assert tds.shape == (2, 60)
+        tdview = tds.view(2, 3, 4, 5)
+        assert isinstance(tdview[0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0, 0], LazyStackedTensorDict)
+        assert (tdview["a"].view(120) == tds["a"].view(120)).all()
+        assert (tdview.view(tds.shape) == tds).all()
+        assert (tdview == tds.unflatten(1, (3, 4, 5))).all()
+        assert (tds == tdview.flatten(1, -1)).all()
+
     def test_neg_dim_lazystack(self):
         td0 = TensorDict(batch_size=(3, 5))
         td1 = TensorDict(batch_size=(4, 5))
