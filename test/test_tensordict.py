@@ -6267,15 +6267,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == td.shape
         td_reshape = td.reshape(-1)
-        assert isinstance(td_reshape, TensorDict)
+        exp_instance = (
+            LazyStackedTensorDict
+            if isinstance(td, LazyStackedTensorDict)
+            else TensorDict
+        )
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         td_reshape = td.reshape((-1,))
-        assert isinstance(td_reshape, TensorDict)
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         td_reshape = td.reshape(size=(-1,))
-        assert isinstance(td_reshape, TensorDict)
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         if td.is_locked:
@@ -6354,9 +6359,6 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             raiser = pytest.raises(RuntimeError)
             raiser_view = raiser
-        elif "stack" in td_name:
-            raiser = contextlib.nullcontext()
-            raiser_view = pytest.raises(RuntimeError)
         else:
             raiser = contextlib.nullcontext()
             raiser_view = raiser
@@ -7653,8 +7655,6 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")
@@ -7695,8 +7695,6 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")
@@ -8333,8 +8331,6 @@ class TestTensorDictsRequiresGrad:
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")

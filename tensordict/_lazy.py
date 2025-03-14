@@ -3121,7 +3121,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 # unbind along k
                 tds = [_td for local_td in tds for _td in local_td.unbind(i)]
             # the dim along which to stack is the first, ie, i
-            return type(self)(*tds, stack_dim=i)
+            tds = self._new_lazy_unsafe(*tds, stack_dim=i)
+            if self.is_locked:
+                return tds.lock_()
+            return tds
 
         is_unflatten, (i, j) = _check_is_unflatten(
             shape, self.batch_size, return_flatten_dim=True
@@ -3133,6 +3136,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 tds = self._new_lazy_unsafe(
                     *list(tds.chunk(shape[k], dim=k)), stack_dim=k
                 )
+            if self.is_locked:
+                return tds.lock_()
             return tds
         if raise_if_not_view:
             raise RuntimeError(
