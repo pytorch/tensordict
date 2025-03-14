@@ -12069,6 +12069,17 @@ class TestNonTensorData:
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 
+    def test_view(self):
+        td = NonTensorStack(*[str(i) for i in range(60)])
+        tdv = td.view(3, 4, 5)
+        assert isinstance(tdv, NonTensorStack)
+        assert isinstance(tdv[0], NonTensorStack)
+        assert isinstance(tdv[0, 0], NonTensorStack)
+        assert tdv.shape == (3, 4, 5)
+        assert tdv.view(60).shape == (60,)
+        assert tdv.view(60).tolist() == [str(i) for i in range(60)]
+        assert tdv.flatten().tolist() == [str(i) for i in range(60)]
+
     def test_where(self):
         condition = torch.tensor([True, False])
         tensor = NonTensorStack(

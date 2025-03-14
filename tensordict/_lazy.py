@@ -3130,7 +3130,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # we are going to organize our list of (A*B*C) elements in a nested list of (A * (B * (C))) elements
             tds = self
             for k in range(i, j):
-                tds = self.lazy_stack(list(tds.chunk(shape[k], dim=k)), k)
+                tds = self._new_lazy_unsafe(
+                    *list(tds.chunk(shape[k], dim=k)), stack_dim=k
+                )
             return tds
         if raise_if_not_view:
             raise RuntimeError(
@@ -3365,7 +3367,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             tds.append(td.split(split_size, split_dim))
         return tuple(
-            LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+            self._new_lazy_unsafe(*tds, stack_dim=self.stack_dim)
             for tds in _zip_strict(*tds)
         )
 
