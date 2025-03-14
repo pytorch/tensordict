@@ -60,8 +60,11 @@ from tensordict.base import (
 from tensordict.utils import (
     _as_context_manager,
     _broadcast_tensors,
+    _check_is_flatten,
+    _check_is_unflatten,
     _get_shape_from_args,
     _getitem_batch_size,
+    _infer_size_impl,
     _is_number,
     _maybe_correct_neg_dim,
     _parse_to,
@@ -3100,10 +3103,74 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return "\n" + exclusive_key_str
 
-    def _view(self, *args, **kwargs):
-        raise RuntimeError(
-            "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
+    def _view(self, *args, raise_if_not_view: bool = True, **kwargs) -> T:
+        shape = _get_shape_from_args(*args, **kwargs)
+        if any(dim < 0 for dim in shape):
+            shape = _infer_size_impl(shape, self.numel())
+
+        # Then we just need to reorganize the lazy stack
+        shape = torch.Size(shape)
+        is_flatten, (i, j) = _check_is_flatten(
+            shape, self.batch_size, return_flatten_dim=True
         )
+        if is_flatten:
+            # we need to get a flat representation of all the elements from dim i to j, starting from j
+            tds = [self]
+            for _ in range(i, j + 1):
+                # for k in range(j, i-1, -1):
+                # unbind along k
+                tds = [_td for local_td in tds for _td in local_td.unbind(i)]
+            # the dim along which to stack is the first, ie, i
+            tds = self._new_lazy_unsafe(*tds, stack_dim=i)
+            if self.is_locked:
+                return tds.lock_()
+            return tds
+
+        is_unflatten, (i, j) = _check_is_unflatten(
+            shape, self.batch_size, return_flatten_dim=True
+        )
+        if is_unflatten:
+            # we are going to organize our list of (A*B*C) elements in a nested list of (A * (B * (C))) elements
+            tds = self
+            for k in range(i, j):
+                tds = self._new_lazy_unsafe(
+                    *list(tds.chunk(shape[k], dim=k)), stack_dim=k
+                )
+            if self.is_locked:
+                return tds.lock_()
+            return tds
+        if raise_if_not_view:
+            raise RuntimeError(
+                "Cannot call `view` on a lazy stacked tensordict. Call `reshape` instead."
+            )
+        return TensorDict.reshape(self, shape)
+
+    def reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> T:
+        return self._view(*args, raise_if_not_view=False, **kwargs)
+
+    def flatten(self, start_dim=0, end_dim=-1):
+        end_dim = _maybe_correct_neg_dim(end_dim, shape=self.batch_size)
+        start_dim = _maybe_correct_neg_dim(start_dim, shape=self.batch_size)
+        new_shape = [
+            s for i, s in enumerate(self.batch_size) if i < start_dim or i > end_dim
+        ]
+        new_shape.insert(start_dim, -1)
+        return self.view(new_shape)
+
+    def unflatten(self, dim, unflattened_size):
+        dim = _maybe_correct_neg_dim(dim, shape=self.batch_size)
+        new_shape = self.batch_size
+        if dim == 0:
+            new_shape = torch.Size(unflattened_size) + new_shape[1:]
+        else:
+            new_shape = (
+                new_shape[:dim] + torch.Size(unflattened_size) + new_shape[dim + 1 :]
+            )
+        return self.view(new_shape)
 
     def _transpose(self, dim0, dim1):
         if self._is_vmapped:
@@ -3305,7 +3372,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             tds.append(td.split(split_size, split_dim))
         return tuple(
-            LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+            self._new_lazy_unsafe(*tds, stack_dim=self.stack_dim)
             for tds in _zip_strict(*tds)
         )
 
@@ -3320,7 +3387,6 @@ class LazyStackedTensorDict(TensorDictBase):
     _convert_to_tensordict = TensorDict._convert_to_tensordict
     _index_tensordict = TensorDict._index_tensordict
     masked_select = TensorDict.masked_select
-    reshape = TensorDict.reshape
     _to_module = TensorDict._to_module
     from_dict_instance = TensorDict.from_dict_instance
 

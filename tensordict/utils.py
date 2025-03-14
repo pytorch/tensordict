@@ -3059,3 +3059,44 @@ def _maybe_correct_neg_dim(
             f"Incompatible dim {new_dim} for tensordict with batch dims {ndim}."
         )
     return new_dim
+
+
+# Check if the new shape is a flatten / unflatten version of the current one
+def _check_is_flatten(new_shape, old_shape, return_flatten_dim=False):
+    if not new_shape:
+        if return_flatten_dim:
+            return False, (-1, -1)
+        return False
+    if new_shape.numel() != old_shape.numel():
+        if return_flatten_dim:
+            return False, (-1, -1)
+        return False
+    # a shape is a flatten version of another if all the first sizes and/or all the last sizes match
+    for i, (first_new, first_old) in enumerate(zip(new_shape, old_shape)):  # noqa: B007
+        if first_new != first_old:
+            break
+    # 'i' must be the result of the flatten op
+    for j, (last_new, last_old) in enumerate(  # noqa: B007
+        zip(reversed(new_shape), reversed(old_shape))
+    ):
+        if last_new != last_old:
+            break
+    # j is also the result of the flatten, so if j and i match this is the result of a flatten
+    if i == len(new_shape) - j - 1:
+        if return_flatten_dim:
+            j = len(old_shape) - j - 1
+            return True, (i, j)
+        return True
+    if return_flatten_dim:
+        return False, (-1, -1)
+    return False
+
+
+def _check_is_unflatten(new_shape, old_shape, return_flatten_dim=False):
+    out = _check_is_flatten(old_shape, new_shape, return_flatten_dim=return_flatten_dim)
+    if return_flatten_dim:
+        out, (i, j) = out
+        # if out:
+        #     j = len(new_shape) - j - 1
+        return out, (i, j)
+    return out

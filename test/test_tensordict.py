@@ -6267,15 +6267,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == td.shape
         td_reshape = td.reshape(-1)
-        assert isinstance(td_reshape, TensorDict)
+        exp_instance = (
+            LazyStackedTensorDict
+            if isinstance(td, LazyStackedTensorDict)
+            else TensorDict
+        )
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         td_reshape = td.reshape((-1,))
-        assert isinstance(td_reshape, TensorDict)
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         td_reshape = td.reshape(size=(-1,))
-        assert isinstance(td_reshape, TensorDict)
+        assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         if td.is_locked:
@@ -6354,9 +6359,6 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             raiser = pytest.raises(RuntimeError)
             raiser_view = raiser
-        elif "stack" in td_name:
-            raiser = contextlib.nullcontext()
-            raiser_view = pytest.raises(RuntimeError)
         else:
             raiser = contextlib.nullcontext()
             raiser_view = raiser
@@ -7653,8 +7655,6 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")
@@ -7695,8 +7695,6 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")
@@ -8333,8 +8331,6 @@ class TestTensorDictsRequiresGrad:
             "unsqueezed_td",
             "squeezed_td",
             "td_h5",
-            "stacked_td",
-            "nested_stacked_td",
         )
         error_dec = (
             pytest.raises(RuntimeError, match="Cannot call `view`")
@@ -9394,6 +9390,32 @@ class TestLazyStackedTensorDict:
 
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+    def test_lazy_stack_view_full_size(self):
+        tds = LazyStackedTensorDict(*[TensorDict(a=i) for i in range(60)], stack_dim=0)
+        tdview = tds.view(3, 4, 5)
+        assert isinstance(tdview, LazyStackedTensorDict)
+        assert isinstance(tdview[0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0], LazyStackedTensorDict)
+        assert (tdview["a"].view(60) == tds["a"]).all()
+        assert (tdview.view(tds.shape) == tds).all()
+        assert (tdview == tds.unflatten(0, (3, 4, 5))).all()
+        assert (tds == tdview.flatten()).all()
+
+    def test_lazy_stack_view_part_size(self):
+        tds = LazyStackedTensorDict(
+            *[TensorDict(a=a, batch_size=(2,)) for a in torch.arange(120).chunk(60)],
+            stack_dim=1,
+        )
+        assert tds.shape == (2, 60)
+        tdview = tds.view(2, 3, 4, 5)
+        assert isinstance(tdview[0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0], LazyStackedTensorDict)
+        assert isinstance(tdview[0, 0, 0], LazyStackedTensorDict)
+        assert (tdview["a"].view(120) == tds["a"].view(120)).all()
+        assert (tdview.view(tds.shape) == tds).all()
+        assert (tdview == tds.unflatten(1, (3, 4, 5))).all()
+        assert (tds == tdview.flatten(1, -1)).all()
 
     def test_neg_dim_lazystack(self):
         td0 = TensorDict(batch_size=(3, 5))
@@ -12042,6 +12064,17 @@ class TestNonTensorData:
 
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
+
+    def test_view(self):
+        td = NonTensorStack(*[str(i) for i in range(60)])
+        tdv = td.view(3, 4, 5)
+        assert isinstance(tdv, NonTensorStack)
+        assert isinstance(tdv[0], NonTensorStack)
+        assert isinstance(tdv[0, 0], NonTensorStack)
+        assert tdv.shape == (3, 4, 5)
+        assert tdv.view(60).shape == (60,)
+        assert tdv.view(60).tolist() == [str(i) for i in range(60)]
+        assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
     def test_where(self):
         condition = torch.tensor([True, False])
