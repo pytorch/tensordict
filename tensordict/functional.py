@@ -127,11 +127,11 @@ def pad_sequence(
         >>> print(padded_td)
         TensorDict(
             fields={
-                a: Tensor(shape=torch.Size([2, 4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                b: Tensor(shape=torch.Size([2, 5, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                a: Tensor(shape=torch.Size([2, 5, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: Tensor(shape=torch.Size([2, 6, 8]), device=cpu, dtype=torch.float32, is_shared=False),
                 masks: TensorDict(
                     fields={
-                        a: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        a: Tensor(shape=torch.Size([2, 5]), device=cpu, dtype=torch.bool, is_shared=False),
                         b: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([2]),
                     device=None,
