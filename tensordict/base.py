@@ -13716,8 +13716,6 @@ def _is_leaf_nontensor(cls: Type) -> bool:
     """
     if _is_tensor_collection(cls):
         return _pass_through_cls(cls)
-    # if issubclass(cls, KeyedJaggedTensor):
-    #     return False
     return issubclass(cls, torch.Tensor)
 
 

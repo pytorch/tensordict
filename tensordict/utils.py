@@ -101,18 +101,6 @@ try:
 except ImportError:
     pass
 
-TORCHREC_ERR = None
-try:
-    from torchrec import KeyedJaggedTensor
-
-    _has_torchrec = True
-except ImportError as err:
-    _has_torchrec = False
-
-    class KeyedJaggedTensor:  # noqa: D103, D101
-        pass
-
-    TORCHREC_ERR = err
 
 if not _has_funcdim:
 
@@ -459,190 +447,9 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     return False
 
 
-def index_keyedjaggedtensor(
-    kjt: KeyedJaggedTensor, index: slice | range | list | torch.Tensor | np.ndarray
-) -> KeyedJaggedTensor:
-    """Indexes a KeyedJaggedTensor along the batch dimension.
-
-    Args:
-        kjt (KeyedJaggedTensor): a KeyedJaggedTensor to index
-        index (torch.Tensor or other indexing type): batch index to use.
-            Indexing with an integer will result in an error.
-
-    Examples:
-        >>> values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
-        >>> weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
-        >>> keys = ["index_0", "index_1", "index_2"]
-        >>> offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
-        >>>
-        >>> jag_tensor = KeyedJaggedTensor(
-        ...     values=values,
-        ...     keys=keys,
-        ...     offsets=offsets,
-        ...     weights=weights,
-        ... )
-        >>> ikjt = index_keyedjaggedtensor(jag_tensor, [0, 2])
-        >>> print(ikjt["index_0"].to_padded_dense(), j0.to_padded_dense())
-
-    """
-    if not _has_torchrec:
-        raise TORCHREC_ERR
-    if isinstance(index, (int,)):
-        raise ValueError(
-            "Indexing KeyedJaggedTensor instances with an integer is prohibited, "
-            "as this would result in a KeyedJaggedTensor without batch size. "
-            "If you want to get a single element from a KeyedJaggedTensor, "
-            "call `index_keyedjaggedtensor(kjt, torch.tensor([index]))` instead."
-        )
-    lengths = kjt.lengths()
-    keys = kjt.keys()
-    numel = len(lengths) // len(keys)
-    offsets = kjt.offsets()
-
-    _offsets1 = offsets[:-1].view(len(keys), numel)[:, index]
-    _offsets2 = offsets[1:].view(len(keys), numel)[:, index]
-    lengths = lengths.view(len(keys), numel)[:, index].reshape(-1)
-
-    full_index = torch.arange(offsets[-1]).view(1, 1, -1)
-    sel = (full_index >= _offsets1.unsqueeze(-1)) & (
-        full_index < _offsets2.unsqueeze(-1)
-    )
-    sel = sel.any(0).any(0)
-    full_index = full_index.squeeze()[sel]
-    values = kjt._values[full_index]
-    weights = kjt._weights[full_index]
-    return KeyedJaggedTensor(
-        values=values, keys=kjt.keys(), weights=weights, lengths=lengths
-    )
-
-
-def setitem_keyedjaggedtensor(
-    orig_tensor: KeyedJaggedTensor,
-    index: slice | range | list | torch.Tensor | np.ndarray,
-    other: KeyedJaggedTensor,
-) -> KeyedJaggedTensor:
-    """Equivalent of `tensor[index] = other` for KeyedJaggedTensors indexed along the batch dimension.
-
-    Args:
-        orig_tensor (torchrec.KeyedJaggedTensor): KeyedJaggedTensor to be updated.
-        index (list or equivalent index): batch index to be written.
-        other (torchrec.KeyedJaggedTensor): KeyedJaggedTensor to be written at
-            the batch locations.
-
-    Examples:
-        >>> values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
-        >>> weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
-        >>> keys = ["index_0", "index_1", "index_2"]
-        >>> offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
-        >>> jag_tensor = KeyedJaggedTensor(
-        ...    values=values,
-        ...    keys=keys,
-        ...    offsets=offsets,
-        ...    weights=weights,
-        ... )
-        >>> keys = ["index_0", "index_1", "index_2"]
-        >>> lengths2 = torch.IntTensor([2, 4, 6, 4, 2, 1])
-        >>> values2 = torch.zeros(
-        ...     lengths2.sum(),
-        ... )
-        >>> weights2 = -torch.ones(
-        ...     lengths2.sum(),
-        ... )
-        >>> sub_jag_tensor = KeyedJaggedTensor(
-        ...     values=values2,
-        ...     keys=keys,
-        ...     lengths=lengths2,
-        ...     weights=weights2,
-        ... )
-        >>> setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
-    """
-    orig_tensor_lengths = orig_tensor.lengths()
-    orig_tensor_keys = orig_tensor.keys()
-    orig_tensor_numel = len(orig_tensor_lengths) // len(orig_tensor_keys)
-    orig_tensor_offsets = orig_tensor.offsets()
-
-    other_lengths = other.lengths()
-    other_keys = other.keys()
-    other_numel = len(other_lengths) // len(other_keys)
-    # other_offsets = other.offsets()
-
-    if not other_keys == orig_tensor_keys:
-        raise KeyError("Mismatch in orig_tensor and other keys.")
-    #     if other_numel - len(index) != orig_tensor_numel:
-    #         raise RuntimeError("orig_tensor and otherination batch differ.")
-
-    _offsets1 = orig_tensor_offsets[:-1]
-    _offsets2 = orig_tensor_offsets[1:]
-    _orig_tensor_shape = len(orig_tensor_keys), orig_tensor_numel
-
-    _lengths_out = orig_tensor_lengths.view(_orig_tensor_shape).clone()
-    _lengths_out[:, index] = other_lengths.view(len(orig_tensor_keys), other_numel)
-    _lengths_out = _lengths_out.view(-1)
-
-    # get the values of orig_tensor that we'll be keeping
-    full_index = torch.arange(orig_tensor_offsets[-1]).view(1, 1, -1)
-    sel = (full_index >= _offsets1.view(_orig_tensor_shape)[:, index].unsqueeze(-1)) & (
-        full_index < _offsets2.view(_orig_tensor_shape)[:, index].unsqueeze(-1)
-    )
-    sel = (~sel).all(0).all(0)
-    index_to_keep = full_index.squeeze()[sel]
-    values_to_keep = orig_tensor._values[index_to_keep]
-    new_values = other._values
-    weights_to_keep = orig_tensor._weights[index_to_keep]
-    new_weights = other._weights
-
-    # compute new offsets
-    _offsets = torch.cat([_lengths_out[:1] * 0, _lengths_out], 0)
-    _offsets = _offsets.cumsum(0)
-
-    # get indices of offsets for new elts
-    _offsets1 = _offsets[:-1]
-    _offsets2 = _offsets[1:]
-    full_index = torch.arange(_offsets[-1]).view(1, 1, -1)
-    sel = (full_index >= _offsets1.view(_orig_tensor_shape)[:, index].unsqueeze(-1)) & (
-        full_index < _offsets2.view(_orig_tensor_shape)[:, index].unsqueeze(-1)
-    )
-    sel = sel.any(0).any(0)
-    new_index_new_elts = full_index.squeeze()[sel]
-    sel = (full_index >= _offsets1.view(_orig_tensor_shape)[:, index].unsqueeze(-1)) & (
-        full_index < _offsets2.view(_orig_tensor_shape)[:, index].unsqueeze(-1)
-    )
-    sel = (~sel).all(0).all(0)
-    new_index_to_keep = full_index.squeeze()[sel]
-
-    # create an empty values tensor
-    values_numel = values_to_keep.shape[0] + other._values.shape[0]
-    tensor = torch.empty(
-        [values_numel, *values_to_keep.shape[1:]],
-        dtype=values_to_keep.dtype,
-        device=values_to_keep.device,
-    )
-    tensor_weights = torch.empty(
-        [values_numel, *values_to_keep.shape[1:]],
-        dtype=weights_to_keep.dtype,
-        device=weights_to_keep.device,
-    )
-    tensor[new_index_to_keep] = values_to_keep
-    tensor[new_index_new_elts] = new_values
-    tensor_weights[new_index_to_keep] = weights_to_keep
-    tensor_weights[new_index_new_elts] = new_weights
-
-    kjt = KeyedJaggedTensor(
-        values=tensor,
-        keys=orig_tensor_keys,
-        weights=tensor_weights,
-        lengths=_lengths_out,
-    )
-    for k, item in kjt.__dict__.items():
-        orig_tensor.__dict__[k] = item
-    return orig_tensor
-
-
 def _ndimension(tensor: Tensor) -> int:
     if isinstance(tensor, Tensor):
         return tensor.ndimension()
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return 1
     else:
         return tensor.ndimension()
 
@@ -651,8 +458,6 @@ def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
     if isinstance(tensor, UninitializedTensorMixin):
         return torch.Size([*getattr(tensor, "batch_size", ()), -1])
     elif not isinstance(tensor, Tensor):
-        if type(tensor) is KeyedJaggedTensor:
-            return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
         return tensor.shape
     if tensor.is_nested:
         if nested_shape:
@@ -670,8 +475,6 @@ def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
 def _device(tensor: Tensor) -> torch.device:
     if isinstance(tensor, Tensor):
         return tensor.device
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return tensor.device()
     else:
         return tensor.device
 
@@ -683,8 +486,6 @@ def _is_shared(tensor: Tensor) -> bool:
         return tensor.is_shared()
     if isinstance(tensor, ftdim.Tensor):
         return None
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return False
     else:
         return tensor.is_shared()
 
@@ -692,8 +493,6 @@ def _is_shared(tensor: Tensor) -> bool:
 def _is_meta(tensor: Tensor) -> bool:
     if isinstance(tensor, Tensor):
         return tensor.is_meta
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return False
     else:
         return tensor.is_meta
 
@@ -701,8 +500,6 @@ def _is_meta(tensor: Tensor) -> bool:
 def _dtype(tensor: Tensor) -> torch.dtype:
     if isinstance(tensor, Tensor):
         return tensor.dtype
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return tensor._values.dtype
     else:
         return tensor.dtype
 
@@ -723,8 +520,6 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
                     )
                 return tensor[index]
             raise err
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return index_keyedjaggedtensor(tensor, index)
     else:
         return tensor[index]
 
@@ -737,9 +532,6 @@ def _set_item(
         raise RuntimeError
     if isinstance(tensor, Tensor):
         tensor[index] = value
-        return tensor
-    elif isinstance(tensor, KeyedJaggedTensor):
-        tensor = setitem_keyedjaggedtensor(tensor, index, value)
         return tensor
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
@@ -764,8 +556,6 @@ def _set_item(
 def _requires_grad(tensor: Tensor) -> bool:
     if isinstance(tensor, Tensor):
         return tensor.requires_grad
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return tensor._values.requires_grad
     else:
         return tensor.requires_grad
 
@@ -1138,7 +928,7 @@ def cache(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, (Tensor, KeyedJaggedTensor)):
+            if not isinstance(out, Tensor):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out
