@@ -15,6 +15,7 @@ from typing import Any, Dict, List, OrderedDict, overload
 import torch
 
 from tensordict._nestedkey import NestedKey
+from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.nn.common import dispatch, TensorDictModuleBase
 from tensordict.nn.distributions import distributions_maps
@@ -811,6 +812,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
             .. warning:: The behaviour of :attr:`return_composite` will change in v0.9
                 and default to True from there on.
+        inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
+            output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
 
     Raises:
         ValueError: If the input sequence of modules is empty.
@@ -945,6 +949,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         modules: OrderedDict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
+        *,
+        inplace: bool | None = None,
     ) -> None: ...
 
     @overload
@@ -953,6 +959,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
+        *,
+        inplace: bool | None = None,
     ) -> None: ...
 
     def __init__(
@@ -960,6 +968,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
+        inplace: bool | None = None,
     ) -> None:
         if len(modules) == 0:
             raise ValueError(
@@ -1004,7 +1013,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
-        super().__init__(*modules, partial_tolerant=partial_tolerant)
+        super().__init__(*modules, partial_tolerant=partial_tolerant, inplace=inplace)
         self.return_composite = return_composite
 
     def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
@@ -1319,6 +1328,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_exec = self._last_module(
                 tensordict_exec, _requires_sample=self._requires_sample
             )
+
+        if self.inplace is True:
+            tensordict_out = tensordict
+        elif self.inplace is False:
+            tensordict_out = TensorDict()
+        elif self.inplace == "empty":
+            tensordict_out = tensordict.empty()
+
         if tensordict_out is not None:
             result = tensordict_out
             result.update(tensordict_exec, keys_to_update=self.out_keys)
@@ -1336,7 +1353,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     ]
                 else:
                     keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
-                return tensordict.update(result, keys_to_update=keys)
+                return tensordict_out.update(result, keys_to_update=keys)
         return result
 
 
