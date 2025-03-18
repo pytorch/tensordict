@@ -3556,9 +3556,15 @@ class NonTensorStack(LazyStackedTensorDict):
         device: DeviceType | None = None,
         out: T | None = None,
         stack_dim_name: str | None = None,
+        **kwargs,
     ) -> T:
         result = super().lazy_stack(
-            items=items, dim=dim, out=out, stack_dim_name=stack_dim_name, device=device
+            items=items,
+            dim=dim,
+            out=out,
+            stack_dim_name=stack_dim_name,
+            device=device,
+            **kwargs,
         )
         if not isinstance(result, cls):
             raise RuntimeError(
