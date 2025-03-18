@@ -70,7 +70,7 @@ class TensorDictSequential(TensorDictModule):
             looking for those that have the required keys, if any. Defaults to False.
         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
-        inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
             :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
             output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
 
@@ -189,7 +189,7 @@ class TensorDictSequential(TensorDictModule):
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
-        inplace: bool | None = None,
+        inplace: bool | str | None = None,
     ) -> None: ...
 
     @overload
@@ -199,7 +199,7 @@ class TensorDictSequential(TensorDictModule):
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
-        inplace: bool | None = None,
+        inplace: bool | str | None = None,
     ) -> None: ...
 
     def __init__(
@@ -207,7 +207,7 @@ class TensorDictSequential(TensorDictModule):
         *modules: Callable[[TensorDictBase], TensorDictBase],
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
-        inplace: bool | None = None,
+        inplace: bool | str | None = None,
     ) -> None:
 
         if len(modules) == 1 and isinstance(modules[0], collections.OrderedDict):
