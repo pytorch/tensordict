@@ -1070,55 +1070,6 @@ class TestTensorClass:
         assert a.grad.x is not None
         assert a.grad.z is None
 
-    def test_kjt(self):
-        try:
-            from torchrec import KeyedJaggedTensor
-        except ImportError:
-            pytest.skip("TorchRec not installed.")
-
-        def _get_kjt(
-            self,
-        ):
-            values = torch.Tensor(
-                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-            )
-            weights = torch.Tensor(
-                [1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0]
-            )
-            keys = ["index_0", "index_1", "index_2"]
-            offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
-
-            jag_tensor = KeyedJaggedTensor(
-                values=values,
-                keys=keys,
-                offsets=offsets,
-                weights=weights,
-            )
-            return jag_tensor
-
-        kjt = _get_kjt()
-
-        @tensorclass
-        class MyData:
-            X: torch.Tensor
-            y: KeyedJaggedTensor
-            z: str
-
-        z = "test_tensorclass"
-        data = MyData(X=torch.zeros(3, 1), y=kjt, z=z, batch_size=[3])
-        subdata = data[:2]
-        assert (
-            subdata.y["index_0"].to_padded_dense()
-            == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
-        ).all()
-
-        subdata = data[[0, 2]]
-        assert (
-            subdata.y["index_0"].to_padded_dense()
-            == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
-        ).all()
-        assert subdata.z == data.z == z
-
     def test_len(self):
         myc = MyData(
             X=torch.rand(2, 3, 4),

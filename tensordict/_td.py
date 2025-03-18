@@ -80,7 +80,6 @@ from tensordict.utils import (
     IndexType,
     is_non_tensor,
     is_tensorclass,
-    KeyedJaggedTensor,
     lock_blocked,
     unravel_key,
     unravel_key_list,
@@ -4517,8 +4516,6 @@ class _TensorDictKeysView:
 
         if isinstance(tensordict, TensorDictParams):
             return tensordict._param_td.items()
-        if isinstance(tensordict, KeyedJaggedTensor):
-            return tuple((key, tensordict[key]) for key in tensordict.keys())
         from tensordict._lazy import (
             _CustomOpTensorDict,
             _iter_items_lazystack,
@@ -4570,10 +4567,6 @@ class _TensorDictKeysView:
                     entry_type = type(item_root)
                     if issubclass(entry_type, Tensor):
                         return False
-                    elif entry_type is KeyedJaggedTensor:
-                        if len(key) > 2:
-                            return False
-                        return key[1] in item_root.keys()
                     # TODO: make this faster for LazyStacked without compromising regular
                     _is_tensordict = _is_tensor_collection(entry_type)
                     if _is_tensordict:
@@ -4584,7 +4577,6 @@ class _TensorDictKeysView:
                             leaf_td = item_root._get_tuple(key[1:-1], None)
                             if leaf_td is None or (
                                 not _is_tensor_collection(type(leaf_td))
-                                and not isinstance(leaf_td, KeyedJaggedTensor)
                             ):
                                 return False
                         else:

@@ -83,7 +83,6 @@ from tensordict.utils import (
     infer_size_impl,
     is_non_tensor,
     is_tensorclass,
-    KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
     unravel_key_list,
@@ -1146,7 +1145,7 @@ class LazyStackedTensorDict(TensorDictBase):
             tensors.append(td._get_str(key, default=default))
             if (
                 tensors[-1] is default
-                and not isinstance(default, (KeyedJaggedTensor, torch.Tensor))
+                and not isinstance(default, torch.Tensor)
                 and not is_tensor_collection(default)
             ):
                 # then we consider this default as non-stackable and return prematurly
@@ -1210,12 +1209,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if len(key) == 1:
             return first
         try:
-            if isinstance(first, KeyedJaggedTensor):
-                if len(key) != 2:
-                    raise ValueError(f"Got too many keys for a KJT: {key}.")
-                return first[key[-1]]
-            else:
-                return first._get_tuple(key[1:], default=default, **kwargs)
+            return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
                 raise ValueError(
