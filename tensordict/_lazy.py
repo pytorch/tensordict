@@ -34,6 +34,7 @@ import orjson as json
 import torch
 
 from tensordict.memmap import MemoryMappedTensor
+from torch.nn.utils.rnn import pad_sequence
 
 try:
     from functorch import dim as ftdim
@@ -516,7 +517,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return item.shape
         except RuntimeError as err:
             if re.match(
-                r"Found more than one unique shape in the tensors|Could not run 'aten::stack' with arguments from the",
+                r"Failed to stack tensors within a tensordict",
                 str(err),
             ):
                 shape = None
@@ -1057,11 +1058,87 @@ class LazyStackedTensorDict(TensorDictBase):
             vals.append(val)
         return vals
 
+    def get(
+        self,
+        key: NestedKey,
+        *args,
+        as_list: bool = False,
+        as_padded_tensor: bool = False,
+        as_nested_tensor: bool = False,
+        padding_side: str = "right",
+        layout: torch.layout = None,
+        padding_value: float | int | bool = 0.0,
+        **kwargs,
+    ) -> CompatibleType:
+        """Gets the value stored with the input key.
+
+        Args:
+            key (str, tuple of str): key to be queried. If tuple of str it is
+                equivalent to chained calls of getattr.
+            default: default value if the key is not found in the tensordict. Defaults to ``None``.
+
+                .. warning::
+                    Previously, if a key was not present in the tensordict and no default
+                    was passed, a `KeyError` was raised. From v0.7, this behaviour has been changed
+                    and a `None` value is returned instead (in accordance with the what dict.get behavior).
+                    To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
+                    :func`~tensordict.set_get_defaults_to_none(False)`.
+
+        Keyword Args:
+            as_list (bool, optional): if ``True``, ragged tensors will be returned as list.
+                Exclusive with `as_padded_tensor` and `as_nested_tensor`.
+                Defaults to ``False``.
+            as_padded_tensor (bool, optional):  if ``True``, ragged tensors will be returned as padded tensors.
+                The padding value can be controlled via the `padding_value` keyword argument, and the padding
+                side via the `padding_side` argument.
+                Exclusive with `as_list` and `as_nested_tensor`.
+                Defaults to ``False``.
+            as_nested_tensor (bool, optional): if ``True``, ragged tensors will be returned as list.
+                Exclusive with `as_list` and `as_padded_tensor`.
+                The layout can be controlled via the `torch.layout` argument.
+                Defaults to ``False``.
+            layout (torch.layout, optional): the layout when `as_nested_tensor=True`.
+            padding_side (str): The side of padding. Must be `"left"` or `"right"`. Defaults to `"right"`.
+            padding_value (scalar or bool, optional): The padding value. Defaults to 0.0.
+
+        Examples:
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> import torch
+            >>> td = lazy_stack([
+            ...     TensorDict({"x": torch.ones(1,)}),
+            ...     TensorDict({"x": torch.ones(2,) * 2}),
+            ... ])
+            >>> td.get("x", as_nested_tensor=True)
+            NestedTensor(size=(2, j1), offsets=tensor([0, 1, 3]), contiguous=True)
+            >>> td.get("x", as_padded_tensor=True)
+            tensor([[1., 0.],
+                    [2., 2.]])
+
+        """
+        return super().get(
+            key,
+            *args,
+            as_list=as_list,
+            as_padded_tensor=as_padded_tensor,
+            as_nested_tensor=as_nested_tensor,
+            padding_side=padding_side,
+            layout=layout,
+            padding_value=padding_value,
+            **kwargs,
+        )
+
     @cache  # noqa: B019
     def _get_str(
         self,
         key: NestedKey,
         default: Any = NO_DEFAULT,
+        *,
+        as_list: bool = False,
+        as_padded_tensor: bool = False,
+        as_nested_tensor: bool = False,
+        padding_side: str = "right",
+        layout: torch.layout = None,
+        padding_value: float | int | bool = 0.0,
     ) -> CompatibleType:
         # we can handle the case where the key is a tuple of length 1
         tensors = []
@@ -1076,7 +1153,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 return default
         try:
             out = self.lazy_stack(
-                tensors, self.stack_dim, stack_dim_name=self._td_dim_name
+                tensors,
+                self.stack_dim,
+                stack_dim_name=self._td_dim_name,
+                as_list=as_list,
+                as_padded_tensor=as_padded_tensor,
+                as_nested_tensor=as_nested_tensor,
+                padding_side=padding_side,
+                layout=layout,
+                padding_value=padding_value,
             )
             if _is_tensor_collection(type(out)):
                 if isinstance(out, LazyStackedTensorDict):
@@ -1118,8 +1203,8 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
-    def _get_tuple(self, key, default):
-        first = self._get_str(key[0], None)
+    def _get_tuple(self, key, default, **kwargs):
+        first = self._get_str(key[0], None, **kwargs)
         if first is None:
             return self._default_get(key[0], default)
         if len(key) == 1:
@@ -1130,7 +1215,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     raise ValueError(f"Got too many keys for a KJT: {key}.")
                 return first[key[-1]]
             else:
-                return first._get_tuple(key[1:], default=default)
+                return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
                 raise ValueError(
@@ -1148,6 +1233,12 @@ class LazyStackedTensorDict(TensorDictBase):
         out: T | None = None,
         stack_dim_name: str | None = None,
         strict_shape: bool = False,
+        as_list: bool = False,
+        as_padded_tensor: bool = False,
+        as_nested_tensor: bool = False,
+        padding_side: str = "right",
+        layout: torch.layout | None = None,
+        padding_value: float | int | bool = 0.0,
     ) -> T:  # noqa: D417
         """Stacks tensordicts in a LazyStackedTensorDict.
 
@@ -1164,13 +1255,55 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim_name (str, optional): a name for the stacked dimension.
             strict_shape (bool, optional): if ``True``, every tensordict's shapes must match.
                 Defaults to ``False``.
+            as_list (bool, optional): if ``True``, ragged tensors will be returned as list.
+                Exclusive with `as_padded_tensor` and `as_nested_tensor`.
+                Defaults to ``False``.
+            as_padded_tensor (bool, optional):  if ``True``, ragged tensors will be returned as padded tensors.
+                The padding value can be controlled via the `padding_value` keyword argument, and the padding
+                side via the `padding_side` argument.
+                Exclusive with `as_list` and `as_nested_tensor`.
+                Defaults to ``False``.
+            as_nested_tensor (bool, optional): if ``True``, ragged tensors will be returned as list.
+                Exclusive with `as_list` and `as_padded_tensor`.
+                The layout can be controlled via the `torch.layout` argument.
+                Defaults to ``False``.
+            layout (torch.layout, optional): the layout when `as_nested_tensor=True`.
+            padding_side (str): The side of padding. Must be `"left"` or `"right"`. Defaults to `"right"`.
+            padding_value (scalar or bool, optional): The padding value. Defaults to 0.0.
 
         """
         if not items:
             raise RuntimeError("items cannot be empty")
 
         if all(isinstance(item, torch.Tensor) for item in items):
-            return torch.stack(items, dim=dim, out=out)
+            # This must be implemented here and not in _get_str because we want to leverage this check
+            special_return = sum((as_list, as_padded_tensor, as_nested_tensor))
+            if special_return > 1:
+                raise TypeError(
+                    "as_list, as_padded_tensor and as_nested_tensor are exclusive."
+                )
+            elif special_return:
+                if as_padded_tensor:
+                    return pad_sequence(
+                        items,
+                        padding_value=padding_value,
+                        padding_side=padding_side,
+                        batch_first=True,
+                    )
+                if as_nested_tensor:
+                    if layout is None:
+                        layout = torch.jagged
+                    return torch.nested.as_nested_tensor(items, layout=layout)
+                if as_list:
+                    return items
+            try:
+                return torch.stack(items, dim=dim, out=out)
+            except RuntimeError as err:
+                raise RuntimeError(
+                    "Failed to stack tensors within a tensordict. You can use nested tensors, "
+                    "padded tensors or return lists via specialized keyword arguments. "
+                    "Check the TensorDict.lazy_stack documentation!"
+                ) from err
         if all(is_non_tensor(tensordict) for tensordict in items):
             # Non-tensor data (Data or Stack) are stacked using NonTensorStack
             # If the content is identical (not equal but same id) this does not
@@ -3521,14 +3654,14 @@ class _CustomOpTensorDict(TensorDictBase):
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
 
-    def _get_str(self, key, default):
-        tensor = self._source._get_str(key, default)
+    def _get_str(self, key, default, **kwargs):
+        tensor = self._source._get_str(key, default, **kwargs)
         if tensor is default:
             return tensor
         return self._transform_value(tensor)
 
-    def _get_tuple(self, key, default):
-        tensor = self._source._get_tuple(key, default)
+    def _get_tuple(self, key, default, **kwargs):
+        tensor = self._source._get_tuple(key, default, **kwargs)
         if tensor is default:
             return tensor
         return self._transform_value(tensor)

@@ -2695,19 +2695,19 @@ class TensorDict(TensorDictBase):
             # )
         return self
 
-    def _get_str(self, key, default):
+    def _get_str(self, key, default, **kwargs):
         first_key = key
         out = self._tensordict.get(first_key)
         if out is None:
             return self._default_get(first_key, default)
         return out
 
-    def _get_tuple(self, key, default):
-        first = self._get_str(key[0], default)
+    def _get_tuple(self, key, default, **kwargs):
+        first = self._get_str(key[0], default, **kwargs)
         if len(key) == 1 or first is default:
             return first
         try:
-            return first._get_tuple(key[1:], default=default)
+            return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
                 raise ValueError(
@@ -3823,16 +3823,16 @@ class _SubTensorDict(TensorDictBase):
             return out._source
         return out
 
-    def _get_str(self, key, default):
+    def _get_str(self, key, default, **kwargs):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
-            data = self._source._get_str(key, NO_DEFAULT)
+            data = self._source._get_str(key, NO_DEFAULT, **kwargs)
             if _pass_through(data):
                 return data[self.idx]
             return _SubTensorDict(data, self.idx)
-        return self._source._get_at_str(key, self.idx, default=default)
+        return self._source._get_at_str(key, self.idx, default=default, **kwargs)
 
-    def _get_tuple(self, key, default):
-        return self._source._get_at_tuple(key, self.idx, default=default)
+    def _get_tuple(self, key, default, **kwargs):
+        return self._source._get_at_tuple(key, self.idx, default=default, **kwargs)
 
     @lock_blocked
     def update(

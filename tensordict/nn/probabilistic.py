@@ -984,6 +984,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 self._ordered_dict = True
             else:
                 modules = modules_list = list(modules[0])
+        elif len(modules) == 1 and isinstance(modules[0], dict):
+            modules = [collections.OrderedDict(modules[0])]
+            return self.__init__(
+                *modules,
+                partial_tolerant=partial_tolerant,
+                return_composite=return_composite,
+                inplace=inplace,
+            )
         elif not return_composite and not isinstance(
             modules[-1],
             (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
