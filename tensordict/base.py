@@ -6436,6 +6436,9 @@ class TensorDictBase(MutableMapping):
                     To adopt the old behavior, set the environment variable `export TD_GET_DEFAULTS_TO_NONE='0'` or call
                     :func`~tensordict.set_get_defaults_to_none(False)`.
 
+        .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
+            See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
+
         Examples:
             >>> td = TensorDict({"x": 1}, batch_size=[])
             >>> td.get("x")
@@ -6449,26 +6452,28 @@ class TensorDictBase(MutableMapping):
         # Find what the default is
         if args:
             default = args[0]
-            if len(args) > 1 or kwargs:
-                raise TypeError("only one (keyword) argument is allowed.")
-        elif kwargs:
+            if len(args) > 1:
+                raise TypeError("Only one arg is allowed in TD.get.")
+            elif "default" in kwargs:
+                raise TypeError("'default' arg was passed twice.")
+        elif "default" in kwargs:
             default = kwargs.pop("default")
-            if args or kwargs:
-                raise TypeError("only one (keyword) argument is allowed.")
+            if args:
+                raise TypeError("'default' arg was passed twice.")
         elif _GET_DEFAULTS_TO_NONE:
             default = None
         else:
             default = NO_DEFAULT
-        return self._get_tuple(key, default=default)
+        return self._get_tuple(key, default=default, **kwargs)
 
     @abc.abstractmethod
-    def _get_str(self, key, default): ...
+    def _get_str(self, key, default, **kwargs): ...
 
     @abc.abstractmethod
-    def _get_tuple(self, key, default): ...
+    def _get_tuple(self, key, default, **kwargs): ...
 
-    def _get_tuple_maybe_non_tensor(self, key, default):
-        result = self._get_tuple(key, default)
+    def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
+        result = self._get_tuple(key, default, **kwargs)
         if _pass_through(result):
             # Only lazy stacks of non tensors are actually tensordict instances
             if isinstance(result, TensorDictBase):

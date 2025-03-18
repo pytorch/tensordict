@@ -5703,11 +5703,11 @@ class TestTensorDicts(TestTensorDictsBase):
         td_stack = LazyStackedTensorDict.lazy_stack([td1, td2], dim)
         # get will fail
         with pytest.raises(
-            RuntimeError, match="Found more than one unique shape in the tensors"
+            RuntimeError, match="Failed to stack tensors within a tensordict"
         ):
             td_stack.get(key)
         with pytest.raises(
-            RuntimeError, match="Found more than one unique shape in the tensors"
+            RuntimeError, match="Failed to stack tensors within a tensordict"
         ):
             td_stack[key]
         if dim in (0, -5):
@@ -5725,11 +5725,11 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td_stack.get_nestedtensor(key)
         with pytest.raises(
-            RuntimeError, match="Found more than one unique shape in the tensors"
+            RuntimeError, match="Failed to stack tensors within a tensordict"
         ):
             td_stack.contiguous()
         with pytest.raises(
-            RuntimeError, match="Found more than one unique shape in the tensors"
+            RuntimeError, match="Failed to stack tensors within a tensordict"
         ):
             td_stack.to_tensordict(retain_none=True)
         # cloning is type-preserving: we can do that operation
@@ -8827,7 +8827,9 @@ class TestLazyStackedTensorDict:
         if ragged:
             # This doesn't work because tensors can't be reduced to a single value
             # as they're not contiguous
-            with pytest.raises(RuntimeError, match="Found more than one unique shape"):
+            with pytest.raises(
+                RuntimeError, match="Failed to stack tensors within a tensordict"
+            ):
                 td1.norm()
         else:
             td1.norm()
@@ -9107,6 +9109,34 @@ class TestLazyStackedTensorDict:
         assert (td_nest_strided.exclude(("td", "c"))[0] == 0).all()
         assert (td_nest_strided.exclude(("td", "a"))[1] == 1).all()
         assert not td_nest_strided["td", "d", "e"].is_nested
+
+    def test_lazy_get(self):
+        inner_td = lazy_stack(
+            [
+                TensorDict({"x": torch.ones(1)}),
+                TensorDict({"x": torch.ones(2) * 2}),
+            ]
+        )
+        td = TensorDict(inner=inner_td, batch_size=[2])
+        with pytest.raises(
+            RuntimeError, match="Failed to stack tensors within a tensordict"
+        ):
+            td.get(("inner", "x"))
+        x = td.get(("inner", "x"), as_nested_tensor=True)
+        assert x.is_nested
+        x = td.get(("inner", "x"), as_list=True)
+        assert isinstance(x, list)
+        x = td.get(("inner", "x"), as_padded_tensor=True)
+        assert isinstance(x, torch.Tensor)
+        assert x[0, 1] == 0
+        x = td.get(
+            ("inner", "x"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=100,
+        )
+        assert isinstance(x, torch.Tensor)
+        assert x[0, 0] == 100
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
@@ -9632,13 +9662,13 @@ class TestLazyStackedTensorDict:
         td_a.update(td_b)
         with pytest.raises(
             RuntimeError,
-            match="Found more than one unique shape in the tensors to be stacked",
+            match="Failed to stack tensors within a tensordict",
         ):
             td_a.update(td_b.to_tensordict(retain_none=True))
         td_a.update_(td_b)
         with pytest.raises(
             RuntimeError,
-            match="Found more than one unique shape in the tensors to be stacked",
+            match="Failed to stack tensors within a tensordict",
         ):
             td_a.update_(td_b.to_tensordict(retain_none=True))
 
