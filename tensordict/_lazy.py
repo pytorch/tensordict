@@ -2155,7 +2155,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             return self
-        result = type(self)(
+        result = self._new_lazy_unsafe(
             *tensordicts, stack_dim=self.stack_dim, stack_dim_name=self._td_dim_name
         )
         return result
