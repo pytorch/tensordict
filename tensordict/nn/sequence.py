@@ -635,7 +635,6 @@ class TensorDictSequential(TensorDictModule):
             )
         if tensordict_out is not None:
             result = tensordict_out
-            print("tensordict_exec", tensordict_exec)
             result.update(tensordict_exec, keys_to_update=self.out_keys)
         else:
             result = tensordict_exec
