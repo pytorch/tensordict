@@ -2644,7 +2644,13 @@ class TensorDict(TensorDictBase):
                 validated=True,
                 non_blocking=False,
             )
-        self.del_(old_key)
+        new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
+        if not (
+            isinstance(old_key, tuple)
+            and old_key[: len(new_key_tuple)] == new_key_tuple
+        ):
+            # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
+            self.del_(old_key)
         return self
 
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
