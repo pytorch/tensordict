@@ -2225,6 +2225,11 @@ class TestGeneric:
         # First stacked tensor has requires_grad == True
         assert list(stacked_td.values())[0].requires_grad is True
 
+    def test_rename_key_nested(self):
+        td = TensorDict(a={"b": {"c": 0}})
+        td.rename_key_(("a", "b", "c"), ("a", "b"))
+        assert td["a", "b"] == 0
+
     @pytest.mark.parametrize("like", [True, False])
     def test_save_load_memmap_stacked_td(
         self,
