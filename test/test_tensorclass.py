@@ -974,6 +974,20 @@ class TestTensorClass:
         assert (data.get("X", "working") == X).all()
         assert data.get("v", "working") == v
 
+    def test_get_lazystack(self):
+        lazystack = LazyStackedTensorDict(
+            TensorDict(X=torch.ones(3), y=0, z="a string"),
+            TensorDict(X=torch.ones(2) * 2, y=0, z="a string"),
+        )
+        obj = MyData2.from_tensordict(lazystack)
+        a = obj.get("X", as_list=True)
+        assert isinstance(a, list)
+        a = obj.get("X", as_nested_tensor=True)
+        assert a.is_nested
+        a = obj.get("X", as_padded_tensor=True)
+        assert a.shape == (2, 3)
+        assert a[1, -1] == 0
+
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):
         @tensorclass

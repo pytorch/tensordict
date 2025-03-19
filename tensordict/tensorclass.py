@@ -1471,7 +1471,7 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     self._non_tensordict = state.get("non_tensordict")
 
 
-def _getattr(self, item: str) -> Any:
+def _getattr(self, item: str, **kwargs) -> Any:
     _tensordict = self._tensordict
     __dataclass_fields__ = type(self).__expected_keys__
 
@@ -1487,7 +1487,7 @@ def _getattr(self, item: str) -> Any:
                 ):
                     return _from_shared_nontensor(out)
                 return out
-        out = _tensordict._get_str(item, NO_DEFAULT)
+        out = _tensordict._get_str(item, NO_DEFAULT, **kwargs)
         if is_non_tensor(out):
             return out.data if not isinstance(out, NonTensorStack) else out.tolist()
         return out
@@ -2307,16 +2307,17 @@ def _get(self, key: NestedKey, *args, **kwargs):
     key = _unravel_key_to_tuple(key)
     if not key:
         raise KeyError(_GENERIC_NESTED_ERR.format(key))
-
     # Find what the default is
     if args:
         default = args[0]
-        if len(args) > 1 or kwargs:
-            raise TypeError("only one (keyword) argument is allowed.")
-    elif kwargs:
+        if len(args) > 1:
+            raise TypeError("Only one arg is allowed in TD.get.")
+        elif "default" in kwargs:
+            raise TypeError("'default' arg was passed twice.")
+    elif "default" in kwargs:
         default = kwargs.pop("default")
-        if args or kwargs:
-            raise TypeError("only one (keyword) argument is allowed.")
+        if args:
+            raise TypeError("'default' arg was passed twice.")
     elif _GET_DEFAULTS_TO_NONE:
         default = None
     else:
@@ -2324,8 +2325,10 @@ def _get(self, key: NestedKey, *args, **kwargs):
 
     try:
         if len(key) > 1:
-            return getattr(self, key[0]).get(key[1:], default=default)
-        return getattr(self, key[0])
+            return _getattr(self, key[0], **kwargs).get(
+                key[1:], default=default, **kwargs
+            )
+        return _getattr(self, key[0], **kwargs)
     except (AttributeError, KeyError):
         if default is NO_DEFAULT:
             raise
