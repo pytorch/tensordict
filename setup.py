@@ -190,6 +190,7 @@ def _main(argv):
             "cloudpickle",
             "orjson",
             "packaging",
+            "setuptools<77.0.3",
         ],
         extras_require={
             "tests": [
