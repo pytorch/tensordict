@@ -181,7 +181,7 @@ def _main(argv):
         ),
         ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+            "build_ext": BuildExtension.with_options(),
             "clean": clean,
         },
         install_requires=[
@@ -190,7 +190,6 @@ def _main(argv):
             "cloudpickle",
             "orjson",
             "packaging",
-            "setuptools<77.0.3",
         ],
         extras_require={
             "tests": [
