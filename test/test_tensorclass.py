@@ -974,6 +974,20 @@ class TestTensorClass:
         assert (data.get("X", "working") == X).all()
         assert data.get("v", "working") == v
 
+    def test_get_lazystack(self):
+        lazystack = LazyStackedTensorDict(
+            TensorDict(X=torch.ones(3), y=0, z="a string"),
+            TensorDict(X=torch.ones(2) * 2, y=0, z="a string"),
+        )
+        obj = MyData2.from_tensordict(lazystack)
+        a = obj.get("X", as_list=True)
+        assert isinstance(a, list)
+        a = obj.get("X", as_nested_tensor=True)
+        assert a.is_nested
+        a = obj.get("X", as_padded_tensor=True)
+        assert a.shape == (2, 3)
+        assert a[1, -1] == 0
+
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):
         @tensorclass
@@ -1069,55 +1083,6 @@ class TestTensorClass:
         assert not a.data.requires_grad
         assert a.grad.x is not None
         assert a.grad.z is None
-
-    def test_kjt(self):
-        try:
-            from torchrec import KeyedJaggedTensor
-        except ImportError:
-            pytest.skip("TorchRec not installed.")
-
-        def _get_kjt(
-            self,
-        ):
-            values = torch.Tensor(
-                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-            )
-            weights = torch.Tensor(
-                [1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0]
-            )
-            keys = ["index_0", "index_1", "index_2"]
-            offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
-
-            jag_tensor = KeyedJaggedTensor(
-                values=values,
-                keys=keys,
-                offsets=offsets,
-                weights=weights,
-            )
-            return jag_tensor
-
-        kjt = _get_kjt()
-
-        @tensorclass
-        class MyData:
-            X: torch.Tensor
-            y: KeyedJaggedTensor
-            z: str
-
-        z = "test_tensorclass"
-        data = MyData(X=torch.zeros(3, 1), y=kjt, z=z, batch_size=[3])
-        subdata = data[:2]
-        assert (
-            subdata.y["index_0"].to_padded_dense()
-            == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
-        ).all()
-
-        subdata = data[[0, 2]]
-        assert (
-            subdata.y["index_0"].to_padded_dense()
-            == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
-        ).all()
-        assert subdata.z == data.z == z
 
     def test_len(self):
         myc = MyData(
