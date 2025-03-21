@@ -354,7 +354,7 @@ class PersistentTensorDict(TensorDictBase):
             return out
 
     @cache  # noqa: B019
-    def _get_str(self, key: NestedKey, default):
+    def _get_str(self, key: NestedKey, default, **kwargs):
         key = _unravel_key_to_tuple(key)
         array = self._get_array(key, default)
         if array is default:

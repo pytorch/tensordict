@@ -56,7 +56,7 @@ from tensordict.nn.utils import (
 )
 
 from torch import distributions, nn
-from torch.distributions import Normal
+from torch.distributions import Categorical, Normal
 from torch.utils._pytree import tree_map
 
 try:
@@ -2127,6 +2127,50 @@ def test_module_buffer():
 
 
 class TestProbabilisticTensorDictModule:
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize("inplace", [True, False, None])
+    @pytest.mark.parametrize("module_inplace", [True, False])
+    def test_tdprobseq_inplace(self, inplace, module_inplace):
+        model = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                lambda x: (x + 1, x - 1),
+                in_keys=["input"],
+                out_keys=[("intermediate", "0"), ("intermediate", "1")],
+                inplace=module_inplace,
+            ),
+            TensorDictModule(
+                lambda y0, y1: y0 * y1,
+                in_keys=[("intermediate", "0"), ("intermediate", "1")],
+                out_keys=["output"],
+                inplace=module_inplace,
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys={"logits": "output"},
+                out_keys=["sample"],
+                return_log_prob=True,
+                distribution_class=Categorical,
+            ),
+            inplace=inplace,
+        )
+        input = TensorDict(input=torch.zeros((5,)))
+        output = model(input)
+        assert "sample_log_prob" in output
+        assert "sample" in output
+        if inplace:
+            assert output is input
+            assert "input" in output
+        else:
+            if not module_inplace or inplace is False:
+                # In this case, inplace=False and inplace=None have the same behavior
+                assert output is not input, (module_inplace, inplace)
+                assert "input" not in output, (module_inplace, inplace)
+            else:
+                # In this case, inplace=False and inplace=None have the same behavior
+                assert output is input, (module_inplace, inplace)
+                assert "input" in output, (module_inplace, inplace)
+
+        assert "output" in output
+
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @set_composite_lp_aggregate(False)
     def test_probabilistic_n_samples(self, return_log_prob):
@@ -3810,6 +3854,20 @@ class TestAddStateIndependentNormalScale:
         assert loc.shape == (4, 2, num_outputs)
         assert scale.shape == (4, 2, num_outputs)
         assert (scale > 0).all()
+
+    def test_add_scale_init_value(self, num_outputs=4):
+        module = nn.Linear(3, num_outputs)
+        init_value = 1.0
+        module_normal = AddStateIndependentNormalScale(
+            num_outputs,
+            scale_mapping="relu",
+            init_value=init_value,
+        )
+        tensor = torch.randn(3)
+        loc, scale = module_normal(module(tensor))
+        assert loc.shape == (num_outputs,)
+        assert scale.shape == (num_outputs,)
+        assert (scale == init_value).all()
 
 
 class TestStateDict:

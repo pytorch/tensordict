@@ -26,7 +26,6 @@ from tensordict.utils import (  # noqa: F401
     expand_as_right,
     expand_right,
     implement_for,
-    index_keyedjaggedtensor,
     infer_size_impl,
     int_generator,
     is_nested_key,
