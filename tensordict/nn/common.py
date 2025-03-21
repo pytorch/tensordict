@@ -851,6 +851,9 @@ class TensorDictModule(TensorDictModuleBase):
         method_kwargs (Dict[str, Any], optional): additional keyword arguments to be passed to the module's method being called.
         strict (bool, optional): if ``True``, the module will raise an exception if any of the inputs is missing from
             the input tensordict. Otherwise, a `None` value will be used as placeholder. Defaults to ``False``.
+        get_kwargs (dict[str, Any], optional): additional keyword arguments to be passed to the :meth:`~tensordict.TensorDictBase.get`
+            method. This is particularily useful when dealing with ragged tensors (see :meth:`~tensordict.LazyStackedTensorDict.get`).
+            Defaults to ``{}``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input
     and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
@@ -1018,6 +1021,7 @@ class TensorDictModule(TensorDictModuleBase):
         method: str | None = None,
         method_kwargs: dict | None = None,
         strict: bool = False,
+        get_kwargs: dict | None = None,
     ) -> None:
         super().__init__()
 
@@ -1097,6 +1101,7 @@ class TensorDictModule(TensorDictModuleBase):
         self.inplace = inplace
         self.method = method
         self.method_kwargs = method_kwargs if method_kwargs is not None else {}
+        self._get_kwargs = get_kwargs if get_kwargs is not None else {}
 
     @property
     def is_functional(self) -> bool:
@@ -1180,7 +1185,9 @@ class TensorDictModule(TensorDictModuleBase):
             else:
                 tensors = tuple(
                     tensordict._get_tuple_maybe_non_tensor(
-                        _unravel_key_to_tuple(in_key), default
+                        _unravel_key_to_tuple(in_key),
+                        default,
+                        **self._get_kwargs,
                     )
                     for in_key in self.in_keys
                 )
@@ -1223,7 +1230,7 @@ class TensorDictModule(TensorDictModuleBase):
                     import inspect
 
                     module = inspect.getsource(module)
-                except OSError:
+                except Exception:
                     # then we can't print the source code
                     pass
             module = indent(str(module), 4 * " ")
