@@ -106,6 +106,8 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         make_param (bool, optional): whether the scale should be a parameter (``True``)
             or a buffer (``False``).
             Defaults to ``True``.
+        init_value (float, optional): Initial value of state independent scale.
+            Defaults to 0.0.
 
     Examples:
         >>> from torch import nn
@@ -136,6 +138,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         scale_lb: Number = 1e-4,
         device: torch.device | None = None,
         make_param: bool = True,
+        init_value: float = 0.0,
     ) -> None:
 
         super().__init__()
@@ -148,11 +151,21 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         self.scale_mapping = scale_mapping
         if make_param:
             self.state_independent_scale = torch.nn.Parameter(
-                torch.zeros(scale_shape, device=device)
+                torch.full(
+                    scale_shape,
+                    init_value,
+                    dtype=torch.get_default_dtype(),
+                    device=device,
+                )
             )
         else:
             self.state_independent_scale = torch.nn.Buffer(
-                torch.zeros(scale_shape, device=device)
+                torch.full(
+                    scale_shape,
+                    init_value,
+                    dtype=torch.get_default_dtype(),
+                    device=device,
+                )
             )
 
     def forward(

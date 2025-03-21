@@ -80,7 +80,6 @@ from tensordict.utils import (
     IndexType,
     is_non_tensor,
     is_tensorclass,
-    KeyedJaggedTensor,
     lock_blocked,
     unravel_key,
     unravel_key_list,
@@ -2645,7 +2644,13 @@ class TensorDict(TensorDictBase):
                 validated=True,
                 non_blocking=False,
             )
-        self.del_(old_key)
+        new_key_tuple = (new_key,) if isinstance(new_key, str) else new_key
+        if not (
+            isinstance(old_key, tuple)
+            and old_key[: len(new_key_tuple)] == new_key_tuple
+        ):
+            # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
+            self.del_(old_key)
         return self
 
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
@@ -2695,19 +2700,19 @@ class TensorDict(TensorDictBase):
             # )
         return self
 
-    def _get_str(self, key, default):
+    def _get_str(self, key, default, **kwargs):
         first_key = key
         out = self._tensordict.get(first_key)
         if out is None:
             return self._default_get(first_key, default)
         return out
 
-    def _get_tuple(self, key, default):
-        first = self._get_str(key[0], default)
+    def _get_tuple(self, key, default, **kwargs):
+        first = self._get_str(key[0], default, **kwargs)
         if len(key) == 1 or first is default:
             return first
         try:
-            return first._get_tuple(key[1:], default=default)
+            return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
             if "has no attribute" in str(err):
                 raise ValueError(
@@ -3823,16 +3828,16 @@ class _SubTensorDict(TensorDictBase):
             return out._source
         return out
 
-    def _get_str(self, key, default):
+    def _get_str(self, key, default, **kwargs):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
-            data = self._source._get_str(key, NO_DEFAULT)
+            data = self._source._get_str(key, NO_DEFAULT, **kwargs)
             if _pass_through(data):
                 return data[self.idx]
             return _SubTensorDict(data, self.idx)
-        return self._source._get_at_str(key, self.idx, default=default)
+        return self._source._get_at_str(key, self.idx, default=default, **kwargs)
 
-    def _get_tuple(self, key, default):
-        return self._source._get_at_tuple(key, self.idx, default=default)
+    def _get_tuple(self, key, default, **kwargs):
+        return self._source._get_at_tuple(key, self.idx, default=default, **kwargs)
 
     @lock_blocked
     def update(
@@ -4517,8 +4522,6 @@ class _TensorDictKeysView:
 
         if isinstance(tensordict, TensorDictParams):
             return tensordict._param_td.items()
-        if isinstance(tensordict, KeyedJaggedTensor):
-            return tuple((key, tensordict[key]) for key in tensordict.keys())
         from tensordict._lazy import (
             _CustomOpTensorDict,
             _iter_items_lazystack,
@@ -4570,10 +4573,6 @@ class _TensorDictKeysView:
                     entry_type = type(item_root)
                     if issubclass(entry_type, Tensor):
                         return False
-                    elif entry_type is KeyedJaggedTensor:
-                        if len(key) > 2:
-                            return False
-                        return key[1] in item_root.keys()
                     # TODO: make this faster for LazyStacked without compromising regular
                     _is_tensordict = _is_tensor_collection(entry_type)
                     if _is_tensordict:
@@ -4584,7 +4583,6 @@ class _TensorDictKeysView:
                             leaf_td = item_root._get_tuple(key[1:-1], None)
                             if leaf_td is None or (
                                 not _is_tensor_collection(type(leaf_td))
-                                and not isinstance(leaf_td, KeyedJaggedTensor)
                             ):
                                 return False
                         else:
