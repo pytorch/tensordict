@@ -229,6 +229,7 @@ def _main(argv):
             ],
             "checkpointing": ["torchsnapshot-nightly"],
             "h5": ["h5py>=3.8"],
+            "dev": ["pybind11", "cmake", "ninja"],
         },
         zip_safe=False,
         classifiers=[
