@@ -1087,8 +1087,12 @@ def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
 
         if not is_compiling():
             for key, field in type(self).__dataclass_fields__.items():
-                if field.default_factory not in (dataclasses.MISSING, ) and not isinstance(field.default_factory, dataclasses._MISSING_TYPE):
-                    print('field.default_factory', field.default_factory)
+                if field.default_factory not in (
+                    dataclasses.MISSING,
+                ) and not isinstance(
+                    field.default_factory,
+                    getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)),
+                ):
                     default = field.default_factory()
                 else:
                     default = field.default
