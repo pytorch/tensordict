@@ -810,7 +810,7 @@ class TensorDictBase(MutableMapping):
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
             return_argmins (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
@@ -943,7 +943,7 @@ class TensorDictBase(MutableMapping):
             keepdim (bool): whether the output tensor has dim retained or not.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
             return_argmins (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
@@ -1049,7 +1049,7 @@ class TensorDictBase(MutableMapping):
             dim (int): integer representing the dimension along which to perform the cummin operation.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
             return_argmins (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
@@ -1152,7 +1152,7 @@ class TensorDictBase(MutableMapping):
             dim (int): integer representing the dimension along which to perform the cummax operation.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
             return_argmins (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
@@ -1268,7 +1268,7 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1386,7 +1386,7 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1500,7 +1500,7 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1623,7 +1623,7 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1737,7 +1737,7 @@ class TensorDictBase(MutableMapping):
             dtype (torch.dtype, optional): the desired data type of returned tensor.
                 If specified, the input tensor is casted to dtype before the operation is performed.
                 This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1850,7 +1850,7 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel's correction, correction=1.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -1963,7 +1963,7 @@ class TensorDictBase(MutableMapping):
         Keyword Args:
             correction (int): difference between the sample size and sample degrees of freedom.
                 Defaults to Bessel's correction, correction=1.
-            reduce (bool, optional): if ``True``, the reduciton will occur across all TensorDict values
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
 
@@ -9313,7 +9313,7 @@ class TensorDictBase(MutableMapping):
         return self.sub_(other)
 
     def __rsub__(self, other: TensorDictBase | torch.Tensor) -> T:
-        return self.sub(other)
+        return self.rsub(other)
 
     def __pow__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.pow(other)
@@ -10585,6 +10585,68 @@ class TensorDictBase(MutableMapping):
         else:
             torch._foreach_sub_(vals, other_val)
         return self
+
+    @_maybe_broadcast_other("sub")
+    def rsub(
+        self,
+        other: TensorDictBase | torch.Tensor | float,
+        *,
+        alpha: float | None = None,
+        default: str | CompatibleType | None = None,
+    ):  # noqa: D417
+        r"""Subtracts `self` from :attr:`other`, scaled by :attr:`alpha`, from ``self``.
+
+        .. math::
+            \text{{out}}_i = \text{{input}}_i - \text{{alpha}} \times \text{{other}}_i
+
+        Supports broadcasting,
+        type promotion, and integer, float, and complex inputs.
+
+        Args:
+            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+
+        Keyword Args:
+            alpha (Number): the multiplier for :attr:`other`.
+            default (torch.Tensor or str, optional): the default value to use for exclusive entries.
+                If none is provided, the two tensordicts key list must match exactly.
+                If ``default="intersection"`` is passed, only the intersecting key sets will be considered
+                and other keys will be ignored.
+                In all other cases, ``default`` will be used for all missing entries on both sides of the
+                operation.
+
+        """
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            new_keys, other_val = other._items_list(
+                True, True, sorting_keys=keys, default=default
+            )
+            if default is not None:
+                as_dict = dict(zip(keys, vals))
+                vals = [as_dict.get(key, default) for key in new_keys]
+                keys = new_keys
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_neg(torch._foreach_sub(vals, other_val, alpha=alpha))
+        else:
+            vals = torch._foreach_neg(torch._foreach_sub(vals, other_val))
+        items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
+        result = self._fast_apply(
+            pop,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            filter_empty=True,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
 
     def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
         """In-place version of :meth:`~.mul`.
