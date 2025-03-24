@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-
 import contextlib
 
 import functools
@@ -20,6 +19,7 @@ import uuid
 import warnings
 import weakref
 from collections import UserDict
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -701,6 +701,12 @@ class TestGeneric:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
         else:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
+
+    def test_deepcopy(self):
+        td = TensorDict(a=TensorDict(b=0))
+        tdc = deepcopy(td)
+        assert (td == tdc).all()
+        assert (td.data_ptr(storage=True) != tdc.data_ptr(storage=True)).all()
 
     def test_dtype(self):
         td = TensorDict(
@@ -12304,6 +12310,87 @@ def _path_td_sync():
     TensorDict._sync_all = _sync_td
     yield
     TensorDict._sync_all = _sync_all
+
+
+class TestLikeConstructors:
+    @pytest.fixture(scope="module")
+    def td(self):
+        yield TensorDict(
+            a=torch.randn(3, 4),
+            b=TensorDict(c=torch.randint(10, (3, 4, 5)), batch_size=(3, 4)),
+            batch_size=(3,),
+        )
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.int64])
+    def test_zeros_like(self, device, dtype, td):
+        tdnew = torch.zeros_like(td, device=device, dtype=dtype)
+        assert (tdnew == 0).all()
+        assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.int64])
+    def test_ones_like(self, device, dtype, td):
+        tdnew = torch.ones_like(td, device=device, dtype=dtype)
+        assert (tdnew == 1).all()
+        assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.int64])
+    def test_empty_like(self, device, dtype, td):
+        tdnew = torch.empty_like(td, device=device, dtype=dtype)
+        assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.int64])
+    def test_full_like(self, device, dtype, td):
+        tdnew = torch.full_like(td, 2, device=device, dtype=dtype)
+        assert (tdnew == 2).all()
+        assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.double])
+    def test_rand_like(self, device, dtype, td):
+        td = td.float()
+        tdnew = torch.rand_like(td, device=device, dtype=dtype)
+        assert (tdnew != td).all()
+        assert (tdnew <= 1).all()
+        assert (tdnew >= 0).all()
+        if dtype is not None:
+            assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("dtype", [None, torch.double])
+    def test_randn_like(self, device, dtype, td):
+        td = td.float()
+        tdnew = torch.randn_like(td, device=device, dtype=dtype)
+        assert (tdnew != td).all()
+        if dtype is not None:
+            assert tdnew.dtype == dtype
+        if device is not None:
+            assert tdnew.device == torch.device(device)
+        else:
+            assert tdnew.device is None
 
 
 if __name__ == "__main__":
