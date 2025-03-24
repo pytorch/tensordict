@@ -517,6 +517,9 @@ class TensorDictBase(MutableMapping):
             return 0
         return batch_size[0]
 
+    def __deepcopy__(self, memo: Dict[Any, Any]) -> "tensordict.TensorDict":  # noqa
+        return self.clone()
+
     def __contains__(self, key: NestedKey) -> bool:
         if isinstance(key, str):
             return key in self.keys()
