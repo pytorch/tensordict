@@ -438,6 +438,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "reshape",
     "round",
     "round_",
+    "rsub",
     "select",
     "separates",
     "set_",
