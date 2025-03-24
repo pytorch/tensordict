@@ -19,6 +19,7 @@ import uuid
 import warnings
 import weakref
 from collections import UserDict
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -700,6 +701,12 @@ class TestGeneric:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
         else:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
+
+    def test_deepcopy(self):
+        td = TensorDict(a=TensorDict(b=0))
+        tdc = deepcopy(td)
+        assert (td == tdc).all()
+        assert (td.data_ptr(storage=True) != tdc.data_ptr(storage=True)).all()
 
     def test_dtype(self):
         td = TensorDict(
