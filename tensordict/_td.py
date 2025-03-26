@@ -113,8 +113,6 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
-_has_mps = torch.backends.mps.is_available()
-_has_cuda = torch.cuda.is_available()
 _has_functorch = False
 try:
     try:
