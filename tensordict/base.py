@@ -143,7 +143,6 @@ class _BEST_ATTEMPT_INPLACE:
         raise NotImplementedError
 
 
-
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
@@ -13553,10 +13552,23 @@ class TensorDictBase(MutableMapping):
 
         return result
 
+    @property
     def _has_cuda(self):
-        return torch.cuda.is_available()
+        val = self.__dict__.get("_has_cuda_val")
+        if val is None:
+            # Cache this value
+            val = torch.cuda.is_available()
+            self.__dict__["_has_cuda_val"] = val
+        return val
+
+    @property
     def _has_mps(self):
-        return torch.backends.mps.is_available()
+        val = self.__dict__.get("_has_mps_val")
+        if val is None:
+            # Cache this value
+            val = torch.backends.mps.is_available()
+            self.__dict__["_has_mps_val"] = val
+        return val
 
     def _sync_all(self):
         if self._has_cuda:
