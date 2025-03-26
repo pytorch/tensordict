@@ -143,9 +143,6 @@ class _BEST_ATTEMPT_INPLACE:
         raise NotImplementedError
 
 
-_has_mps = torch.backends.mps.is_available()
-_has_cuda = torch.cuda.is_available()
-
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
@@ -13555,12 +13552,30 @@ class TensorDictBase(MutableMapping):
 
         return result
 
+    @property
+    def _has_cuda(self):
+        val = self.__dict__.get("_has_cuda_val")
+        if val is None:
+            # Cache this value
+            val = torch.cuda.is_available()
+            self.__dict__["_has_cuda_val"] = val
+        return val
+
+    @property
+    def _has_mps(self):
+        val = self.__dict__.get("_has_mps_val")
+        if val is None:
+            # Cache this value
+            val = torch.backends.mps.is_available()
+            self.__dict__["_has_mps_val"] = val
+        return val
+
     def _sync_all(self):
-        if _has_cuda:
+        if self._has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
             if not is_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
-        elif _has_mps:
+        elif self._has_mps:
             mps = getattr(torch, "mps", None)
             if mps is not None:
                 mps.synchronize()
