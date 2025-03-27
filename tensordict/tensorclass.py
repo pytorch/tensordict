@@ -517,18 +517,20 @@ class _tensorclass_dec:
     frozen: bool
     nocast: bool
     shadow: bool
+    tensor_only: bool
 
     def __new__(
         cls,
         autocast: bool = False,
         frozen: bool = False,
         nocast: bool = False,
-        shadow: bool = False,
+            shadow: bool = False,
+            tensor_only: bool = False,
     ):
         if not isinstance(autocast, bool):
             clz = autocast
             self = super().__new__(cls)
-            self.__init__(autocast=False, frozen=False, nocast=False, shadow=False)
+            self.__init__(autocast=False, frozen=False, nocast=False, shadow=False, tensor_only=False)
             return self.__call__(clz)
         return super().__new__(cls)
 
@@ -537,7 +539,8 @@ class _tensorclass_dec:
         autocast: bool = False,
         frozen: bool = False,
         nocast: bool = False,
-        shadow: bool = False,
+            shadow: bool = False,
+            tensor_only: bool = False,
     ):
         if autocast and nocast:
             raise ValueError("autocast is exclusive with nocast.")
@@ -545,14 +548,16 @@ class _tensorclass_dec:
         self.frozen = frozen
         self.nocast = nocast
         self.shadow = shadow
+        self.tensor_only = tensor_only
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
-        clz = _tensorclass(cls, frozen=self.frozen, shadow=self.shadow)
+        clz = _tensorclass(cls, frozen=self.frozen, shadow=self.shadow, tensor_only=self.tensor_only)
         clz._autocast = self.autocast
         clz._nocast = self.nocast
         clz._shadow = self.shadow
         clz._frozen = self.frozen
+        clz._tensor_only = self.tensor_only
         return clz
 
 
@@ -568,6 +573,7 @@ def from_dataclass(
     nocast: bool = False,
     inplace: bool = False,
     shadow: bool = False,
+tensor_only: bool=False,
     device: torch.device | None = None,
 ) -> Any:
     """Converts a dataclass instance or a type into a tensorclass instance or type, respectively.
@@ -587,6 +593,7 @@ def from_dataclass(
         frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
         autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
         nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
+        tensor_only (bool, optional): TODO
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
@@ -654,6 +661,7 @@ def from_dataclass(
         clz._nocast = nocast
         clz._shadow = shadow
         clz._frozen = frozen
+        clz._tensor_only = tensor_only
         return clz
 
     if not is_dataclass(obj):
@@ -669,6 +677,7 @@ def from_dataclass(
         clz._nocast = nocast
         clz._shadow = shadow
         clz._frozen = frozen
+        clz._tensor_only = tensor_only
     else:
         clz = dest_cls
     result = clz(**asdict(obj), batch_size=batch_size, device=device)
@@ -690,6 +699,7 @@ def tensorclass(
     frozen: bool = False,
     nocast: bool = False,
     shadow: bool = False,
+tensor_only: bool=False,
 ) -> T | None:
     """A decorator to create :obj:`tensorclass` classes.
 
@@ -709,6 +719,7 @@ def tensorclass(
             at the same time). Defaults to ``False``.
         shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
             Use with caution, as this may cause unintended consequences. Defaults to False.
+        tensor_only (bool, optional): TODO
 
     tensorclass can be used with or without arguments:
 
@@ -789,7 +800,7 @@ def tensorclass(
     """
 
     def wrap(cls):
-        return _tensorclass_dec(autocast, frozen, nocast, shadow)(cls)
+        return _tensorclass_dec(autocast, frozen, nocast, shadow, tensor_only)(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
     if cls is None:
@@ -801,7 +812,7 @@ def tensorclass(
 
 
 @dataclass_transform()
-def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
+def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -859,7 +870,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
             delattr(cls, field.name)
 
     _get_type_hints(cls)
-    cls.__init__ = _init_wrapper(cls.__init__, frozen, shadow)
+    # cls._tensor_only = tensor_only
+    cls.__init__ = _init_wrapper(cls.__init__, frozen, shadow, tensor_only)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -867,7 +879,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool) -> T:
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
 
-    cls.__getattr__ = _getattr
+    if tensor_only:
+        cls.__getattr__ = _getattr_tensor_only
+    else:
+        cls.__getattr__ = _getattr
+
     if "__setattr__" not in cls.__dict__:
         cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
     if "__getitem__" not in cls.__dict__:
@@ -1039,7 +1055,7 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
-def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool) -> Callable:
+def _init_wrapper(__init__: Callable, frozen: bool, shadow: bool, tensor_only: bool) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
@@ -1476,6 +1492,19 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     self._tensordict = state.get("tensordict")
     self._non_tensordict = state.get("non_tensordict")
 
+def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
+    _tensordict = self._tensordict
+    result = _tensordict._get_str(item, None, **kwargs)
+    if result is not None:
+        return result
+    out = getattr(_tensordict, item, NO_DEFAULT)
+    if out is not NO_DEFAULT:
+        if not callable(out) and not is_non_tensor(out):
+            return out
+        if is_non_tensor(out):
+            return out.data if hasattr(out, "data") else out.tolist()
+        return _wrap_method(self, item, out)
+    raise AttributeError(item)
 
 def _getattr(self, item: str, **kwargs) -> Any:
     _tensordict = self._tensordict
@@ -2334,7 +2363,9 @@ def _get(self, key: NestedKey, *args, **kwargs):
             return _getattr(self, key[0], **kwargs).get(
                 key[1:], default=default, **kwargs
             )
-        return _getattr(self, key[0], **kwargs)
+        if kwargs:
+            return _getattr(self, key[0], **kwargs)
+        return getattr(self, key[0])
     except (AttributeError, KeyError):
         if default is NO_DEFAULT:
             raise
@@ -3938,7 +3969,7 @@ def _update_shared_nontensor(nontensor, val):
 
 class _TensorClassMeta(abc.ABCMeta):
     def __new__(
-        mcs, name, bases, namespace, autocast=None, nocast=None, frozen=None, **kwargs
+        mcs, name, bases, namespace, autocast=None, nocast=None, frozen=None, tensor_only=None, **kwargs
     ):
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
@@ -3950,6 +3981,8 @@ class _TensorClassMeta(abc.ABCMeta):
             nocast = cls._nocast
         if autocast is None and hasattr(cls, "_autocast"):
             autocast = cls._autocast
+        if tensor_only is None and hasattr(cls, "_tensor_only"):
+            tensor_only = cls._tensor_only
 
         if name == "TensorClass" and "tensordict.tensorclass" in namespace.get(
             "__module__", ""
@@ -3957,7 +3990,7 @@ class _TensorClassMeta(abc.ABCMeta):
             pass
         else:
             cls = tensorclass(
-                frozen=bool(frozen), nocast=bool(nocast), autocast=bool(autocast)
+                frozen=bool(frozen), nocast=bool(nocast), autocast=bool(autocast), tensor_only=bool(tensor_only)
             )(cls)
 
         return cls
@@ -4039,6 +4072,7 @@ class TensorClass(metaclass=_TensorClassMeta):
     _autocast: bool = False
     _nocast: bool = False
     _frozen: bool = False
+    _tensor_only: bool = False
     ...
 
 
