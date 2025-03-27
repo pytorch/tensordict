@@ -1319,7 +1319,9 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
             def is_tensor_or_optional_tensor(type_hint):
                 # Check if the type hint is exactly torch.Tensor
                 if isinstance(type_hint, type):
-                    return issubclass(type_hint, _TensorTypes)
+                    return issubclass(type_hint, _TensorTypes) or _is_tensor_collection(
+                        type_hint
+                    )
                 if isinstance(type_hint, type(Any)):
                     return False
                 if isinstance(type_hint, UnionType):
@@ -1343,7 +1345,9 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
                 if key not in cls.__expected_keys__:
                     continue
                 if not is_tensor_or_optional_tensor(val):
-                    raise TypeError("tensor_only requires types to be tensor or None")
+                    raise TypeError(
+                        "tensor_only requires types to be Tensor, Tensor-subtrypes or None"
+                    )
         cls._type_hints = {
             key: val if isinstance(val, type) else _AnyType
             for key, val in cls._type_hints.items()
@@ -1361,22 +1365,6 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
             "your tensorclass globally."
         )
         cls._type_hints = None
-    # except TypeError:
-    #     # This is a rather common case where type annotation is like
-    #     # class MyClass:
-    #     #     x: int | str
-    #     # in which case get_type_hints doesn't work (it does work
-    #     # however with old-school Optional or Union...)
-    #     # We simply differ the warning till _set() is called
-    #     cls._set_dict_warn_msg = (
-    #         "A TypeError occurred when trying to retrieve a type annotation. "
-    #         "This may be caused by annotations that use plain `|` instead of typing.Union "
-    #         "or typing.Optional which are supported. If you wish to use the feature "
-    #         "of setting dict as attributes with automapping to tensordict/tensorclass "
-    #         "(`my_obj.attr = dict(...)`), consider re-writing the tensorclass with "
-    #         "traditional type annotations."
-    #     )
-    #     cls._type_hints = None
 
 
 def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
@@ -1618,14 +1606,12 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 ):
                     return _from_shared_nontensor(out)
                 return out
-        _tensordict = self._tensordict
-        out = _tensordict._get_str(item, NO_DEFAULT, **kwargs)
+        out = self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
         if is_non_tensor(out):
             return out.data if not isinstance(out, NonTensorStack) else out.tolist()
         return out
 
-    _tensordict = self._tensordict
-    out = getattr(_tensordict, item, NO_DEFAULT)
+    out = getattr(self._tensordict, item, NO_DEFAULT)
     if out is not NO_DEFAULT:
         if not callable(out) and not is_non_tensor(out):
             return out

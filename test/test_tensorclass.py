@@ -3022,22 +3022,33 @@ class TestTensorOnly:
             )
             e: Optional[torch.IntTensor] = None  # noqa
             f: Optional[torch.IntTensor | None] = None  # noqa
+            g: TensorDict | None = None
+            h: MyTensorClass | None = None
 
-        with pytest.raises(TypeError):
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
 
             class TensorOnlyAny(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: Any
                 c: torch.Tensor | None = None
 
-        with pytest.raises(TypeError):
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
 
             class TensorOnlyStr(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: torch.Tensor | str
                 c: torch.Tensor | None = None
 
-        with pytest.raises(TypeError):
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
 
             class TensorOnlyStrUnion(TensorClass["tensor_only"]):
                 a: torch.Tensor
