@@ -231,7 +231,7 @@ try:
     MyTensorClass_autocast = from_dataclass(MyDataClass, autocast=True)
     MyTensorClass_nocast = from_dataclass(MyDataClass, nocast=True)
     MyTensorClass = from_dataclass(MyDataClass)
-except Exception as e:
+except Exception:
     MyTensorClass_autocast = MyTensorClass_nocast = MyTensorClass = None
 
 
@@ -2698,7 +2698,8 @@ class TestShadow:
             names: Any
             device: Any
 
-    def test_shadow_values(self):
+    def test_shadow_values_dec(self):
+
         @tensorclass(shadow=True)
         class MyClass:
             batch_size: Any
@@ -2706,6 +2707,48 @@ class TestShadow:
             device: Any
 
         c = MyClass(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+        c.batch_size = 1
+        assert c.batch_size == 1
+
+    def test_shadow_values_dec_subcls(self):
+        @tensorclass(shadow=True)
+        class MyClass:
+            batch_size: Any
+            names: Any
+            device: Any
+
+        class MyClsSubcls(MyClass): ...
+
+        c = MyClsSubcls(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+        c.batch_size = 1
+        assert c.batch_size == 1
+
+    def test_shadow_values_subcls(self):
+
+        class MyClassSbcls(TensorClass, shadow=True):
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClassSbcls(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+
+    def test_shadow_values_subcls_idx(self):
+
+        class MyClassSbcls(TensorClass["shadow"]):
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClassSbcls(batch_size=0, names=0, device=0)
         assert c.batch_size == 0
         assert c.names == 0
         assert c.device == 0

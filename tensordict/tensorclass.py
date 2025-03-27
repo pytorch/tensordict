@@ -837,7 +837,13 @@ def tensorclass(
     """
 
     def wrap(cls):
-        return _tensorclass_dec(autocast, frozen, nocast, shadow, tensor_only)(cls)
+        return _tensorclass_dec(
+            autocast=autocast,
+            frozen=frozen,
+            nocast=nocast,
+            shadow=shadow,
+            tensor_only=tensor_only,
+        )(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
     if cls is None:
@@ -904,12 +910,16 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     cls.fields = classmethod(dataclasses.fields)
     for field in cls.fields():
         if hasattr(cls, field.name):
-            delattr(cls, field.name)
-
+            # if we have used Cls(TensorClass["shadow"]), we have a subclass of Cls(TensorClass)
+            #  so we cannot directly delete the attribute
+            try:
+                delattr(cls, field.name)
+            except AttributeError:
+                pass
     _get_type_hints(cls, tensor_only=tensor_only)
     if tensor_only and (cls._autocast or cls._nocast):
         raise TypeError("tensor_only and _autocast or _nocast are exclusive features.")
-    cls.__init__ = _init_wrapper(cls.__init__, frozen, shadow, tensor_only)
+    cls.__init__ = _init_wrapper(cls.__init__, cls, frozen, shadow, tensor_only)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -922,13 +932,12 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     else:
         cls.__getattr__ = _getattr
 
+    cls.__setattr_parent__ = object.__setattr__
     if "__setattr__" not in cls.__dict__:
-        cls.__setattr_parent__ = object.__setattr__
         if not tensor_only:
             cls.__setattr__ = _setattr
         else:
             cls.__setattr__ = _setattr_tensor_only
-        # _setattr_wrapper(cls.__setattr__, expected_keys)
     if "__getitem__" not in cls.__dict__:
         cls.__getitem__ = _getitem
     if "__getitems__" not in cls.__dict__:
@@ -1101,12 +1110,17 @@ def _from_tensordict_with_none(tc, tensordict):
 
 
 def _init_wrapper(
-    __init__: Callable, frozen: bool, shadow: bool, tensor_only: bool
+    __init__: Callable, cls, frozen: bool, shadow: bool, tensor_only: bool
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
+    # if not required_params and hasattr(cls, "__init_parent__"):
+    #     init_sig_parent = inspect.signature(cls.__init_parent__)
+    #     params_parent = list(init_sig_parent.parameters.values())
+    #     # drop first entry of params which corresponds to self and isn't passed by the user
+    #     required_params = [p.name for p in params_parent[1:] if p.default is inspect._empty]
 
     @functools.wraps(__init__)
     def wrapper(
@@ -1184,8 +1198,10 @@ def _init_wrapper(
                 names=names,
             ),
         )
-        super(type(self), self).__setattr__("_non_tensordict", {})
-        super(type(self), self).__setattr__("_is_initialized", True)
+        # super(type(self), self).__setattr__("_non_tensordict", {})
+        # super(type(self), self).__setattr__("_is_initialized", True)
+        self.__setattr_parent__("_non_tensordict", {})
+        self.__setattr_parent__("_is_initialized", True)
 
         # convert the non tensor data in a regular data
         kwargs = {
@@ -4087,6 +4103,7 @@ class _TensorClassMeta(abc.ABCMeta):
         nocast=None,
         frozen=None,
         tensor_only=None,
+        shadow=None,
         **kwargs,
     ):
         # Create the class using the ABCMeta's __new__ method
@@ -4101,7 +4118,8 @@ class _TensorClassMeta(abc.ABCMeta):
             autocast = cls._autocast
         if tensor_only is None and hasattr(cls, "_tensor_only"):
             tensor_only = cls._tensor_only
-
+        if shadow is None and hasattr(cls, "_shadow"):
+            shadow = cls._shadow
         if name == "TensorClass" and "tensordict.tensorclass" in namespace.get(
             "__module__", ""
         ):
@@ -4112,6 +4130,7 @@ class _TensorClassMeta(abc.ABCMeta):
                 nocast=bool(nocast),
                 autocast=bool(autocast),
                 tensor_only=bool(tensor_only),
+                shadow=bool(shadow),
             )(cls)
 
         return cls
@@ -4123,13 +4142,38 @@ class _TensorClassMeta(abc.ABCMeta):
         cls_name = f"TensorClass_{name}"
         bases = (cls,)
         class_dict = {}
-        return cls.__class__.__new__(
-            cls.__class__,
+        # Copy the __init__ method from the original class
+        result = _TensorClassMeta(
             cls_name,
             bases,
             class_dict,
             **{_item: True for _item in item},
         )
+        # Note: We must destroy any property that is set by the tensorclass decorator.
+        #  The result is a base class, so we don't need them, and they will be populated later.
+        #  If they are present, the dataclass decorator applied within tensorclass will look for a default value
+        #  for these guys (when shadow=True) and it will actually find them (since they're properties of the base
+        #  class). This is bad because then we'll be using the property as default value - not what we want.
+        delattr(result, "device")
+        delattr(result, "batch_size")
+        delattr(result, "names")
+        return result
+
+    #
+    # def __getitem__(cls, item):
+    #     if not isinstance(item, tuple):
+    #         item = (item,)
+    #     name = "_".join(item)
+    #     cls_name = f"TensorClass_{name}"
+    #
+    #     # Create a new class that inherits from the original class
+    #     new_cls = types.new_class(cls_name, (cls,))
+    #
+    #     # Set the __init__ method of the new class to be the same as the original class
+    #     if hasattr(cls, '__init__'):
+    #         new_cls.__init__ = cls.__init__
+    #
+    #     return new_cls
 
 
 class TensorClass(metaclass=_TensorClassMeta):
@@ -4156,7 +4200,21 @@ class TensorClass(metaclass=_TensorClassMeta):
             device=None,
             is_shared=False)
 
-    You can pass keyword arguments in two ways: using brackets or keyword arguments.
+    Keyword Args:
+        batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
+        device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
+        frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
+        autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
+        nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
+        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
+            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
+            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+            Defaults to ``False``.
+        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
+            Use with caution, as this may cause unintended consequences. Defaults to False.
+
+    You can pass boolean keyword arguments (`"autocast"`, `"nocast"`, `"frozen"`, `"tensor_only"`, `"shadow"`) in two ways: using
+        brackets or keyword arguments.
 
     Examples:
         >>> class Foo(TensorClass["autocast"]):
