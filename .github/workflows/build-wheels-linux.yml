@@ -33,7 +33,6 @@ jobs:
         include:
           - repository: pytorch/tensordict
             smoke-test-script: test/smoke_test.py
-            pre-script: .github/scripts/linux-pre-script.sh
             post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: pytorch/tensordict

@@ -3,4 +3,3 @@ include LICENSE
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
-recursive-include tensordict *.so

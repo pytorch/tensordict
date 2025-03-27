@@ -6,11 +6,6 @@ possible.
 Install the library as suggested in the README. For advanced features,
 it is preferable to install the nightly built of pytorch.
 
-You will need the following packages to be installed:
-```bash
-pip install ninja cmake pybind11 -U
-```
-
 Make sure you install tensordict in develop mode by running
 ```
 python setup.py develop
