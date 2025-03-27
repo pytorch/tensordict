@@ -2,14 +2,6 @@
 set TENSORDICT_BUILD_VERSION=0.7.0
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
 
-if "%CONDA_RUN%"=="" (
-    echo CONDA_RUN is not set. Please activate your conda environment or set CONDA_RUN.
-    exit /b 1
-)
-
-:: Run the pip install command
-%CONDA_RUN% conda install -c conda-forge pybind11 -y
-
 @echo on
 
 set VC_VERSION_LOWER=17
