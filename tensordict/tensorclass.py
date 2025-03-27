@@ -25,8 +25,20 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
+from types import NoneType, UnionType
 
-from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    get_args,
+    get_origin,
+    get_type_hints,
+    List,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+)
 from warnings import warn
 
 import numpy as np
@@ -100,6 +112,16 @@ if (major, minor) < (3, 11):
 
 else:
     _AnyType = Any
+
+_TensorTypes = (
+    torch.FloatTensor,
+    torch.DoubleTensor,
+    torch.IntTensor,
+    torch.LongTensor,
+    torch.ByteTensor,
+    torch.BoolTensor,
+    torch.Tensor,  # The base tensor class
+)
 
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
@@ -877,8 +899,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         if hasattr(cls, field.name):
             delattr(cls, field.name)
 
-    _get_type_hints(cls)
-    # cls._tensor_only = tensor_only
+    _get_type_hints(cls, tensor_only=tensor_only)
+    if tensor_only and (cls._autocast or cls._nocast):
+        raise TypeError("tensor_only and _autocast or _nocast are exclusive features.")
     cls.__init__ = _init_wrapper(cls.__init__, frozen, shadow, tensor_only)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
@@ -928,6 +951,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls._set_at_str = _set_at_str
     if not hasattr(cls, "del_") and "del_" not in expected_keys:
         cls.del_ = _del_
+    if "__delattr__" not in cls.__dict__:
+        cls.__delattr__ = _delattr
     if not hasattr(cls, "get") and "get" not in expected_keys:
         cls.get = _get
     if not hasattr(cls, "get_at") and "get_at" not in expected_keys:
@@ -1211,7 +1236,7 @@ _cast_funcs[torch.Tensor] = torch.as_tensor
 _cast_funcs[np.ndarray] = np.asarray
 
 
-def _get_type_hints(cls, with_locals=False):
+def _get_type_hints(cls, with_locals=False, tensor_only=False):
     #######
     # Set proper type annotations for autocasting to tensordict/tensorclass
     #
@@ -1266,13 +1291,43 @@ def _get_type_hints(cls, with_locals=False):
             localns=localns,
             # globalns=globals(),
         )
+        if tensor_only:
+
+            def is_tensor_or_optional_tensor(type_hint):
+                # Check if the type hint is exactly torch.Tensor
+                if isinstance(type_hint, type):
+                    return issubclass(type_hint, _TensorTypes)
+                if isinstance(type_hint, type(Any)):
+                    return False
+                if isinstance(type_hint, UnionType):
+                    args = get_args(type_hint)
+                    return all(
+                        t is None or t is NoneType or is_tensor_or_optional_tensor(t)
+                        for t in args
+                    )
+                # Check if the type hint is a Union (e.g., Tensor | None)
+                origin = get_origin(type_hint)
+
+                if origin is Union:
+                    args = get_args(type_hint)
+                    return all(
+                        t is None or t is NoneType or is_tensor_or_optional_tensor(t)
+                        for t in args
+                    )
+                return False
+
+            for key, val in cls._type_hints.items():
+                if key not in cls.__expected_keys__:
+                    continue
+                if not is_tensor_or_optional_tensor(val):
+                    raise TypeError("tensor_only requires types to be tensor or None")
         cls._type_hints = {
             key: val if isinstance(val, type) else _AnyType
             for key, val in cls._type_hints.items()
         }
     except NameError:
         if not with_locals:
-            return _get_type_hints(cls, with_locals=True)
+            return _get_type_hints(cls, with_locals=True, tensor_only=tensor_only)
         cls._set_dict_warn_msg = (
             "A NameError occurred while trying to retrieve a type annotation. "
             "This can occur when a tensorclass references another locally defined "
@@ -1283,22 +1338,22 @@ def _get_type_hints(cls, with_locals=False):
             "your tensorclass globally."
         )
         cls._type_hints = None
-    except TypeError:
-        # This is a rather common case where type annotation is like
-        # class MyClass:
-        #     x: int | str
-        # in which case get_type_hints doesn't work (it does work
-        # however with old-school Optional or Union...)
-        # We simply differ the warning till _set() is called
-        cls._set_dict_warn_msg = (
-            "A TypeError occurred when trying to retrieve a type annotation. "
-            "This may be caused by annotations that use plain `|` instead of typing.Union "
-            "or typing.Optional which are supported. If you wish to use the feature "
-            "of setting dict as attributes with automapping to tensordict/tensorclass "
-            "(`my_obj.attr = dict(...)`), consider re-writing the tensorclass with "
-            "traditional type annotations."
-        )
-        cls._type_hints = None
+    # except TypeError:
+    #     # This is a rather common case where type annotation is like
+    #     # class MyClass:
+    #     #     x: int | str
+    #     # in which case get_type_hints doesn't work (it does work
+    #     # however with old-school Optional or Union...)
+    #     # We simply differ the warning till _set() is called
+    #     cls._set_dict_warn_msg = (
+    #         "A TypeError occurred when trying to retrieve a type annotation. "
+    #         "This may be caused by annotations that use plain `|` instead of typing.Union "
+    #         "or typing.Optional which are supported. If you wish to use the feature "
+    #         "of setting dict as attributes with automapping to tensordict/tensorclass "
+    #         "(`my_obj.attr = dict(...)`), consider re-writing the tensorclass with "
+    #         "traditional type annotations."
+    #     )
+    #     cls._type_hints = None
 
 
 def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
@@ -1621,6 +1676,9 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         raise AttributeError(
             f"Cannot set attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
         )
+    if value is None:
+        self._non_tensordict[key] = None
+        return
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
     if out is not self:
         raise RuntimeError(
@@ -2342,6 +2400,10 @@ def _set_at_str(
         key, value, idx, validated=validated, non_blocking=non_blocking
     )
     return self
+
+
+def _delattr(self, key):
+    del self._tensordict[key]
 
 
 def _del_(self, key):

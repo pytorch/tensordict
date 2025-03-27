@@ -2957,6 +2957,43 @@ class TestTensorOnly:
         assert x.a == 1
         assert x.b == 2
         assert x.c is None
+        x.c = 3
+        assert x.c == 3
+        assert isinstance(x.c, torch.Tensor)
+        delattr(x, "c")
+        assert not hasattr(x, "c")
+
+    def test_wrong_tensor_only(self):
+        class TensorOnly(TensorClass["tensor_only"]):
+            a: torch.IntTensor
+            b: torch.LongTensor
+            c: torch.Tensor | None = None
+            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = (
+                None  # noqa
+            )
+            e: Optional[torch.IntTensor] = None  # noqa
+            f: Optional[torch.IntTensor | None] = None  # noqa
+
+        with pytest.raises(TypeError):
+
+            class TensorOnlyAny(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: Any
+                c: torch.Tensor | None = None
+
+        with pytest.raises(TypeError):
+
+            class TensorOnlyStr(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: torch.Tensor | str
+                c: torch.Tensor | None = None
+
+        with pytest.raises(TypeError):
+
+            class TensorOnlyStrUnion(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: torch.Tensor
+                c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
 
 
 if __name__ == "__main__":
