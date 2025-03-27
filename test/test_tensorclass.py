@@ -231,7 +231,7 @@ try:
     MyTensorClass_autocast = from_dataclass(MyDataClass, autocast=True)
     MyTensorClass_nocast = from_dataclass(MyDataClass, nocast=True)
     MyTensorClass = from_dataclass(MyDataClass)
-except Exception:
+except Exception as e:
     MyTensorClass_autocast = MyTensorClass_nocast = MyTensorClass = None
 
 
@@ -755,6 +755,12 @@ class TestTensorClass:
         assert obj[0].a == obj[1].a - 1
         assert obj[0].b == obj[1].b
         assert obj[0].c is obj[1].c
+
+    def test_from_dataclass_exec(self):
+        # Check that everything runs fine
+        from_dataclass(MyDataClass, autocast=True)
+        from_dataclass(MyDataClass, nocast=True)
+        from_dataclass(MyDataClass)
 
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)

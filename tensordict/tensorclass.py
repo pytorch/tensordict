@@ -623,7 +623,10 @@ def from_dataclass(
         frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
         autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
         nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
-        tensor_only (bool, optional): TODO
+        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
+            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
+            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+            Defaults to ``False``.
         inplace (bool, optional): If ``True``, the dataclass type passed will be modified in-place. Defaults to ``False``.
             Without effect if an instance is provided.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
@@ -685,7 +688,7 @@ def from_dataclass(
             )
         else:
             cls = obj
-        clz = _tensorclass(cls, frozen=frozen, shadow=shadow)
+        clz = _tensorclass(cls, frozen=frozen, shadow=shadow, tensor_only=tensor_only)
         clz._type_hints = get_type_hints(obj)
         clz._autocast = autocast
         clz._nocast = nocast
@@ -702,6 +705,7 @@ def from_dataclass(
             make_dataclass(name, fields=obj.__dataclass_fields__),
             frozen=frozen,
             shadow=shadow,
+            tensor_only=tensor_only,
         )
         clz._autocast = autocast
         clz._nocast = nocast
@@ -749,7 +753,10 @@ def tensorclass(
             at the same time). Defaults to ``False``.
         shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
             Use with caution, as this may cause unintended consequences. Defaults to False.
-        tensor_only (bool, optional): TODO
+        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
+            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
+            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+            Defaults to ``False``.
 
     tensorclass can be used with or without arguments:
 
@@ -1646,12 +1653,12 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
 
     if key not in self.__expected_keys__:
         raise AttributeError(
-            f"Cannot set attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
+            f"Cannot set the attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."
         )
     out = self.set(key, value)
     if out is not self:
         raise RuntimeError(
-            "Cannot set attribute on a locked tensorclass, even if "
+            "Cannot set the attribute on a locked tensorclass, even if "
             "clone_on_set is set to True. Use my_obj.set(...) instead."
         )
 
