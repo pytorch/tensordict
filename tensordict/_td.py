@@ -113,8 +113,6 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
-_has_mps = torch.backends.mps.is_available()
-_has_cuda = torch.cuda.is_available()
 _has_functorch = False
 try:
     try:
@@ -338,7 +336,7 @@ class TensorDict(TensorDictBase):
             else:
                 sub_non_blocking = non_blocking
             device = torch.device(device) if device is not None else None
-            if _has_mps:
+            if self._has_mps:
                 # With MPS, an explicit sync is required
                 sub_non_blocking = True
         self._device = device
