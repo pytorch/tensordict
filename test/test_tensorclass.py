@@ -2937,6 +2937,28 @@ class TestSubClassing:
         assert (s.b == 2).all()
 
 
+class TestTensorOnly:
+    class TensorOnly(TensorClass["tensor_only"]):
+        a: torch.Tensor
+        b: torch.Tensor
+        c: torch.Tensor | None = None
+
+    def test_tensor_only_base(self):
+        x = self.TensorOnly(1, 2, 3)
+        assert x.a == 1
+        assert x.b == 2
+        assert x.c == 3
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, torch.Tensor)
+
+    def test_tensor_only_none(self):
+        x = self.TensorOnly(1, 2)
+        assert x.a == 1
+        assert x.b == 2
+        assert x.c is None
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

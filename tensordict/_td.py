@@ -2699,11 +2699,10 @@ class TensorDict(TensorDictBase):
         return self
 
     def _get_str(self, key, default, **kwargs):
-        first_key = key
-        out = self._tensordict.get(first_key)
-        if out is None:
-            return self._default_get(first_key, default)
-        return out
+        try:
+            return self._tensordict[key]
+        except KeyError:
+            return self._default_get(key, default)
 
     def _get_tuple(self, key, default, **kwargs):
         first = self._get_str(key[0], default, **kwargs)
