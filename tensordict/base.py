@@ -11352,6 +11352,8 @@ class TensorDictBase(MutableMapping):
 
     @property
     def _validate_value(self):
+        if is_compiling():
+            return self._validate_value_generic
         try:
             return self._validate_value_cached
         except AttributeError:
