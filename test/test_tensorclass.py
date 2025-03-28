@@ -756,6 +756,12 @@ class TestTensorClass:
         assert obj[0].b == obj[1].b
         assert obj[0].c is obj[1].c
 
+    def test_from_dataclass_exec(self):
+        # Check that everything runs fine
+        from_dataclass(MyDataClass, autocast=True)
+        from_dataclass(MyDataClass, nocast=True)
+        from_dataclass(MyDataClass)
+
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)
         assert MyTensorClass_nocast is not MyDataClass
@@ -2692,7 +2698,8 @@ class TestShadow:
             names: Any
             device: Any
 
-    def test_shadow_values(self):
+    def test_shadow_values_dec(self):
+
         @tensorclass(shadow=True)
         class MyClass:
             batch_size: Any
@@ -2700,6 +2707,48 @@ class TestShadow:
             device: Any
 
         c = MyClass(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+        c.batch_size = 1
+        assert c.batch_size == 1
+
+    def test_shadow_values_dec_subcls(self):
+        @tensorclass(shadow=True)
+        class MyClass:
+            batch_size: Any
+            names: Any
+            device: Any
+
+        class MyClsSubcls(MyClass): ...
+
+        c = MyClsSubcls(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+        c.batch_size = 1
+        assert c.batch_size == 1
+
+    def test_shadow_values_subcls(self):
+
+        class MyClassSbcls(TensorClass, shadow=True):
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClassSbcls(batch_size=0, names=0, device=0)
+        assert c.batch_size == 0
+        assert c.names == 0
+        assert c.device == 0
+
+    def test_shadow_values_subcls_idx(self):
+
+        class MyClassSbcls(TensorClass["shadow"]):
+            batch_size: Any
+            names: Any
+            device: Any
+
+        c = MyClassSbcls(batch_size=0, names=0, device=0)
         assert c.batch_size == 0
         assert c.names == 0
         assert c.device == 0
@@ -2935,6 +2984,77 @@ class TestSubClassing:
         s.b = torch.ones(())
         assert (s.a == 0).all()
         assert (s.b == 2).all()
+
+
+class TestTensorOnly:
+    class TensorOnly(TensorClass["tensor_only"]):
+        a: torch.Tensor
+        b: torch.Tensor
+        c: torch.Tensor | None = None
+
+    def test_tensor_only_base(self):
+        x = self.TensorOnly(1, 2, 3)
+        assert x.a == 1
+        assert x.b == 2
+        assert x.c == 3
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, torch.Tensor)
+        assert isinstance(x.c, torch.Tensor)
+
+    def test_tensor_only_none(self):
+        x = self.TensorOnly(1, 2)
+        assert x.a == 1
+        assert x.b == 2
+        assert x.c is None
+        x.c = 3
+        assert x.c == 3
+        assert isinstance(x.c, torch.Tensor)
+        delattr(x, "c")
+        assert not hasattr(x, "c")
+
+    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
+    def test_wrong_tensor_only(self):
+        class TensorOnly(TensorClass["tensor_only"]):
+            a: torch.IntTensor
+            b: torch.LongTensor
+            c: torch.Tensor | None = None
+            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = (
+                None  # noqa
+            )
+            e: Optional[torch.IntTensor] = None  # noqa
+            f: Optional[torch.IntTensor | None] = None  # noqa
+            g: TensorDict | None = None
+            h: MyTensorClass | None = None
+
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
+
+            class TensorOnlyAny(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: Any
+                c: torch.Tensor | None = None
+
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
+
+            class TensorOnlyStr(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: torch.Tensor | str
+                c: torch.Tensor | None = None
+
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+        ):
+
+            class TensorOnlyStrUnion(TensorClass["tensor_only"]):
+                a: torch.Tensor
+                b: torch.Tensor
+                c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
 
 
 if __name__ == "__main__":
