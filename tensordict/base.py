@@ -610,7 +610,12 @@ class TensorDictBase(MutableMapping):
 
     def __getstate__(self):
         result = dict(self.__dict__)
-        for key in ("_last_op", "_cache", "__lock_parents_weakrefs"):
+        for key in (
+            "_last_op",
+            "_cache",
+            "__lock_parents_weakrefs",
+            "_validate_value_cached",
+        ):
             result.pop(key, None)
         return result
 
@@ -2912,7 +2917,8 @@ class TensorDictBase(MutableMapping):
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
-        delattr(self, "_validate_value_cached")
+        if hasattr(self, "_validate_value_cached"):
+            delattr(self, "_validate_value_cached")
         if new_batch_size == self.batch_size:
             return
         if self._lazy:
