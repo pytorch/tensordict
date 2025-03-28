@@ -25,7 +25,6 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from types import NoneType, UnionType
 
 from typing import (
     Any,
@@ -104,6 +103,13 @@ except ImportError:
 T = TypeVar("T", bound=TensorDictBase)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
+if (major, minor) < (3, 10):
+    from typing import Union  # noqa
+
+    NonType = type(None)
+    UnionType = type(Union)
+else:
+    from types import NoneType, UnionType
 if (major, minor) < (3, 11):
 
     class _AnyType:
@@ -122,7 +128,9 @@ _TensorTypes = (
     torch.BoolTensor,
     torch.Tensor,  # The base tensor class
 )
-
+_TENSOR_ONLY_TYPE_ERR = TypeError(
+    "tensor_only requires types to be Tensor, Tensor-subtrypes or None"
+)
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
@@ -1345,9 +1353,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
                 if key not in cls.__expected_keys__:
                     continue
                 if not is_tensor_or_optional_tensor(val):
-                    raise TypeError(
-                        "tensor_only requires types to be Tensor, Tensor-subtrypes or None"
-                    )
+                    raise _TENSOR_ONLY_TYPE_ERR
         cls._type_hints = {
             key: val if isinstance(val, type) else _AnyType
             for key, val in cls._type_hints.items()
@@ -1363,6 +1369,24 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
             f"or `{cls}.set` will not attempt to map dictionaries to "
             "the relevant tensorclass. To resolve this issue, consider defining "
             "your tensorclass globally."
+        )
+        cls._type_hints = None
+    except TypeError as err:
+        if err is _TENSOR_ONLY_TYPE_ERR:
+            raise err
+        # This is a rather common case where type annotation is like
+        # class MyClass:
+        #     x: int | str
+        # in which case get_type_hints doesn't work (it does work
+        # however with old-school Optional or Union...)
+        # We simply differ the warning till _set() is called
+        cls._set_dict_warn_msg = (
+            "A TypeError occurred when trying to retrieve a type annotation. "
+            "This may be caused by annotations that use plain `|` instead of typing.Union "
+            "or typing.Optional which are supported. If you wish to use the feature "
+            "of setting dict as attributes with automapping to tensordict/tensorclass "
+            "(`my_obj.attr = dict(...)`), consider re-writing the tensorclass with "
+            "traditional type annotations."
         )
         cls._type_hints = None
 

@@ -3012,6 +3012,7 @@ class TestTensorOnly:
         delattr(x, "c")
         assert not hasattr(x, "c")
 
+    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_wrong_tensor_only(self):
         class TensorOnly(TensorClass["tensor_only"]):
             a: torch.IntTensor
