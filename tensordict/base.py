@@ -2912,6 +2912,7 @@ class TensorDictBase(MutableMapping):
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
+        delattr(self, "_validate_value_cached")
         if new_batch_size == self.batch_size:
             return
         if self._lazy:
@@ -11343,7 +11344,26 @@ class TensorDictBase(MutableMapping):
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return key
 
-    def _validate_value(
+    @property
+    def _validate_value(self):
+        try:
+            return self._validate_value_cached
+        except AttributeError:
+            if self.device:
+                if self.batch_size:
+                    self._validate_value_cached = self._validate_value_generic
+                else:
+                    self._validate_value_cached = self._validate_value_batchfree
+            else:
+                if self.batch_size:
+                    self._validate_value_cached = self._validate_value_devicefree
+                else:
+                    self._validate_value_cached = (
+                        self._validate_value_batchfree_devicefree
+                    )
+            return self._validate_value_cached
+
+    def _validate_value_generic(
         self,
         value: CompatibleType | dict[str, CompatibleType],
         non_blocking: bool = False,
@@ -11351,8 +11371,11 @@ class TensorDictBase(MutableMapping):
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
-        is_tc = None
-        if issubclass(cls, dict):
+        if issubclass(cls, torch.Tensor):
+            is_tc = False
+        elif _is_tensor_collection(cls):
+            is_tc = True
+        elif issubclass(cls, dict):
             # We use non-blocking if someone's watching or if non-blocking is explicitly passed
             value = self._convert_to_tensordict(
                 value, non_blocking=_device_recorder.marked or non_blocking
@@ -11367,16 +11390,10 @@ class TensorDictBase(MutableMapping):
                     f"TensorDict conversion only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
+            is_tc = _is_tensor_collection(cls)
         batch_size = self.batch_size
-        check_shape = check_shape and self.batch_size
-        if (
-            check_shape
-            and batch_size
-            and _shape(value)[: self.batch_dims] != batch_size
-        ):
+        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
             # if TensorDict, let's try to map it to the desired shape
-            if is_tc is None:
-                is_tc = _is_tensor_collection(cls)
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()
                 value = value.clone(recurse=False)
@@ -11392,18 +11409,131 @@ class TensorDictBase(MutableMapping):
                 _device_recorder.record_transfer(device)
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
-            if is_tc is None:
-                is_tc = _is_tensor_collection(cls)
             if not is_tc:
                 return value
             has_names = self._has_names()
             # we do our best to match the dim names of the value and the
             # container.
-            if has_names and value.names[: self.batch_dims] != self.names:
-                # we clone not to corrupt the value
-                value = value.clone(False).refine_names(*self.names)
-            elif not has_names and value._has_names():
-                self.names = value.names[: self.batch_dims]
+            if has_names:
+                if value.names[: self.batch_dims] != self.names:
+                    # we clone not to corrupt the value
+                    value = value.clone(False).refine_names(*self.names)
+            else:
+                if value._has_names():
+                    self.names = value.names[: self.batch_dims]
+        return value
+
+    def _validate_value_batchfree(
+        self,
+        value: CompatibleType | dict[str, CompatibleType],
+        non_blocking: bool = False,
+        *,
+        check_shape: bool = True,
+    ) -> CompatibleType | dict[str, CompatibleType]:
+        cls = type(value)
+        if issubclass(cls, torch.Tensor) or _is_tensor_collection(cls):
+            pass
+        elif issubclass(cls, dict):
+            # We use non-blocking if someone's watching or if non-blocking is explicitly passed
+            value = self._convert_to_tensordict(
+                value, non_blocking=_device_recorder.marked or non_blocking
+            )
+        elif not issubclass(cls, _ACCEPTED_CLASSES):
+            # If cls is not a tensor
+            try:
+                value = self._convert_to_tensor(value)
+            except ValueError as err:
+                raise ValueError(
+                    f"TensorDict conversion only supports tensorclasses, tensordicts,"
+                    f" numeric scalars and tensors. Got {type(value)}"
+                ) from err
+        device = self.device
+        if device is not None and value.device != device:
+            if _device_recorder.marked and device.type != "cuda":
+                _device_recorder.record_transfer(device)
+            value = value.to(device, non_blocking=non_blocking)
+        return value
+
+    def _validate_value_devicefree(
+        self,
+        value: CompatibleType | dict[str, CompatibleType],
+        non_blocking: bool = False,
+        *,
+        check_shape: bool = True,
+    ) -> CompatibleType | dict[str, CompatibleType]:
+        cls = type(value)
+        if issubclass(cls, torch.Tensor):
+            is_tc = False
+        elif _is_tensor_collection(cls):
+            is_tc = True
+        elif issubclass(cls, dict):
+            # We use non-blocking if someone's watching or if non-blocking is explicitly passed
+            value = self._convert_to_tensordict(
+                value, non_blocking=_device_recorder.marked or non_blocking
+            )
+            is_tc = True
+        elif not issubclass(cls, _ACCEPTED_CLASSES):
+            # If cls is not a tensor
+            try:
+                value = self._convert_to_tensor(value)
+            except ValueError as err:
+                raise ValueError(
+                    f"TensorDict conversion only supports tensorclasses, tensordicts,"
+                    f" numeric scalars and tensors. Got {type(value)}"
+                ) from err
+            is_tc = _is_tensor_collection(cls)
+
+        batch_size = self.batch_size
+        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
+            # if TensorDict, let's try to map it to the desired shape
+            if is_tc:
+                # we must clone the value before not to corrupt the data passed to set()
+                value = value.clone(recurse=False)
+                value.batch_size = self.batch_size
+            else:
+                raise RuntimeError(
+                    f"batch dimension mismatch, got self.batch_size"
+                    f"={self.batch_size} and value.shape={_shape(value)}."
+                )
+        if check_shape:
+            if not is_tc:
+                return value
+            has_names = self._has_names()
+            # we do our best to match the dim names of the value and the
+            # container.
+            if has_names:
+                if value.names[: self.batch_dims] != self.names:
+                    # we clone not to corrupt the value
+                    value = value.clone(False).refine_names(*self.names)
+            else:
+                if value._has_names():
+                    self.names = value.names[: self.batch_dims]
+        return value
+
+    def _validate_value_batchfree_devicefree(
+        self,
+        value: CompatibleType | dict[str, CompatibleType],
+        non_blocking: bool = False,
+        *,
+        check_shape: bool = True,
+    ) -> CompatibleType | dict[str, CompatibleType]:
+        cls = type(value)
+        if issubclass(cls, torch.Tensor) or _is_tensor_collection(cls):
+            pass
+        elif issubclass(cls, dict):
+            # We use non-blocking if someone's watching or if non-blocking is explicitly passed
+            value = self._convert_to_tensordict(
+                value, non_blocking=_device_recorder.marked or non_blocking
+            )
+        elif not issubclass(cls, _ACCEPTED_CLASSES):
+            # If cls is not a tensor
+            try:
+                value = self._convert_to_tensor(value)
+            except ValueError as err:
+                raise ValueError(
+                    f"TensorDict conversion only supports tensorclasses, tensordicts,"
+                    f" numeric scalars and tensors. Got {type(value)}"
+                ) from err
         return value
 
     def __enter__(self):
