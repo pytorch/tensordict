@@ -4544,6 +4544,8 @@ class TensorDictBase(MutableMapping):
 
         """
         self._device = None
+        if hasattr(self, "_validate_value_cached"):
+            delattr(self, "_validate_value_cached")
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value.clear_device_()
@@ -4551,6 +4553,8 @@ class TensorDictBase(MutableMapping):
 
     def _set_device(self, device: torch.device) -> T:
         self._device = device
+        if hasattr(self, "_validate_value_cached"):
+            delattr(self, "_validate_value_cached")
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._set_device(device=device)
