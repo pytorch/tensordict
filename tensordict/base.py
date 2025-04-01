@@ -55,6 +55,7 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
+    _convert_list_to_stack,
     _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _is_dataclass as is_dataclass,
@@ -95,6 +96,7 @@ from tensordict.utils import (
     is_namedtuple_class,
     is_non_tensor,
     lazy_legacy,
+    list_to_stack,
     lock_blocked,
     prod,
     set_capture_non_tensor_stack,
@@ -11281,6 +11283,8 @@ class TensorDictBase(MutableMapping):
         castable = None
         if isinstance(array, (float, int, bool)):
             castable = True
+        elif isinstance(array, list) and list_to_stack():
+            return _convert_list_to_stack(array)[0]
         elif isinstance(array, np.bool_):
             castable = True
             array = array.item()
@@ -11289,6 +11293,20 @@ class TensorDictBase(MutableMapping):
                 return TensorDictBase.from_struct_array(array, device=self.device)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif isinstance(array, (list, tuple)):
+            if isinstance(array, list) and list_to_stack(allow_none=True) is None:
+                warnings.warn(
+                    "You are setting a list of elements within a tensordict without setting `set_list_to_stack`. "
+                    "The current behaviour is that: if this list can be cast to a Tensor, it will be and will be written "
+                    "as such. If it cannot, it will be converted to a numpy array and considered as a non-indexable "
+                    "entity through a wrapping in a NonTensorData. If you want your list to be indexable along the "
+                    "tensordict batch-size, use the decorator/context manager tensordict.set_list_to_stack(True), the "
+                    "global flag `tensordict.set_list_to_stack(True).set()`, or "
+                    "the environment variable LIST_TO_STACK=1 (or use False/0 to silence this warning). "
+                    "This behavior will change in v0.10.0, and "
+                    "lists will be automatically stacked.",
+                    category=FutureWarning,
+                )
+
             array = np.asarray(array)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif hasattr(array, "numpy"):

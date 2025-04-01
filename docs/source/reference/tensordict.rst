@@ -243,3 +243,5 @@ Utils
     parse_tensor_dict_string
     set_capture_non_tensor_stack
     set_lazy_legacy
+    set_list_to_stack
+    list_to_stack

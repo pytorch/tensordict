@@ -72,6 +72,7 @@ from tensordict.utils import (
     is_tensorclass,
     logger as tdlogger,
     set_lazy_legacy,
+    set_list_to_stack,
 )
 from torch import multiprocessing as mp, nn
 from torch._subclasses import FakeTensor, FakeTensorMode
@@ -2341,6 +2342,42 @@ class TestGeneric:
         )
         assert "unique" in td
         assert "unique" in td_sep
+
+    @set_list_to_stack(True)
+    def test_set_list_nontensor(self):
+        td = TensorDict(a=["a string", "another string"], batch_size=2)
+        assert td["a"] == ["a string", "another string"]
+        assert td[0]["a"] == "a string"
+        assert td[1]["a"] == "another string"
+
+    @set_list_to_stack(True)
+    def test_set_list_tensor(self):
+        td = TensorDict(a=[torch.zeros(()), torch.ones(())], batch_size=2)
+        assert (td["a"] == torch.tensor([0, 1])).all()
+        assert td[0]["a"] == 0
+        assert td[1]["a"] == 1
+
+    @set_list_to_stack(True)
+    def test_set_list_mixed(self):
+        td = TensorDict(a=[torch.zeros(()), "another string"], batch_size=2)
+        assert td[0]["a"] == 0
+        assert td[1]["a"] == "another string"
+
+    @pytest.fixture
+    def _set_list_none(self):
+        import tensordict.utils
+
+        v = tensordict.utils._LIST_TO_STACK
+        tensordict.utils._LIST_TO_STACK = None
+        yield
+        tensordict.utils._LIST_TO_STACK = v
+
+    def test_set_list_warning(self, _set_list_none):
+        with pytest.warns(
+            FutureWarning,
+            match="You are setting a list of elements within a tensordict without setting",
+        ):
+            TensorDict(a=["a string", "another string"], batch_size=2)
 
     def test_set_nested_keys(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -9495,6 +9532,31 @@ class TestLazyStackedTensorDict:
         assert td.shape == (3, 2, 4, 5)
         tensor = getattr(td, reduction)(dim="feature", reduce=True)
         assert tensor.shape == td.shape
+
+    @set_list_to_stack(True)
+    def test_set_list_stack(self):
+        td = LazyStackedTensorDict(TensorDict(), TensorDict())
+        td["a"] = ["0", "1"]
+        assert td[0]["a"] == "0"
+        assert td[1]["a"] == "1"
+        td["b"] = [torch.ones((2,)) * 2, torch.ones((1,))]
+        assert (
+            td.get("b", as_padded_tensor=True) == torch.tensor([[2, 2], [1, 0]])
+        ).all()
+        # note that we start by the outer td then nest the inner one (ie, batch-dim 1 is more out than batch-dim 0)
+        td = lazy_stack(
+            [lazy_stack([TensorDict() for _ in range(2)]) for _ in range(3)], 1
+        )
+        shapes = [[1, 2, 3], [4, 5, 6]]
+        # note that the order matches the shape [2, 3]
+        elt = [[torch.ones(shapes[i][j]) for j in range(3)] for i in range(2)]
+        td["a"] = elt
+        assert td[0, 0]["a"].shape == (1,)
+        assert td[0, 1]["a"].shape == (2,)
+        assert td[0, 2]["a"].shape == (3,)
+        assert td[1, 0]["a"].shape == (4,)
+        assert td[1, 1]["a"].shape == (5,)
+        assert td[1, 2]["a"].shape == (6,)
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])

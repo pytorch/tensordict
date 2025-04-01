@@ -73,6 +73,7 @@ except ImportError:  # torch 2.0
     from torch._dynamo import assume_constant_result, is_compiling
 
 if TYPE_CHECKING:
+    from tensordict.tensorclass import NonTensorStack
     from tensordict.tensordict import TensorDictBase
 
 try:
@@ -2011,6 +2012,83 @@ def capture_non_tensor_stack(allow_none=False):
         if isinstance(_CAPTURE_NONTENSOR_STACK, str)
         else _CAPTURE_NONTENSOR_STACK
     )
+
+
+# list to stack constrol
+_DEFAULT_LIST_TO_STACK = None
+_LIST_TO_STACK = os.environ.get("LIST_TO_STACK")
+
+
+class set_list_to_stack(_DecoratorContextManager):
+    def __init__(self, mode: bool) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_list_to_stack:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
+        global _LIST_TO_STACK
+        self._old_mode = _LIST_TO_STACK
+        _LIST_TO_STACK = bool(self.mode)
+        os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _LIST_TO_STACK
+        _LIST_TO_STACK = self._old_mode
+        os.environ["LIST_TO_STACK"] = str(_LIST_TO_STACK)
+
+
+def list_to_stack(allow_none=False):
+    global _LIST_TO_STACK
+    if _LIST_TO_STACK is None and allow_none:
+        return None
+    elif _LIST_TO_STACK is None:
+        return _DEFAULT_LIST_TO_STACK
+    elif _LIST_TO_STACK == "none":
+        return _DEFAULT_LIST_TO_STACK
+    return (
+        strtobool(_LIST_TO_STACK) if isinstance(_LIST_TO_STACK, str) else _LIST_TO_STACK
+    )
+
+
+def _convert_list_to_stack(
+    a_list: list[Any],
+) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack, bool]:  # noqa
+    # First, check elements and determine if there are lists within
+    nontensor = True
+    if all(isinstance(elt, list) for elt in a_list):
+        a_list, nontensor = zip(*[_convert_list_to_stack(elt) for elt in a_list])
+        nontensor = any(nontensor)
+    all_tensors = all(isinstance(elt, torch.Tensor) for elt in a_list)
+    if not nontensor or all_tensors:
+        # should we stack?
+        if all_tensors and len({x.shape for x in a_list}) == 1:
+            return torch.stack(a_list), False
+        # TODO: check that LazyStack understands that a list is a bunch of elements to write in separate tds
+        return list(a_list), False
+    from tensordict.base import _is_tensor_collection
+
+    if all(_is_tensor_collection(type(elt)) for elt in a_list):
+        return torch.stack(a_list), False
+    from tensordict import NonTensorStack
+
+    return NonTensorStack(*a_list), True
+
+
+def _recursive_unbind_list(a_list, dim):
+    if dim == 0:
+        return list(a_list)
+    try:
+        return map(
+            list, _zip_strict(*[_recursive_unbind_list(elt, dim - 1) for elt in a_list])
+        )
+    except Exception:
+        raise ValueError("lengths of nested lists differed.")
 
 
 # Process initializer for map

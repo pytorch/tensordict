@@ -69,6 +69,7 @@ from tensordict.utils import (
     _is_number,
     _maybe_correct_neg_dim,
     _parse_to,
+    _recursive_unbind_list,
     _renamed_inplace_method,
     _shape,
     _td_fields,
@@ -83,6 +84,7 @@ from tensordict.utils import (
     infer_size_impl,
     is_non_tensor,
     is_tensorclass,
+    list_to_stack,
     lock_blocked,
     NestedKey,
     unravel_key_list,
@@ -587,11 +589,19 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
         if not validated:
-            value = self._validate_value(value, non_blocking=non_blocking)
+            value = self._validate_value(
+                value, non_blocking=non_blocking, check_shape=not list_to_stack()
+            )
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
-        values = value.unbind(self.stack_dim)
+        if isinstance(value, list):
+            if self.stack_dim == 0:
+                values = list(value)
+            else:
+                values = _recursive_unbind_list(value, self.stack_dim)
+        else:
+            values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_str(
                 key,
