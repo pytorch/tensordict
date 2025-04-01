@@ -2020,6 +2020,37 @@ _LIST_TO_STACK = os.environ.get("LIST_TO_STACK")
 
 
 class set_list_to_stack(_DecoratorContextManager):
+    """Context manager and decorator to control the behavior of list handling in TensorDict.
+
+    When enabled, lists assigned to a TensorDict will be automatically stacked along the batch dimension.
+    This can be useful for ensuring that lists of tensors or other elements are treated as stackable entities
+    within a TensorDict.
+
+    Current Behavior:
+        If a list is assigned to a TensorDict without this context manager, it will be converted to a numpy array
+            and wrapped in a NonTensorData if it cannot be cast to a Tensor.
+
+    Future Behavior:
+        In version 0.10.0, lists will be automatically stacked by default.
+
+    Args:
+        mode (bool): If True, enables list-to-stack conversion. If False, disables it.
+
+    .. warning::
+        A FutureWarning will be raised if a list is assigned to a TensorDict without setting this context manager
+            or the global flag, indicating that the behavior will change in the future.
+
+    Example:
+        >>> with set_list_to_stack(True):
+        ...     td = TensorDict(a=[torch.zeros(()), torch.ones(())], batch_size=2)
+        ...     assert (td["a"] == torch.tensor([0, 1])).all()
+        ...     assert td[0]["a"] == 0
+        ...     assert td[1]["a"] == 1
+
+    .. seealso:: :func:`~tensordict.list_to_stack`.
+
+    """
+
     def __init__(self, mode: bool) -> None:
         super().__init__()
         self.mode = mode
@@ -2044,6 +2075,27 @@ class set_list_to_stack(_DecoratorContextManager):
 
 
 def list_to_stack(allow_none=False):
+    """Retrieves the current setting for list-to-stack conversion in TensorDict.
+
+    This function checks the global environment variable or the context manager setting to determine
+    whether lists should be automatically stacked when assigned to a TensorDict.
+
+    Current Behavior:
+        Returns the current setting for list-to-stack conversion. If the setting is not defined and `allow_none`
+            is True, it returns None. Otherwise, it returns the default setting.
+
+    Future Behavior:
+        The default behavior will change in version 0.10.0 to automatically stack lists.
+
+    Args:
+        allow_none (bool): If True, allows the function to return None if the setting is not defined.
+
+    Returns:
+        bool or None: The current setting for list-to-stack conversion.
+
+    .. seealso:: :class:`~tensordict.set_list_to_stack`.
+
+    """
     global _LIST_TO_STACK
     if _LIST_TO_STACK is None and allow_none:
         return None
@@ -2064,10 +2116,16 @@ def _convert_list_to_stack(
     if all(isinstance(elt, list) for elt in a_list):
         a_list, nontensor = zip(*[_convert_list_to_stack(elt) for elt in a_list])
         nontensor = any(nontensor)
+    # FIXME: we should check that the type is unique
+    all_castable = all(isinstance(elt, (bool, int, float)) for elt in a_list)
+    if all_castable:
+        return torch.tensor(a_list), False
     all_tensors = all(isinstance(elt, torch.Tensor) for elt in a_list)
     if not nontensor or all_tensors:
         # should we stack?
         if all_tensors and len({x.shape for x in a_list}) == 1:
+            # FIXME: this may lead to some weird behaviours if we have nested lists and by chance one of them has
+            #  things that can be stacked, and others don't.
             return torch.stack(a_list), False
         # TODO: check that LazyStack understands that a list is a bunch of elements to write in separate tds
         return list(a_list), False

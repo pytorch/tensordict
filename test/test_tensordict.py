@@ -2237,6 +2237,8 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @set_list_to_stack(True)
+    @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
     def test_save_load_memmap_stacked_td(
         self,
@@ -2311,10 +2313,11 @@ class TestGeneric:
                 ("nested", "double_nested", "t2"),
             }
 
+    @set_list_to_stack(True)
+    @set_capture_non_tensor_stack(False)
     def test_select_nested_missing(self):
         # checks that we keep a nested key even if missing nested keys are present
         td = TensorDict({"a": {"b": [1], "c": [2]}}, [])
-
         td_select = td.select(("a", "b"), "r", ("a", "z"), strict=False)
         assert ("a", "b") in list(td_select.keys(True, True))
         assert ("a", "b") in td_select.keys(True, True)
@@ -3305,6 +3308,7 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="keys_to_update"):
             td0.update(td1, update_batch_size=True, keys_to_update=[("a",)])
 
+    @set_list_to_stack(True)
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)
@@ -8882,6 +8886,7 @@ class TestLazyStackedTensorDict:
         else:
             td1.norm()
 
+    @set_list_to_stack(True)
     def test_best_intention_stack(self):
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
@@ -9917,6 +9922,7 @@ class TestLazyStackedTensorDict:
         std5 = sub_td.unbind(1)[0]
         assert (std5.contiguous() == sub_td.contiguous().unbind(1)[0]).all()
 
+    @set_list_to_stack(True)
     def test_stacked_td_nested_keys(self):
         td = LazyStackedTensorDict.lazy_stack(
             [
