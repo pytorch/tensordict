@@ -200,6 +200,22 @@ class LazyStackedTensorDict(TensorDictBase):
         >>> print(td_stack[:, 0] is tds[0])
         True
 
+    .. note:: Lazy stacks support assignment via lists. For consistency, the lists should be
+        presented as `tensor.tolist()` data structure. This means that the length of the first
+        level of the nested lists should match the first dimension of the lazy stack (whether or
+        not this is the stack dimension).
+
+            >>> td = LazyStackedTensorDict(TensorDict(), TensorDict(), stack_dim=0)
+            >>> td["a"] = [torch.ones(2), torch.zeros(1)]
+            >>> assert td[1]["a"] == torch.zeros(1)
+            >>> td["b"] = ["a string", "another string"]
+            >>> assert td[1]["b"] == "another string"
+
+    .. note:: When using the :meth:`~.get` method, one can pass `as_nested_tensor`, `as_padded_tensor`
+        or the `as_list` arguments to control how the data should be presented if the dimensions of the
+        tensors mismatch. When passed, the nesting/padding will occur regardless of whether the
+        dimensions mismatch or not.
+
     """
 
     _is_vmapped: bool = False
