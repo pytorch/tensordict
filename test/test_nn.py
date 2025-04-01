@@ -21,6 +21,7 @@ from tensordict import (
     is_tensor_collection,
     NonTensorData,
     NonTensorStack,
+    set_list_to_stack,
     tensorclass,
     TensorDict,
 )
@@ -976,6 +977,7 @@ class TestTDModule:
         out = module(TensorDict({"a": torch.randn(3)}, []))
         assert (out["b"] == out["a"]).all()
 
+    @set_list_to_stack(True)
     def test_tdmodule_inplace(self):
         tdm = TensorDictModule(
             lambda x: (x, x), in_keys=["x"], out_keys=["y", "z"], inplace=False
