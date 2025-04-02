@@ -1440,14 +1440,14 @@ def assert_close(
             raise RuntimeError(
                 f"Failed to compare key {prefix + (key,)}. Scroll up for more details."
             ) from err
-        mse = mse.div(input1.numel()).sqrt().item()
+        mse = mse.data.div(input1.numel()).sqrt().item()
 
         local_msg = f"key {prefix + (key,)} does not match, got mse = {mse:4.4f}"
         new_msg = ",\t".join([local_msg, msg]) if len(msg) else local_msg
         if input1.is_nested:
             torch.testing.assert_close(
-                input1v,
-                input2v,
+                input1v.data,
+                input2v.data,
                 rtol=rtol,
                 atol=atol,
                 equal_nan=equal_nan,
@@ -1455,7 +1455,12 @@ def assert_close(
             )
         else:
             torch.testing.assert_close(
-                input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=new_msg
+                input1.data,
+                input2.data,
+                rtol=rtol,
+                atol=atol,
+                equal_nan=equal_nan,
+                msg=new_msg,
             )
         local_msg = f"key {prefix + (key,)} matches"
         msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
