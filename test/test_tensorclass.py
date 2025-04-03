@@ -35,6 +35,7 @@ from tensordict import (
     LazyStackedTensorDict,
     MemoryMappedTensor,
     set_capture_non_tensor_stack,
+    set_list_to_stack,
     tensorclass,
     TensorClass,
     TensorDict,
@@ -1461,6 +1462,21 @@ class TestTensorClass:
         assert "b" not in data_select._tensordict
         assert (data_select == 1).all()
         assert "a" in data_select._tensordict
+
+    @set_list_to_stack(True)
+    def test_set_list_in_constructor(self):
+        obj = MyTensorClass(
+            a=["a string", "another string"],
+            b=[torch.randn(3), torch.zeros(3)],
+            c="smth completly different",
+            batch_size=2,
+        )
+        assert obj.shape == (2,)
+        assert obj[0].a == "a string"
+        assert obj[1].a == "another string"
+        assert (obj[0].b != 0).all()
+        assert (obj[1].b == 0).all()
+        assert obj.c == obj[0].c
 
     def test_set_dict(self):
         @tensorclass(autocast=True)
