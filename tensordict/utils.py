@@ -2944,7 +2944,7 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
             if len(sizes) > 1:
                 return False, None, None
             continue
-        return False, None
+        return False, None, None
     else:
         if len(dtypes):
             dtype = list(dtypes)[0]
