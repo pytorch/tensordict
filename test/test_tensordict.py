@@ -72,6 +72,7 @@ from tensordict.utils import (
     is_tensorclass,
     logger as tdlogger,
     set_lazy_legacy,
+    set_list_to_stack,
 )
 from torch import multiprocessing as mp, nn
 from torch._subclasses import FakeTensor, FakeTensorMode
@@ -2236,6 +2237,8 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @set_list_to_stack(True)
+    @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("like", [True, False])
     def test_save_load_memmap_stacked_td(
         self,
@@ -2310,10 +2313,11 @@ class TestGeneric:
                 ("nested", "double_nested", "t2"),
             }
 
+    @set_list_to_stack(True)
+    @set_capture_non_tensor_stack(False)
     def test_select_nested_missing(self):
         # checks that we keep a nested key even if missing nested keys are present
         td = TensorDict({"a": {"b": [1], "c": [2]}}, [])
-
         td_select = td.select(("a", "b"), "r", ("a", "z"), strict=False)
         assert ("a", "b") in list(td_select.keys(True, True))
         assert ("a", "b") in td_select.keys(True, True)
@@ -2341,6 +2345,42 @@ class TestGeneric:
         )
         assert "unique" in td
         assert "unique" in td_sep
+
+    @set_list_to_stack(True)
+    def test_set_list_nontensor(self):
+        td = TensorDict(a=["a string", "another string"], batch_size=2)
+        assert td["a"] == ["a string", "another string"]
+        assert td[0]["a"] == "a string"
+        assert td[1]["a"] == "another string"
+
+    @set_list_to_stack(True)
+    def test_set_list_tensor(self):
+        td = TensorDict(a=[torch.zeros(()), torch.ones(())], batch_size=2)
+        assert (td["a"] == torch.tensor([0, 1])).all()
+        assert td[0]["a"] == 0
+        assert td[1]["a"] == 1
+
+    @set_list_to_stack(True)
+    def test_set_list_mixed(self):
+        td = TensorDict(a=[torch.zeros(()), "another string"], batch_size=2)
+        assert td[0]["a"] == 0
+        assert td[1]["a"] == "another string"
+
+    @pytest.fixture
+    def _set_list_none(self):
+        import tensordict.utils
+
+        v = tensordict.utils._LIST_TO_STACK
+        tensordict.utils._LIST_TO_STACK = None
+        yield
+        tensordict.utils._LIST_TO_STACK = v
+
+    def test_set_list_warning(self, _set_list_none):
+        with pytest.warns(
+            FutureWarning,
+            match="You are setting a list of elements within a tensordict without setting",
+        ):
+            TensorDict(a=["a string", "another string"], batch_size=2)
 
     def test_set_nested_keys(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -3268,6 +3308,7 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="keys_to_update"):
             td0.update(td1, update_batch_size=True, keys_to_update=[("a",)])
 
+    @set_list_to_stack(True)
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)
@@ -8845,6 +8886,7 @@ class TestLazyStackedTensorDict:
         else:
             td1.norm()
 
+    @set_list_to_stack(True)
     def test_best_intention_stack(self):
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
@@ -9496,6 +9538,31 @@ class TestLazyStackedTensorDict:
         tensor = getattr(td, reduction)(dim="feature", reduce=True)
         assert tensor.shape == td.shape
 
+    @set_list_to_stack(True)
+    def test_set_list_stack(self):
+        td = LazyStackedTensorDict(TensorDict(), TensorDict())
+        td["a"] = ["0", "1"]
+        assert td[0]["a"] == "0"
+        assert td[1]["a"] == "1"
+        td["b"] = [torch.ones((2,)) * 2, torch.ones((1,))]
+        assert (
+            td.get("b", as_padded_tensor=True) == torch.tensor([[2, 2], [1, 0]])
+        ).all()
+        # note that we start by the outer td then nest the inner one (ie, batch-dim 1 is more out than batch-dim 0)
+        td = lazy_stack(
+            [lazy_stack([TensorDict() for _ in range(2)]) for _ in range(3)], 1
+        )
+        shapes = [[1, 2, 3], [4, 5, 6]]
+        # note that the order matches the shape [2, 3]
+        elt = [[torch.ones(shapes[i][j]) for j in range(3)] for i in range(2)]
+        td["a"] = elt
+        assert td[0, 0]["a"].shape == (1,)
+        assert td[0, 1]["a"].shape == (2,)
+        assert td[0, 2]["a"].shape == (3,)
+        assert td[1, 0]["a"].shape == (4,)
+        assert td[1, 1]["a"].shape == (5,)
+        assert td[1, 2]["a"].shape == (6,)
+
     @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     def test_setitem_hetero(self, batch_size, stack_dim):
@@ -9855,6 +9922,7 @@ class TestLazyStackedTensorDict:
         std5 = sub_td.unbind(1)[0]
         assert (std5.contiguous() == sub_td.contiguous().unbind(1)[0]).all()
 
+    @set_list_to_stack(True)
     def test_stacked_td_nested_keys(self):
         td = LazyStackedTensorDict.lazy_stack(
             [

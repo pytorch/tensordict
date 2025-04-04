@@ -69,6 +69,7 @@ from tensordict.utils import (
     _is_number,
     _maybe_correct_neg_dim,
     _parse_to,
+    _recursive_unbind_list,
     _renamed_inplace_method,
     _shape,
     _td_fields,
@@ -83,6 +84,7 @@ from tensordict.utils import (
     infer_size_impl,
     is_non_tensor,
     is_tensorclass,
+    list_to_stack,
     lock_blocked,
     NestedKey,
     unravel_key_list,
@@ -197,6 +199,22 @@ class LazyStackedTensorDict(TensorDictBase):
         torch.Size([3, 10, 4])
         >>> print(td_stack[:, 0] is tds[0])
         True
+
+    .. note:: Lazy stacks support assignment via lists. For consistency, the lists should be
+        presented as `tensor.tolist()` data structure. This means that the length of the first
+        level of the nested lists should match the first dimension of the lazy stack (whether or
+        not this is the stack dimension).
+
+            >>> td = LazyStackedTensorDict(TensorDict(), TensorDict(), stack_dim=0)
+            >>> td["a"] = [torch.ones(2), torch.zeros(1)]
+            >>> assert td[1]["a"] == torch.zeros(1)
+            >>> td["b"] = ["a string", "another string"]
+            >>> assert td[1]["b"] == "another string"
+
+    .. note:: When using the :meth:`~.get` method, one can pass `as_nested_tensor`, `as_padded_tensor`
+        or the `as_list` arguments to control how the data should be presented if the dimensions of the
+        tensors mismatch. When passed, the nesting/padding will occur regardless of whether the
+        dimensions mismatch or not.
 
     """
 
@@ -587,11 +605,19 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
         if not validated:
-            value = self._validate_value(value, non_blocking=non_blocking)
+            value = self._validate_value(
+                value, non_blocking=non_blocking, check_shape=not list_to_stack()
+            )
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
-        values = value.unbind(self.stack_dim)
+        if isinstance(value, list):
+            if self.stack_dim == 0:
+                values = list(value)
+            else:
+                values = _recursive_unbind_list(value, self.stack_dim)
+        else:
+            values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_str(
                 key,

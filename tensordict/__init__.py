@@ -62,9 +62,11 @@ from tensordict.utils import (
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
+    list_to_stack,
     parse_tensor_dict_string,
     set_capture_non_tensor_stack,
     set_lazy_legacy,
+    set_list_to_stack,
     unravel_key,
     unravel_key_list,
 )
