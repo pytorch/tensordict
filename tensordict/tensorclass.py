@@ -72,6 +72,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     IndexType,
     is_tensorclass,
     KeyDependentDefaultDict,
+    list_to_stack,
     set_capture_non_tensor_stack,
 )
 from torch import multiprocessing as mp, Tensor
@@ -363,6 +364,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "expand_as",
     "expm1",
     "expm1_",
+    "extend",
     "fill_",
     "filter_empty_",
     "filter_non_tensor_data",
@@ -1025,6 +1027,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 _wrap_td_method(method_name, copy_non_tensor=True),
             )
 
+    # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
+    #     cls.batch_size = property(_batch_size, _batch_size_setter)
+
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
 
@@ -1078,6 +1083,12 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
+
+
+# def _batch_size(self):
+#     return self.__dict__["_tensordict"]._batch_size
+# def _batch_size_setter(self, value):
+#     self.__dict__["_tensordict"].batch_size = value
 
 
 def _arg_to_tensordict(arg):
@@ -2347,6 +2358,9 @@ def _set(
             )
         ):
             return set_tensor()
+        elif issubclass(value_type, list) and list_to_stack():
+            # set() will take care of casting to non tensor
+            non_tensor = False
         else:
             non_tensor = True
 

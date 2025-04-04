@@ -35,6 +35,7 @@ from tensordict import (
     LazyStackedTensorDict,
     MemoryMappedTensor,
     set_capture_non_tensor_stack,
+    set_list_to_stack,
     tensorclass,
     TensorClass,
     TensorDict,
@@ -1032,19 +1033,28 @@ class TestTensorClass:
         assert data.y.v == "test_nested"
         assert data.y.batch_size == torch.Size(batch_size)
 
-    def test_indexing(self):
-        @tensorclass
-        class MyDataNested:
-            X: torch.Tensor
-            z: list
-            y: "MyDataNested" = None
+    @pytest.mark.parametrize("list_to_stack", [True, False])
+    def test_indexing(self, list_to_stack):
+        with set_list_to_stack(list_to_stack):
 
-        X = torch.ones(3, 4, 5)
-        z = ["a", "b", "c"]
-        batch_size = [3, 4]
-        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
-        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+            @tensorclass
+            class MyDataNested:
+                X: torch.Tensor
+                z: list
+                y: "MyDataNested" = None
 
+            X = torch.ones(3, 4, 5)
+            z = ["a", "b", "c"]
+            batch_size = [3, 4]
+            with (
+                pytest.raises(RuntimeError, match="batch dimension mismatch")
+                if list_to_stack
+                else contextlib.nullcontext()
+            ):
+                data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+                data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+            if list_to_stack:
+                return
         assert data[:2].batch_size == torch.Size([2, 4])
         assert data[:2].X.shape == torch.Size([2, 4, 5])
         assert (data[:2].X == X[:2]).all()
@@ -1462,6 +1472,21 @@ class TestTensorClass:
         assert (data_select == 1).all()
         assert "a" in data_select._tensordict
 
+    @set_list_to_stack(True)
+    def test_set_list_in_constructor(self):
+        obj = MyTensorClass(
+            a=["a string", "another string"],
+            b=[torch.randn(3), torch.zeros(3)],
+            c="smth completly different",
+            batch_size=2,
+        )
+        assert obj.shape == (2,)
+        assert obj[0].a == "a string"
+        assert obj[1].a == "another string"
+        assert (obj[0].b != 0).all()
+        assert (obj[1].b == 0).all()
+        assert obj.c == obj[0].c
+
     def test_set_dict(self):
         @tensorclass(autocast=True)
         class MyClass:
@@ -1540,7 +1565,8 @@ class TestTensorClass:
         # ensure optional fields are writable
         data.k = torch.zeros(3, 4, 5)
 
-    def test_setitem(self):
+    @pytest.mark.parametrize("list_to_stack", [True, False])
+    def test_setitem(self, list_to_stack):
         data = MyData(
             X=torch.ones(3, 4, 5),
             y=torch.zeros(3, 4, 5),
@@ -1599,26 +1625,34 @@ class TestTensorClass:
         X = torch.randn(3, 4, 5)
         z = ["a", "b", "c"]
         batch_size = [3, 4]
-        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
-        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        X2 = torch.ones(3, 4, 5)
-        data_nest2 = MyDataNested(X=X2, z=z, batch_size=batch_size)
-        data2 = MyDataNested(X=X2, y=data_nest2, z=z, batch_size=batch_size)
-        data[:2] = data2[:2].clone()
-        assert (data[:2].X == data2[:2].X).all()
-        assert (data[:2].y.X == data2[:2].y.X).all()
-        assert data[:2].z == z
+        with set_list_to_stack(list_to_stack), (
+            pytest.raises(RuntimeError, match="batch dimension mismatch")
+            if list_to_stack
+            else contextlib.nullcontext()
+        ):
+            data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+            data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+            X2 = torch.ones(3, 4, 5)
+            data_nest2 = MyDataNested(X=X2, z=z, batch_size=batch_size)
+            data2 = MyDataNested(X=X2, y=data_nest2, z=z, batch_size=batch_size)
+            data[:2] = data2[:2].clone()
+            assert (data[:2].X == data2[:2].X).all()
+            assert (data[:2].y.X == data2[:2].y.X).all()
+            assert data[:2].z == z
 
-        # Negative Scenario
-        data3 = MyDataNested(X=X2, y=data_nest2, z=["e", "f"], batch_size=batch_size)
-        data[:2] = data3[:2]
-        assert data[:2].z == data3[:2]._get_str("z", None).tolist()
+            # Negative Scenario
+            data3 = MyDataNested(
+                X=X2, y=data_nest2, z=["e", "f"], batch_size=batch_size
+            )
+            data[:2] = data3[:2]
+            assert data[:2].z == data3[:2]._get_str("z", None).tolist()
 
     @pytest.mark.parametrize(
         "broadcast_type",
         ["scalar", "tensor", "tensordict", "maptensor"],
     )
-    def test_setitem_broadcast(self, broadcast_type):
+    @pytest.mark.parametrize("list_to_stack", [True, False])
+    def test_setitem_broadcast(self, broadcast_type, list_to_stack):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1628,22 +1662,27 @@ class TestTensorClass:
         X = torch.ones(3, 4, 5)
         z = ["a", "b", "c"]
         batch_size = [3, 4]
-        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
-        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+        with set_list_to_stack(list_to_stack), (
+            pytest.raises(RuntimeError, match="batch dimension mismatch")
+            if list_to_stack
+            else contextlib.nullcontext()
+        ):
+            data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+            data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
-        if broadcast_type == "scalar":
-            val = 0
-        elif broadcast_type == "tensor":
-            val = torch.zeros(4, 5)
-        elif broadcast_type == "tensordict":
-            val = TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4])
-        elif broadcast_type == "maptensor":
-            val = MemoryMappedTensor.from_tensor(torch.zeros(4, 5))
+            if broadcast_type == "scalar":
+                val = 0
+            elif broadcast_type == "tensor":
+                val = torch.zeros(4, 5)
+            elif broadcast_type == "tensordict":
+                val = TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4])
+            elif broadcast_type == "maptensor":
+                val = MemoryMappedTensor.from_tensor(torch.zeros(4, 5))
 
-        data[:2] = val
-        assert (data[:2] == 0).all()
-        assert (data.X[:2] == 0).all()
-        assert (data.y.X[:2] == 0).all()
+            data[:2] = val
+            assert (data[:2] == 0).all()
+            assert (data.X[:2] == 0).all()
+            assert (data.y.X[:2] == 0).all()
 
     def test_setitem_memmap(self):
         # regression test PR #203
