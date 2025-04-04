@@ -10,7 +10,7 @@ if [ "$(uname)" == "Darwin" ]; then
   brew install gcc
   brew install clang-build-analyzer
   brew install --cask clay
-  brew install clang
+#  brew install clang
 #  brew upgrade gcc
 #  brew upgrade clang
 #  export CXXFLAGS="-march=armv8-a+fp16+sha3"
