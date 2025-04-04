@@ -31,7 +31,10 @@ jobs:
       fail-fast: false
       matrix:
         runner-type:
-          - macos-12
+          - macos-m1-12
+          - macos-m1-14
+          - macos-m2-14
+          - macos-m2-15
           - macos-m1-stable
         include:
           - repository: pytorch/tensordict
