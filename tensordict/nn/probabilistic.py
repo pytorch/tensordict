@@ -1218,7 +1218,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         *,
         dist: torch.distributions.Distribution | None = None,
         **kwargs,
-    ):
+    ) -> TensorDictBase | torch.Tensor:
         """Returns the log-probability of the input tensordict.
 
         If `self.return_composite` is ``True`` and the distribution is a :class:`~tensordict.nn.CompositeDistribution`,
