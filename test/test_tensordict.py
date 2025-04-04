@@ -11864,16 +11864,15 @@ class TestNonTensorData:
 
     @staticmethod
     def _run_worker(td, val1, update):
+        set_list_to_stack(True).set()
         # Update in place
         if update == "setitem":
-            td["val"] = val1
+            td["val"] = NonTensorData(val1)
         elif update == "update_":
-            td.get("val").update_(
-                NonTensorData(data=val1, batch_size=[]), non_blocking=False
-            )
+            td.get("val").update_(NonTensorData(data=val1), non_blocking=False)
         elif update == "update-inplace":
             td.get("val").update(
-                NonTensorData(data=val1, batch_size=[]),
+                NonTensorData(data=val1),
                 inplace=True,
                 non_blocking=False,
             )
@@ -11884,6 +11883,7 @@ class TestNonTensorData:
         assert td["val"] == val1
 
     @pytest.mark.slow
+    @set_list_to_stack(True)
     @pytest.mark.parametrize("pair", PAIRS)
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize("update", ["update_", "update-inplace"])
