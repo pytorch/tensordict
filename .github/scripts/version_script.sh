@@ -8,6 +8,7 @@ if [ "$(uname)" == "Darwin" ]; then
   echo $(clang --version)
   brew update
   brew install gcc
+  brew install --cask clay
   brew install clang
 #  brew upgrade gcc
 #  brew upgrade clang
