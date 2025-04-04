@@ -7,8 +7,10 @@ if [ "$(uname)" == "Darwin" ]; then
   echo $(gcc --version)
   echo $(clang --version)
   brew update
-  brew upgrade gcc
-  brew upgrade clang
+  brew install gcc
+  brew install clang
+#  brew upgrade gcc
+#  brew upgrade clang
 #  export CXXFLAGS="-march=armv8-a+fp16+sha3"
   export CMAKE_OSX_ARCHITECTURES=arm64
 fi
