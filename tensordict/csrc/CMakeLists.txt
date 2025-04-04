@@ -24,3 +24,5 @@ set_target_properties(_C PROPERTIES
 
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
