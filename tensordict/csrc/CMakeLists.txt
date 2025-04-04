@@ -22,8 +22,6 @@ set_target_properties(_C PROPERTIES
 set_target_properties(_C PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
 )
-set_target_properties(larcv3 PROPERTIES
-                      LINK_FLAGS "-undefined dynamic_lookup")
 
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
