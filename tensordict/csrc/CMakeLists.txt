@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Set the Python executable to the one from your virtual environment
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-find_package(pybind11 REQUIRED)
+find_package(pybind11 2.13 REQUIRED)
 
 file(GLOB SOURCES "*.cpp")
 
@@ -25,4 +25,10 @@ set_target_properties(_C PROPERTIES
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -fsanitize=address")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+endif()
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum OS X deployment version")
+set(CMAKE_VERBOSE_MAKEFILE ON)
