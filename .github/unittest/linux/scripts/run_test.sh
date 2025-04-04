@@ -19,6 +19,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
 export TD_GET_DEFAULTS_TO_NONE=1
+export LIST_TO_STACK=1
 
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120
