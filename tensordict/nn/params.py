@@ -798,7 +798,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
             try:
                 return getattr(self.__dict__["_param_td"], item)
             except AttributeError:
-                return super().__getattr__(item)
+                try:
+                    return super().__getattr__(item)
+                except AttributeError as e:
+                    # During some state-dict loads, we may encounter cases where pytorch does a getattr
+                    #  with the module name
+                    if item in self.keys():
+                        return TensorDictParams(self[item])
+                    raise e
         else:
             return super().__getattr__(item)
 
