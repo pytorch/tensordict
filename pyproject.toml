@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools", "wheel", "torch"]
+requires = ["setuptools", "wheel", "pybind11", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
 
 [tool.usort]
 first_party_detection = false
@@ -12,3 +13,47 @@ excludes = [
 [tool.black]
 line-length = 88
 target-version = ["py38"]
+
+[project]
+name = "tensordict"
+version = "0.8.0"
+description = "TensorDict is a pytorch dedicated tensor container."
+authors = [
+  { name="Vincent Moens", email="vincentmoens@gmail.com" }
+]
+readme = "README.md"
+license = { text = "BSD" }
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Development Status :: 4 - Beta"
+]
+dependencies = []
+
+[project.urls]
+homepage = "https://github.com/pytorch/tensordict"
+
+[project.optional-dependencies]
+tests = [
+    "pytest",
+    "pyyaml",
+    "pytest-instafail",
+    "pytest-rerunfailures",
+    "pytest-benchmark"
+]
+checkpointing = ["torchsnapshot-nightly"]
+h5 = ["h5py>=3.8"]
+dev = ["pybind11", "cmake", "ninja"]
+
+[tool.setuptools]
+packages = { find = { exclude = ["test", "tutorials", "packaging", "gallery", "docs"] } }
+
+#[tool.setuptools.extension]
+#my_extension = { sources = ["tensordict/csrc/pybind.cpp", "tensordict/csrc/utils.cpp"] }
+
+[tool.setuptools.package-data]
+"tensordict" = ["*.so", "*.pyd"]
