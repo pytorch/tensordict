@@ -32,7 +32,13 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Development Status :: 4 - Beta"
 ]
-dependencies = []
+dependencies = [
+    "torch",
+    "numpy",
+    "cloudpickle",
+    "orjson",
+    "packaging",
+]
 
 [project.urls]
 homepage = "https://github.com/pytorch/tensordict"
