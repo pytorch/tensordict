@@ -44,7 +44,7 @@ else
 fi
 
 printf "* Installing tensordict\n"
-python setup.py develop
+pip install -e .
 
 # # install torchsnapshot nightly
 # if [[ "$TORCH_VERSION" == "nightly" ]]; then

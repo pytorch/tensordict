@@ -33,7 +33,8 @@ jobs:
         include:
           - repository: pytorch/tensordict
             smoke-test-script: test/smoke_test.py
-            env-script: .github/scripts/install-deps-smoke-test.sh
+            pre-script: .github/scripts/linux-pre-script.sh
+            post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: pytorch/tensordict
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
@@ -44,7 +45,7 @@ jobs:
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      runner-type: macos-m1-stable
+      runner-type: macos-m2-15
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
