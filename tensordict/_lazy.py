@@ -30,20 +30,7 @@ from typing import (
 
 import numpy as np
 
-import orjson as json
 import torch
-
-from tensordict.memmap import MemoryMappedTensor
-from torch.nn.utils.rnn import pad_sequence
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict.base import (
     _is_leaf_nontensor,
@@ -58,6 +45,8 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
+
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _broadcast_tensors,
@@ -90,7 +79,22 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import Tensor
+from torch.nn.utils.rnn import pad_sequence
 
+try:
+    import orjson as json
+except ImportError:
+    # Fallback
+    import json
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 _has_functorch = False
 try:
@@ -2943,6 +2947,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     keys_to_update=keys_to_update,
                     non_blocking=non_blocking,
                     is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
                     **kwargs,
                 )
             return self
