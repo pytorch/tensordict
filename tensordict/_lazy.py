@@ -2933,7 +2933,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         hook_out=self.hook_out,
                         hook_in=self.hook_in,
                         stack_dim_name=self._td_dim_name,
-                        update_batch_size=update_batch_size,
                     )
                     return self
 
