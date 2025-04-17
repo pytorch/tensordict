@@ -46,7 +46,7 @@ from typing import (
 )
 
 import numpy as np
-import orjson as json
+
 import torch
 
 from tensordict._contextlib import LAST_OP_MAPS
@@ -109,6 +109,12 @@ from tensordict.utils import (
 from torch import multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
+
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 
 try:
     from torch.compiler import is_compiling

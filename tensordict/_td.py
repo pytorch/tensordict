@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tupl
 from warnings import warn
 
 import numpy as np
-import orjson as json
+
 import torch
 from tensordict._nestedkey import NestedKey
 
@@ -91,6 +91,11 @@ from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
+try:
+    import orjson as json
+except ImportError:
+    # Fallback
+    import json
 try:
     from functorch import dim as ftdim
 

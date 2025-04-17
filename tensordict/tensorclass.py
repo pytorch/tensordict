@@ -41,7 +41,7 @@ from typing import (
 from warnings import warn
 
 import numpy as np
-import orjson as json
+
 import tensordict as tensordict_lib
 
 import torch
@@ -53,6 +53,7 @@ from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
     CompatibleType,
@@ -79,6 +80,11 @@ from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 try:
     from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
@@ -1841,7 +1847,10 @@ def _update(
     non_blocking: bool = False,
     update_batch_size: bool = False,
     ignore_lock: bool = False,
+    is_leaf: Callable[[Type], bool] | None = None,
 ):
+    if is_leaf is None:
+        is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
 
@@ -1859,6 +1868,7 @@ def _update(
             non_blocking=non_blocking,
             update_batch_size=update_batch_size,
             ignore_lock=ignore_lock,
+            is_leaf=is_leaf,
         )
         self._non_tensordict.update(non_tensordict)
         return self
@@ -1871,6 +1881,7 @@ def _update(
         non_blocking=non_blocking,
         update_batch_size=update_batch_size,
         ignore_lock=ignore_lock,
+        is_leaf=is_leaf,
     )
     # We also need to remove things from non_tensordict
     if self._non_tensordict:

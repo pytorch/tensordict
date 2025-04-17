@@ -18,7 +18,6 @@ from typing import Any, Callable, Tuple, Type
 
 import numpy as np
 
-import orjson as json
 import torch
 
 from tensordict._td import (
@@ -56,6 +55,12 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch import multiprocessing as mp
+
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 
