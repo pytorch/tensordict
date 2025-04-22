@@ -517,11 +517,11 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def empty(cls, *size, dtype=None, device=None, filename=None): ...
+    def empty(cls, *size, dtype=None, device=None, filename=None, layout=None): ...
 
     @classmethod
     @overload
-    def empty(cls, shape, *, dtype=None, device=None, filename=None): ...
+    def empty(cls, shape, *, dtype=None, device=None, filename=None, layout=None): ...
 
     @classmethod
     def empty(cls, *args, **kwargs):
@@ -539,8 +539,10 @@ class MemoryMappedTensor(torch.Tensor):
                 is provided, a handler is used.
             existsok (bool, optional): whether it is ok to overwrite an existing file.
                 Defaults to ``False``.
+            layout (torch.layout): the layout of the tensor if nested. Only `None` (default), `torch.jagged` and
+                `torch.strided` are accepted.
         """
-        shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
+        shape, device, dtype, _, filename, layout = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -573,11 +575,19 @@ class MemoryMappedTensor(torch.Tensor):
                 else:
                     raise RuntimeError(NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
-                result = torch._nested_view_from_buffer(
-                    result,
-                    shape,
-                    *offsets_strides,
-                )
+                if layout in (None, torch.strided):
+                    result = torch._nested_view_from_buffer(
+                        result,
+                        shape,
+                        *offsets_strides,
+                        layout=layout,
+                    )
+                else:
+                    result = result.view((-1, *shape[0].tolist()))
+                    result = torch.nested.nested_tensor_from_jagged(
+                        result,
+                        lengths=result[:, 0],
+                    )
                 result = cls(result)
                 result._handler = handler
                 return result
@@ -597,11 +607,20 @@ class MemoryMappedTensor(torch.Tensor):
                     offsets_strides = func_offset_stride(shape)
                 else:
                     raise RuntimeError(NESTED_TENSOR_ERR)
-                result = torch._nested_view_from_buffer(
-                    result,
-                    shape,
-                    *offsets_strides,
-                )
+                if layout in (None, torch.strided):
+                    result = torch._nested_view_from_buffer(
+                        result,
+                        shape,
+                        *offsets_strides,
+                    )
+                else:
+                    # TODO: we should not assume that the 2nd dim is the ragged one
+                    result = result.view((-1, *shape[0, 1:].tolist()))
+                    result = torch.nested.nested_tensor_from_jagged(
+                        result,
+                        lengths=result[:, 0],
+                    )
+
                 result = cls(result)
                 result.filename = filename
                 return result
@@ -1030,6 +1049,7 @@ def _proc_args_const(*args, **kwargs):
         kwargs.pop("dtype", None),
         kwargs.pop("fill_value", None),
         kwargs.pop("filename", None),
+        kwargs.pop("layout", None),
     )
 
 
