@@ -59,7 +59,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _maybe_correct_neg_dim,
     _mismatch_keys,
-    _NON_STR_KEY_ERR,
+    _NON_STR_KEY_ERR,_nested_tensor_shape,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
@@ -4701,7 +4701,19 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
 def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok):
     filename = None if prefix is None else str(prefix / f"{key}.memmap")
     if value.is_nested:
-        shape = value._nested_tensor_size()
+        if value.layout is torch.strided:
+            shape = value._nested_tensor_size()
+        else:
+            offsets = value.offsets()
+            if offsets is None:
+                lengths = value.lengths()
+            else:
+                lengths = offsets.diff()
+            shapes = [lengths]
+            for s in value.shape[2:]:
+                shapes.append(torch.full_like(lengths, s))
+            shape = torch.stack(shapes, -1)
+            value = value.values()
         # Make the shape a memmap tensor too
         if prefix is not None:
             shape_filename = Path(filename)
@@ -4713,6 +4725,7 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok)
                 existsok=existsok,
                 copy_data=True,
             )
+
     else:
         shape = None
     memmap_tensor = MemoryMappedTensor.from_tensor(
@@ -4795,7 +4808,7 @@ def _update_metadata(*, metadata, key, value, is_collection):
             "shape": (
                 list(value.shape)
                 if not value.is_nested
-                else list(value._nested_tensor_size().shape)
+                else list(_nested_tensor_shape(value).shape)
             ),
             "dtype": str(value.dtype),
             "is_nested": value.is_nested,
