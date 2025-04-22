@@ -3028,3 +3028,18 @@ def _check_is_unflatten(new_shape, old_shape, return_flatten_dim=False):
         #     j = len(new_shape) - j - 1
         return out, (i, j)
     return out
+
+def _nested_tensor_shape(value):
+    if value.layout is torch.strided:
+        shape = value._nested_tensor_size()
+    else:
+        offsets = value.offsets()
+        if offsets is None:
+            lengths = value.lengths()
+        else:
+            lengths = offsets.diff()
+        shapes = [lengths]
+        for s in value.shape[2:]:
+            shapes.append(torch.full_like(lengths, s))
+        shape = torch.stack(shapes, -1)
+    return shape

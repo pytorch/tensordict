@@ -588,15 +588,20 @@ class TestOps:
         assert (memmap != ~memmap).all()
 
 
+@pytest.mark.parametrize("layout", [torch.jagged, torch.strided])
 class TestNestedTensor:
-    shape = torch.tensor([[2, 3], [2, 4], [3, 2]])
+    def shape(self, layout):
+        if layout is torch.strided:
+            return torch.tensor([[2, 3], [2, 4], [3, 2]])
+        return torch.tensor([[2, 3], [3, 3], [4, 3]])
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
-    def test_with_filename(self, tmpdir):
+    def test_with_filename(self, tmpdir, layout):
         filename = tmpdir + "/test_file2.memmap"
         tensor = MemoryMappedTensor.empty(
-            self.shape, filename=filename, dtype=torch.int
+            self.shape(layout), filename=filename, dtype=torch.int, layout=layout,
         )
+        assert tensor.layout is layout
         assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.int
         tensor.fill_(2)
@@ -605,14 +610,16 @@ class TestNestedTensor:
 
         filename = tmpdir + "/test_file0.memmap"
         tensor = MemoryMappedTensor.zeros(
-            self.shape, filename=filename, dtype=torch.bool
+            self.shape(layout), filename=filename, dtype=torch.bool, layout=layout,
         )
+        assert tensor.layout is layout
         assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.bool
         assert tensor.filename is not None
 
         filename = tmpdir + "/test_file1.memmap"
-        tensor = MemoryMappedTensor.ones(self.shape, filename=filename, dtype=torch.int)
+        tensor = MemoryMappedTensor.ones(self.shape(layout), filename=filename, dtype=torch.int, layout=layout)
+        assert tensor.layout is layout
         assert type(tensor) is MemoryMappedTensor
         assert tensor.dtype == torch.int
         assert (tensor[0] == 1).all()
@@ -620,7 +627,7 @@ class TestNestedTensor:
 
         filename = tmpdir + "/test_file3.memmap"
         tensor = torch.nested.nested_tensor(
-            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape(layout))]
         )
         memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=filename)
         assert type(memmap_tensor) is MemoryMappedTensor
@@ -629,7 +636,7 @@ class TestNestedTensor:
             assert (t1 == t2).all()
 
         memmap_tensor2 = MemoryMappedTensor.from_filename(
-            filename, dtype=memmap_tensor.dtype, shape=self.shape
+            filename, dtype=memmap_tensor.dtype, shape=self.shape(layout)
         )
         assert type(memmap_tensor2) is MemoryMappedTensor
         for t1, t2 in zip(memmap_tensor2, memmap_tensor):
@@ -637,27 +644,27 @@ class TestNestedTensor:
             assert (t1 == t2).all()
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
-    def test_with_handler(self):
-        tensor = MemoryMappedTensor.empty(self.shape, dtype=torch.int)
+    def test_with_handler(self, layout):
+        tensor = MemoryMappedTensor.empty(self.shape(layout), dtype=torch.int, layout=layout)
         assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.int
         tensor.fill_(2)
         assert (tensor[0] == 2).all()
         assert tensor._handler is not None
 
-        tensor = MemoryMappedTensor.zeros(self.shape, dtype=torch.bool)
+        tensor = MemoryMappedTensor.zeros(self.shape(layout), dtype=torch.bool, layout=layout)
         assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.bool
         assert tensor._handler is not None
 
-        tensor = MemoryMappedTensor.ones(self.shape, dtype=torch.int)
+        tensor = MemoryMappedTensor.ones(self.shape(layout), dtype=torch.int, layout=layout)
         assert type(tensor) is MemoryMappedTensor
         assert tensor.dtype == torch.int
         assert (tensor[0] == 1).all()
         assert tensor._handler is not None
 
         tensor = torch.nested.nested_tensor(
-            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape(layout))]
         )
         memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
         assert type(memmap_tensor) is MemoryMappedTensor
@@ -666,7 +673,7 @@ class TestNestedTensor:
             assert (t1 == t2).all()
 
         memmap_tensor2 = MemoryMappedTensor.from_handler(
-            memmap_tensor._handler, dtype=memmap_tensor.dtype, shape=self.shape
+            memmap_tensor._handler, dtype=memmap_tensor.dtype, shape=self.shape(layout), layout=layout
         )
         assert type(memmap_tensor2) is MemoryMappedTensor
         for t1, t2 in zip(memmap_tensor2, memmap_tensor):
@@ -675,19 +682,19 @@ class TestNestedTensor:
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     @pytest.mark.parametrize("with_filename", [False, True])
-    def test_from_storage(self, with_filename, tmpdir):
+    def test_from_storage(self, with_filename, tmpdir, layout):
         if with_filename:
             filename = Path(tmpdir) / "file.memmap"
             filename = str(filename)
         else:
             filename = None
         a = MemoryMappedTensor.from_tensor(
-            torch.arange(10, dtype=torch.float64), filename=filename
+            torch.arange(10, dtype=torch.float64), filename=filename, layout=layout,
         )
         assert type(a) is MemoryMappedTensor
         shape = torch.tensor([[2, 2], [2, 3]])
         b = MemoryMappedTensor.from_storage(
-            a.untyped_storage(), filename=filename, shape=shape, dtype=a.dtype
+            a.untyped_storage(), filename=filename, shape=shape, dtype=a.dtype, layout=layout,
         )
         assert type(b) is MemoryMappedTensor
         assert (b._nested_tensor_size() == shape).all()
@@ -695,14 +702,14 @@ class TestNestedTensor:
         assert (b[1] == torch.arange(4, 10).view(2, 3)).all()
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
-    def test_save_td_with_nested(self, tmpdir):
+    def test_save_td_with_nested(self, tmpdir, layout):
         td = TensorDict(
             {
                 "a": torch.nested.nested_tensor(
                     [
                         torch.arange(12, dtype=torch.float64).view(3, 4),
                         torch.arange(15, dtype=torch.float64).view(3, 5),
-                    ]
+                    ], layout=layout,
                 )
             },
             batch_size=[2, 3],
