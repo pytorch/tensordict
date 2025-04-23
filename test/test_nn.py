@@ -2175,22 +2175,27 @@ class TestProbabilisticTensorDictModule:
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @set_composite_lp_aggregate(False)
-    def test_probabilistic_n_samples(self, return_log_prob):
+    @pytest.mark.parametrize("num_samples", [2, None, (2,)])
+    def test_probabilistic_n_samples(self, return_log_prob, num_samples):
         prob = ProbabilisticTensorDictModule(
             in_keys=["loc"],
             out_keys=["sample"],
             distribution_class=Normal,
             distribution_kwargs={"scale": 1},
             return_log_prob=return_log_prob,
-            num_samples=2,
+            num_samples=num_samples,
             default_interaction_type="random",
         )
+        if num_samples is None:
+            num_samples = ()
+        elif num_samples == 2:
+            num_samples = (2,)
         # alone
         td = TensorDict(loc=torch.randn(3, 4), batch_size=[3])
         td = prob(td)
         assert "sample" in td
-        assert td.shape == (2, 3)
-        assert td["sample"].shape == (2, 3, 4)
+        assert td.shape == (*num_samples, 3)
+        assert td["sample"].shape == (*num_samples, 3, 4)
         if return_log_prob:
             assert "sample_log_prob" in td
         assert prob.dist_sample_keys == ["sample"]

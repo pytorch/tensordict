@@ -1120,7 +1120,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             if isinstance(
                 tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
             ):
-                num_samples = tdm.num_samples + num_samples
+                local_num_samples = tdm.num_samples
+                if local_num_samples is None:
+                    local_num_samples = ()
+                num_samples = local_num_samples + num_samples
         return num_samples
 
     def get_dist(

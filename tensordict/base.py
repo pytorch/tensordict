@@ -11762,8 +11762,6 @@ class TensorDictBase(MutableMapping):
                 will be written in the tensordict.
                 Otherwise they will be discarded. Default: ``True``.
 
-                .. note:: from v0.8, the default value will be switched to ``False``.
-
         Returns:
             a new TensorDict object containing the same values.
 
