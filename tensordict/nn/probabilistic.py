@@ -425,7 +425,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
-        if isinstance(num_samples, (int, torch.SymInt)):
+        if num_samples is None:
+            num_samples = ()
+        elif isinstance(num_samples, (int, torch.SymInt)):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
         self._composite_lp_aggreate_at_init = composite_lp_aggregate(nowarn=True)
