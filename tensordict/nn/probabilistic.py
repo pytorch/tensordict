@@ -425,9 +425,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
-        if num_samples is None:
-            num_samples = ()
-        elif isinstance(num_samples, (int, torch.SymInt)):
+        if isinstance(num_samples, (int, torch.SymInt)):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
         self._composite_lp_aggreate_at_init = composite_lp_aggregate(nowarn=True)
@@ -1122,7 +1120,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             if isinstance(
                 tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
             ):
-                num_samples = tdm.num_samples + num_samples
+                local_num_samples = tdm.num_samples
+                if local_num_samples is None:
+                    local_num_samples = ()
+                num_samples = local_num_samples + num_samples
         return num_samples
 
     def get_dist(
