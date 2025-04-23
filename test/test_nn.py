@@ -812,8 +812,9 @@ class TestTDModule:
         with _set_dispatch_td_nn_modules(True):
             out = tdm(a=torch.zeros(1, 1))
             assert (out == td["b"]).all()
-        with _set_dispatch_td_nn_modules(False), pytest.raises(
-            TypeError, match="missing 1 required positional argument"
+        with (
+            _set_dispatch_td_nn_modules(False),
+            pytest.raises(TypeError, match="missing 1 required positional argument"),
         ):
             tdm(a=torch.zeros(1, 1))
 
@@ -2458,11 +2459,14 @@ class TestProbabilisticTensorDictModule:
                 out_keys=[("dirich", "categ")],
                 return_log_prob=True,
             )
-            with pytest.warns(
-                DeprecationWarning, match="You are querying the log-probability key"
-            ), pytest.warns(
-                DeprecationWarning,
-                match="Composite log-prob aggregation wasn't defined explicitly",
+            with (
+                pytest.warns(
+                    DeprecationWarning, match="You are querying the log-probability key"
+                ),
+                pytest.warns(
+                    DeprecationWarning,
+                    match="Composite log-prob aggregation wasn't defined explicitly",
+                ),
             ):
                 td = TensorDict(
                     params=TensorDict(
