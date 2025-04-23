@@ -36,6 +36,7 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
+    Union,
 )
 
 import numpy as np
