@@ -4,13 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 
-def test_imports():
+def test_imports_deps():
     print("Importing numpy")  # noqa
     import numpy  # noqa
 
     print("Importing torch")  # noqa
     import torch  # noqa
 
+def test_imports():
     print("Importing tensordict")  # noqa
     from tensordict import TensorDict  # noqa: F401
 
@@ -27,4 +28,5 @@ def test_imports():
 
 
 if __name__ == "__main__":
+    test_imports_deps()
     test_imports()
