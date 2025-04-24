@@ -33,8 +33,6 @@ jobs:
         include:
           - repository: pytorch/tensordict
             smoke-test-script: test/smoke_test.py
-            build-command: pip wheel
-            build-platform: python-build-package
             pre-script: .github/scripts/linux-pre-script.sh
             post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
@@ -51,3 +49,5 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
+      build-command: pip wheel .
+      build-platform: python-build-package
