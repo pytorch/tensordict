@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "utils.h"
-#include "utils.cpp"
 
 namespace py = pybind11;
 
