@@ -18,7 +18,6 @@ from typing import Any, Callable, Tuple, Type
 
 import numpy as np
 
-import orjson as json
 import torch
 
 from tensordict._td import (
@@ -56,6 +55,12 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch import multiprocessing as mp
+
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 
@@ -230,7 +235,7 @@ class PersistentTensorDict(TensorDictBase):
         cls,
         input_dict,
         filename,
-        *others,
+        *,
         auto_batch_size: bool = False,
         batch_size=None,
         device=None,
@@ -257,19 +262,6 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
-        if others:
-            if batch_size is not None:
-                raise TypeError(
-                    "conflicting batch size values. Please use the keyword argument only."
-                )
-            warnings.warn(
-                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead."
-            )
-            if len(others) == 2:
-                batch_size, device = others
-            else:
-                batch_size = others[0]
-
         import h5py
 
         file = h5py.File(filename, "w", locking=cls.LOCKING)

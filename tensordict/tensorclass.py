@@ -38,10 +38,9 @@ from typing import (
     TypeVar,
     Union,
 )
-from warnings import warn
 
 import numpy as np
-import orjson as json
+
 import tensordict as tensordict_lib
 
 import torch
@@ -53,6 +52,7 @@ from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
     CompatibleType,
@@ -79,6 +79,11 @@ from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 try:
     from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
@@ -1841,7 +1846,10 @@ def _update(
     non_blocking: bool = False,
     update_batch_size: bool = False,
     ignore_lock: bool = False,
+    is_leaf: Callable[[Type], bool] | None = None,
 ):
+    if is_leaf is None:
+        is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
 
@@ -1859,6 +1867,7 @@ def _update(
             non_blocking=non_blocking,
             update_batch_size=update_batch_size,
             ignore_lock=ignore_lock,
+            is_leaf=is_leaf,
         )
         self._non_tensordict.update(non_tensordict)
         return self
@@ -1871,6 +1880,7 @@ def _update(
         non_blocking=non_blocking,
         update_batch_size=update_batch_size,
         ignore_lock=ignore_lock,
+        is_leaf=is_leaf,
     )
     # We also need to remove things from non_tensordict
     if self._non_tensordict:
@@ -2186,14 +2196,7 @@ def _from_dict_instance(
     # check that
     if batch_size is None:
         if auto_batch_size is None and batch_dims is None:
-            warn(
-                "The batch-size was not provided and auto_batch_size isn't set either. "
-                "Currently, from_dict will call set auto_batch_size=True but this behaviour "
-                "will be changed in v0.8 and auto_batch_size will be False onward. "
-                "To silence this warning, pass auto_batch_size directly.",
-                category=DeprecationWarning,
-            )
-            auto_batch_size = True
+            auto_batch_size = False
         elif auto_batch_size is None:
             auto_batch_size = True
         if auto_batch_size:
@@ -2211,8 +2214,6 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
         retain_none (bool): if ``True``, the ``None`` values will be written in the
             tensordict. Otherwise they will be discrarded. Default: ``True``.
 
-            .. note:: from v0.8, the default value will be switched to ``False``.
-
     Returns:
         A new TensorDict object containing the same values as the tensorclass.
 
@@ -2221,12 +2222,7 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
     for key, val in self._non_tensordict.items():
         if val is None:
             if retain_none is None:
-                retain_none = True
-                warnings.warn(
-                    "retain_none was not specified and a None value was encountered in the tensorclass. "
-                    "As of now, the None will be written in the tensordict but this default behaviour will change "
-                    "in v0.8. To disable this warning, specify the value of retain_none."
-                )
+                retain_none = False
             if retain_none:
                 pass
             else:
@@ -4279,7 +4275,7 @@ class TensorClass(metaclass=_TensorClassMeta):
     ...
 
 
-# TODO: v0.8: remove this func entirely
+# TODO: v0.9: remove this func entirely
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
@@ -4295,7 +4291,7 @@ def _check_equal(a, b):
     if iseq:
         warnings.warn(
             "The content of the stacked NonTensorData objects matched in value but not identity. "
-            "This will currently return a NonTensorData but in the future (v0.8) it will return "
+            "This will currently return a NonTensorData but in the future (v0.9) it will return "
             "a NonTensorStack instead. "
             "To obtain a non-tensor stack, use `TensorDict.lazy_stack` instead.",
             category=UserWarning,

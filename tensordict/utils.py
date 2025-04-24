@@ -506,23 +506,20 @@ def _dtype(tensor: Tensor) -> torch.dtype:
 
 
 def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
-    if isinstance(tensor, Tensor):
-        try:
-            return tensor[index]
-        except IndexError as err:
-            # try to map list index to tensor, and assess type. If bool, we
-            # likely have a nested list of booleans which is not supported by pytorch
-            if _is_lis_of_list_of_bools(index):
-                index = torch.tensor(index, device=tensor.device)
-                if index.dtype is torch.bool:
-                    raise RuntimeError(
-                        "Indexing a tensor with a nested list of boolean values is "
-                        "not supported by PyTorch.",
-                    )
-                return tensor[index]
-            raise err
-    else:
+    try:
         return tensor[index]
+    except IndexError as err:
+        # try to map list index to tensor, and assess type. If bool, we
+        # likely have a nested list of booleans which is not supported by pytorch
+        if _is_lis_of_list_of_bools(index):
+            index = torch.tensor(index, device=tensor.device)
+            if index.dtype is torch.bool:
+                raise RuntimeError(
+                    "Indexing a tensor with a nested list of boolean values is "
+                    "not supported by PyTorch.",
+                )
+            return tensor[index]
+        raise err
 
 
 def _set_item(
