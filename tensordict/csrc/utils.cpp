@@ -9,58 +9,58 @@
 namespace py = pybind11;
 
 py::tuple _unravel_key_to_tuple(const py::object &key) {
-  std::stack<py::object> stack;
-  stack.push(key);
-  py::list result;
+  bool is_tuple = py::isinstance<py::tuple>(key);
+  bool is_str = py::isinstance<py::str>(key);
 
-  while (!stack.empty()) {
-    py::object current = stack.top();
-    stack.pop();
-
-    if (py::isinstance<py::tuple>(current)) {
-      py::tuple current_tuple = current.cast<py::tuple>();
-      for (ssize_t i = current_tuple.size() - 1; i >= 0; --i) {
-        stack.push(current_tuple[i]);
+  if (is_tuple) {
+    py::list newkey;
+    for (const auto &subkey : key) {
+      if (py::isinstance<py::str>(subkey)) {
+        newkey.append(subkey);
+      } else {
+        auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
+        if (_key.size() == 0) {
+          return py::make_tuple();
+        }
+        newkey += _key;
       }
-    } else if (py::isinstance<py::str>(current)) {
-      result.append(current);
-    } else {
-      return py::make_tuple();  // Return empty tuple if any non-string, non-tuple is encountered
     }
+    return py::tuple(newkey);
   }
-
-  return py::tuple(result);
+  if (is_str) {
+    return py::make_tuple(key);
+  } else {
+    return py::make_tuple();
+  }
 }
 
 py::object unravel_key(const py::object &key) {
-  if (!py::isinstance<py::tuple>(key) && !py::isinstance<py::str>(key)) {
+  bool is_tuple = py::isinstance<py::tuple>(key);
+  bool is_str = py::isinstance<py::str>(key);
+
+  if (is_tuple) {
+    py::list newkey;
+    int count = 0;
+    for (const auto &subkey : key) {
+      if (py::isinstance<py::str>(subkey)) {
+        newkey.append(subkey);
+        count++;
+      } else {
+        auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
+        count += _key.size();
+        newkey += _key;
+      }
+    }
+    if (count == 1) {
+      return newkey[0];
+    }
+    return py::tuple(newkey);
+  }
+  if (is_str) {
+    return key;
+  } else {
     throw std::runtime_error("key should be a Sequence<NestedKey>");
   }
-
-  std::stack<py::object> stack;
-  stack.push(key);
-  py::list result;
-  int count = 0;
-
-  while (!stack.empty()) {
-    py::object current = stack.top();
-    stack.pop();
-
-    if (py::isinstance<py::tuple>(current)) {
-      py::tuple current_tuple = current.cast<py::tuple>();
-      for (ssize_t i = current_tuple.size() - 1; i >= 0; --i) {
-        stack.push(current_tuple[i]);
-      }
-    } else if (py::isinstance<py::str>(current)) {
-      result.append(current);
-      count++;
-    }
-  }
-
-  if (count == 1) {
-    return result[0];
-  }
-  return py::tuple(result);
 }
 
 py::list unravel_key_list(const py::list &keys) {
