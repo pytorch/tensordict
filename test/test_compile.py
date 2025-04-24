@@ -43,6 +43,8 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 
 _v2_5 = TORCH_VERSION >= version.parse("2.5.0")
+_v2_6 = TORCH_VERSION >= version.parse("2.6.0")
+_v2_7 = TORCH_VERSION >= version.parse("2.7.0")
 
 _IS_OSX = platform.system() == "Darwin"
 
@@ -887,6 +889,7 @@ class TestExport:
     #  the params in the module have changed and are not 'meta' anymore => this
     #  is symptomatic of export failing to see the functional call
     @pytest.mark.parametrize("strict", [False])  # , True])
+    @pytest.mark.skipif(not _v2_7, reason="Requires PT>=2.7")
     def test_export_with_td_params(self, strict):
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),

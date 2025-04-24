@@ -46,7 +46,7 @@ from typing import (
 )
 
 import numpy as np
-import orjson as json
+
 import torch
 
 from tensordict._contextlib import LAST_OP_MAPS
@@ -109,6 +109,12 @@ from tensordict.utils import (
 from torch import multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
+
+try:
+    import orjson as json
+except ImportError:
+    # Fallback for 3.13
+    import json
 
 try:
     from torch.compiler import is_compiling
@@ -11755,8 +11761,6 @@ class TensorDictBase(MutableMapping):
             retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
                 will be written in the tensordict.
                 Otherwise they will be discarded. Default: ``True``.
-
-                .. note:: from v0.8, the default value will be switched to ``False``.
 
         Returns:
             a new TensorDict object containing the same values.

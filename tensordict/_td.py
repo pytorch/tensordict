@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tupl
 from warnings import warn
 
 import numpy as np
-import orjson as json
+
 import torch
 from tensordict._nestedkey import NestedKey
 
@@ -91,6 +91,11 @@ from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
+try:
+    import orjson as json
+except ImportError:
+    # Fallback
+    import json
 try:
     from functorch import dim as ftdim
 
@@ -2054,7 +2059,7 @@ class TensorDict(TensorDictBase):
     def from_dict(
         cls,
         input_dict,
-        *others,
+        *,
         auto_batch_size: bool | None = None,
         batch_size=None,
         device=None,
@@ -2063,36 +2068,6 @@ class TensorDict(TensorDictBase):
     ):
         if _is_tensor_collection(type(input_dict)):
             return input_dict
-        if others:
-            if batch_size is not None:
-                raise TypeError(
-                    "conflicting batch size values. Please use the keyword argument only."
-                )
-            if device is not None:
-                raise TypeError(
-                    "conflicting device values. Please use the keyword argument only."
-                )
-            if batch_dims is not None:
-                raise TypeError(
-                    "conflicting batch_dims values. Please use the keyword argument only."
-                )
-            if names is not None:
-                raise TypeError(
-                    "conflicting names values. Please use the keyword argument only."
-                )
-            warn(
-                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead.",
-                category=DeprecationWarning,
-            )
-            batch_size, *others = others
-            if len(others):
-                device, *others = others
-                if len(others):
-                    batch_dims, *others = others
-                    if len(others):
-                        names, *others = others
-                        if len(others):
-                            raise TypeError("Too many positional arguments.")
 
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
@@ -2142,43 +2117,13 @@ class TensorDict(TensorDictBase):
     def from_dict_instance(
         self,
         input_dict,
-        *others,
+        *,
         auto_batch_size: bool | None = None,
         batch_size=None,
         device=None,
         batch_dims=None,
         names=None,
     ):
-        if others:
-            if batch_size is not None:
-                raise TypeError(
-                    "conflicting batch size values. Please use the keyword argument only."
-                )
-            if device is not None:
-                raise TypeError(
-                    "conflicting device values. Please use the keyword argument only."
-                )
-            if batch_dims is not None:
-                raise TypeError(
-                    "conflicting batch_dims values. Please use the keyword argument only."
-                )
-            if names is not None:
-                raise TypeError(
-                    "conflicting names values. Please use the keyword argument only."
-                )
-            warn(
-                "All positional arguments after filename will be deprecated in v0.8. Please use keyword arguments instead.",
-                category=DeprecationWarning,
-            )
-            batch_size, *others = others
-            if len(others):
-                device, *others = others
-                if len(others):
-                    batch_dims, *others = others
-                    if len(others):
-                        names, *others = others
-                        if len(others):
-                            raise TypeError("Too many positional arguments.")
 
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
@@ -2220,14 +2165,7 @@ class TensorDict(TensorDictBase):
         )
         if batch_size is None:
             if auto_batch_size is None and batch_dims is None:
-                warn(
-                    "The batch-size was not provided and auto_batch_size isn't set either. "
-                    "Currently, from_dict will call set auto_batch_size=True but this behaviour "
-                    "will be changed in v0.8 and auto_batch_size will be False onward. "
-                    "To silence this warning, pass auto_batch_size directly.",
-                    category=DeprecationWarning,
-                )
-                auto_batch_size = True
+                auto_batch_size = False
             elif auto_batch_size is None:
                 auto_batch_size = True
             if auto_batch_size:

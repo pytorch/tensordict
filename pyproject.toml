@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel", "torch"]
 
 [tool.usort]
 first_party_detection = false
-target-version = ["py38"]
+target-version = ["py39"]
 excludes = [
     "gallery",
     "tutorials",
@@ -11,4 +11,4 @@ excludes = [
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py39"]

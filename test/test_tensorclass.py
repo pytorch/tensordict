@@ -1625,10 +1625,13 @@ class TestTensorClass:
         X = torch.randn(3, 4, 5)
         z = ["a", "b", "c"]
         batch_size = [3, 4]
-        with set_list_to_stack(list_to_stack), (
-            pytest.raises(RuntimeError, match="batch dimension mismatch")
-            if list_to_stack
-            else contextlib.nullcontext()
+        with (
+            set_list_to_stack(list_to_stack),
+            (
+                pytest.raises(RuntimeError, match="batch dimension mismatch")
+                if list_to_stack
+                else contextlib.nullcontext()
+            ),
         ):
             data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
             data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
@@ -1662,10 +1665,13 @@ class TestTensorClass:
         X = torch.ones(3, 4, 5)
         z = ["a", "b", "c"]
         batch_size = [3, 4]
-        with set_list_to_stack(list_to_stack), (
-            pytest.raises(RuntimeError, match="batch dimension mismatch")
-            if list_to_stack
-            else contextlib.nullcontext()
+        with (
+            set_list_to_stack(list_to_stack),
+            (
+                pytest.raises(RuntimeError, match="batch dimension mismatch")
+                if list_to_stack
+                else contextlib.nullcontext()
+            ),
         ):
             data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
             data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
