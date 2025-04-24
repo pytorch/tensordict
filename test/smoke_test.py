@@ -5,7 +5,16 @@
 
 
 def test_imports():
+    print("Importing numpy")  # noqa
+    import numpy  # noqa
+
+    print("Importing torch")  # noqa
+    import torch  # noqa
+
+    print("Importing tensordict")  # noqa
     from tensordict import TensorDict  # noqa: F401
+
+    print("Importing tensordict nn")  # noqa
     from tensordict.nn import TensorDictModule  # noqa: F401
 
     # # Check that distributed is not imported

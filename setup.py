@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from setuptools import Extension, setup
+from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -92,4 +92,7 @@ setup(
         "build_ext": CMakeBuild,
         "clean": clean,
     },
+    packages=find_packages(
+        exclude=("test", "tutorials", "packaging", "gallery", "docs")
+    ),
 )
