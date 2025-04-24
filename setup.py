@@ -2,7 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+import distutils.command.clean
+import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +15,34 @@ from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = Path(__file__).parent.resolve()
+
+
+def get_python_executable():
+    # Check if we're running in a virtual environment
+    if "VIRTUAL_ENV" in os.environ:
+        # Get the virtual environment's Python executable
+        python_executable = os.path.join(os.environ["VIRTUAL_ENV"], "bin", "python")
+    else:
+        # Fall back to sys.executable
+        python_executable = sys.executable
+    return python_executable
+
+
+class clean(distutils.command.clean.clean):
+    def run(self):
+        # Run default behavior first
+        distutils.command.clean.clean.run(self)
+
+        # Remove tensordict extension
+        for path in (ROOT_DIR / "tensordict").glob("**/*.so"):
+            logging.info(f"removing '{path}'")
+            path.unlink()
+        # Remove build directory
+        build_dirs = [ROOT_DIR / "build"]
+        for path in build_dirs:
+            if path.exists():
+                logging.info(f"removing '{path}' (and everything under it)")
+                shutil.rmtree(str(path), ignore_errors=True)
 
 
 class CMakeExtension(Extension):
@@ -25,10 +57,17 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
+        is_editable = self.inplace
+        if is_editable:
+            # For editable installs, place the extension in the source directory
+            extdir = os.path.abspath(os.path.join(ROOT_DIR, "tensordict"))
+        else:
+            # For regular installs, place the extension in the build directory
+            extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
-            f"-DPYTHON_EXECUTABLE={sys.executable}",
+            f"-DPYTHON_EXECUTABLE={get_python_executable()}",
+            f"-DPython3_EXECUTABLE={get_python_executable()}",
         ]
 
         build_args = []
@@ -49,5 +88,8 @@ def get_extensions():
 
 setup(
     ext_modules=get_extensions(),
-    cmdclass={"build_ext": CMakeBuild},
+    cmdclass={
+        "build_ext": CMakeBuild,
+        "clean": clean,
+    },
 )
