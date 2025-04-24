@@ -1,6 +1,8 @@
 #!/bin/bash
 
 export TENSORDICT_BUILD_VERSION=0.8.0
+export MACOSX_DEPLOYMENT_TARGET=12.0
+
 ${CONDA_RUN} pip install --upgrade pip
 
 ${CONDA_RUN} conda install conda-forge::rust -y
