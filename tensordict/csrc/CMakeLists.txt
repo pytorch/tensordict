@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set the Python executable to the one from your virtual environment
 
+include(FindPythonPyEnv)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 2.13 REQUIRED)
 
