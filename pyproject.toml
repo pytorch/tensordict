@@ -56,7 +56,10 @@ h5 = ["h5py>=3.8"]
 dev = ["pybind11", "cmake", "ninja"]
 
 [tool.setuptools]
-packages = { find = { exclude = ["test", "tutorials", "packaging", "gallery", "docs", "benchmarks"] } }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+exclude = ["test", "tutorials", "packaging", "gallery", "docs", "benchmarks"]
 
 #[tool.setuptools.extension]
 #my_extension = { sources = ["tensordict/csrc/pybind.cpp", "tensordict/csrc/utils.cpp"] }
