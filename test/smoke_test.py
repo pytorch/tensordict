@@ -29,4 +29,4 @@ def test_imports():
 
 if __name__ == "__main__":
     test_imports_deps()
-    # test_imports()
+    test_imports()
