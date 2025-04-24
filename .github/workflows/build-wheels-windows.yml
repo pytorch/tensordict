@@ -32,7 +32,7 @@ jobs:
       matrix:
         include:
           - repository: pytorch/tensordict
-            pre-script: ""
+            pre-script: .github/scripts/win-pre-script.bat
             env-script: .github/scripts/version_script.bat
             post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py

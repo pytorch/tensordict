@@ -4,18 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 
-def test_imports():
-    from tensordict import TensorDict  # noqa: F401
-    from tensordict.nn import TensorDictModule  # noqa: F401
+def test_imports_deps():
+    print("Importing numpy")  # noqa
+    import numpy  # noqa
 
-    # # Check that distributed is not imported
-    # v = set(sys.modules.values())
-    # try:
-    #     from torch import distributed
-    # except ImportError:
-    #     return
-    # assert distributed not in v
+    print("Importing torch")  # noqa
+    import torch  # noqa
+
+
+def test_imports():
+    print("Importing tensordict")  # noqa
+    from tensordict import TensorDict  # noqa: F401
+
+    print("Importing tensordict nn")  # noqa
+    from tensordict.nn import TensorDictModule  # noqa: F401
 
 
 if __name__ == "__main__":
+    test_imports_deps()
     test_imports()

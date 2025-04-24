@@ -19,4 +19,5 @@ dependencies:
     - coverage
     - h5py
     - orjson
+    - ninja
     - numpy<2.0.0

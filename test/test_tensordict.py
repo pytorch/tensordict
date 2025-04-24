@@ -11988,12 +11988,15 @@ class TestNonTensorData:
         assert data_memmap._is_memmap
 
     def test_memmap_stack_updates(self, tmpdir):
-        with pytest.warns(
-            UserWarning,
-            match="The content of the stacked NonTensorData objects matched in value but not identity",
-        ), pytest.warns(
-            FutureWarning,
-            match="The default behavior of stacking non-tensor data will change in version v0.9",
+        with (
+            pytest.warns(
+                UserWarning,
+                match="The content of the stacked NonTensorData objects matched in value but not identity",
+            ),
+            pytest.warns(
+                FutureWarning,
+                match="The default behavior of stacking non-tensor data will change in version v0.9",
+            ),
         ):
             data = torch.stack(
                 [

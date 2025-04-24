@@ -6,9 +6,15 @@ possible.
 Install the library as suggested in the README. For advanced features,
 it is preferable to install the nightly built of pytorch.
 
+You will need the following packages to be installed:
+```bash
+pip install ninja "pybind11[global]" -U
+```
+as well as cmake (using `apt-get`, `conda` or any other package manager).
+
 Make sure you install tensordict in develop mode by running
 ```
-python setup.py develop
+pip install -e .
 ```
 in your shell.
 
@@ -16,7 +22,7 @@ If the generation of this artifact in MacOs M1 doesn't work correctly or in the 
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
-ARCHFLAGS="-arch arm64" python setup.py develop
+ARCHFLAGS="-arch arm64" pip install -e .
 ```
 
 ## Formatting your code
