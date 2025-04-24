@@ -11,6 +11,7 @@ def test_imports_deps():
     print("Importing torch")  # noqa
     import torch  # noqa
 
+
 def test_imports():
     print("Importing tensordict")  # noqa
     from tensordict import TensorDict  # noqa: F401

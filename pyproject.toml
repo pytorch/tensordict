@@ -38,6 +38,7 @@ dependencies = [
     "cloudpickle",
     "orjson",
     "packaging",
+    "importlib_metadata",
 ]
 
 [project.urls]
