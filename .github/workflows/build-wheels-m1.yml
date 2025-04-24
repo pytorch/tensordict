@@ -49,5 +49,5 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
-      build-command: pip wheel . && mkdir dist && mv *.whl ./dist
+      # build-command: pip wheel . && mkdir dist && mv *.whl ./dist
       build-platform: python-build-package
