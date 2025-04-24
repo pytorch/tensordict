@@ -19,14 +19,6 @@ def test_imports():
     print("Importing tensordict nn")  # noqa
     from tensordict.nn import TensorDictModule  # noqa: F401
 
-    # # Check that distributed is not imported
-    # v = set(sys.modules.values())
-    # try:
-    #     from torch import distributed
-    # except ImportError:
-    #     return
-    # assert distributed not in v
-
 
 if __name__ == "__main__":
     test_imports_deps()

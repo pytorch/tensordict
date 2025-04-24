@@ -173,12 +173,12 @@ setup_base_build_version() {
   export BUILD_VERSION
 }
 
-## Set some useful variables for OS X, if applicable
-#setup_macos() {
-#  if [[ "$(uname)" == Darwin ]]; then
-#    export MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++
-#  fi
-#}
+# Set some useful variables for OS X, if applicable
+setup_macos() {
+  if [[ "$(uname)" == Darwin ]]; then
+    export MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++
+  fi
+}
 
 
 # Top-level entry point for things every package will need to do
@@ -187,7 +187,7 @@ setup_base_build_version() {
 setup_env() {
   setup_cuda
   setup_build_version "$1"
-#  setup_macos
+  setup_macos
 }
 
 # Function to retry functions that sometimes timeout or have flaky failures
