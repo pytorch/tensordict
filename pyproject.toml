@@ -66,4 +66,4 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 #my_extension = { sources = ["tensordict/csrc/pybind.cpp", "tensordict/csrc/utils.cpp"] }
 
 [tool.setuptools.package-data]
-"tensordict" = ["*.so", "*.pyd"]
+"tensordict" = ["*.so", "*.pyd", "*.dll"]

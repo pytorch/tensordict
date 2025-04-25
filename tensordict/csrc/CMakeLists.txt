@@ -54,8 +54,8 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 if(WIN32)
     # Move contents of tensordict/Release/* to tensordict/
-    file(GLOB RELEASE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/tensordict/Release/*")
+    file(GLOB RELEASE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Release/*")
     foreach(FILE ${RELEASE_FILES})
-        file(COPY ${FILE} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tensordict/)
+        file(COPY ${FILE} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/)
     endforeach()
 endif()
