@@ -68,6 +68,7 @@ class CMakeBuild(build_ext):
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
             f"-DPython3_EXECUTABLE={get_python_executable()}",
+            "-DCMAKE_INTDIR=",
         ]
 
         build_args = []
