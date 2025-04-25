@@ -7,8 +7,6 @@ if "%CONDA_RUN%"=="" (
     exit /b 1
 )
 
-%CONDA_RUN% conda install -c conda-forge rust || exit /b 1
-
 @echo on
 
 set VC_VERSION_LOWER=17
