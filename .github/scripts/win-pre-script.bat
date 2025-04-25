@@ -6,7 +6,8 @@ if "%CONDA_RUN%"=="" (
 )
 
 :: Run the pip install command
-%CONDA_RUN% conda install -c conda-forge pybind11 -y
+%CONDA_RUN% conda install conda-forge::pybind11 -y
+%CONDA_RUN% conda install conda-forge::rust -y
 
 :: Check if the installation was successful
 if errorlevel 1 (
