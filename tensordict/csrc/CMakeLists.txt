@@ -17,11 +17,20 @@ file(GLOB SOURCES "*.cpp")
 
 add_library(_C MODULE ${SOURCES})
 
-set_target_properties(_C PROPERTIES
-    OUTPUT_NAME "_C"
-    PREFIX ""  # Remove 'lib' prefix
-    SUFFIX ".so"  # Ensure correct suffix for macOS/Linux (consider using CMAKE_SHARED_LIBRARY_SUFFIX instead for cross-platform compatibility)
-)
+if(WIN32)
+    set_target_properties(_C PROPERTIES
+        OUTPUT_NAME "_C"
+        PREFIX ""  # Remove 'lib' prefix
+        SUFFIX "${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    )
+else()
+    set_target_properties(_C PROPERTIES
+        OUTPUT_NAME "_C"
+        PREFIX ""  # Remove 'lib' prefix
+        SUFFIX ".so"  # Ensure correct suffix for macOS/Linux (consider using CMAKE_SHARED_LIBRARY_SUFFIX instead for cross-platform compatibility)
+    )
+endif()
+
 set_target_properties(_C PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
 )
