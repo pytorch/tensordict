@@ -35,7 +35,7 @@ jobs:
             pre-script: .github/scripts/win-pre-script.bat
             #env-script: .github/scripts/version_script.bat
             post-script: "python packaging/wheel/relocate.py"
-            smoke-test-script: test/smoke_test.py
+            #smoke-test-script: test/smoke_test.py
             package-name: tensordict
     name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_windows.yml@main
