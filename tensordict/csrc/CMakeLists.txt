@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set the Python executable to the one from your virtual environment
-if(APPLE) # Check if the target OS is OSX/macOS
+if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
     include(FindPythonPyEnv)
 endif()
@@ -28,7 +28,7 @@ set_target_properties(_C PROPERTIES
 
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 
-if(APPLE) # Check if the target OS is OSX/macOS
+if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
     target_link_libraries(_C PRIVATE pybind11::module)
 else()
     target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
