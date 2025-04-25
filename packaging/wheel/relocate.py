@@ -109,6 +109,10 @@ def patch_win():
     # Find wheel
     # ("Finding wheels...")
     wheels = glob.glob(osp.join(PACKAGE_ROOT, "dist", "*.whl"))
+    if not wheels:
+        raise FileNotFoundError(
+            "Did not find any wheels in {}".format(osp.join(PACKAGE_ROOT, "dist"))
+        )
     output_dir = osp.join(PACKAGE_ROOT, "dist", ".wheel-process")
 
     for wheel in wheels:

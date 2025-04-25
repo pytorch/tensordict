@@ -49,3 +49,5 @@ jobs:
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       post-script: ${{ matrix.post-script }}
+      build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
+      build-platform: python-build-package
