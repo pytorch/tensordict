@@ -53,9 +53,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum OS X deployment ver
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 if(WIN32)
-    # Move contents of tensordict/Release/* to tensordict/
-    file(GLOB RELEASE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Release/*")
-    foreach(FILE ${RELEASE_FILES})
-        file(COPY ${FILE} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/)
-    endforeach()
+    add_custom_command(TARGET _C POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_C> "${CMAKE_CURRENT_SOURCE_DIR}/tensordict/$<TARGET_FILE_NAME:_C>"
+    )
 endif()
