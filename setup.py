@@ -66,6 +66,7 @@ class CMakeBuild(build_ext):
             extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
             f"-DPython3_EXECUTABLE={get_python_executable()}",
             # for windows
