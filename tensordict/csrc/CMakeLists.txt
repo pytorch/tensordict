@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set the Python executable to the one from your virtual environment
-if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
+if(APPLE) # Check if the target OS is OSX/macOS
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
     include(FindPythonPyEnv)
 endif()
