@@ -76,6 +76,8 @@ class CMakeBuild(build_ext):
         build_args = []
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
+        if sys.platform == "win32":
+            build_args += ["--config", "Release"]
         subprocess.check_call(
             ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp
         )
