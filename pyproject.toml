@@ -39,7 +39,6 @@ dependencies = [
     "orjson",
     "packaging",
     "importlib_metadata",
-    'rust (>=1.3.1,<2.0.0) ; python_version >= "3.13" and platform_system == "Windows"',
 ]
 
 [project.urls]
