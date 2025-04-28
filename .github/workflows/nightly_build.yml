@@ -63,12 +63,20 @@ jobs:
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 -mpip install "pybind11[global]"
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
-           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            apt-get update
+            apt-get install -y cmake
+          elif [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install cmake
+          else
+            echo "Unsupported OS"
+            exit 1
+          fi
+          python3 -mpip install "pybind11[global]" poetry
+          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          poetry build
+          rm pyproject.toml.bak
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Show auditwheel output; confirm 2-17
@@ -217,15 +225,27 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Build tensordict nightly
+      - name: Build tensordict Nightly
         shell: bash
         run: |
+          # Remove the dist directory if it exists
           rm -r dist || true
-          python3 -mpip install "pybind11[global]"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
+          if ! choco -v &> /dev/null; then
+            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
+          fi
+          # Install cmake using Chocolatey
+          choco install cmake -y
+          # Install necessary Python packages
+          python -m pip install --upgrade pip
+          python -m pip install "pybind11[global]" poetry
+          # Modify pyproject.toml to change the package name
+          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          # Build the package with Poetry
+          poetry build
+          # Clean up the backup file created by sed
+          rm pyproject.toml.bak
+          # Rename the wheel files to match the manylinux1 convention
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
