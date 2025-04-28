@@ -71,7 +71,8 @@ jobs:
           fi
           python3 -mpip install "pybind11[global]" poetry
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
-          poetry build
+          # poetry build
+          python -m build --wheel
           rm pyproject.toml.bak
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -120,7 +121,6 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
