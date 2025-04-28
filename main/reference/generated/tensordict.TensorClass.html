@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.7.0)
+                  main (None)
                 </div>
               
             
@@ -381,7 +381,27 @@ the &#64;tensorclass decorator.</p>
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
-<p>You can pass keyword arguments in two ways: using brackets or keyword arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – The batch size of the TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The device on which the TensorDict will be created. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>frozen</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting class or instance will be immutable. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>autocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, enables automatic type casting for the resulting class or instance. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>nocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, disables any type casting for the resulting class or instance. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>tensor_only</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is expected that all items in tensorclass will be
+tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
+This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved attributes.
+Use with caution, as this may cause unintended consequences. Defaults to False.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>You can pass boolean keyword arguments (<cite>“autocast”</cite>, <cite>“nocast”</cite>, <cite>“frozen”</cite>, <cite>“tensor_only”</cite>, <cite>“shadow”</cite>) in two ways: using</dt><dd><p>brackets or keyword arguments.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>

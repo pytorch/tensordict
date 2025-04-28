@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.7.0)
+                  main (None)
                 </div>
               
             
@@ -382,7 +382,7 @@ stack does not have the required keys, then TensorDictSequential will scan throu
 looking for those that have the required keys, if any. Defaults to False.</p></li>
 <li><p><strong>selected_out_keys</strong> (<em>iterable of NestedKeys</em><em>, </em><em>optional</em>) – the list of out-keys to select. If not provided, all
 <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> will be written.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, the input tensordict is modified in-place. If <cite>False</cite>, a new empty
+<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, the input tensordict is modified in-place. If <cite>False</cite>, a new empty
 <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance is created. If <cite>“empty”</cite>, <cite>input.empty()</cite> is used instead (ie, the
 output preserves type, device and batch-size). Defaults to <cite>None</cite> (relies on sub-modules).</p></li>
 </ul>
