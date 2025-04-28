@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -96,7 +96,7 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        runs-on: [ubuntu-20.04, macos-latest]
+        runs-on: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -138,7 +138,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -170,6 +170,7 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
+        if: ${{ matrix.os == 'ubuntu-22.04' }}
         uses: actions/download-artifact@v4
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
@@ -180,6 +181,7 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install /tmp/wheels/*
+          python3 -c """from tensordict import *"""
       - name: Log version string
         run: |
           # Avoid ambiguity of "import tensordict" by deleting the source files.
