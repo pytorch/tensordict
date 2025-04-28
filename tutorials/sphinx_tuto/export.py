@@ -107,7 +107,7 @@ print(model(x=x))
 
 from torch.export import export
 
-model_export = export(model, args=(), kwargs={"x": x})
+model_export = export(model, args=(), kwargs={"x": x}, strict=True)
 
 ##################################################
 # Let us look at the module:
