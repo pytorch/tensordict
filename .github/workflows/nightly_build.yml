@@ -44,7 +44,6 @@ jobs:
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
-          ["3.13t", "cp313t-cp313t"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -72,9 +71,7 @@ jobs:
           fi
           python3 -mpip install "pybind11[global]" poetry
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
-          # poetry build
-          mkdir dist
-          python -m pip wheel . -w ./dist/ 
+          poetry build
           rm pyproject.toml.bak
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
