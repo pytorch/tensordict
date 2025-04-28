@@ -72,7 +72,9 @@ jobs:
           fi
           python3 -mpip install "pybind11[global]" poetry
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
-          poetry build
+          # poetry build
+          mkdir dist
+          python -m pip wheel -w ./dist/ 
           rm pyproject.toml.bak
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -107,9 +109,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
-          architecture: x64
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Checkout tensordict
         uses: actions/checkout@v4
       - name: Install PyTorch Nightly
