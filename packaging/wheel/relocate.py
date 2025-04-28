@@ -99,16 +99,20 @@ def compress_wheel(output_dir, wheel, wheel_dir, wheel_name):
 
 
 def patch_win():
-    # Get dumpbin location
-    dumpbin = find_program("dumpbin")
-    if dumpbin is None:
-        raise FileNotFoundError(
-            "Dumpbin was not found in the system, please make sure that is available on the PATH."
-        )
+    # # Get dumpbin location
+    # dumpbin = find_program("dumpbin")
+    # if dumpbin is None:
+    #     raise FileNotFoundError(
+    #         "Dumpbin was not found in the system, please make sure that is available on the PATH."
+    #     )
 
     # Find wheel
     # ("Finding wheels...")
     wheels = glob.glob(osp.join(PACKAGE_ROOT, "dist", "*.whl"))
+    if not wheels:
+        raise FileNotFoundError(
+            "Did not find any wheels in {}".format(osp.join(PACKAGE_ROOT, "dist"))
+        )
     output_dir = osp.join(PACKAGE_ROOT, "dist", ".wheel-process")
 
     for wheel in wheels:

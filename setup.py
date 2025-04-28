@@ -66,18 +66,23 @@ class CMakeBuild(build_ext):
             extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={get_python_executable()}",
             f"-DPython3_EXECUTABLE={get_python_executable()}",
+            # for windows
+            "-DCMAKE_BUILD_TYPE=Release",
         ]
 
         build_args = []
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
+        if sys.platform == "win32":
+            build_args += ["--config", "Release"]
         subprocess.check_call(
             ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp
         )
         subprocess.check_call(
-            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
+            ["cmake", "--build", ".", "--verbose"] + build_args, cwd=self.build_temp
         )
 
 

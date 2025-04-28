@@ -7,9 +7,6 @@ if "%CONDA_RUN%"=="" (
     exit /b 1
 )
 
-:: Run the pip install command
-%CONDA_RUN% conda install -c conda-forge pybind11 -y
-
 @echo on
 
 set VC_VERSION_LOWER=17
