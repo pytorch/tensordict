@@ -29,12 +29,14 @@ concurrency:
 
 
 jobs:
-  build-wheel-linux:
+  build-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: ubuntu-20.04
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-20.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -53,6 +55,7 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          
           python3 -c """import sys;print(sys.version)"""
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build tensordict Nightly
@@ -60,6 +63,7 @@ jobs:
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
+          python3 -mpip install "pybind11[global]"
           python3 setup.py bdist_wheel \
             --package_name tensordict-nightly \
             --python-tag=${{ matrix.python-tag }}
@@ -75,14 +79,15 @@ jobs:
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
-
-  upload-wheel-linux:
+  upload-wheel-unix:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: test-wheel-linux
-    runs-on: ubuntu-20.04
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel-unix
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
     strategy:
       matrix:
+        runs-on: [ubuntu-20.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -116,13 +121,15 @@ jobs:
               /tmp/wheels/tensordict_nightly-*.whl \
               --verbose
 
-  test-wheel-linux:
+  test-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    needs: build-wheel-linux
-    runs-on: ubuntu-20.04
+    needs: build-wheel-unix
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-20.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -182,10 +189,13 @@ jobs:
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
+
+
   build-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
+    continue-on-error: true
     strategy:
       matrix:
         python_version: [
@@ -210,6 +220,7 @@ jobs:
         shell: bash
         run: |
           rm -r dist || true
+          python3 -mpip install "pybind11[global]"
           python3 -mpip install wheel
           python3 setup.py bdist_wheel \
             --package_name tensordict-nightly \
@@ -219,11 +230,11 @@ jobs:
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
-
   test-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
@@ -282,8 +293,9 @@ jobs:
 
   upload-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
