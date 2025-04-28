@@ -74,7 +74,7 @@ jobs:
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
           # poetry build
           mkdir dist
-          python -m pip wheel -w ./dist/ 
+          python -m pip wheel . -w ./dist/ 
           rm pyproject.toml.bak
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
