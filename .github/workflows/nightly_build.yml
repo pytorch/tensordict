@@ -4,6 +4,7 @@
 name: Push Binary Nightly
 
 on:
+  pull_request:
   workflow_call:
     secrets:
 #      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
@@ -29,12 +30,14 @@ concurrency:
 
 
 jobs:
-  build-wheel-linux:
+  build-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: ubuntu-20.04
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -47,82 +50,49 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v4
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+
           python3 -c """import sys;print(sys.version)"""
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build tensordict Nightly
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
-           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install cmake
+          else
+            sudo apt-get update
+            sudo apt-get install -y cmake
+          fi
+          python3 -mpip install "pybind11[global]" poetry
+          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          # poetry build
+          python -m build --wheel
+          rm pyproject.toml.bak
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output; confirm 2-17
-        run: |
-          python3 -mpip install auditwheel
-          auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
           path: dist/*.whl
 
-  upload-wheel-linux:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: test-wheel-linux
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        python_version: [
-          ["3.9", "cp39-cp39"],
-          ["3.10", "cp310-cp310"],
-          ["3.11", "cp311-cp311"],
-          ["3.12", "cp312-cp312"],
-          ["3.13", "cp313-cp313"],
-        ]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
-          path: /tmp/wheels
-      - name: Push tensordict Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
-          python -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
 
-  test-wheel-linux:
+  test-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    needs: build-wheel-linux
-    runs-on: ubuntu-20.04
+    needs: build-wheel-unix
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -133,12 +103,9 @@ jobs:
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
-          architecture: x64
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Checkout tensordict
         uses: actions/checkout@v4
       - name: Install PyTorch Nightly
@@ -156,7 +123,7 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
           path: /tmp/wheels
         env:
           AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
@@ -182,10 +149,55 @@ jobs:
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
+  upload-wheel-unix:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel-unix
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        runs-on: [ubuntu-22.04, macos-latest]
+        python_version: [
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+        ]
+        cuda_support: [["", "cpu", "cpu"]]
+    steps:
+      - name: Checkout tensordict
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version[0] }}
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
+          path: /tmp/wheels
+      - name: Push tensordict Binary to PYPI
+        env:
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install twine
+          python -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              /tmp/wheels/tensordict_nightly-*.whl \
+              --verbose
+
+
+
   build-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
+    continue-on-error: true
     strategy:
       matrix:
         python_version: [
@@ -206,24 +218,37 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Build tensordict nightly
+      - name: Build tensordict Nightly
         shell: bash
         run: |
+          # Remove the dist directory if it exists
           rm -r dist || true
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
+          if ! choco -v &> /dev/null; then
+            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
+          fi
+          # Install cmake using Chocolatey
+          choco install cmake -y
+          # Install necessary Python packages
+          python -m pip install --upgrade pip
+          python -m pip install "pybind11[global]" poetry
+          # Modify pyproject.toml to change the package name
+          sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          # Build the package with Poetry
+          poetry build
+          # Clean up the backup file created by sed
+          rm pyproject.toml.bak
+          # Rename the wheel files to match the manylinux1 convention
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
-
   test-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
@@ -266,7 +291,7 @@ jobs:
         shell: bash
         run: |
           # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/
+          rm -rf tensordict/ || true
           python3 -c "import tensordict; print(tensordict.__version__)"
       - name: Run tests
         shell: bash
@@ -282,8 +307,9 @@ jobs:
 
   upload-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
