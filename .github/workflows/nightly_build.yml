@@ -131,7 +131,6 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install /tmp/wheels/*
-          python3 -c """from tensordict import *"""
       - name: Log version string
         run: |
           # Avoid ambiguity of "import tensordict" by deleting the source files.
