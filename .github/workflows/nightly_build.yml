@@ -51,7 +51,7 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v4
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
       - name: Install PyTorch nightly
@@ -104,7 +104,7 @@ jobs:
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
           architecture: x64
@@ -177,7 +177,7 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v4
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
       - name: Download built wheels
