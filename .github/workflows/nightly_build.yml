@@ -63,14 +63,11 @@ jobs:
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            apt-get update
-            apt-get install -y cmake
-          elif [[ "$OSTYPE" == "darwin"* ]]; then
+          if [[ "$OSTYPE" == "darwin"* ]]; then
             brew install cmake
           else
-            echo "Unsupported OS"
-            exit 1
+            sudo apt-get update
+            sudo apt-get install -y cmake
           fi
           python3 -mpip install "pybind11[global]" poetry
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
@@ -80,6 +77,7 @@ jobs:
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Show auditwheel output; confirm 2-17
+        if: ${{ matrix.os == 'ubuntu-22.04' }}
         run: |
           python3 -mpip install auditwheel
           auditwheel show dist/*
@@ -300,7 +298,7 @@ jobs:
         shell: bash
         run: |
           # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/
+          rm -rf tensordict/ || true
           python3 -c "import tensordict; print(tensordict.__version__)"
       - name: Run tests
         shell: bash
