@@ -36,7 +36,6 @@ dependencies = [
     "torch",
     "numpy",
     "cloudpickle",
-    "orjson",
     "packaging",
     "importlib_metadata",
     # orjson fails to be installed in python 3.13t
