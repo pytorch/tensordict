@@ -56,7 +56,7 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          
+
           python3 -c """import sys;print(sys.version)"""
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build tensordict Nightly
@@ -76,57 +76,12 @@ jobs:
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output; confirm 2-17
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
-        run: |
-          python3 -mpip install auditwheel
-          auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
           path: dist/*.whl
-  upload-wheel-unix:
-    # Don't run on forked repos.
-    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
-    needs: test-wheel-unix
-    runs-on: ${{ matrix.os }}
-    continue-on-error: true
-    strategy:
-      matrix:
-        runs-on: [ubuntu-22.04, macos-latest]
-        python_version: [
-          ["3.9", "cp39-cp39"],
-          ["3.10", "cp310-cp310"],
-          ["3.11", "cp311-cp311"],
-          ["3.12", "cp312-cp312"],
-          ["3.13", "cp313-cp313"],
-        ]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
-          path: /tmp/wheels
-      - name: Push tensordict Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
-          python -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
+
 
   test-wheel-unix:
     # Don't run on forked repos.
@@ -171,7 +126,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-22.04' }}
         uses: actions/download-artifact@v4
         with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
           path: /tmp/wheels
         env:
           AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
@@ -197,6 +152,48 @@ jobs:
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
+
+  upload-wheel-unix:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel-unix
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        runs-on: [ubuntu-22.04, macos-latest]
+        python_version: [
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+        ]
+        cuda_support: [["", "cpu", "cpu"]]
+    steps:
+      - name: Checkout tensordict
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version[0] }}
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.os == 'ubuntu-22.04' && format('tensordict-linux-{0}_{1}.whl', matrix.python_version[0], matrix.cuda_support[2]) || format('tensordict-macos-{0}.whl', matrix.python_version[0]) }}
+          path: /tmp/wheels
+      - name: Push tensordict Binary to PYPI
+        env:
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install twine
+          python -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              /tmp/wheels/tensordict_nightly-*.whl \
+              --verbose
 
 
 
