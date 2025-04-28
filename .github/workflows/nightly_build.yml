@@ -71,6 +71,8 @@ jobs:
           fi
           python3 -mpip install "pybind11[global]" poetry
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          DATE_VERSION=$(date +%Y.%m.%d)
+          sed -i.bak '/^version = /s/version = .*/version = "'"$DATE_VERSION"'"/' pyproject.toml
           # poetry build
           python -m build --wheel
           rm pyproject.toml.bak
@@ -157,7 +159,7 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        runs-on: [ubuntu-22.04, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
         python_version: [
           ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
@@ -233,6 +235,8 @@ jobs:
           python -m pip install "pybind11[global]" poetry
           # Modify pyproject.toml to change the package name
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
+          DATE_VERSION=$(date +%Y.%m.%d)
+          sed -i.bak '/^version = /s/version = .*/version = "'"$DATE_VERSION"'"/' pyproject.toml
           # Build the package with Poetry
           poetry build
           # Clean up the backup file created by sed
