@@ -17,18 +17,28 @@ file(GLOB SOURCES "*.cpp")
 
 add_library(_C MODULE ${SOURCES})
 
-set_target_properties(_C PROPERTIES
-    OUTPUT_NAME "_C"
-    PREFIX ""  # Remove 'lib' prefix
-    SUFFIX ".so"  # Ensure correct suffix for macOS/Linux (consider using CMAKE_SHARED_LIBRARY_SUFFIX instead for cross-platform compatibility)
-)
-set_target_properties(_C PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-)
+if(WIN32)
+    set_target_properties(_C PROPERTIES
+        OUTPUT_NAME "_C"
+        PREFIX ""  # Remove 'lib' prefix
+        SUFFIX ".pyd"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+else()
+    set_target_properties(_C PROPERTIES
+        OUTPUT_NAME "_C"
+        PREFIX ""  # Remove 'lib' prefix
+        SUFFIX ".so"  # Ensure correct suffix for macOS/Linux (consider using CMAKE_SHARED_LIBRARY_SUFFIX instead for cross-platform compatibility)
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+endif()
 
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 
-if(APPLE) # Check if the target OS is OSX/macOS
+if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
     target_link_libraries(_C PRIVATE pybind11::module)
 else()
     target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
@@ -41,3 +51,9 @@ else()
 endif()
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum OS X deployment version")
 set(CMAKE_VERBOSE_MAKEFILE ON)
+
+if(WIN32)
+    add_custom_command(TARGET _C POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_C> "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:_C>"
+    )
+endif()
