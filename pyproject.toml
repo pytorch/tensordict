@@ -68,3 +68,7 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 
 [tool.setuptools.package-data]
 "tensordict" = ["*.so", "*.pyd", "*.dll"]
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+write_to = "tensordict/_version.py"

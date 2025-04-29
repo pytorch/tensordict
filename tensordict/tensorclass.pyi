@@ -1122,3 +1122,31 @@ class TensorClass:
 
 class NonTensorData(TensorClass): ...
 class NonTensorStack(TensorDictBase): ...
+
+@dataclass_transform()
+def tensorclass(
+    cls: T = None,
+    /,
+    *,
+    autocast: bool = False,
+    frozen: bool = False,
+    nocast: bool = False,
+    shadow: bool = False,
+    tensor_only: bool = False,
+) -> T | None: ...
+def is_non_tensor(obj) -> bool: ...
+def from_dataclass(
+    obj: Any,
+    *,
+    dest_cls: Type | None = None,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    batch_size: torch.Size | None = None,
+    frozen: bool = False,
+    autocast: bool = False,
+    nocast: bool = False,
+    inplace: bool = False,
+    shadow: bool = False,
+    tensor_only: bool = False,
+    device: torch.device | None = None,
+) -> Any: ...
