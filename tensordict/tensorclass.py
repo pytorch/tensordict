@@ -539,7 +539,7 @@ _FALLBACK_METHOD_FROM_TD_COPY = [
 ]
 
 
-def is_non_tensor(obj):
+def is_non_tensor(obj) -> bool:
     """A local implementation of is_non_tensor.
 
     The utils implementation does an attribute check, but here we have access to the classes

@@ -74,6 +74,6 @@ from tensordict._pytree import *
 from tensordict.nn import as_tensordict_module, TensorDictParams
 
 try:
-    from tensordict.version import __version__  # @manual=//pytorch/tensordict:version
+    from tensordict._version import __version__  # @manual=//pytorch/tensordict:version
 except ImportError:
     __version__ = None
