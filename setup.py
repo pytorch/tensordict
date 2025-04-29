@@ -91,6 +91,12 @@ def get_extensions():
     return [CMakeExtension("tensordict._C", sourcedir=extensions_dir)]
 
 
+def version():
+    return {
+        "write_to": "tensordict/_version.py",  # Specify the path where the version file should be written
+    }
+
+
 setup(
     ext_modules=get_extensions(),
     cmdclass={
@@ -100,4 +106,6 @@ setup(
     packages=find_packages(
         exclude=("test", "tutorials", "packaging", "gallery", "docs")
     ),
+    setup_requires=["setuptools_scm"],
+    use_scm_version=version(),
 )

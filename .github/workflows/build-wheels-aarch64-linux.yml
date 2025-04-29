@@ -48,3 +48,5 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
+      build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
+      build-platform: python-build-package
