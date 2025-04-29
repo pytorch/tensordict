@@ -17,7 +17,10 @@ def test_imports():
     from tensordict import TensorDict  # noqa: F401
 
     print("Importing tensordict nn")  # noqa
+    import tensordict  # noqa
     from tensordict.nn import TensorDictModule  # noqa: F401
+
+    print("version", tensordict.__version__)  # noqa
 
 
 if __name__ == "__main__":
