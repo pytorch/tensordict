@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**02:28.778** total execution time for 11 files **from all galleries**:
+**02:26.997** total execution time for 11 files **from all galleries**:
 
 .. container::
 
@@ -33,22 +33,22 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``reference/generated/tutorials/tensorclass_fashion.py``)
-     - 01:01.384
+     - 01:01.114
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``reference/generated/tutorials/data_fashion.py``)
-     - 00:56.780
+     - 00:55.548
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``reference/generated/tutorials/tensordict_module.py``)
-     - 00:17.227
+     - 00:17.010
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``reference/generated/tutorials/streamed_tensordict.py``)
-     - 00:11.022
+     - 00:11.021
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``reference/generated/tutorials/tensorclass_imagenet.py``)
-     - 00:01.687
+     - 00:01.635
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``reference/generated/tutorials/export.py``)
-     - 00:00.649
+     - 00:00.640
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``reference/generated/tutorials/tensordict_keys.py``)
      - 00:00.009
@@ -57,7 +57,7 @@ Computation times
      - 00:00.008
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``reference/generated/tutorials/tensordict_slicing.py``)
-     - 00:00.005
+     - 00:00.004
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``reference/generated/tutorials/tensordict_memory.py``)
      - 00:00.004
