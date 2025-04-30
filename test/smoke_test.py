@@ -28,27 +28,27 @@ def test_imports():
     print("version", tensordict.__version__)  # noqa
 
 
-def test_static_linking(self):
+def test_static_linking():
     if not _IS_LINUX:
         return
     # Locate _C.so
     try:
         import tensordict._C
     except ImportError as e:
-        self.fail(f"Failed to import tensordict._C: {e}")
+        raise RuntimeError(f"Failed to import tensordict._C: {e}")
     # Get the path to _C.so
     _C_path = Path(tensordict._C.__file__)
     if not _C_path.exists():
-        self.fail(f"_C.so not found at {_C_path}")
+        raise RuntimeError(f"_C.so not found at {_C_path}")
     # Run ldd on _C.so
     try:
         output = subprocess.check_output(["ldd", str(_C_path)]).decode("utf-8")
     except subprocess.CalledProcessError as e:
-        self.fail(f"Failed to run ldd on {_C_path}: {e}")
+        raise RuntimeError(f"Failed to run ldd on {_C_path}: {e}")
     # Check if libpython is dynamically linked
     for line in output.splitlines():
         if "libpython" in line and "=>" in line and "not found" not in line:
-            self.fail(f"tensordict/_C.so is dynamically linked against {line.strip()}")
+            raise RuntimeError(f"tensordict/_C.so is dynamically linked against {line.strip()}")
     print("Test passed: tensordict/_C.so does not show dynamic linkage to libpython.")
 
 
