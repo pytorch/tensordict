@@ -51,7 +51,9 @@ def test_static_linking():
             raise RuntimeError(
                 f"tensordict/_C.so is dynamically linked against {line.strip()}"
             )
-    print("Test passed: tensordict/_C.so does not show dynamic linkage to libpython.")  # noqa
+    print(  # noqa
+        "Test passed: tensordict/_C.so does not show dynamic linkage to libpython."
+    )
 
 
 if __name__ == "__main__":
