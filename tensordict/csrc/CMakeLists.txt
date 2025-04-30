@@ -38,6 +38,9 @@ endif()
 
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 
+find_package(Python COMPONENTS Development.Static)
+target_link_libraries(_C ${Python_STATIC_LIBRARIES})
+
 if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
     target_link_libraries(_C PRIVATE pybind11::module)
 else()
