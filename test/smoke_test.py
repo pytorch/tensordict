@@ -6,9 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+_IS_LINUX = sys.platform.startswith("linux")
 
-_IS_LINUX = sys.platform.startswith('linux')
 
 def test_imports_deps():
     print("Importing numpy")  # noqa
@@ -28,8 +27,10 @@ def test_imports():
 
     print("version", tensordict.__version__)  # noqa
 
-@pytest.mark.skipif(not _IS_LINUX, reason="only run on linux systems")
+
 def test_static_linking(self):
+    if not _IS_LINUX:
+        return
     # Locate _C.so
     try:
         import tensordict._C
