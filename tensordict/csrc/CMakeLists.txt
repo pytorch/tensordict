@@ -36,13 +36,16 @@ else()
     )
 endif()
 
+find_package(Python COMPONENTS Development.Static)
+target_link_libraries(_C ${Python_STATIC_LIBRARIES})
+
 target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
 
-if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
-    target_link_libraries(_C PRIVATE pybind11::module)
-else()
-    target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
-endif()
+#if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
+target_link_libraries(_C PRIVATE pybind11::module)
+#else()
+#    target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
+#endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -fsanitize=address")
