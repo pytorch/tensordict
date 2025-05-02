@@ -7953,6 +7953,51 @@ class TensorDictBase(MutableMapping):
 
         return _tag
 
+    def broadcast_content(
+        self,
+        src: int,
+        dst: int,
+        group: "ProcessGroup" | None = None,
+        device: torch.device | None = None,
+        group_src: "ProcessGroup" | None = None,
+    ):
+        # Get a list of key - specs
+        data = [
+            {
+                k: (val.shape, val.dtype, val.device)
+                for k, val in self.items(True, True)
+            },
+            self.batch_size,
+            self.device,
+            self.is_locked,
+        ]
+        torch.distributed.broadcast_object_list(
+            data, src=src, group=group, device=device, group_src=group_src
+        )
+        self.isend(dst, group=group)
+
+    @classmethod
+    def from_broadcast(
+        cls,
+        src: int,
+        group: "ProcessGroup" | None = None,
+        device: torch.device | None = None,
+        group_src: "ProcessGroup" | None = None,
+    ):
+        data = [None, None, None]
+        torch.distributed.broadcast_object_list(
+            data, src=src, group=group, device=device, group_src=group_src
+        )
+        td = cls(
+            {k: torch.empty(v[0], dtype=v[1], device=v[2]) for k, v in data[0]},
+            batch_size=data[1],
+            device=data[2],
+        )
+        if data[3]:
+            td.lock_()
+        td.irecv(src=src, group=group)
+        return td
+
     def isend(
         self,
         dst: int,
@@ -8048,7 +8093,13 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
 
         """
-        return self._isend(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group, return_early=return_early)
+        return self._isend(
+            dst,
+            _tag=init_tag - 1,
+            pseudo_rand=pseudo_rand,
+            group=group,
+            return_early=return_early,
+        )
 
     def _isend(
         self,
@@ -8057,7 +8108,7 @@ class TensorDictBase(MutableMapping):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
-            return_early: bool = False,
+        return_early: bool = False,
     ) -> int:
         from torch import distributed as dist
 
