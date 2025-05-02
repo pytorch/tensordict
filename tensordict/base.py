@@ -8083,6 +8083,13 @@ class TensorDictBase(MutableMapping):
         .. seealso::
             The sending process should have called `~.init_remote` to send the metadata and content.
         """
+        from tensordict import TensorDict
+
+        if not issubclass(cls, TensorDict):
+            raise TypeError(
+                f"remote initialization is currently only supported for TensorDict objects, got {cls=}."
+            )
+
         data = [None, None, None, None]
         torch.distributed.recv_object_list(
             data,
