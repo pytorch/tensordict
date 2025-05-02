@@ -800,7 +800,7 @@ class TestBroadcast:
             .expand(1, 2)
             .contiguous()
         )
-        td.broadcast_content(0, dst=1)
+        td.broadcast_content(dst=1)
 
     def test_broadcast(self, set_context, tmp_path):
         queue = mp.Queue(1)
