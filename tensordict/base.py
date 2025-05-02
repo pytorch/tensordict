@@ -7955,7 +7955,6 @@ class TensorDictBase(MutableMapping):
 
     def broadcast_content(
         self,
-        src: int,
         dst: int,
         group: "ProcessGroup" | None = None,
         device: torch.device | None = None,
@@ -7971,8 +7970,8 @@ class TensorDictBase(MutableMapping):
             self.device,
             self.is_locked,
         ]
-        torch.distributed.broadcast_object_list(
-            data, src=src, group=group, device=device, group_src=group_src
+        torch.distributed.send_object_list(
+            data, dst=dst, group=group, device=device, group_src=group_src
         )
         self.isend(dst, group=group)
 
@@ -7985,7 +7984,7 @@ class TensorDictBase(MutableMapping):
         group_src: "ProcessGroup" | None = None,
     ):
         data = [None, None, None]
-        torch.distributed.broadcast_object_list(
+        torch.distributed.recv_object_list(
             data, src=src, group=group, device=device, group_src=group_src
         )
         td = cls(
