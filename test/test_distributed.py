@@ -761,7 +761,7 @@ class TestiSendLazyStackNest(iSendBase):
         return td
 
 
-class TestBroadcast:
+class TestInitRemote:
     port = "29505"
 
     @classmethod
@@ -774,8 +774,9 @@ class TestBroadcast:
             world_size=2,
         )
 
-        td = TensorDict.from_broadcast(src=0)
+        td = TensorDict.from_remote_init(src=0)
         assert set(td.keys()) == {"a", "c", "d"}
+        assert (td == 1).all()
         queue.put("yuppie")
 
     @classmethod
@@ -800,9 +801,9 @@ class TestBroadcast:
             .expand(1, 2)
             .contiguous()
         )
-        td.broadcast_content(dst=1)
+        td.init_remote(dst=1)
 
-    def test_broadcast(self, set_context, tmp_path):
+    def test_init_remote(self, set_context, tmp_path):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=type(self).server, args=(queue,))
         secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))

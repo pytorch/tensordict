@@ -148,7 +148,9 @@ if hasattr(torch, "uint32"):
 if hasattr(torch, "uint64"):
     _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
 _STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
-_DTYPE_TO_STR_DTYPE = {dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()}
+_DTYPE_TO_STR_DTYPE = {
+    dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
+}
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
