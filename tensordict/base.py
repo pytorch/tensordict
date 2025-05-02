@@ -7971,7 +7971,7 @@ class TensorDictBase(MutableMapping):
             self.is_locked,
         ]
         torch.distributed.send_object_list(
-            data, dst=dst, group=group, device=device, group_src=group_src
+            data, dst=dst, group=group, device=device,
         )
         self.isend(dst, group=group)
 
@@ -7985,7 +7985,7 @@ class TensorDictBase(MutableMapping):
     ):
         data = [None, None, None]
         torch.distributed.recv_object_list(
-            data, src=src, group=group, device=device, group_src=group_src
+            data, src=src, group=group, device=device,
         )
         td = cls(
             {k: torch.empty(v[0], dtype=v[1], device=v[2]) for k, v in data[0]},
