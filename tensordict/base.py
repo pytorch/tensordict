@@ -48,7 +48,6 @@ from typing import (
 import numpy as np
 
 import torch
-from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE
 
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey
@@ -56,8 +55,8 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
-    _convert_list_to_stack,
-    _DTYPE2STRDTYPE,
+    _convert_list_to_stack, _STR_DTYPE_TO_DTYPE,
+    _DTYPE_TO_STR_DTYPE,
     _GENERIC_NESTED_ERR,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
@@ -5062,7 +5061,7 @@ class TensorDictBase(MutableMapping):
             stop = sum([start, flat_size[-1]])
             if requires_metadata:
                 metadata_dict["leaves"][key] = (
-                    _DTYPE2STRDTYPE[dtype],
+                    _DTYPE_TO_STR_DTYPE[dtype],
                     list(shape),
                     # _DEVICE2STRDEVICE[device],
                     start,
@@ -7987,7 +7986,7 @@ class TensorDictBase(MutableMapping):
             data, src=src, group=group, device=device,
         )
         td = cls(
-            {k: torch.empty(v[0], dtype=STR_DTYPE_TO_TORCH_DTYPE[v[1]], device=v[2]) for k, v in data[0]},
+            {k: torch.empty(v[0], dtype=_STR_DTYPE_TO_DTYPE[v[1]], device=v[2]) for k, v in data[0]},
             batch_size=data[1],
             device=data[2],
         )
