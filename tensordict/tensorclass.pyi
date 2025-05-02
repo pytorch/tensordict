@@ -704,27 +704,24 @@ class TensorClass:
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> int: ...
-    def broadcast_content(
-        self,
-        src: int,
-        dst: int,
-        group: "ProcessGroup" | None = None,
-        device: torch.device | None = None,
-        group_src: "ProcessGroup" | None = None,
-    ): ...
     @classmethod
-    def from_broadcast(
-        cls,
+    def from_remote_init(
+        cls: T,
         src: int,
-        group: "ProcessGroup" | None = None,
+        group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
-        group_src: "ProcessGroup" | None = None,
+    ) -> T: ...
+    def init_remote(
+        self,
+        dst: int,
+        group: "ProcessGroup" | None = None,  # noqa: F821
+        device: torch.device | None = None,
     ): ...
     def isend(
         self,
         dst: int,
         *,
-        group: dist.ProcessGroup | None = None,
+        group: "dist.ProcessGroup" | None = None,  # noqa: F821
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> int: ...
