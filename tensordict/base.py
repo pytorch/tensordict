@@ -7958,7 +7958,6 @@ class TensorDictBase(MutableMapping):
         dst: int,
         group: "ProcessGroup" | None = None,
         device: torch.device | None = None,
-        group_src: "ProcessGroup" | None = None,
     ):
         # Get a list of key - specs
         data = [
@@ -7981,7 +7980,6 @@ class TensorDictBase(MutableMapping):
         src: int,
         group: "ProcessGroup" | None = None,
         device: torch.device | None = None,
-        group_src: "ProcessGroup" | None = None,
     ):
         data = [None, None, None]
         torch.distributed.recv_object_list(
