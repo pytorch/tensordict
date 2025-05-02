@@ -48,6 +48,7 @@ from typing import (
 import numpy as np
 
 import torch
+from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE
 
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey
@@ -7962,7 +7963,7 @@ class TensorDictBase(MutableMapping):
         # Get a list of key - specs
         data = [
             {
-                k: (val.shape, val.dtype, val.device)
+                k: (tuple(val.shape), str(val.dtype), str(val.device))
                 for k, val in self.items(True, True)
             },
             self.batch_size,
@@ -7972,7 +7973,7 @@ class TensorDictBase(MutableMapping):
         torch.distributed.send_object_list(
             data, dst=dst, group=group, device=device,
         )
-        self.isend(dst, group=group)
+        # self.isend(dst, group=group)
 
     @classmethod
     def from_broadcast(
@@ -7986,13 +7987,13 @@ class TensorDictBase(MutableMapping):
             data, src=src, group=group, device=device,
         )
         td = cls(
-            {k: torch.empty(v[0], dtype=v[1], device=v[2]) for k, v in data[0]},
+            {k: torch.empty(v[0], dtype=STR_DTYPE_TO_TORCH_DTYPE[v[1]], device=v[2]) for k, v in data[0]},
             batch_size=data[1],
             device=data[2],
         )
         if data[3]:
             td.lock_()
-        td.irecv(src=src, group=group)
+        # td.irecv(src=src, group=group)
         return td
 
     def isend(
