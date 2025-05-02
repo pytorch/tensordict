@@ -7960,7 +7960,8 @@ class TensorDictBase(MutableMapping):
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
-    ) -> int:  # noqa: D417
+        return_early: bool = False,
+    ) -> int | List["Work"]:  # noqa: D417
         """Sends the content of the tensordict asynchronously.
 
         Args:
@@ -7980,6 +7981,9 @@ class TensorDictBase(MutableMapping):
                 without overlap. Notice that the generation of these pseudo-random
                 numbers is expensive (1e-5 sec/number), meaning that it could
                 slow down the runtime of your algorithm.
+                Defaults to ``False``.
+            return_early (bool, optional): if True, a list of futures
+                will be returned instead of the tag of the last tensor sent.
                 Defaults to ``False``.
 
         Example:
@@ -8044,7 +8048,7 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
 
         """
-        return self._isend(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
+        return self._isend(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group, return_early=return_early)
 
     def _isend(
         self,
@@ -8053,6 +8057,7 @@ class TensorDictBase(MutableMapping):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+            return_early: bool = False,
     ) -> int:
         from torch import distributed as dist
 
@@ -8069,6 +8074,7 @@ class TensorDictBase(MutableMapping):
                     pseudo_rand=pseudo_rand,
                     _futures=_futures,
                     group=group,
+                    return_early=return_early,
                 )
                 continue
             elif isinstance(value, Tensor):
@@ -8081,9 +8087,11 @@ class TensorDictBase(MutableMapping):
                 _tag = int_generator(_tag + 1)
             _future = dist.isend(value, dst=dst, tag=_tag, group=group)
             _futures.append(_future)
-        if root:
+        if root and not return_early:
             for _future in _futures:
                 _future.wait()
+        elif root and return_early:
+            return _futures
         return _tag
 
     def irecv(
