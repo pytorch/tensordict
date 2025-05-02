@@ -7981,7 +7981,7 @@ class TensorDictBase(MutableMapping):
         group: "ProcessGroup" | None = None,
         device: torch.device | None = None,
     ):
-        data = [None, None, None]
+        data = [None, None, None, None]
         torch.distributed.recv_object_list(
             data, src=src, group=group, device=device,
         )
