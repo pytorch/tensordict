@@ -12,7 +12,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _is_tensorclass, _STRDTYPE2DTYPE
+from tensordict.utils import _is_tensorclass, _STR_DTYPE_TO_DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -99,7 +99,7 @@ def _rebuild_tensordict_files_consolidated(
             for (key, (data, batch_size, device)) in non_tensor.items()
         }
         for key, (dtype, local_shape, start, stop, pad) in leaves.items():
-            dtype = _STRDTYPE2DTYPE[dtype]
+            dtype = _STR_DTYPE_TO_DTYPE[dtype]
             # device = torch.device(device)
             local_shape = torch.Size(local_shape)
             value = storage[start:stop].view(dtype)

@@ -704,6 +704,22 @@ class TensorClass:
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> int: ...
+    def broadcast_content(
+        self,
+        src: int,
+        dst: int,
+        group: "ProcessGroup" | None = None,
+        device: torch.device | None = None,
+        group_src: "ProcessGroup" | None = None,
+    ): ...
+    @classmethod
+    def from_broadcast(
+        cls,
+        src: int,
+        group: "ProcessGroup" | None = None,
+        device: torch.device | None = None,
+        group_src: "ProcessGroup" | None = None,
+    ): ...
     def isend(
         self,
         dst: int,

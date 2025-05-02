@@ -67,7 +67,7 @@ from tensordict.utils import (
     _set_item,
     _set_max_batch_size,
     _shape,
-    _STRDTYPE2DTYPE,
+    _STR_DTYPE_TO_DTYPE,
     _StringKeys,
     _StringOnlyDict,
     _sub_index,
@@ -2836,7 +2836,7 @@ class TensorDict(TensorDictBase):
                 else:
                     shape = torch.Size(shape)
                 tensor = MemoryMappedTensor.from_filename(
-                    dtype=_STRDTYPE2DTYPE[dtype],
+                    dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
                     filename=str(prefix / f"{key}.memmap"),
                 )
@@ -2846,7 +2846,7 @@ class TensorDict(TensorDictBase):
                 tensor = torch.zeros(
                     torch.Size(shape),
                     device=device,
-                    dtype=_STRDTYPE2DTYPE[dtype],
+                    dtype=_STR_DTYPE_TO_DTYPE[dtype],
                 )
             result._set_str(
                 key,

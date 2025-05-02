@@ -56,7 +56,7 @@ from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
     _convert_list_to_stack,
-    _DTYPE2STRDTYPE,
+    _DTYPE_TO_STR_DTYPE,
     _GENERIC_NESTED_ERR,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
@@ -79,6 +79,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _split_tensordict,
+    _STR_DTYPE_TO_DTYPE,
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
@@ -5061,7 +5062,7 @@ class TensorDictBase(MutableMapping):
             stop = sum([start, flat_size[-1]])
             if requires_metadata:
                 metadata_dict["leaves"][key] = (
-                    _DTYPE2STRDTYPE[dtype],
+                    _DTYPE_TO_STR_DTYPE[dtype],
                     list(shape),
                     # _DEVICE2STRDEVICE[device],
                     start,
@@ -7953,11 +7954,161 @@ class TensorDictBase(MutableMapping):
 
         return _tag
 
+    def init_remote(
+        self,
+        dst: int,
+        group: "ProcessGroup" | None = None,  # noqa: F821
+        device: torch.device | None = None,
+    ):
+        """Initializes a remote tensordict by sending its metadata and content.
+
+        This method sends the metadata (shape, dtype, etc.) of the current tensordict to the specified destination rank (`dst`).
+
+        It then asynchronously sends the actual tensordict content.
+
+        Args:
+            dst (int): The rank of the destination process.
+            group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
+            device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+
+        .. seealso::
+            The receiving process should call `~.from_remote_init` or an equivalent method to receive and initialize a new tensordict based on the sent metadata.
+
+        Examples:
+            >>> import os
+            >>> import torch
+            >>> import torch.distributed as dist
+            >>> from tensordict import TensorDict, MemoryMappedTensor
+            >>> import multiprocessing as mp
+            >>>
+            >>> def server(queue):
+            ...     # Set environment variables for distributed communication
+            ...     os.environ["MASTER_ADDR"] = "localhost"
+            ...     os.environ["MASTER_PORT"] = "29505"
+            ...
+            ...     # Initialize the distributed backend
+            ...     dist.init_process_group("gloo", rank=0, world_size=2)
+            ...
+            ...     # Create a sample tensordict
+            ...     td = (
+            ...         TensorDict(
+            ...             {
+            ...                 ("a", "b"): torch.ones(2),
+            ...                 "c": torch.ones(2),
+            ...                 ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
+            ...             },
+            ...             [2],
+            ...         )
+            ...         .expand(1, 2)
+            ...         .contiguous()
+            ...     )
+            ...
+            ...     # Send the tensordict metadata and content to the client
+            ...     td.init_remote(dst=1)
+            ...
+            >>> def client(queue):
+            ...     # Set environment variables for distributed communication
+            ...     os.environ["MASTER_ADDR"] = "localhost"
+            ...     os.environ["MASTER_PORT"] = "29505"
+            ...
+            ...     # Initialize the distributed backend
+            ...     dist.init_process_group("gloo", rank=1, world_size=2)
+            ...
+            ...     # Receive the tensordict metadata and content from the server
+            ...     received_td = TensorDict.from_remote_init(src=0)
+            ...
+            ...     # Verify that the received tensordict matches the expected structure and values
+            ...     assert set(received_td.keys()) == {"a", "c", "d"}
+            ...     assert (received_td == 1).all()
+            ...
+            ...     # Signal that the test has completed successfully
+            ...     queue.put("yuppie")
+            >>>
+            >>> if __name__ == "__main__":
+            ...     queue = mp.Queue(1)
+            ...
+            ...     # Create and start the server and client processes
+            ...     main_worker = mp.Process(target=server, args=(queue,))
+            ...     secondary_worker = mp.Process(target=client, args=(queue,))
+            ...
+            ...     main_worker.start()
+            ...     secondary_worker.start()
+            ...
+            ...     try:
+            ...         out = queue.get(timeout=10)  # Wait for the signal with a timeout
+            ...         print(out)  # Should print "yuppie"
+            ...     finally:
+            ...         queue.close()
+            ...         main_worker.join(timeout=10)
+            ...         secondary_worker.join(timeout=10)
+        """
+        # Get a list of key - specs
+        data = [
+            {
+                k: (tuple(val.shape), str(val.dtype), str(val.device))
+                for k, val in self.items(True, True)
+            },
+            self.batch_size,
+            self.device,
+            self.is_locked,
+        ]
+        torch.distributed.send_object_list(
+            data,
+            dst=dst,
+            group=group,
+            device=device,
+        )
+        self.isend(dst, group=group)
+
+    @classmethod
+    def from_remote_init(
+        cls: T,
+        src: int,
+        group: "ProcessGroup" | None = None,  # noqa: F821
+        device: torch.device | None = None,
+    ) -> T:
+        """Creates a new tensordict instance initialized from remotely sent metadata.
+
+        This class method receives the metadata sent by `init_remote`, creates a new tensordict with matching shape and dtype,
+        and then asynchronously receives the actual tensordict content.
+
+        Args:
+            src (int): The rank of the source process that sent the metadata.
+            group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
+            device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+
+        Returns:
+            TensorDict: A new tensordict instance initialized with the received metadata and content.
+
+        .. seealso::
+            The sending process should have called `~.init_remote` to send the metadata and content.
+        """
+        data = [None, None, None, None]
+        torch.distributed.recv_object_list(
+            data,
+            src=src,
+            group=group,
+            device=device,
+        )
+        metadata = data[0]
+        td = cls(
+            {
+                k: torch.empty(v[0], dtype=_STR_DTYPE_TO_DTYPE[v[1]], device=v[2])
+                for k, v in metadata.items()
+            },
+            batch_size=data[1],
+            device=data[2],
+        )
+        if data[3]:
+            td.lock_()
+        td.irecv(src=src, group=group)
+        return td
+
     def isend(
         self,
         dst: int,
         *,
-        group: "torch.distributed.ProcessGroup" | None = None,
+        group: "torch.distributed.ProcessGroup" | None = None,   # noqa: F821
         init_tag: int = 0,
         pseudo_rand: bool = False,
         return_early: bool = False,
@@ -8048,7 +8199,13 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
 
         """
-        return self._isend(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group, return_early=return_early)
+        return self._isend(
+            dst,
+            _tag=init_tag - 1,
+            pseudo_rand=pseudo_rand,
+            group=group,
+            return_early=return_early,
+        )
 
     def _isend(
         self,
@@ -8057,7 +8214,7 @@ class TensorDictBase(MutableMapping):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
-            return_early: bool = False,
+        return_early: bool = False,
     ) -> int:
         from torch import distributed as dist
 

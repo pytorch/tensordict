@@ -761,6 +761,65 @@ class TestiSendLazyStackNest(iSendBase):
         return td
 
 
+class TestInitRemote:
+    port = "29505"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        td = TensorDict.from_remote_init(src=0)
+        assert set(td.keys()) == {"a", "c", "d"}
+        assert (td == 1).all()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+        )
+
+        td = (
+            TensorDict(
+                {
+                    ("a", "b"): torch.ones(2),
+                    "c": torch.ones(2),
+                    ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
+                },
+                [2],
+            )
+            .expand(1, 2)
+            .contiguous()
+        )
+        td.init_remote(dst=1)
+
+    def test_init_remote(self, set_context, tmp_path):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
