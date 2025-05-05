@@ -71,6 +71,8 @@ class CMakeBuild(build_ext):
             f"-DPython3_EXECUTABLE={get_python_executable()}",
             # for windows
             "-DCMAKE_BUILD_TYPE=Release",
+            # Use Ninja generator
+            "-GNinja",
         ]
 
         build_args = []
