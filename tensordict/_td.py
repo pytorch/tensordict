@@ -2709,7 +2709,7 @@ class TensorDict(TensorDictBase):
             self._is_memmap = True
             self._is_shared = False  # since they are mutually exclusive
             if hasattr(self, "_validate_value_cached"):
-                delattr(self, "_validate_value_cached")
+                self._validate_value_cached = None
             self._device = torch.device("cpu")
         else:
             dest._is_memmap = True
