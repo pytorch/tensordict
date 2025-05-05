@@ -11575,7 +11575,7 @@ class TensorDictBase(MutableMapping):
                     _validate_value_cached = self._validate_value_cached = (
                         self._validate_value_batchfree_devicefree
                     )
-            return _validate_value_cached
+        return _validate_value_cached
 
     def _validate_value_generic(
         self,
