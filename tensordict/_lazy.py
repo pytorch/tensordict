@@ -621,7 +621,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
         if not validated:
-            value = self._validate_value()(
+            value = self._validate_value(
                 value,
                 non_blocking=non_blocking,
                 check_shape=not (isinstance(value, list) and list_to_stack()),
@@ -680,7 +680,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #         )
         #     inplace = has_key
         if not validated:
-            value = self._validate_value()(value, non_blocking=non_blocking)
+            value = self._validate_value(value, non_blocking=non_blocking)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
@@ -883,7 +883,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
         if not validated:
-            value = self._validate_value()(
+            value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
@@ -986,7 +986,7 @@ class LazyStackedTensorDict(TensorDictBase):
             *tds, stack_dim=self.stack_dim, hook_out=self.hook_out, hook_in=self.hook_in
         )
         if not validated:
-            value = self._validate_value()(
+            value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
@@ -3755,7 +3755,7 @@ class _CustomOpTensorDict(TensorDictBase):
         non_blocking: bool = False,
     ):
         if not validated:
-            value = self._validate_value()(
+            value = self._validate_value(
                 value, check_shape=True, non_blocking=non_blocking
             )
             validated = True
@@ -3826,7 +3826,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"`td.clone()` before `td.set_at_(...)`"
             )
         if not validated:
-            value = self._validate_value()(
+            value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
 
