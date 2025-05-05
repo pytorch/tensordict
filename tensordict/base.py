@@ -11550,6 +11550,12 @@ class TensorDictBase(MutableMapping):
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return key
 
+    # TODO: figure out how to make this work, as it brings some potential speed-up.
+    #  We don't want to run any check (batch size or device)
+    #  as these incur overhead. We want to cache which validation has to be used for which TD.
+    #  Refs to self such as these create pseudo-mem leaks where the gc fails to collect the TD's tensors.
+    #  See issue #1309 for ref.
+    #  See #1310 for the revert.
     # _validate_value_cached: Callable[[Any], Any] | None = None
     #
     # def _validate_value(self):
