@@ -2926,8 +2926,8 @@ class TensorDictBase(MutableMapping):
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
-        if hasattr(self, "_validate_value_cached"):
-            self._validate_value_cached = None
+        # if hasattr(self, "_validate_value_cached"):
+        #     self._validate_value_cached = None
         if new_batch_size == self.batch_size:
             return
         if self._lazy:
@@ -4553,8 +4553,8 @@ class TensorDictBase(MutableMapping):
 
         """
         self._device = None
-        if hasattr(self, "_validate_value_cached"):
-            self._validate_value_cached = None
+        # if hasattr(self, "_validate_value_cached"):
+        #     self._validate_value_cached = None
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value.clear_device_()
@@ -4562,8 +4562,8 @@ class TensorDictBase(MutableMapping):
 
     def _set_device(self, device: torch.device) -> T:
         self._device = device
-        if hasattr(self, "_validate_value_cached"):
-            self._validate_value_cached = None
+        # if hasattr(self, "_validate_value_cached"):
+        #     self._validate_value_cached = None
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._set_device(device=device)
@@ -11550,32 +11550,32 @@ class TensorDictBase(MutableMapping):
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return key
 
-    _validate_value_cached: Callable[[Any], Any] | None = None
-
-    def _validate_value(self):
-        if is_compiling():
-            return self._validate_value_generic
-        _validate_value_cached = self._validate_value_cached
-        if _validate_value_cached is None:
-            if self.device:
-                if self.batch_size:
-                    _validate_value_cached = self._validate_value_cached = (
-                        self._validate_value_generic
-                    )
-                else:
-                    _validate_value_cached = self._validate_value_cached = (
-                        self._validate_value_batchfree
-                    )
-            else:
-                if self.batch_size:
-                    _validate_value_cached = self._validate_value_cached = (
-                        self._validate_value_devicefree
-                    )
-                else:
-                    _validate_value_cached = self._validate_value_cached = (
-                        self._validate_value_batchfree_devicefree
-                    )
-        return _validate_value_cached
+    # _validate_value_cached: Callable[[Any], Any] | None = None
+    #
+    # def _validate_value(self):
+    #     if is_compiling():
+    #         return self._validate_value_generic
+    #     _validate_value_cached = self._validate_value_cached
+    #     if _validate_value_cached is None:
+    #         if self.device:
+    #             if self.batch_size:
+    #                 _validate_value_cached = self._validate_value_cached = (
+    #                     self._validate_value_generic
+    #                 )
+    #             else:
+    #                 _validate_value_cached = self._validate_value_cached = (
+    #                     self._validate_value_batchfree
+    #                 )
+    #         else:
+    #             if self.batch_size:
+    #                 _validate_value_cached = self._validate_value_cached = (
+    #                     self._validate_value_devicefree
+    #                 )
+    #             else:
+    #                 _validate_value_cached = self._validate_value_cached = (
+    #                     self._validate_value_batchfree_devicefree
+    #                 )
+    #     return _validate_value_cached
 
     def _validate_value_generic(
         self,
@@ -11636,6 +11636,8 @@ class TensorDictBase(MutableMapping):
                 if value._has_names():
                     self.names = value.names[: self.batch_dims]
         return value
+
+    _validate_value = _validate_value_generic
 
     def _validate_value_batchfree(
         self,
