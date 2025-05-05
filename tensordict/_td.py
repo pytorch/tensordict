@@ -2356,7 +2356,7 @@ class TensorDict(TensorDictBase):
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(
+            value = self._validate_value()(
                 value, check_shape=True, non_blocking=non_blocking
             )
         if not inplace:
@@ -2446,7 +2446,7 @@ class TensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         if not validated:
-            value = self._validate_value(
+            value = self._validate_value()(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
@@ -3577,7 +3577,7 @@ class _SubTensorDict(TensorDictBase):
         # so that this method can have minimal overhead from runtime checks
         parent = self._source
         if not validated:
-            value = self._validate_value(
+            value = self._validate_value()(
                 value, check_shape=True, non_blocking=non_blocking
             )
             validated = True
@@ -3671,7 +3671,7 @@ class _SubTensorDict(TensorDictBase):
     def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
-            value = self._validate_value(
+            value = self._validate_value()(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True

@@ -11550,7 +11550,6 @@ class TensorDictBase(MutableMapping):
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         return key
 
-    @property
     def _validate_value(self):
         if is_compiling():
             return self._validate_value_generic
