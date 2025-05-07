@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+g5f26a8b)
+                  main (0.0.post1+g1d642b0)
                 </div>
               
             
@@ -366,7 +366,7 @@ to download the full example code.</p>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">():</span>
-    <span class="k">return</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+    <span class="k">return</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 </pre></div>
 </div>
 <p>Perhaps we want to call this function multiple times and use the results to populate
@@ -434,12 +434,12 @@ have assigned random values to.</p>
 </pre></div>
 </div>
 <p>Subsequent iterations, we update the pre-allocated tensors in-place.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span>
 <span class="n">random_tensordict</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">()</span>
 <span class="n">tensordict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">random_tensordict</span>
 
 <span class="c1"># the same tensor is stored under &quot;a&quot;, but the values have been updated</span>
-<span class="k">assert</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="ow">is</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a>
+<span class="k">assert</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="ow">is</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a>
 <span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
