@@ -2232,6 +2232,34 @@ class TestGeneric:
         # First stacked tensor has requires_grad == True
         assert list(stacked_td.values())[0].requires_grad is True
 
+    def test_refine_names_setitem_subtd(self):
+        batch_size = 1
+        seq_len = 2
+        n_agents = 3
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "obs": torch.zeros((batch_size, seq_len, n_agents, 5)),
+                        "dones": torch.zeros((batch_size, seq_len, n_agents, 1)),
+                    },
+                    batch_size=(batch_size, seq_len, n_agents),
+                    names=[None, "time", "other"],
+                ),
+                "dones": torch.zeros((batch_size, seq_len)),
+            },
+            batch_size=(batch_size, seq_len),
+            names=[None, "time"],
+        )
+        #
+        td["agents"] = td["agents"].repeat_interleave(2, dim=-1)
+        assert len(td["agents"].names) == 3
+        assert td["agents"].names[-1] == "other"
+        td["agents"] = td["agents"].repeat(1, 1, 2)
+        assert td["agents"].names[-1] == "other"
+        td["agents"] = torch.cat((td["agents"], td["agents"]), dim=2)
+        assert td["agents"].names[-1] == "other"
+
     def test_rename_key_nested(self):
         td = TensorDict(a={"b": {"c": 0}})
         td.rename_key_(("a", "b", "c"), ("a", "b"))

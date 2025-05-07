@@ -1882,6 +1882,7 @@ class TensorDict(TensorDictBase):
             batch_size=new_batch_size,
             call_on_nested=True,
             propagate_lock=True,
+            names=self._maybe_names(),
         )
 
     def _repeat(self, *repeats: int) -> TensorDictBase:
@@ -1895,6 +1896,7 @@ class TensorDict(TensorDictBase):
             batch_size=new_batch_size,
             call_on_nested=True,
             propagate_lock=True,
+            names=self._maybe_names(),
         )
 
     def _transpose(self, dim0, dim1):

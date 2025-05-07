@@ -1356,7 +1356,9 @@ def assert_close(
     if not _is_tensor_collection(type(actual)) or not _is_tensor_collection(
         type(expected)
     ):
-        raise TypeError("assert_allclose inputs must be of TensorDict type")
+        raise TypeError(
+            f"assert_allclose inputs must be of TensorDict type, got {type(actual)} and {type(expected)}"
+        )
 
     from tensordict._lazy import LazyStackedTensorDict
 
