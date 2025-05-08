@@ -264,7 +264,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = td_out_save
-                    with torch.cuda.graph(self.graph):
+                    with torch.cuda.graph(self.graph, stream=self.self._warmup_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
 
                     if not is_tensor_collection(out) and out is not None:
@@ -349,7 +349,7 @@ class CudaGraphModule:
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
-                    with torch.cuda.graph(self.graph):
+                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
                         out = self.module(*self._args, **self._kwargs)
                     self._out, self._out_struct = tree_flatten(out)
                     self.counter += 1
