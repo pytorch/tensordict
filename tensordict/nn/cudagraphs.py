@@ -8,7 +8,7 @@ import contextlib
 import functools
 import os
 import warnings
-
+from functools import partial
 from textwrap import indent
 from typing import Any, Callable, List
 
@@ -174,10 +174,10 @@ class CudaGraphModule:
         if torch.cuda.is_available():
             self._warmup_stream = torch.cuda.Stream(device)
             self._capture_stream = torch.cuda.Stream(device)
-            self._warmup_stream_cm = torch.cuda.stream(self._warmup_stream)
+            self._warmup_stream_cm = partial(torch.cuda.stream, self._warmup_stream)
         else:
             self._warmup_stream = None
-            self._warmup_stream_cm = contextlib.nullcontext()
+            self._warmup_stream_cm = contextlib.nullcontext
         self.device = device
         tensordict_logger.info(f"Setting up CudaGraphModule with stream {self._warmup_stream} on device {self.device}.")
 
@@ -229,11 +229,11 @@ class CudaGraphModule:
 
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     # We must clone the data because providing non-contiguous data will fail later when we clone
-                    tensordict.apply(self._clone, out=tensordict)
                     if self._has_cuda:
                         torch.cuda.synchronize()
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    with self._warmup_stream_cm:
+                    with self._warmup_stream_cm():
+                        tensordict.apply(self._clone, out=tensordict)
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = tensordict_out
                         out = self.module(tensordict, *args, **kwargs)
@@ -256,15 +256,15 @@ class CudaGraphModule:
                         )
 
                     tree_map(self._check_non_tensor, (args, kwargs))
-                    tensordict.apply(self._clone, out=tensordict)
-                    self._tensordict = tensordict.copy()
-                    if tensordict_out is not None:
-                        td_out_save = tensordict_out.copy()
-                        kwargs["tensordict_out"] = tensordict_out
 
                     torch.cuda.synchronize()
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    with self._warmup_stream_cm:
+                    with self._warmup_stream_cm():
+                        tensordict.apply(self._clone, out=tensordict)
+                        self._tensordict = tensordict.copy()
+                        if tensordict_out is not None:
+                            td_out_save = tensordict_out.copy()
+                            kwargs["tensordict_out"] = tensordict_out
                         this_out = self.module(tensordict, *args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     torch.cuda.synchronize()
@@ -272,6 +272,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = td_out_save
+                    print('self._tensordict', self._tensordict)
                     with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
@@ -335,7 +336,7 @@ class CudaGraphModule:
                     if self._has_cuda:
                         torch.cuda.synchronize()
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    with self._warmup_stream_cm:
+                    with self._warmup_stream_cm():
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
@@ -357,7 +358,7 @@ class CudaGraphModule:
 
                     torch.cuda.synchronize()
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    with self._warmup_stream_cm:
+                    with self._warmup_stream_cm():
                         this_out = self.module(*args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     torch.cuda.synchronize()
