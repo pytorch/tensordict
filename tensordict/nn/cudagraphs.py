@@ -233,6 +233,7 @@ class CudaGraphModule:
                         out = self.module(tensordict, *args, **kwargs)
                         if self._out_matches_in is None:
                             self._out_matches_in = out is tensordict
+                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     self.counter += self._has_cuda
                     if self._has_cuda:
                         torch.cuda.synchronize()
@@ -253,7 +254,9 @@ class CudaGraphModule:
                         kwargs["tensordict_out"] = tensordict_out
 
                     torch.cuda.synchronize()
-                    this_out = self.module(tensordict, *args, **kwargs)
+                    with self._warmup_stream_cm:
+                        this_out = self.module(tensordict, *args, **kwargs)
+                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
@@ -322,6 +325,7 @@ class CudaGraphModule:
                         torch.cuda.synchronize()
                     with self._warmup_stream_cm:
                         out = self.module(*args, **kwargs)
+                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     if self._has_cuda:
                         torch.cuda.synchronize()
                     self.counter += self._has_cuda
