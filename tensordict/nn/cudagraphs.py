@@ -229,6 +229,7 @@ class CudaGraphModule:
                     tensordict.apply(self._clone, out=tensordict)
                     if self._has_cuda:
                         torch.cuda.synchronize()
+                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm:
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = tensordict_out
@@ -256,6 +257,7 @@ class CudaGraphModule:
                         kwargs["tensordict_out"] = tensordict_out
 
                     torch.cuda.synchronize()
+                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm:
                         this_out = self.module(tensordict, *args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
@@ -325,6 +327,7 @@ class CudaGraphModule:
                     args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         torch.cuda.synchronize()
+                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm:
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
@@ -343,6 +346,7 @@ class CudaGraphModule:
                     )
 
                     torch.cuda.synchronize()
+                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm:
                         this_out = self.module(*args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
