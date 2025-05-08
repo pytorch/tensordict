@@ -22,7 +22,7 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import _zip_strict, strtobool
+from tensordict.utils import _zip_strict, strtobool, logger as tensordict_logger
 from torch import Tensor
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -177,6 +177,8 @@ class CudaGraphModule:
         else:
             self._warmup_stream = None
             self._warmup_stream_cm = contextlib.nullcontext()
+        self.device = device
+        tensordict_logger.info(f"Setting up CudaGraphModule with stream {self._warmup_stream} on device {self.device}.")
 
         if hasattr(module, "in_keys"):
             self.in_keys = module.in_keys
@@ -242,6 +244,9 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
+                    tensordict_logger.info(
+                        "Registering CUDA graph..."
+                        )
                     if tensordict.device is None:
                         tensordict.apply(self._check_device_and_grad, filter_empty=True)
                     elif tensordict.device.type != "cuda":
@@ -268,6 +273,7 @@ class CudaGraphModule:
                         kwargs["tensordict_out"] = td_out_save
                     with torch.cuda.graph(self.graph, stream=self._warmup_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
+                    tensordict_logger.info("CUDA graph successfully registered.")
 
                     if not is_tensor_collection(out) and out is not None:
                         raise RuntimeError(
@@ -336,6 +342,9 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
+                    tensordict_logger.info(
+                        "Registering CUDA graph..."
+                        )
                     self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
 
                     self._flat_tree = tuple(
@@ -355,6 +364,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph, stream=self._warmup_stream):
                         out = self.module(*self._args, **self._kwargs)
+                    tensordict_logger.info("CUDA graph successfully registered.")
                     self._out, self._out_struct = tree_flatten(out)
                     self.counter += 1
                     # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
