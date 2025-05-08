@@ -213,6 +213,7 @@ class CudaGraphModule:
                 tensordict_out: TensorDictBase | None = None,
                 **kwargs: Any,
             ) -> Any:
+                # TODO: remove
                 with torch.cuda.device(self.device) if self.device is not None else contextlib.nullcontext():
                     if self.counter >= self._warmup:
                         self._tensordict.update_(tensordict, non_blocking=True)
@@ -246,7 +247,6 @@ class CudaGraphModule:
                         self.counter += self._has_cuda
                         return out
                     else:
-                    # TODO: remove
                         tensordict_logger.info(
                             "Registering CUDA graph..."
                             )
