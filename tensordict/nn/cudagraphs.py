@@ -230,7 +230,6 @@ class CudaGraphModule:
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     # We must clone the data because providing non-contiguous data will fail later when we clone
                     if self._has_cuda:
-                        torch.cuda.synchronize(self.device)
                         self._warmup_stream.wait_stream(torch.cuda.current_stream())
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
@@ -241,7 +240,6 @@ class CudaGraphModule:
                             self._out_matches_in = out is tensordict
                     if self._has_cuda:
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize(self.device)
                     self.counter += self._has_cuda
                     return out
                 else:
@@ -257,7 +255,6 @@ class CudaGraphModule:
 
                     tree_map(self._check_non_tensor, (args, kwargs))
 
-                    torch.cuda.synchronize(self.device)
                     self._warmup_stream.wait_stream(torch.cuda.current_stream())
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
@@ -266,8 +263,7 @@ class CudaGraphModule:
                             td_out_save = tensordict_out.copy()
                             kwargs["tensordict_out"] = tensordict_out
                         this_out = self.module(tensordict, *args, **kwargs)
-                    torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    torch.cuda.synchronize(self.device)
+                    torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
 
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
@@ -334,65 +330,63 @@ class CudaGraphModule:
                     args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
                         torch.cuda.synchronize(self.device)
-                        self._warmup_stream.wait_stream(torch.cuda.current_stream())
+                        self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
+                        torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
                         torch.cuda.synchronize(self.device)
                     self.counter += self._has_cuda
                     return out
                 else:
-                    # TODO: remove
-                    with torch.cuda.device(self.device) if self.device is not None else contextlib.nullcontext():
-                        tensordict_logger.info(
-                            "Registering CUDA graph..."
+                    tensordict_logger.info(
+                        "Registering CUDA graph..."
+                        )
+                    self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
+
+                    self._flat_tree = tuple(
+                        self._check_device_and_clone(arg) for arg in self._flat_tree
+                    )
+                    args, kwargs = self._args, self._kwargs = tree_unflatten(
+                        self._flat_tree, self._tree_spec
+                    )
+
+                    torch.cuda.synchronize(self.device)
+                    self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
+                    with self._warmup_stream_cm():
+                        this_out = self.module(*args, **kwargs)
+                    torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
+                    torch.cuda.synchronize(self.device)
+
+                    self.graph = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
+                        out = self.module(*self._args, **self._kwargs)
+                    tensordict_logger.info("CUDA graph successfully registered.")
+                    self._out, self._out_struct = tree_flatten(out)
+                    self.counter += 1
+                    # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
+                    # user.
+                    tree_leaves_input = tree_leaves((args, kwargs))
+                    tree_leaves_output = tree_leaves(out)
+                    if not isinstance(tree_leaves_output, tuple):
+                        tree_leaves_output = (tree_leaves_output,)
+                    for inp in tree_leaves_input:
+                        if isinstance(inp, torch.Tensor) and inp in tree_leaves_output:
+                            warnings.warn(
+                                "An input tensor is also present in the output of the wrapped function. "
+                                f"{type(self).__name__} will not copy tensors in place: the output will be cloned "
+                                f"and the identity between input and output will not match anymore. "
+                                f"Make sure you don't rely on input-output identity further in the code."
                             )
-                        self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
-
-                        self._flat_tree = tuple(
-                            self._check_device_and_clone(arg) for arg in self._flat_tree
-                        )
-                        args, kwargs = self._args, self._kwargs = tree_unflatten(
-                            self._flat_tree, self._tree_spec
-                        )
-
-                        torch.cuda.synchronize(self.device)
-                        self._warmup_stream.wait_stream(torch.cuda.current_stream())
-                        with self._warmup_stream_cm():
-                            this_out = self.module(*args, **kwargs)
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize(self.device)
-
-                        self.graph = torch.cuda.CUDAGraph()
-                        with torch.cuda.graph(self.graph, stream=self._warmup_stream):
-                            out = self.module(*self._args, **self._kwargs)
-                        tensordict_logger.info("CUDA graph successfully registered.")
-                        self._out, self._out_struct = tree_flatten(out)
-                        self.counter += 1
-                        # Check that there is not intersection between the indentity of inputs and outputs, otherwise warn
-                        # user.
-                        tree_leaves_input = tree_leaves((args, kwargs))
-                        tree_leaves_output = tree_leaves(out)
-                        if not isinstance(tree_leaves_output, tuple):
-                            tree_leaves_output = (tree_leaves_output,)
-                        for inp in tree_leaves_input:
-                            if isinstance(inp, torch.Tensor) and inp in tree_leaves_output:
-                                warnings.warn(
-                                    "An input tensor is also present in the output of the wrapped function. "
-                                    f"{type(self).__name__} will not copy tensors in place: the output will be cloned "
-                                    f"and the identity between input and output will not match anymore. "
-                                    f"Make sure you don't rely on input-output identity further in the code."
-                                )
-                        if not self._out:
-                            self._return_unchanged = True
-                        else:
-                            self._out = [
-                                out.lock_() if is_tensor_collection(out) else out
-                                for out in self._out
-                            ]
-                            self._return_unchanged = False
-                        return this_out
+                    if not self._out:
+                        self._return_unchanged = True
+                    else:
+                        self._out = [
+                            out.lock_() if is_tensor_collection(out) else out
+                            for out in self._out
+                        ]
+                        self._return_unchanged = False
+                    return this_out
 
         _call_func = functools.wraps(self.module)(_call)
         self._call_func = _call_func
