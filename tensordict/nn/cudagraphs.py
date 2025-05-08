@@ -173,6 +173,7 @@ class CudaGraphModule:
         self._warmup = warmup
         if torch.cuda.is_available():
             self._warmup_stream = torch.cuda.Stream(device)
+            self._capture_stream = torch.cuda.Stream(device)
             self._warmup_stream_cm = torch.cuda.stream(self._warmup_stream)
         else:
             self._warmup_stream = None
@@ -271,7 +272,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = td_out_save
-                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
+                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
 
@@ -362,7 +363,7 @@ class CudaGraphModule:
                     torch.cuda.synchronize()
 
                     self.graph = torch.cuda.CUDAGraph()
-                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
+                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(*self._args, **self._kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
                     self._out, self._out_struct = tree_flatten(out)
