@@ -123,6 +123,7 @@ class CudaGraphModule:
 
         out_keys (list of NestedKeys): the output keys, if the module takes and outputs TensorDict as output.
             Defaults to ``module.out_keys`` if this value exists, otherwise ``None``.
+        device (torch.device, optional): the device of the stream to use.
 
     Examples:
         >>> # Wrap a simple function
@@ -156,6 +157,7 @@ class CudaGraphModule:
         warmup: int = 2,
         in_keys: List[NestedKey] = None,
         out_keys: List[NestedKey] = None,
+        device: torch.device | None = None,
     ):
         self._has_cuda = torch.cuda.is_available()
         if not self._has_cuda:
@@ -170,7 +172,7 @@ class CudaGraphModule:
             raise ValueError("warmup must be an integer greater than 0.")
         self._warmup = warmup
         if torch.cuda.is_available():
-            self._warmup_stream = torch.cuda.Stream()
+            self._warmup_stream = torch.cuda.Stream(device)
             self._warmup_stream_cm = torch.cuda.stream(self._warmup_stream)
         else:
             self._warmup_stream = None
