@@ -173,7 +173,7 @@ class CudaGraphModule:
         self._warmup = warmup
         if torch.cuda.is_available():
             self._warmup_stream = torch.cuda.Stream(device)
-            # self._capture_stream = torch.cuda.Stream(device)
+            self._capture_stream = torch.cuda.Stream(device)
             self._warmup_stream_cm = partial(torch.cuda.stream, self._warmup_stream)
         else:
             self._warmup_stream = None
@@ -213,40 +213,40 @@ class CudaGraphModule:
                 tensordict_out: TensorDictBase | None = None,
                 **kwargs: Any,
             ) -> Any:
-                if self.counter >= self._warmup:
-                    self._tensordict.update_(tensordict, non_blocking=True)
-                    torch.cuda.synchronize(self.device)
-                    self.graph.replay()
-                    if self._out_matches_in:
-                        result = tensordict.update(
-                            self._out, keys_to_update=self._selected_keys
-                        )
-                    elif tensordict_out is not None:
-                        result = tensordict_out.update(self._out, clone=True)
-                    else:
-                        result = self._out.clone() if self._out is not None else None
-                    return result
+                with torch.cuda.device(self.device) if self.device is not None else contextlib.nullcontext():
+                    if self.counter >= self._warmup:
+                        self._tensordict.update_(tensordict, non_blocking=True)
+                        torch.cuda.synchronize(self.device)
+                        self.graph.replay()
+                        if self._out_matches_in:
+                            result = tensordict.update(
+                                self._out, keys_to_update=self._selected_keys
+                            )
+                        elif tensordict_out is not None:
+                            result = tensordict_out.update(self._out, clone=True)
+                        else:
+                            result = self._out.clone() if self._out is not None else None
+                        return result
 
-                if not self._has_cuda or self.counter < self._warmup - 1:
-                    # We must clone the data because providing non-contiguous data will fail later when we clone
-                    if self._has_cuda:
-                        torch.cuda.synchronize(self.device)
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    with self._warmup_stream_cm():
-                        tensordict.apply(self._clone, out=tensordict)
-                        if tensordict_out is not None:
-                            kwargs["tensordict_out"] = tensordict_out
-                        out = self.module(tensordict, *args, **kwargs)
-                        if self._out_matches_in is None:
-                            self._out_matches_in = out is tensordict
-                    if self._has_cuda:
-                        torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize(self.device)
-                    self.counter += self._has_cuda
-                    return out
-                else:
+                    if not self._has_cuda or self.counter < self._warmup - 1:
+                        # We must clone the data because providing non-contiguous data will fail later when we clone
+                        if self._has_cuda:
+                            torch.cuda.synchronize(self.device)
+                            torch.cuda.current_stream().wait_stream(self._warmup_stream)
+                        with self._warmup_stream_cm():
+                            tensordict.apply(self._clone, out=tensordict)
+                            if tensordict_out is not None:
+                                kwargs["tensordict_out"] = tensordict_out
+                            out = self.module(tensordict, *args, **kwargs)
+                            if self._out_matches_in is None:
+                                self._out_matches_in = out is tensordict
+                        if self._has_cuda:
+                            torch.cuda.current_stream().wait_stream(self._warmup_stream)
+                            torch.cuda.synchronize(self.device)
+                        self.counter += self._has_cuda
+                        return out
+                    else:
                     # TODO: remove
-                    with torch.cuda.device(self.device) if self.device is not None else contextlib.nullcontext():
                         tensordict_logger.info(
                             "Registering CUDA graph..."
                             )
