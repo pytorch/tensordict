@@ -215,7 +215,7 @@ class CudaGraphModule:
             ) -> Any:
                 if self.counter >= self._warmup:
                     self._tensordict.update_(tensordict, non_blocking=True)
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._out_matches_in:
                         result = tensordict.update(
@@ -230,7 +230,7 @@ class CudaGraphModule:
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     # We must clone the data because providing non-contiguous data will fail later when we clone
                     if self._has_cuda:
-                        torch.cuda.synchronize()
+                        torch.cuda.synchronize(self.device)
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
@@ -241,7 +241,7 @@ class CudaGraphModule:
                             self._out_matches_in = out is tensordict
                     if self._has_cuda:
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize()
+                        torch.cuda.synchronize(self.device)
                     self.counter += self._has_cuda
                     return out
                 else:
@@ -257,7 +257,7 @@ class CudaGraphModule:
 
                     tree_map(self._check_non_tensor, (args, kwargs))
 
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
@@ -267,7 +267,7 @@ class CudaGraphModule:
                             kwargs["tensordict_out"] = tensordict_out
                         this_out = self.module(tensordict, *args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
 
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
@@ -317,7 +317,7 @@ class CudaGraphModule:
                         self._maybe_copy_onto_(arg_src, arg_dest, srcs, dests)
                     if dests:
                         torch._foreach_copy_(dests, srcs)
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._return_unchanged:
                         result = self._out
@@ -334,13 +334,13 @@ class CudaGraphModule:
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
-                        torch.cuda.synchronize()
+                        torch.cuda.synchronize(self.device)
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm():
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize()
+                        torch.cuda.synchronize(self.device)
                     self.counter += self._has_cuda
                     return out
                 else:
@@ -356,12 +356,12 @@ class CudaGraphModule:
                         self._flat_tree, self._tree_spec
                     )
 
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
                     with self._warmup_stream_cm():
                         this_out = self.module(*args, **kwargs)
                     torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(self.device)
 
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph, stream=self._capture_stream):
