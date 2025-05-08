@@ -245,6 +245,7 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
+                    # TODO: remove
                     with torch.cuda.device(self.device) if self.device is not None else contextlib.nullcontext():
                         tensordict_logger.info(
                             "Registering CUDA graph..."
@@ -258,7 +259,6 @@ class CudaGraphModule:
 
                         tree_map(self._check_non_tensor, (args, kwargs))
 
-                        torch.cuda.synchronize(self.device)
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
                         with self._warmup_stream_cm():
                             tensordict.apply(self._clone, out=tensordict)
@@ -268,12 +268,11 @@ class CudaGraphModule:
                                 kwargs["tensordict_out"] = tensordict_out
                             this_out = self.module(tensordict, *args, **kwargs)
                         torch.cuda.current_stream().wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize(self.device)
 
                         self.graph = torch.cuda.CUDAGraph()
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = td_out_save
-                        with torch.cuda.graph(self.graph, stream=self._capture_stream):
+                        with torch.cuda.graph(self.graph, stream=self._warmup_stream):
                             out = self.module(self._tensordict, *args, **kwargs)
                         tensordict_logger.info("CUDA graph successfully registered.")
 
