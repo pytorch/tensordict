@@ -269,7 +269,8 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = td_out_save
-                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
+
+                    with torch.cuda.stream(self._capture_stream), torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
 
