@@ -22,7 +22,7 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
 )
-from tensordict.utils import _zip_strict, strtobool, logger as tensordict_logger
+from tensordict.utils import _zip_strict, logger as tensordict_logger, strtobool
 from torch import Tensor
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -142,6 +142,17 @@ class CudaGraphModule:
         >>> td = TensorDict(x=x)
         >>> td = func(td)
 
+    .. note:: Tips on debugging CudaGraphModule errors:
+
+        - Errors of the sort of `operation would make the legacy stream depend on a capturing blocking stream` are
+            to be debugged using a non-compiled version of your code first (compiled code will hide the part of the
+            code that is responsible for the cross-stream dependency). It can happen because you are
+            doing inter-device operations which make the capturing stream dependent on other streams.
+        - Errors like `Cannot call CUDAGeneratorImpl::current_seed during CUDA graph capture` or other errors orignating
+            from the compiler (not the compiled code!) probably point to a capture of the graph while recompiling.
+            Capture the recompiles with `TORCH_LOGS="+recompiles" python myscrip.py` and try to fix these.
+            In general, make sure you are using enough warmup steps.
+            Please file an issue if you're struggling with these.
 
     """
 
@@ -179,7 +190,9 @@ class CudaGraphModule:
             self._warmup_stream = None
             self._warmup_stream_cm = contextlib.nullcontext
         self.device = device
-        tensordict_logger.info(f"Setting up CudaGraphModule with stream {self._warmup_stream} on device {self.device}.")
+        tensordict_logger.info(
+            f"Setting up CudaGraphModule with stream {self._warmup_stream} on device {self.device}."
+        )
 
         if hasattr(module, "in_keys"):
             self.in_keys = module.in_keys
@@ -243,9 +256,7 @@ class CudaGraphModule:
                     self.counter += self._has_cuda
                     return out
                 else:
-                    tensordict_logger.info(
-                        "Registering CUDA graph..."
-                        )
+                    tensordict_logger.info("Registering CUDA graph...")
                     if tensordict.device is None:
                         tensordict.apply(self._check_device_and_grad, filter_empty=True)
                     elif tensordict.device.type != "cuda":
@@ -257,7 +268,9 @@ class CudaGraphModule:
 
                     torch.cuda.synchronize(self.device)
                     kwargs = kwargs.copy()
-                    self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
+                    self._warmup_stream.wait_stream(
+                        torch.cuda.current_stream(self.device)
+                    )
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
                         self._tensordict = tensordict.copy()
@@ -268,8 +281,7 @@ class CudaGraphModule:
                     self._capture_stream.wait_stream(self._warmup_stream)
 
                     self.graph = torch.cuda.CUDAGraph()
-
-                    with torch.cuda.stream(self._capture_stream), torch.cuda.graph(self.graph, stream=self._capture_stream):
+                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         if tensordict_out is not None:
                             kwargs["tensordict_out"] = td_out_save
                         out = self.module(self._tensordict, *args, **kwargs)
@@ -332,17 +344,19 @@ class CudaGraphModule:
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
-                        self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
+                        self._warmup_stream.wait_stream(
+                            torch.cuda.current_stream(self.device)
+                        )
                     with self._warmup_stream_cm():
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
-                        torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
+                        torch.cuda.current_stream(self.device).wait_stream(
+                            self._warmup_stream
+                        )
                     self.counter += self._has_cuda
                     return out
                 else:
-                    tensordict_logger.info(
-                        "Registering CUDA graph..."
-                        )
+                    tensordict_logger.info("Registering CUDA graph...")
                     self._flat_tree, self._tree_spec = tree_flatten((args, kwargs))
 
                     self._flat_tree = tuple(
@@ -352,7 +366,9 @@ class CudaGraphModule:
                         self._flat_tree, self._tree_spec
                     )
 
-                    self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
+                    self._warmup_stream.wait_stream(
+                        torch.cuda.current_stream(self.device)
+                    )
                     with self._warmup_stream_cm():
                         this_out = self.module(*args, **kwargs)
                     self._capture_stream.wait_stream(self._warmup_stream)
