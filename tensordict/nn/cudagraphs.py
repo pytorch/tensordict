@@ -256,6 +256,7 @@ class CudaGraphModule:
                     tree_map(self._check_non_tensor, (args, kwargs))
 
                     torch.cuda.synchronize(self.device)
+                    kwargs = kwargs.copy()
                     self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
@@ -267,10 +268,10 @@ class CudaGraphModule:
                     self._capture_stream.wait_stream(self._warmup_stream)
 
                     self.graph = torch.cuda.CUDAGraph()
-                    if tensordict_out is not None:
-                        kwargs["tensordict_out"] = td_out_save
 
                     with torch.cuda.stream(self._capture_stream), torch.cuda.graph(self.graph, stream=self._capture_stream):
+                        if tensordict_out is not None:
+                            kwargs["tensordict_out"] = td_out_save
                         out = self.module(self._tensordict, *args, **kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
 
