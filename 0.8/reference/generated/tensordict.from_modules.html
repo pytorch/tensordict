@@ -370,7 +370,7 @@ If the modules differ in their structure, a lazy stack is needed
 <dd class="field-even"><ul class="simple">
 <li><p><strong>as_module</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code>
 instance will be returned which can be used to store parameters
-within a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+within a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>lock</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict will be locked.
 Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>use_state_dict</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the state-dict from the
@@ -405,8 +405,8 @@ perform a stack each time <a class="reference internal" href="tensordict.LazySta
 require memory (N times the size of the parameters, more if a
 graph is built) and time to be computed.
 It also means that the optimizer(s) will contain more
-parameters, and operations like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>
-or <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zero_grad()</span></code></a> will take longer
+parameters, and operations like <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>
+or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zero_grad()</span></code></a> will take longer
 to be executed. In general, <code class="docutils literal notranslate"><span class="pre">lazy_stack</span></code> should be reserved
 to very few use cases.</p>
 </div>
