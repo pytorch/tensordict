@@ -255,6 +255,7 @@ class CudaGraphModule:
 
                     tree_map(self._check_non_tensor, (args, kwargs))
 
+                    torch.cuda.synchronize(self.device)
                     self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
