@@ -255,7 +255,7 @@ class CudaGraphModule:
 
                     tree_map(self._check_non_tensor, (args, kwargs))
 
-                    self._warmup_stream.wait_stream(torch.cuda.current_stream())
+                    self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         tensordict.apply(self._clone, out=tensordict)
                         self._tensordict = tensordict.copy()
@@ -268,7 +268,7 @@ class CudaGraphModule:
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
                         kwargs["tensordict_out"] = td_out_save
-                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
+                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(self._tensordict, *args, **kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
 
@@ -329,13 +329,11 @@ class CudaGraphModule:
                 if not self._has_cuda or self.counter < self._warmup - 1:
                     args, kwargs = tree_map(self._clone, (args, kwargs))
                     if self._has_cuda:
-                        torch.cuda.synchronize(self.device)
                         self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         out = self.module(*args, **kwargs)
                     if self._has_cuda:
                         torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
-                        torch.cuda.synchronize(self.device)
                     self.counter += self._has_cuda
                     return out
                 else:
@@ -351,15 +349,13 @@ class CudaGraphModule:
                         self._flat_tree, self._tree_spec
                     )
 
-                    torch.cuda.synchronize(self.device)
                     self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         this_out = self.module(*args, **kwargs)
                     torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
-                    torch.cuda.synchronize(self.device)
 
                     self.graph = torch.cuda.CUDAGraph()
-                    with torch.cuda.graph(self.graph, stream=self._warmup_stream):
+                    with torch.cuda.graph(self.graph, stream=self._capture_stream):
                         out = self.module(*self._args, **self._kwargs)
                     tensordict_logger.info("CUDA graph successfully registered.")
                     self._out, self._out_struct = tree_flatten(out)
