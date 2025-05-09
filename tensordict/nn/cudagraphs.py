@@ -263,7 +263,7 @@ class CudaGraphModule:
                             td_out_save = tensordict_out.copy()
                             kwargs["tensordict_out"] = tensordict_out
                         this_out = self.module(tensordict, *args, **kwargs)
-                    torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
+                    self._capture_stream.wait_stream(self._warmup_stream)
 
                     self.graph = torch.cuda.CUDAGraph()
                     if tensordict_out is not None:
@@ -352,7 +352,7 @@ class CudaGraphModule:
                     self._warmup_stream.wait_stream(torch.cuda.current_stream(self.device))
                     with self._warmup_stream_cm():
                         this_out = self.module(*args, **kwargs)
-                    torch.cuda.current_stream(self.device).wait_stream(self._warmup_stream)
+                    self._capture_stream.wait_stream(self._warmup_stream)
 
                     self.graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(self.graph, stream=self._capture_stream):
