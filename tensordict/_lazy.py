@@ -2625,6 +2625,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        return_early: bool = False,
     ) -> int:
         if _futures is None:
             is_root = True
@@ -2635,9 +2636,11 @@ class LazyStackedTensorDict(TensorDictBase):
             _tag = td._isend(
                 dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures, group=group
             )
-        if is_root:
-            for future in _futures:
-                future.wait()
+        if is_root and not return_early:
+            for _future in _futures:
+                _future.wait()
+        elif is_root and return_early:
+            return _futures
         return _tag
 
     def _recv(
