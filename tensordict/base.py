@@ -3312,8 +3312,18 @@ class TensorDictBase(MutableMapping):
                 **kwargs_copy,
             )
 
+        names = self._maybe_names()
+        if names:
+            if len(size) > self.ndim:
+                names = [None] * (len(size) - self.ndim) + list(names)
+            elif self.ndim > len(size):
+                names = names[-len(size) :]
         return self._fast_apply(
-            func, call_on_nested=True, device=device, batch_size=size
+            func,
+            call_on_nested=True,
+            device=device,
+            batch_size=size,
+            names=names,
         )
 
     def new_tensor(
