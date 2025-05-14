@@ -311,6 +311,22 @@ class LazyStackedTensorDict(TensorDictBase):
         empty_lazy: bool = False,
         **kwargs,
     ):
+        # The tricky thing here is to figure out if (1) we want to return a lazy stack or
+        #  a plain TD and (2) if it's a lazy stack, what to do if the ndim the user is asking for
+        #  differs from the ndims of the lazy stack (ie, where should the lazy stack dim lie in the
+        #  new td)? Currently, we use the same stack dim if possible, and only when empty_lazy is True.
+        if not empty_lazy:
+            return TensorDictBase._new_impl(
+                self,
+                size=size,
+                dtype=dtype,
+                device=device,
+                requires_grad=requires_grad,
+                layout=layout,
+                funcname=funcname,
+                empty_lazy=empty_lazy,
+                **kwargs,
+            )
         if isinstance(size, int):
             size = (size,)
         elif len(size) == 1 and not isinstance(size[0], int):
@@ -323,7 +339,9 @@ class LazyStackedTensorDict(TensorDictBase):
             empty_lazy and len(size) > self.stack_dim
         ):  # eg, stack_dim is 1 and size is (3, 4)
             sub_size = list(size)
-            sub_size.pop(self.stack_dim)
+            # TODO: consider starting from the end?
+            stack_dim = self.stack_dim  # - self.ndim
+            sub_size.pop(stack_dim)
             td = self.tensordicts[0].empty(recurse=True).new_empty(sub_size)
             # reproduce td as many times as needed
             return self._new_lazy_unsafe(
@@ -333,6 +351,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 hook_in=self.hook_in,
                 stack_dim_name=self._td_dim_name,
             )
+
+        names = self._maybe_names()
+        if names:
+            if len(size) > self.ndim:
+                names = [None] * (len(size) - self.ndim) + list(names)
+            elif self.ndim > len(size):
+                names = names[-len(size) :]
 
         def func(tensor, size=size):
             feature_shape = tensor.shape[ndim:]
@@ -349,9 +374,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 **kwargs_copy,
             )
 
-        return self._fast_apply(
-            func, call_on_nested=True, device=device, batch_size=size
+        result = self._fast_apply(
+            func,
+            call_on_nested=True,
+            device=device,
+            batch_size=size,
+            names=names,
         )
+        return result
 
     @classmethod
     def _new_lazy_unsafe(
