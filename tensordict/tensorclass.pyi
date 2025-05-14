@@ -313,6 +313,7 @@ class TensorClass:
         requires_grad: bool = False,
         layout: torch.layout = ...,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ): ...
     def new_ones(
         self,
@@ -322,6 +323,7 @@ class TensorClass:
         requires_grad: bool = False,
         layout: torch.layout = ...,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ): ...
     def new_empty(
         self,
@@ -331,6 +333,7 @@ class TensorClass:
         requires_grad: bool = False,
         layout: torch.layout = ...,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ): ...
     def new_full(
         self,
@@ -342,6 +345,7 @@ class TensorClass:
         requires_grad: bool = False,
         layout: torch.layout = ...,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ): ...
     def new_tensor(
         self,
