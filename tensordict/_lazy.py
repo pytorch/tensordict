@@ -299,6 +299,53 @@ class LazyStackedTensorDict(TensorDictBase):
         if stack_dim_name is not None:
             self._td_dim_name = stack_dim_name
 
+    def _new_impl(
+        self,
+        size: torch.Size,
+        *,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        funcname: str,
+        **kwargs,
+    ):
+        if isinstance(size, int):
+            size = (size,)
+        elif len(size) == 1 and not isinstance(size[0], int):
+            size = size[0]
+
+        ndim = self.ndim
+        if device is not NO_DEFAULT:
+            kwargs["device"] = device
+        if len(size) > self.stack_dim:  # eg, stack_dim is 1 and size is (3, 4)
+            sub_size = list(size)
+            sub_size.pop(self.stack_dim)
+            td = self.tensordicts[0].empty(recurse=True).new_empty(sub_size)
+            # reproduce td as many times as needed
+            return self._new_lazy_unsafe(
+                *[td.copy() for _ in range(size[self.stack_dim])],
+                stack_dim=self.stack_dim,
+                hook_out=self.hook_out,
+                hook_in=self.hook_in,
+                stack_dim_name=self._td_dim_name,
+            )
+
+        def func(tensor, size=size):
+            feature_shape = tensor.shape[ndim:]
+            size = torch.Size((*size, *feature_shape))
+            return getattr(tensor, funcname)(
+                size,
+                dtype=dtype,
+                requires_grad=requires_grad,
+                layout=layout,
+                **kwargs,
+            )
+
+        return self._fast_apply(
+            func, call_on_nested=True, device=device, batch_size=size
+        )
+
     @classmethod
     def _new_lazy_unsafe(
         cls,
