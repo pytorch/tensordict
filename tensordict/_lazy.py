@@ -308,6 +308,7 @@ class LazyStackedTensorDict(TensorDictBase):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         funcname: str,
+        empty_lazy: bool = False,
         **kwargs,
     ):
         if isinstance(size, int):
@@ -318,7 +319,9 @@ class LazyStackedTensorDict(TensorDictBase):
         ndim = self.ndim
         if device is not NO_DEFAULT:
             kwargs["device"] = device
-        if len(size) > self.stack_dim:  # eg, stack_dim is 1 and size is (3, 4)
+        if (
+            empty_lazy and len(size) > self.stack_dim
+        ):  # eg, stack_dim is 1 and size is (3, 4)
             sub_size = list(size)
             sub_size.pop(self.stack_dim)
             td = self.tensordicts[0].empty(recurse=True).new_empty(sub_size)
@@ -334,12 +337,16 @@ class LazyStackedTensorDict(TensorDictBase):
         def func(tensor, size=size):
             feature_shape = tensor.shape[ndim:]
             size = torch.Size((*size, *feature_shape))
+            kwargs_copy = kwargs
+            if empty_lazy and is_tensor_collection(tensor):
+                kwargs_copy = dict(kwargs)
+                kwargs_copy["empty_lazy"] = empty_lazy
             return getattr(tensor, funcname)(
                 size,
                 dtype=dtype,
                 requires_grad=requires_grad,
                 layout=layout,
-                **kwargs,
+                **kwargs_copy,
             )
 
         return self._fast_apply(

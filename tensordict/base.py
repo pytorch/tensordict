@@ -3088,6 +3088,7 @@ class TensorDictBase(MutableMapping):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 0.
 
@@ -3107,6 +3108,10 @@ class TensorDictBase(MutableMapping):
                 Default: ``torch.strided``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
+            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
+                This can be useful whenever the content of a lazy stack is likely to change
+                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+                Defaults to ``False``.
 
         """
         kwargs = {}
@@ -3119,6 +3124,7 @@ class TensorDictBase(MutableMapping):
             requires_grad=requires_grad,
             layout=layout,
             funcname="new_zeros",
+            empty_lazy=empty_lazy,
             **kwargs,
         )
 
@@ -3130,6 +3136,7 @@ class TensorDictBase(MutableMapping):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 1.
 
@@ -3149,6 +3156,10 @@ class TensorDictBase(MutableMapping):
                 Default: ``torch.strided``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
+            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
+                This can be useful whenever the content of a lazy stack is likely to change
+                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+                Defaults to ``False``.
 
         """
         kwargs = {}
@@ -3161,6 +3172,7 @@ class TensorDictBase(MutableMapping):
             requires_grad=requires_grad,
             layout=layout,
             funcname="new_ones",
+            empty_lazy=empty_lazy,
             **kwargs,
         )
 
@@ -3172,6 +3184,7 @@ class TensorDictBase(MutableMapping):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` with emtpy tensors.
 
@@ -3191,6 +3204,10 @@ class TensorDictBase(MutableMapping):
                 Default: ``torch.strided``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
+            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
+                This can be useful whenever the content of a lazy stack is likely to change
+                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+                Defaults to ``False``.
 
         """
         kwargs = {}
@@ -3203,6 +3220,7 @@ class TensorDictBase(MutableMapping):
             requires_grad=requires_grad,
             layout=layout,
             funcname="new_empty",
+            empty_lazy=empty_lazy,
             **kwargs,
         )
 
@@ -3216,6 +3234,7 @@ class TensorDictBase(MutableMapping):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         pin_memory: bool = None,
+        empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 1.
 
@@ -3236,6 +3255,10 @@ class TensorDictBase(MutableMapping):
                 Default: ``torch.strided``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
+            empty_lazy (bool, optional): If `True`, lazy stacks will be emptied of their content.
+                This can be useful whenever the content of a lazy stack is likely to change
+                during filling of the new tensordict. This argument is propagated to sub-tensordicts.
+                Defaults to ``False``.
 
         """
         kwargs = {}
@@ -3249,6 +3272,7 @@ class TensorDictBase(MutableMapping):
             layout=layout,
             funcname="new_full",
             fill_value=fill_value,
+            empty_lazy=empty_lazy,
             **kwargs,
         )
 
@@ -3261,6 +3285,7 @@ class TensorDictBase(MutableMapping):
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
         funcname: str,
+        empty_lazy: bool = False,
         **kwargs,
     ):
         if isinstance(size, int):
@@ -3275,12 +3300,16 @@ class TensorDictBase(MutableMapping):
         def func(tensor, size=size):
             feature_shape = tensor.shape[ndim:]
             size = torch.Size((*size, *feature_shape))
+            kwargs_copy = kwargs
+            if empty_lazy and is_tensor_collection(tensor):
+                kwargs_copy = dict(kwargs)
+                kwargs_copy["empty_lazy"] = empty_lazy
             return getattr(tensor, funcname)(
                 size,
                 dtype=dtype,
                 requires_grad=requires_grad,
                 layout=layout,
-                **kwargs,
+                **kwargs_copy,
             )
 
         return self._fast_apply(
