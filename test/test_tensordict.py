@@ -9541,6 +9541,19 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError):
             assert lazy_stack([TensorDict(), td0, td1])
 
+    def test_new_methods(self):
+        td = TensorDict(
+            dense=torch.randn(1, 10),
+            sparse=LazyStackedTensorDict(
+                *[TensorDict(batch_size=1) for _ in range(10)], stack_dim=1
+            ),
+            batch_size=(1, 10),
+        )
+        assert isinstance(td.new_empty((10, 1))["sparse"], LazyStackedTensorDict)
+        assert isinstance(td.new_empty((1, 10, 1))["sparse"], LazyStackedTensorDict)
+        assert isinstance(td.new_empty((1, 100, 1))["sparse"], LazyStackedTensorDict)
+        assert td.new_empty((1, 100, 1))["sparse"].is_empty()
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )
