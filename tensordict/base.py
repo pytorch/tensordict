@@ -9505,6 +9505,10 @@ class TensorDictBase(MutableMapping):
         self._fast_apply(record, filter_empty=True)
         return self
 
+    def __copy__(self):
+        """Copies the tensordict without cloning its tensors."""
+        return self.copy()
+
     # point-wise arithmetic ops
     def __add__(self, other: TensorDictBase | torch.Tensor) -> T:
         return self.add(other)
