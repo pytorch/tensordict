@@ -211,7 +211,7 @@ class CudaGraphModule:
                 if not strtobool(os.environ.get("EXCLUDE_TD_FROM_PYTREE", "0")):
                     warnings.warn(
                         f"Tensordict is registered in PyTree. This is incompatible with {self.__class__.__name__}. "
-                        f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_module._exclude_td_from_pytree().set() "
+                        f"Removing TDs from PyTree. To silence this warning, call tensordict.nn.functional_modules._exclude_td_from_pytree().set() "
                         f"or set the environment variable `EXCLUDE_TD_FROM_PYTREE=1`. "
                         f"This operation is irreversible."
                     )
