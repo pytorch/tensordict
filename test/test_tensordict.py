@@ -29,14 +29,26 @@ import pytest
 
 import tensordict.base as tensordict_base
 import torch
-from _utils_internal import (
-    decompose,
-    DummyPicklableClass,
-    get_available_devices,
-    prod,
-    TestTensorDictsBase,
-)
 from packaging import version
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    IS_FB = True
+    from pytorch.tensordict.test._utils_internal import (
+        decompose,
+        DummyPicklableClass,
+        get_available_devices,
+        prod,
+        TestTensorDictsBase,
+    )
+else:
+    IS_FB = False
+    from _utils_internal import (
+        decompose,
+        DummyPicklableClass,
+        get_available_devices,
+        prod,
+        TestTensorDictsBase,
+    )
 
 from tensordict import (
     capture_non_tensor_stack,
@@ -3440,7 +3452,6 @@ class TestPointwiseOps:
         return self.dummy_td_0.apply(lambda x: x + 2)
 
     def test_ordering(self):
-
         x0 = TensorDict({"y": torch.zeros(3), "x": torch.ones(3)})
 
         x1 = TensorDict({"x": torch.ones(3), "y": torch.zeros(3)})
@@ -4956,7 +4967,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_getitem_nestedtuple(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert isinstance(td[(("a",))], torch.Tensor)
+        assert isinstance(td[("a",)], torch.Tensor)
         assert isinstance(td.get((("a",))), torch.Tensor)
 
     def test_getitem_range(self, td_name, device):
@@ -12007,7 +12018,6 @@ class TestNonTensorData:
             )
 
         else:
-
             data = torch.stack(
                 [
                     NonTensorData(data=DummyPicklableClass(0), device=device),
@@ -12036,6 +12046,7 @@ class TestNonTensorData:
         assert data_memmap.is_memmap()
         assert data_memmap._is_memmap
 
+    @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):
         with (
             pytest.warns(
