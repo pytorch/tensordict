@@ -80,6 +80,8 @@ except ImportError:
     from tensordict.utils import Buffer
 
 
+IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
+
 # Capture all warnings
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -109,7 +111,6 @@ if PYTORCH_TEST_FBCODE:
 
 
 class TestInteractionType:
-
     @pytest.mark.parametrize(
         "str_and_expected_type",
         [
@@ -276,7 +277,6 @@ class TestTDModule:
             self._data.insert(index, value)
 
     def test_module_method_and_kwargs(self):
-
         class MyNet(nn.Module):
             def my_func(self, tensor: torch.Tensor, *, an_integer: int):
                 return tensor + an_integer
@@ -1362,9 +1362,10 @@ class TestTDSequence:
                 == expected
             )
 
-    @set_composite_lp_aggregate(False)
-    def test_probtdseq_multdist(self):
-
+    @pytest.mark.parametrize("aggregate_probabilities", [None, False, True])
+    @pytest.mark.parametrize("inplace", [None, False, True])
+    @pytest.mark.parametrize("include_sum", [None, False, True])
+    def test_probtdseq_multdist(self, include_sum, aggregate_probabilities, inplace):
         tdm0 = TensorDictModule(torch.nn.Linear(3, 4), in_keys=["x"], out_keys=["loc"])
         tdm1 = ProbabilisticTensorDictModule(
             in_keys=["loc"],
@@ -2416,6 +2417,7 @@ class TestProbabilisticTensorDictModule:
         assert isinstance(seq[:2], ProbabilisticTensorDictSequential)
         assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
 
+    @pytest.mark.skipif(IS_FB, reason="Not working within fbcode")
     def test_no_warning_single_key(self):
         # Check that there is no warning if the number of out keys is 1 and sample log prob is set
         torch.manual_seed(0)
@@ -2973,7 +2975,6 @@ class TestCompositeDist:
 
     @set_composite_lp_aggregate(False)
     def test_from_distributions(self):
-
         # Values are not used to build the dists
         params = TensorDict(
             {

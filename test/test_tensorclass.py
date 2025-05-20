@@ -26,8 +26,6 @@ import pytest
 import tensordict.utils
 import torch
 
-from _utils_internal import get_available_devices
-
 from tensordict import (
     assert_allclose_td,
     is_tensorclass,
@@ -55,6 +53,13 @@ except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    IS_FB = True
+    from pytorch.tensordict.test._utils_internal import get_available_devices
+else:
+    IS_FB = False
+    from _utils_internal import get_available_devices
+
 # Capture all warnings
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -65,6 +70,8 @@ pytestmark = [
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
 ]
+
+IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
 
 def _get_methods_from_pyi(file_path):
@@ -113,6 +120,7 @@ def _get_methods_from_class(cls):
     return methods
 
 
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_methods():
     tensorclass_pyi_path = (
         pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
@@ -134,6 +142,7 @@ def test_tensorclass_stub_methods():
         )
 
 
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_instance_methods():
     @tensorclass
     class X:
@@ -857,7 +866,6 @@ class TestTensorClass:
         assert full_like_tc.z == data.z == z
 
     def test_frozen(self):
-
         @tensorclass(frozen=True, autocast=True)
         class X:
             y: torch.Tensor
@@ -1269,7 +1277,6 @@ class TestTensorClass:
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
         with set_capture_non_tensor_stack(False):
-
             tc = TCStrings(a="a", b="b")
 
             tcstack = TensorDict(tc=torch.stack([tc, tc.clone()]))
@@ -1451,7 +1458,6 @@ class TestTensorClass:
         data.set("k", torch.zeros(3, 4, 5))
 
     def test_select(self):
-
         @tensorclass
         class Data:
             a: torch.Tensor
@@ -1477,7 +1483,7 @@ class TestTensorClass:
         obj = MyTensorClass(
             a=["a string", "another string"],
             b=[torch.randn(3), torch.zeros(3)],
-            c="smth completly different",
+            c="smth completely different",
             batch_size=2,
         )
         assert obj.shape == (2,)
@@ -1970,7 +1976,6 @@ class TestTensorClass:
             torch.stack([data1, data3], dim=0)
 
     def test_stack_keyorder(self):
-
         class MyTensorClass(TensorClass):
             foo: Tensor
             bar: Tensor
@@ -2744,7 +2749,6 @@ class TestShadow:
             device: Any
 
     def test_shadow_values_dec(self):
-
         @tensorclass(shadow=True)
         class MyClass:
             batch_size: Any
@@ -2775,7 +2779,6 @@ class TestShadow:
         assert c.batch_size == 1
 
     def test_shadow_values_subcls(self):
-
         class MyClassSbcls(TensorClass, shadow=True):
             batch_size: Any
             names: Any
@@ -2787,7 +2790,6 @@ class TestShadow:
         assert c.device == 0
 
     def test_shadow_values_subcls_idx(self):
-
         class MyClassSbcls(TensorClass["shadow"]):
             batch_size: Any
             names: Any
