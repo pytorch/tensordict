@@ -1987,6 +1987,13 @@ class TensorDict(TensorDictBase):
             # we only want to squeeze dimensions lower than the batch dim, and view
             # is the perfect op for this
             def _squeeze(tensor):
+                from tensordict import LazyStackedTensorDict
+
+                if (
+                    isinstance(tensor, LazyStackedTensorDict)
+                    and tensor.shape[tensor.stack_dim] == 1
+                ):
+                    return tensor.tensordicts[0]
                 return tensor.view(*batch_size, *tensor.shape[self.batch_dims :])
 
             return self._fast_apply(
@@ -2022,7 +2029,7 @@ class TensorDict(TensorDictBase):
         self._maybe_set_shared_attributes(result)
         return result
 
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         # make the dim positive
         if dim < 0:
             newdim = self.batch_dims + dim + 1
@@ -4325,7 +4332,7 @@ class _SubTensorDict(TensorDictBase):
             "Cannot call `squeeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         raise RuntimeError(
             "Cannot call `unsqueeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
@@ -4966,7 +4973,7 @@ def from_pytree(
     )
 
 
-def stack(input, dim=0, *, out=None):
+def stack(input, dim: int = 0, *, out=None):
     """Stacks tensordicts into a single tensordict along the given dimension.
 
     This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
@@ -4975,7 +4982,7 @@ def stack(input, dim=0, *, out=None):
     return TensorDict.stack(input, dim=dim, out=out)
 
 
-def lazy_stack(input, dim=0, *, out=None):
+def lazy_stack(input, dim: int = 0, *, out=None):
     """Creates a lazy stack of tensordicts.
 
     See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
@@ -4983,7 +4990,7 @@ def lazy_stack(input, dim=0, *, out=None):
     return TensorDict.lazy_stack(input, dim=dim, out=out)
 
 
-def cat(input, dim=0, *, out=None):
+def cat(input, dim: int = 0, *, out=None):
     """Concatenates tensordicts into a single tensordict along the given dimension.
 
     This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
@@ -4992,7 +4999,7 @@ def cat(input, dim=0, *, out=None):
     return TensorDict.cat(input, dim=dim, out=out)
 
 
-def maybe_dense_stack(input, dim=0, *, out=None, **kwargs):
+def maybe_dense_stack(input, dim: int = 0, *, out=None, **kwargs):
     """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
 
     See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.

@@ -3447,7 +3447,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> T:
         return self._view(*args, raise_if_not_view=False, **kwargs)
 
-    def flatten(self, start_dim=0, end_dim=-1):
+    def flatten(self, start_dim: int = 0, end_dim=-1):
         end_dim = _maybe_correct_neg_dim(end_dim, shape=self.batch_size)
         start_dim = _maybe_correct_neg_dim(start_dim, shape=self.batch_size)
         new_shape = [
@@ -3615,7 +3615,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     result = result.squeeze(dim)
         return result
 
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         new_dim = dim
         if new_dim < 0:
             new_dim = self.batch_dims + new_dim + 1
@@ -4292,7 +4292,7 @@ class _CustomOpTensorDict(TensorDictBase):
             "Cannot call `squeeze` on a lazy tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         raise RuntimeError(
             "Cannot call `unsqueeze` on a lazy tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )

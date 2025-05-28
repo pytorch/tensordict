@@ -1407,7 +1407,7 @@ class PersistentTensorDict(TensorDictBase):
             "Cannot call `squeeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         raise RuntimeError(
             "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
