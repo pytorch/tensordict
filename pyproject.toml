@@ -16,7 +16,7 @@ target-version = ["py39"]
 
 [project]
 name = "tensordict"
-version = "0.8.1"
+version = "0.9.0"
 description = "TensorDict is a pytorch dedicated tensor container."
 authors = [
   { name="Vincent Moens", email="vincentmoens@gmail.com" }
