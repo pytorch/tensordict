@@ -821,13 +821,9 @@ class TensorDictModule(TensorDictModuleBase):
             number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
 
     Keyword Args:
-        out_to_in_map (bool, optional): if ``True``, `in_keys` is read as if the keys are the arguments keys of
+        out_to_in_map (bool, optional): if ``True`` (default), `in_keys` is read as if the keys are the arguments keys of
             the :meth:`~.forward` method and the values are the keys in the input :class:`~tensordict.TensorDict`. If
-            ``False`` or ``None`` (default), keys are considered to be the input keys and values the method's arguments keys.
-
-            .. warning::
-                The default value of `out_to_in_map` will change from ``False`` to ``True`` in the v0.9 release.
-
+            ``False``, keys are considered to be the input keys and values the method's arguments keys.
         inplace (bool or string, optional): if ``True`` (default), the output of the module are written in the tensordict
             provided to the :meth:`~.forward` method. If ``False``, a new :class:`~tensordict.TensorDict` with and empty
             batch-size and no device is created. if ``"empty"``, :meth:`~tensordict.TensorDict.empty` will be used to
@@ -1032,16 +1028,7 @@ class TensorDictModule(TensorDictModuleBase):
 
         if isinstance(in_keys, dict):
             if out_to_in_map is None:
-                out_to_in_map = False
-                warnings.warn(
-                    "Using a dictionary in_keys without specifying out_to_in_map is deprecated. "
-                    "By default, out_to_in_map is `False` (`in_keys` keys as tensordict pointers, "
-                    "values as kwarg name), but from version>=0.9, default will be `True` "
-                    "(`in_keys` keys as func kwarg name, values as tensordict pointers). "
-                    "Please use explicit out_to_in_map to indicate the ordering of the input keys. ",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
+                out_to_in_map = True
 
             # write the kwargs and create a list instead
             _in_keys = []
@@ -1128,19 +1115,9 @@ class TensorDictModule(TensorDictModuleBase):
             else:
                 tensordict_out = tensordict
         if len(tensors) > len(out_keys):
-            incipit = "There are more tensors than out_keys. "
+            raise RuntimeError("There are more tensors than out_keys.")
         elif len(out_keys) > len(tensors):
-            incipit = "There are more out_keys than tensors. "
-        else:
-            incipit = None
-        if incipit is not None:
-            warnings.warn(
-                incipit + "This is currently "
-                "allowed but it will be deprecated in v0.9. To silence this warning, "
-                "make sure the number of out_keys matches the number of outputs of the "
-                "network.",
-                category=DeprecationWarning,
-            )
+            raise RuntimeError("There are more out_keys than tensors.")
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
                 tensordict_out.set(_out_key, TensorDict.from_any(_tensor))

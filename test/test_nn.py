@@ -435,18 +435,6 @@ class TestTDModule:
         with pytest.raises(TypeError, match="got an unexpected keyword argument '1'"):
             module(td)
 
-    def test_input_keys_dict_deprecated_warning(self):
-        in_keys = {"1": "x", "2": "y"}
-
-        def fn(x, y):
-            return x + y
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="Using a dictionary in_keys without specifying out_to_in_map is deprecated.",
-        ):
-            _ = TensorDictModule(fn, in_keys=in_keys, out_keys=["a"])
-
     def test_reset(self):
         torch.manual_seed(0)
         net = nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())])
@@ -1594,18 +1582,6 @@ class TestSIM:
         dummy()
 
 
-def test_probabilistic_sequential_type_checks():
-    td_module_1 = TensorDictModule(nn.Linear(3, 2), in_keys=["in"], out_keys=["hidden"])
-    td_module_2 = TensorDictModule(
-        nn.Linear(2, 4), in_keys=["hidden"], out_keys=["out"]
-    )
-    with pytest.raises(
-        TypeError,
-        match="The final module passed to ProbabilisticTensorDictSequential",
-    ):
-        ProbabilisticTensorDictSequential(td_module_1, td_module_2)
-
-
 def test_keyerr_msg():
     module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
     with pytest.raises(
@@ -2409,7 +2385,6 @@ class TestProbabilisticTensorDictModule:
         seq = ProbabilisticTensorDictSequential(m0, m1, m2)
         assert isinstance(seq[0], ProbabilisticTensorDictModule)
         assert isinstance(seq[:2], TensorDictSequential)
-        assert not isinstance(seq[:2], ProbabilisticTensorDictSequential)
         assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
 
         seq = ProbabilisticTensorDictSequential(m0, m1, m2, return_composite=True)
@@ -2441,12 +2416,9 @@ class TestProbabilisticTensorDictModule:
                 out_keys=[("an", "action")],
                 return_log_prob=True,
             )
-            with pytest.warns(
-                DeprecationWarning, match="You are querying the log-probability key"
-            ):
-                mod(td.copy())
-                mod.log_prob(mod(td.copy()))
-                mod.log_prob_key
+            mod(td.copy())
+            mod.log_prob(mod(td.copy()))
+            mod.log_prob_key
 
             # add another variable, and trigger the warning
             mod = ProbabilisticTensorDictModule(
@@ -2461,31 +2433,22 @@ class TestProbabilisticTensorDictModule:
                 out_keys=[("dirich", "categ")],
                 return_log_prob=True,
             )
-            with (
-                pytest.warns(
-                    DeprecationWarning, match="You are querying the log-probability key"
-                ),
-                pytest.warns(
-                    DeprecationWarning,
-                    match="Composite log-prob aggregation wasn't defined explicitly",
-                ),
-            ):
-                td = TensorDict(
-                    params=TensorDict(
-                        dirich=TensorDict(
-                            concentration=torch.rand(
-                                (
-                                    10,
-                                    11,
-                                )
+            td = TensorDict(
+                params=TensorDict(
+                    dirich=TensorDict(
+                        concentration=torch.rand(
+                            (
+                                10,
+                                11,
                             )
-                        ),
-                        categ=TensorDict(logits=torch.rand((5,))),
-                    )
+                        )
+                    ),
+                    categ=TensorDict(logits=torch.rand((5,))),
                 )
-                mod(td.copy())
-                mod.log_prob(mod(td.copy()))
-                mod.log_prob_key
+            )
+            mod(td.copy())
+            mod.log_prob(mod(td.copy()))
+            mod.log_prob_key
 
 
 class TestEnsembleModule:
@@ -2942,7 +2905,7 @@ class TestCompositeDist:
             else:
                 assert p.log_prob_keys == ["cont_log_prob", ("nested", "disc_log_prob")]
 
-        if mode in (True, None):
+        if mode in (True,):
             with set_composite_lp_aggregate(True):
                 assert p.out_keys == ["cont", ("nested", "disc"), "sample_log_prob"]
                 assert p.log_prob_key == "sample_log_prob"
@@ -3060,16 +3023,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
-            CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-                },
-                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-                aggregate_probabilities=True,
-            )
 
         dist = CompositeDistribution(
             params,
@@ -3097,16 +3050,6 @@ class TestCompositeDist:
             },
             [3],
         )
-        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
-            CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.RelaxedOneHotCategorical,
-                },
-                extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
-                aggregate_probabilities=True,
-            )
 
         dist = CompositeDistribution(
             params,
@@ -3186,16 +3129,6 @@ class TestCompositeDist:
             [3],
         )
 
-        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
-            CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.Categorical,
-                },
-                aggregate_probabilities=True,
-            )
-
         dist = CompositeDistribution(
             params,
             distribution_map={
@@ -3220,16 +3153,6 @@ class TestCompositeDist:
             },
             [3],
         )
-
-        with pytest.warns(DeprecationWarning, match="aggregate_probabilities"):
-            CompositeDistribution(
-                params,
-                distribution_map={
-                    "cont": distributions.Normal,
-                    ("nested", "disc"): distributions.Categorical,
-                },
-                aggregate_probabilities=True,
-            )
 
         dist = CompositeDistribution(
             params,
@@ -3731,12 +3654,6 @@ class TestCompositeDist:
                 lp,
                 sample.get("cont_log_prob").sum(-1)
                 + sample.get(("nested", "cont_log_prob")).sum(-1),
-            )
-        else:
-            torch.testing.assert_close(
-                lp,
-                sample_clone.get("cont_log_prob").sum(-1)
-                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
             )
 
     @pytest.mark.parametrize(

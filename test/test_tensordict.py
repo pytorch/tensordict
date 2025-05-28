@@ -73,7 +73,7 @@ from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_s
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
+from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -7052,21 +7052,14 @@ class TestTensorDicts(TestTensorDictsBase):
         if is_lazy:
             return
         td_out = td_out.expand(td.shape[0], 2, *td.shape[1:]).clone()
-        td_stack = LazyStackedTensorDict.lazy_stack([td0, td1], 1)
         if td_name == "td_params":
             with pytest.raises(RuntimeError, match="out.batch_size and stacked"):
                 LazyStackedTensorDict.lazy_stack([td0, td1], 0, out=td_out)
             return
+        td_stack = LazyStackedTensorDict.lazy_stack(
+            [td0.detach(), td1.detach()], 1, out=td_out
+        )
         data_ptr_set_before = {val.data_ptr() for val in decompose(td_out)}
-        with (
-            pytest.warns(
-                FutureWarning,
-                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-            )
-            if td_name in ("nested_tensorclass", "td_with_non_tensor")
-            else contextlib.nullcontext()
-        ):
-            LazyStackedTensorDict.lazy_stack([td0, td1], 1, out=td_out)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td_out)}
         assert data_ptr_set_before == data_ptr_set_after
         assert (td_stack == td_out).all()
@@ -7083,15 +7076,7 @@ class TestTensorDicts(TestTensorDictsBase):
                 LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
-        with (
-            pytest.warns(
-                FutureWarning,
-                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-            )
-            if td_name in ("nested_tensorclass", "td_with_non_tensor")
-            else contextlib.nullcontext()
-        ):
-            stacked_td = stack_td(tds_list, 0, out=td)
+        stacked_td = stack_td(tds_list, 0, out=td)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td)}
         assert data_ptr_set_before == data_ptr_set_after
         assert stacked_td.batch_size == td.batch_size
@@ -7425,15 +7410,7 @@ class TestTensorDicts(TestTensorDictsBase):
             torch.manual_seed(1)
             td = getattr(self, td_name)(device)
             td_unbind = torch.unbind(td, dim=dim)
-            with (
-                pytest.warns(
-                    FutureWarning,
-                    match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-                )
-                if td_name in ("nested_tensorclass", "td_with_non_tensor")
-                else contextlib.nullcontext()
-            ):
-                assert (td == stack_td(td_unbind, dim).contiguous()).all()
+            assert (td == stack_td(td_unbind, dim).contiguous()).all()
             idx = (slice(None),) * dim + (0,)
             assert (td[idx] == td_unbind[0]).all()
 
@@ -9834,11 +9811,7 @@ class TestLazyStackedTensorDict:
             )
             td_a = TensorDict.maybe_dense_stack([td0, td1])
             td_b = TensorDict.maybe_dense_stack([td0, td1]).clone()
-            with pytest.warns(
-                FutureWarning,
-                match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-            ):
-                td = TensorDict.maybe_dense_stack([td_a, td_b])
+            td = TensorDict.maybe_dense_stack([td_a, td_b])
             return (td, td_a, td_b, td0, td1)
 
         td, td_a, td_b, td0, td1 = make_tds()
@@ -11625,6 +11598,28 @@ class TestNonTensorData:
             ("nested", "bool")
         )
 
+    def test_expand(self):
+        d = NonTensorData(0, batch_size=(3,))
+        d_expand = d.expand((2, 3))
+        assert d_expand.shape == (2, 3)
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, NonTensorStack)
+        d = NonTensorData(0, batch_size=(1,))
+        d_expand = d.expand((2, 3))
+        assert d_expand.shape == (2, 3)
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, NonTensorStack)
+
+    def test_expand_nested(self):
+        d = TensorDict(foo=NonTensorData(0, batch_size=(3,)), batch_size=(3,))
+        d_expand = d.expand((2, 3)).get("foo")
+        assert d_expand.shape == (2, 3)
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        d = TensorDict(foo=NonTensorData(0, batch_size=(1,)), batch_size=(1,))
+        d_expand = d.expand((2, 3)).get("foo")
+        assert d_expand.shape == (2, 3)
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+
     def test_from_list(self):
         nd = NonTensorStack.from_list(
             [[True, "b", torch.randn(())], ["another", 0, NonTensorData("final")]]
@@ -11728,16 +11723,9 @@ class TestNonTensorData:
             )
             == NonTensorData(3, batch_size=[2])
         ).all()
-        with pytest.warns(
-            FutureWarning,
-            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-        ):
-            assert (
-                torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
-                    ("nested", "int")
-                )
-                == 3
-            )
+        assert torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+            ("nested", "int")
+        ) == [3, 3]
         with set_capture_non_tensor_stack(True):
             assert capture_non_tensor_stack()
             assert (
@@ -11753,16 +11741,10 @@ class TestNonTensorData:
             ) == [3, 3]
 
         assert capture_non_tensor_stack(allow_none=True) is None
-        with pytest.warns(
-            FutureWarning,
-            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-        ):
-            assert isinstance(
-                torch.stack([non_tensor_data, non_tensor_data], 0).get(
-                    ("nested", "int")
-                ),
-                NonTensorData,
-            )
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int")),
+            NonTensorStack,
+        )
         with set_capture_non_tensor_stack(False):
             assert isinstance(
                 torch.stack([non_tensor_data, non_tensor_data], 0).get(
@@ -11773,16 +11755,10 @@ class TestNonTensorData:
 
         non_tensor_copy = non_tensor_data.clone()
         non_tensor_copy.get(("nested", "int")).data = 4
-        with pytest.warns(
-            FutureWarning,
-            match="The default behavior of stacking non-tensor data will change in version v0.9 and switch from True to False",
-        ):
-            assert isinstance(
-                torch.stack([non_tensor_data, non_tensor_copy], 0).get(
-                    ("nested", "int")
-                ),
-                LazyStackedTensorDict,
-            )
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
+            LazyStackedTensorDict,
+        )
 
     def test_stack_consolidate(self):
         td = torch.stack(
@@ -12048,23 +12024,6 @@ class TestNonTensorData:
 
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):
-        with (
-            pytest.warns(
-                UserWarning,
-                match="The content of the stacked NonTensorData objects matched in value but not identity",
-            ),
-            pytest.warns(
-                FutureWarning,
-                match="The default behavior of stacking non-tensor data will change in version v0.9",
-            ),
-        ):
-            data = torch.stack(
-                [
-                    NonTensorData(data=torch.zeros(())),
-                    NonTensorData(data=torch.zeros(())),
-                ],
-                0,
-            )
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
         assert is_non_tensor(data)
         data = torch.stack([data] * 3)
@@ -12115,21 +12074,21 @@ class TestNonTensorData:
         assert isinstance(data[0, 0], NonTensorData)
         with pytest.raises(
             RuntimeError,
-            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+            match="Cannot update a leaf NonTensorDataBase from a memmaped parent NonTensorStack",
         ):
             data[0, 0].update(NonTensorData(data=1), inplace=True, non_blocking=False)
 
         # Should raise an exception
         with pytest.raises(
             RuntimeError,
-            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+            match="Cannot update a leaf NonTensorDataBase from a memmaped parent NonTensorStack",
         ):
             data[0].update(NonTensorData(data=1), inplace=True, non_blocking=False)
 
         # should raise an exception
         with pytest.raises(
             ValueError,
-            match="Cannot update a NonTensorData object with a NonTensorStack",
+            match="Cannot update a NonTensorDataBase object with a NonTensorStack",
         ):
             out = NonTensorData(data=1).update(data, inplace=True, non_blocking=False)
         # as suggested by the error message this works
@@ -12237,6 +12196,16 @@ class TestNonTensorData:
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 
+    def test_squeeze_unsqueeze(self):
+        td = TensorDict(foo=NonTensorData(3))
+        tdu = td.unsqueeze(0)
+        assert isinstance(tdu.get("foo"), NonTensorStack)
+        assert tdu["foo"] == [3]
+        assert isinstance(tdu.squeeze()["foo"], int)
+        assert isinstance(tdu.squeeze().get("foo"), NonTensorData)
+        assert isinstance(tdu.squeeze(0)["foo"], int)
+        assert isinstance(tdu.squeeze(0).get("foo"), NonTensorData)
+
     def test_view(self):
         td = NonTensorStack(*[str(i) for i in range(60)])
         tdv = td.view(3, 4, 5)
@@ -12273,6 +12242,69 @@ class TestNonTensorData:
         )
         result = tensor.where(condition=condition, other=other, out=out, pad=0)
         assert result.tolist() == [["a"], ["a"]]
+
+
+class TestMetaData:
+
+    def test_expand(self):
+        d = MetaData(0, batch_size=(3,))
+        d_expand = d.expand((2, 3))
+        assert d_expand.shape == (2, 3)
+        assert d_expand.data == 0
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, MetaData)
+        d = MetaData(0, batch_size=(1,))
+        d_expand = d.expand((2, 3))
+        assert d_expand.shape == (2, 3)
+        assert d_expand.data == 0
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, MetaData)
+
+    def test_expand_nested(self):
+        d = TensorDict(foo=MetaData(0, batch_size=(3,)), batch_size=(3,))
+        d_expand = d.expand((2, 3)).get("foo")
+        assert d_expand.shape == (2, 3)
+        assert d_expand.data == 0
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, MetaData)
+        d = TensorDict(foo=MetaData(0, batch_size=(1,)), batch_size=(1,))
+        d_expand = d.expand((2, 3)).get("foo")
+        assert d_expand.shape == (2, 3)
+        assert d_expand.data == 0
+        assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+        assert isinstance(d_expand, MetaData)
+
+    def test_metadata(self):
+        foo = MetaData(3)
+        assert is_non_tensor(foo)
+        assert _pass_through(foo)
+
+    def test_squeeze_unsqueeze(self):
+        td = TensorDict(foo=MetaData(3))
+        tdu = td.unsqueeze(0)
+        assert isinstance(tdu.get("foo"), MetaData)
+        assert tdu["foo"] == 3
+        assert isinstance(tdu.squeeze()["foo"], int)
+        assert isinstance(tdu.squeeze().get("foo"), MetaData)
+        assert isinstance(tdu.squeeze(0)["foo"], int)
+        assert isinstance(tdu.squeeze(0).get("foo"), MetaData)
+
+    def test_stack(self):
+        data = "a string"
+        td0 = TensorDict(foo=MetaData(data))
+        td1 = TensorDict(foo=MetaData(data))
+        assert isinstance(td0.get("foo"), MetaData)
+        assert isinstance(td1.get("foo"), MetaData)
+        tds = torch.stack([td0, td1])
+        foo = tds.get("foo")
+        assert isinstance(foo, MetaData)
+        assert foo.batch_size == (2,)
+        another_data = "another string"
+        td1 = TensorDict(foo=MetaData(another_data))
+        tds = torch.stack([td0, td1])
+        foo = tds.get("foo")
+        assert isinstance(foo, NonTensorStack)
+        assert foo.batch_size == (2,)
 
 
 class TestSubclassing:

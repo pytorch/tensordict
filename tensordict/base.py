@@ -3490,7 +3490,7 @@ class TensorDictBase(MutableMapping):
             return result
 
     @abc.abstractmethod
-    def _unsqueeze(self, dim):
+    def _unsqueeze(self, dim: int):
         raise NotImplementedError
 
     def _legacy_unsqueeze(self, dim: int) -> T:
@@ -3886,7 +3886,7 @@ class TensorDictBase(MutableMapping):
         return torch.stack(tensors, dim, out=out)
 
     @classmethod
-    def stack(cls, input, dim=0, *, out=None):
+    def stack(cls, input, dim: int = 0, *, out=None):
         """Stacks tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
@@ -3899,7 +3899,7 @@ class TensorDictBase(MutableMapping):
         return _stack(input, dim, out=out)
 
     @classmethod
-    def cat(cls, input, dim=0, *, out=None):
+    def cat(cls, input, dim: int = 0, *, out=None):
         """Concatenates tensordicts into a single tensordict along the given dimension.
 
         This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
@@ -3912,7 +3912,7 @@ class TensorDictBase(MutableMapping):
         return _cat(input, dim, out=out)
 
     @classmethod
-    def lazy_stack(cls, input, dim=0, *, out=None, **kwargs):
+    def lazy_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
         """Creates a lazy stack of tensordicts.
 
         See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
@@ -3922,7 +3922,7 @@ class TensorDictBase(MutableMapping):
         return LazyStackedTensorDict.lazy_stack(input, dim=dim, out=out, **kwargs)
 
     @classmethod
-    def maybe_dense_stack(cls, input, dim=0, *, out=None, **kwargs):
+    def maybe_dense_stack(cls, input, dim: int = 0, *, out=None, **kwargs):
         """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
 
         See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
@@ -7588,7 +7588,7 @@ class TensorDictBase(MutableMapping):
         return sorted(self.keys())
 
     @_as_context_manager()
-    def flatten(self, start_dim=0, end_dim=-1):
+    def flatten(self, start_dim: int = 0, end_dim=-1):
         """Flattens all the tensors of a tensordict.
 
         Args:

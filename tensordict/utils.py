@@ -1937,7 +1937,7 @@ def _legacy_lazy(func):
 
 
 # non tensor stack control
-_DEFAULT_CAPTURE_NONTENSOR_STACK = True
+_DEFAULT_CAPTURE_NONTENSOR_STACK = False
 _CAPTURE_NONTENSOR_STACK = os.environ.get("CAPTURE_NONTENSOR_STACK")
 
 
@@ -1950,8 +1950,7 @@ class set_capture_non_tensor_stack(_DecoratorContextManager):
             a single :class:`~tensordict.NonTensorData` object will contain the unique value, but with the desired batch-size.
             Defaults to ``True``.
 
-    .. note:: Until v0.9, this will raise a warning if the same value is encountered and the value is not set
-        explicitly (`capture_non_tensor_stack() = True` default behavior).
+    .. note:: Since v0.9, `capture_non_tensor_stack()` returns `False` by default.
         You can set the value of :func:`~tensordict.capture_non_tensor_stack` through:
 
         - The ``CAPTURE_NON_TENSOR_STACK`` environment variable;
@@ -2999,7 +2998,7 @@ def _maybe_correct_neg_dim(
 
 # Check if the new shape is a flatten / unflatten version of the current one
 def _check_is_flatten(new_shape, old_shape, return_flatten_dim=False):
-    if not new_shape:
+    if not new_shape or not old_shape:
         if return_flatten_dim:
             return False, (-1, -1)
         return False

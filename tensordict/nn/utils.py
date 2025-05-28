@@ -8,7 +8,6 @@ from __future__ import annotations
 import functools
 import inspect
 import os
-import warnings
 from enum import Enum
 from typing import Any, Callable
 
@@ -483,17 +482,7 @@ def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
 
     """
     mode = _composite_lp_aggregate.get_mode()
-    if mode is None:
-        if not nowarn:
-            warnings.warn(
-                "Composite log-prob aggregation wasn't defined explicitly and ``composite_lp_aggregate()`` will "
-                "currently return ``True``. However, from v0.9, this behavior will change and ``composite_lp_aggregate`` will "
-                "return ``False``. Please change your code accordingly by specifying the aggregation strategy via "
-                "`tensordict.nn.set_composite_lp_aggregate` or via the `COMPOSITE_LP_AGGREGATE` environment variable.",
-                category=DeprecationWarning,
-            )
-        return True
-    return mode
+    return bool(mode)
 
 
 class set_composite_lp_aggregate(_DecoratorContextManager):

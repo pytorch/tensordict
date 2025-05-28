@@ -49,7 +49,9 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import (
     from_dataclass,
+    MetaData,
     NonTensorData,
+    NonTensorDataBase,
     NonTensorStack,
     tensorclass,
     TensorClass,

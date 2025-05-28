@@ -759,7 +759,7 @@ def where(condition, input, other, *, out=None):
     return input.where(condition, other, out=out)
 
 
-def _stack_uninit_params(list_of_params, dim=0, out=None):
+def _stack_uninit_params(list_of_params, dim: int = 0, out=None):
     if out is not None:
         raise NotImplementedError
     if dim > 0:

@@ -176,7 +176,7 @@ class UnbatchedTensor(TensorClass):
     @_bypass
     def view(self, *shape): ...
 
-    def unsqueeze(self, dim):
+    def unsqueeze(self, dim: int):
         shape = list(self.batch_size)
         shape.insert(dim, 0)
         self_copy = self.copy()
@@ -200,7 +200,9 @@ class UnbatchedTensor(TensorClass):
         return self_copy
 
     @classmethod
-    def _stack_non_tensor(cls, list_of_non_tensor, dim=0, raise_if_non_unique=False):
+    def _stack_non_tensor(
+        cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
+    ):
         result = list_of_non_tensor[0].copy()
         batch_size = list(result.batch_size)
         batch_size.insert(dim, len(list_of_non_tensor))
@@ -211,4 +213,4 @@ class UnbatchedTensor(TensorClass):
     def unflatten(self, dim, unflattened_size): ...
 
     @_bypass
-    def flatten(self, start_dim=0, end_dim=-1): ...
+    def flatten(self, start_dim: int = 0, end_dim=-1): ...
