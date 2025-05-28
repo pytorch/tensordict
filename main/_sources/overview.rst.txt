@@ -160,6 +160,9 @@ You can create a TensorDict with non-tensor data using the :class:`~tensordict.N
 
 As you can see, the :class:`~tensordict.NonTensorData` object is stored in the TensorDict just like a regular tensor.
 
+The :class:`~tensordict.MetaData` class can be used to carry non-indexable data, or data that does not need to follow
+the tensordict batch-size.
+
 Accessing Non-Tensor Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -258,8 +261,9 @@ way to tell what to do in general with a non-tensor data that happens to be a li
 Stacking TensorDicts with Non-Tensor Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To stack non-tensor data, :func:`~torch.stack` will check the identity of the non-tensor objects and produce a single
-:class:`~tensordict.NonTensorData` if they match, or a :class:`~tensordict.NonTensorStack` otherwise:
+To stack non-tensor data, :func:`~torch.stack` will create a :class:`~tensordict.NonTensorStack`. In contrast,
+when using :class:`~tensordict.MetaData` instances, a stacking operation will result in a single `MetaData` instance
+if their content matches.
 
     >>> td = TensorDict(
     ...     a=NonTensorData("a string!"),
@@ -268,28 +272,26 @@ To stack non-tensor data, :func:`~torch.stack` will check the identity of the no
     >>> print(torch.stack([td, td]))
     TensorDict(
         fields={
-            a: NonTensorData(data=a string!, batch_size=torch.Size([2]), device=None),
-            b: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
-
-If you want to make sure the result is a stack, use :meth:`~tensordict.TensorDict.lazy_stack` instead.
-
-    >>> print(TensorDict.lazy_stack([td, td]))
-    LazyStackedTensorDict(
-        fields={
             a: NonTensorStack(
                 ['a string!', 'a string!'],
                 batch_size=torch.Size([2]),
                 device=None),
             b: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
-        exclusive_fields={
-        },
         batch_size=torch.Size([2]),
         device=None,
-        is_shared=False,
-        stack_dim=0)
+        is_shared=False)
+    >>> td = TensorDict(
+    ...     a=MetaData("a string!"),
+    ... b = torch.zeros(()),
+    ... )
+    >>> print(torch.stack([td, td]))
+    TensorDict(
+        fields={
+            a: MetaData(data=a string!, batch_size=torch.Size([2]), device=None),
+            b: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([2]),
+        device=None,
+        is_shared=False)
 
 Named dimensions
 ----------------

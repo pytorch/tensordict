@@ -281,6 +281,7 @@ Here is an example:
     tensorclass
     TensorClass
     NonTensorData
+    MetaData
     NonTensorStack
     from_dataclass
 

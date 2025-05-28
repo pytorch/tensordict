@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+g4e72956)
+                  main (0.0.post1+g8d0241d)
                 </div>
               
             
@@ -402,18 +402,12 @@ lazy stack of tensordicts AND if partial_tolerant is <code class="docutils liter
 does not have the required keys, then TensorDictSequential will scan through
 the sub-tensordicts looking for those that have the required keys, if any.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>return_composite</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>If True and multiple
+<li><p><strong>return_composite</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If True and multiple
 <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> or
 <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a> instances are found,
 a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> instance will be used.
 Otherwise, only the last module will be used to build the distribution.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>The behaviour of <code class="xref py py-attr docutils literal notranslate"><span class="pre">return_composite</span></code> will change in v0.9
-and default to True from there on.</p>
-</div>
-</p></li>
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, the input tensordict is modified in-place. If <cite>False</cite>, a new empty
 <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance is created. If <cite>“empty”</cite>, <cite>input.empty()</cite> is used instead (ie, the
 output preserves type, device and batch-size). Defaults to <cite>None</cite> (relies on sub-modules).</p></li>
@@ -686,11 +680,6 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <dd class="field-even"><p><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase">TensorDictBase</a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)">torch.Tensor</a></p>
 </dd>
 </dl>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>In future releases (v0.9), the default values of <cite>aggregate_probabilities</cite>, <cite>inplace</cite>, and <cite>include_sum</cite> will change.
-To avoid warnings, it is recommended to explicitly pass these arguments to the <cite>log_prob</cite> method or set them in the constructor.</p>
-</div>
 </dd></dl>
 
 </dd></dl>
