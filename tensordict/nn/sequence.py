@@ -620,9 +620,7 @@ class TensorDictSequential(TensorDictModule):
 
         if not len(kwargs):
             for module in self._module_iter():
-                tensordict_exec = self._run_module(
-                    module, tensordict_exec, **kwargs
-                )
+                tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
         else:
             raise RuntimeError(
                 f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
