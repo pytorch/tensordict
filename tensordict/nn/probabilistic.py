@@ -998,7 +998,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             return_composite = not isinstance(
                 modules_list[-1],
                 (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
-            ) or (sum(isinstance(m, ProbabilisticTensorDictModule) for m in modules_list) > 1)
+            ) or (
+                sum(isinstance(m, ProbabilisticTensorDictModule) for m in modules_list)
+                > 1
+            )
 
         if not any(
             isinstance(
