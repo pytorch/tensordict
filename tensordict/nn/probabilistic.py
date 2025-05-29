@@ -959,8 +959,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return_composite: bool | None = None,
         inplace: bool | None = None,
     ) -> None:
-        if return_composite is None:
-            return_composite = True
         if len(modules) == 0:
             raise ValueError(
                 "ProbabilisticTensorDictSequential must consist of zero or more "
@@ -983,8 +981,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 return_composite=return_composite,
                 inplace=inplace,
             )
-        elif not return_composite and not isinstance(
-            modules[-1],
+        else:
+            modules_list = list(modules)
+        modules_list = self._convert_modules(modules_list)
+
+        if return_composite is False and not isinstance(
+            modules_list[-1],
             (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
         ):
             raise TypeError(
@@ -992,9 +994,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "an instance of ProbabilisticTensorDictModule or another "
                 "ProbabilisticTensorDictSequential (unless return_composite is set to ``True``)."
             )
-        else:
-            modules_list = list(modules)
-        modules_list = self._convert_modules(modules_list)
+        if return_composite is None:
+            return_composite = not isinstance(
+                modules_list[-1],
+                (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+            ) or (sum(isinstance(m, ProbabilisticTensorDictModule) for m in modules_list) > 1)
 
         if not any(
             isinstance(
@@ -1023,6 +1027,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
         super().__init__(*modules, partial_tolerant=partial_tolerant, inplace=inplace)
+        if return_composite is None:
+            return_composite = True
         self.return_composite = return_composite
 
     def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
