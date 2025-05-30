@@ -998,6 +998,12 @@ class TestGeneric:
             2,
         )
 
+    def test_flatten_00(self):
+        td = TensorDict(a=torch.zeros((2,)), batch_size=(2,))
+        td_flat = td.flatten(0, 0)
+        assert td_flat.shape == (2,)
+        assert td_flat["a"].shape == (2,)
+
     def test_fromkeys(self):
         td = TensorDict.fromkeys({"a", "b", "c"})
         assert td["a"] == 0
