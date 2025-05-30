@@ -795,12 +795,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             does not have the required keys, then TensorDictSequential will scan through
             the sub-tensordicts looking for those that have the required keys, if any.
             Defaults to ``False``.
-        return_composite (bool, optional): If True and multiple
+        return_composite (bool, optional): If `True` and multiple
             :class:`~tensordict.nn.ProbabilisticTensorDictModule` or
             :class:`~tensordict.nn.ProbabilisticTensorDictSequential` instances are found,
             a :class:`~tensordict.nn.CompositeDistribution` instance will be used.
             Otherwise, only the last module will be used to build the distribution.
-            Defaults to ``True``.
+            Defaults to ``True`` whenever there are more than one probabilistic modules or the last module is not probabilistic.
+            Errors if `return_composite` is `False` and the neither of the above conditions are met.
         inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
             :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
             output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
