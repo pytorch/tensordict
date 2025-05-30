@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import sys
 from copy import deepcopy
 from typing import Any, Callable, Iterable, List, OrderedDict, overload
 
@@ -41,6 +42,8 @@ try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+_has_py311_or_greater = sys.version_info >= (3, 11)
 
 __all__ = ["TensorDictSequential"]
 
@@ -620,7 +623,17 @@ class TensorDictSequential(TensorDictModule):
 
         if not len(kwargs):
             for module in self._module_iter():
-                tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
+                try:
+                    tensordict_exec = self._run_module(
+                        module, tensordict_exec, **kwargs
+                    )
+                except Exception as e:
+                    if _has_py311_or_greater:
+                        module_num_or_key = self._get_module_num_or_key(module)
+                        e.add_note(
+                            f"Failed while executing module '{module_num_or_key}'."
+                        )
+                    raise
         else:
             raise RuntimeError(
                 f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
