@@ -986,6 +986,18 @@ class TestGeneric:
         assert (f"a{separator}b") in td5_flat.keys()
         assert (f"a{separator}b{separator}c") in td5_flat.keys()
 
+    @pytest.mark.parametrize(
+        "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
+    )
+    def test_flatten_empty(self, in_out):
+        td = TensorDict(a=torch.zeros((2,)))
+        td_flat = td.flatten(in_out[0], in_out[1])
+        assert td_flat.shape == (1,)
+        assert td_flat["a"].shape == (
+            1,
+            2,
+        )
+
     def test_fromkeys(self):
         td = TensorDict.fromkeys({"a", "b", "c"})
         assert td["a"] == 0
@@ -11619,6 +11631,16 @@ class TestNonTensorData:
         d_expand = d.expand((2, 3)).get("foo")
         assert d_expand.shape == (2, 3)
         assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
+
+    @pytest.mark.parametrize(
+        "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
+    )
+    def test_flatten_empty(self, in_out):
+        ntd = NonTensorData(0, batch_size=())
+        assert ntd.shape == ()
+        ntdflat = ntd.flatten(in_out[0], in_out[1])
+        assert ntdflat.shape == (1,)
+        assert ntdflat.tolist() == [0]
 
     def test_from_list(self):
         nd = NonTensorStack.from_list(

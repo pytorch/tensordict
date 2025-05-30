@@ -7588,7 +7588,7 @@ class TensorDictBase(MutableMapping):
         return sorted(self.keys())
 
     @_as_context_manager()
-    def flatten(self, start_dim: int = 0, end_dim=-1):
+    def flatten(self, start_dim: int | None = None, end_dim: int | None = None):
         """Flattens all the tensors of a tensordict.
 
         Args:
@@ -7619,6 +7619,12 @@ class TensorDictBase(MutableMapping):
             tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])
 
         """
+        if start_dim in (None, 0) and end_dim in (None, -1, 0) and not self.ndim:
+            return self.unsqueeze(0)
+        if start_dim is None:
+            start_dim = 0
+        if end_dim is None:
+            end_dim = -1
         if start_dim < 0:
             start_dim = self.ndim + start_dim
         if end_dim < 0:
