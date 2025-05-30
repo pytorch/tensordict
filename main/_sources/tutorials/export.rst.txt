@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.4515, 0.1380, 0.0000, 0.1729]], grad_fn=<ReluBackward0>), tensor([[-0.0509,  0.2476, -0.0105, -0.0259]], grad_fn=<AddmmBackward0>), tensor([[-0.0509,  0.2476]], grad_fn=<SplitBackward0>), tensor([[0.9934, 0.9838]], grad_fn=<ClampMinBackward0>), tensor([[-0.0509,  0.2476]], grad_fn=<SplitBackward0>))
+    (tensor([[0.0000, 0.3328, 0.0000, 0.0849]], grad_fn=<ReluBackward0>), tensor([[-0.3198, -0.3230, -0.5386,  0.3315]], grad_fn=<AddmmBackward0>), tensor([[-0.3198, -0.3230]], grad_fn=<SplitBackward0>), tensor([[0.6966, 1.2207]], grad_fn=<ClampMinBackward0>), tensor([[-0.3198, -0.3230]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  514.98 micro-seconds
-    Time for exported module:  672.58 micro-seconds
+    Time for TDModule:  519.04 micro-seconds
+    Time for exported module:  692.84 micro-seconds
 
 
 
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[-0.0509,  0.2476]], grad_fn=<SplitBackward0>)
+    tensor([[-0.3198, -0.3230]], grad_fn=<SplitBackward0>)
 
 
 
