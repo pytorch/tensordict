@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+ged850e3)
+                  main (0.0.post1+g56b4493)
                 </div>
               
             
@@ -402,12 +402,13 @@ lazy stack of tensordicts AND if partial_tolerant is <code class="docutils liter
 does not have the required keys, then TensorDictSequential will scan through
 the sub-tensordicts looking for those that have the required keys, if any.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>return_composite</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If True and multiple
+<li><p><strong>return_composite</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <cite>True</cite> and multiple
 <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> or
 <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a> instances are found,
 a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> instance will be used.
 Otherwise, only the last module will be used to build the distribution.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code> whenever there are more than one probabilistic modules or the last module is not probabilistic.
+Errors if <cite>return_composite</cite> is <cite>False</cite> and the neither of the above conditions are met.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, the input tensordict is modified in-place. If <cite>False</cite>, a new empty
 <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance is created. If <cite>“empty”</cite>, <cite>input.empty()</cite> is used instead (ie, the
 output preserves type, device and batch-size). Defaults to <cite>None</cite> (relies on sub-modules).</p></li>
