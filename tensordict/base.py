@@ -7633,9 +7633,9 @@ class TensorDictBase(MutableMapping):
                 raise ValueError(
                     f"Incompatible end_dim {end_dim} for tensordict with shape {self.shape}."
                 )
-        if end_dim <= start_dim:
+        if end_dim < start_dim:
             raise ValueError(
-                "The end dimension must be strictly greater than the start dim."
+                "The end dimension must be greater or equal to the start dim."
             )
 
         def flatten(tensor):
