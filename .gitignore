@@ -16,3 +16,6 @@ docs/src
 
 # Pycharm
 .idea
+
+*/_C.so
+tensordict/_version.py

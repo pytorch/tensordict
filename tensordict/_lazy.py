@@ -2954,9 +2954,23 @@ class LazyStackedTensorDict(TensorDictBase):
             shape = tuple(args[0])
         else:
             shape = args
+        # We need to reprod the elements if shape is (1,)
+        if shape[self.stack_dim - self.ndim] != len(self.tensordicts):
+            if len(self.tensordicts) == 1:
+                tds = [
+                    self.tensordicts[0].copy()
+                    for _ in range(shape[self.stack_dim - self.ndim])
+                ]
+            else:
+                raise ValueError(
+                    f"Cannot expand LazyStackedTensorDict with shape {shape} because the number of elements in the stack "
+                    f"({len(self.tensordicts)}) does not match the number of elements in the new shape ({shape[self.stack_dim - self.ndim]})."
+                )
+        else:
+            tds = self.tensordicts
         stack_dim = len(shape) + self.stack_dim - self.ndimension()
         new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
-        tensordicts = [td.expand(new_shape_tensordicts) for td in self.tensordicts]
+        tensordicts = [td.expand(new_shape_tensordicts) for td in tds]
         if inplace:
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
