@@ -1115,7 +1115,9 @@ class TensorDictModule(TensorDictModuleBase):
             else:
                 tensordict_out = tensordict
         if len(tensors) > len(out_keys):
-            raise RuntimeError("There are more tensors than out_keys.")
+            raise RuntimeError(
+                f"There are more tensors ({len(tensors)=}) than out_keys ({out_keys=})."
+            )
         elif len(out_keys) > len(tensors):
             raise RuntimeError("There are more out_keys than tensors.")
         for _out_key, _tensor in zip(out_keys, tensors):

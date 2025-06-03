@@ -3354,7 +3354,11 @@ class NonTensorDataBase(TensorClass):
         )
 
     def to_dict(
-        self, *, retain_none: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        retain_none: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> dict[str, Any]:
         # override to_dict to return just the data
         return self.data
@@ -3418,7 +3422,7 @@ class NonTensorDataBase(TensorClass):
             nowarn=True,
         )(*args, **kwargs)
 
-    def tolist(self, *, convert_tensors: bool = False):
+    def tolist(self, *, convert_tensors: bool = False, tolist_first: bool = False):
         """Converts the data in a list if the batch-size is non-empty.
 
         If the batch-size is empty, returns the data.
@@ -3426,11 +3430,15 @@ class NonTensorDataBase(TensorClass):
         Keyword Args:
             convert_tensors (bool, optional): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
-
+            tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
+                it has batch dimensions. Default: ``True``.
         """
         if not self.batch_size:
             return self.data
-        return [ntd.tolist(convert_tensors=convert_tensors) for ntd in self.unbind(0)]
+        return [
+            ntd.tolist(convert_tensors=convert_tensors, tolist_first=tolist_first)
+            for ntd in self.unbind(0)
+        ]
 
     def copy_(
         self, src: NonTensorDataBase | NonTensorStack, non_blocking: bool = False
@@ -3942,12 +3950,14 @@ class NonTensorStack(LazyStackedTensorDict):
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
 
-    def tolist(self, *, convert_tensors: bool = False):
+    def tolist(self, *, convert_tensors: bool = False, tolist_first: bool = False):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
 
         Keyword Args:
             convert_tensors (bool): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
+            tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
+                it has batch dimensions. Default: ``True``.
 
         Examples:
             >>> from tensordict import NonTensorData
@@ -3960,7 +3970,10 @@ class NonTensorStack(LazyStackedTensorDict):
 
         """
         iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
-        return [td.tolist(convert_tensors=convert_tensors) for td in iterator]
+        return [
+            td.tolist(convert_tensors=convert_tensors, tolist_first=tolist_first)
+            for td in iterator
+        ]
 
     def maybe_to_stack(self):
         """Placeholder for interchangeability between stack and non-stack of non-tensors."""
@@ -4029,7 +4042,11 @@ class NonTensorStack(LazyStackedTensorDict):
         return result
 
     def to_dict(
-        self, *, retain_none: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        retain_none: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> dict[str, Any]:
         return self.tolist(convert_tensors=convert_tensors)
 

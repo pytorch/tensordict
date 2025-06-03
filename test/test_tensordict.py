@@ -3180,6 +3180,35 @@ class TestGeneric:
             else:
                 assert isinstance(tdlist[0][0]["b"], TensorDict)
 
+    def test_tolist_first(self):
+        """Tests the behavior of tolist_first parameter in tolist() method."""
+        td = TensorDict(
+            a=torch.arange(24).view(2, 3, 4),
+            b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
+            batch_size=(2, 3),
+        )
+
+        # Test with tolist_first=True
+        result_true = td.tolist(tolist_first=True)
+        # First element should be a list of 3 dictionaries
+        assert len(result_true[0]) == 3
+        # Each dictionary should have 'a' as tensor and 'b' as a list of dictionaries
+        assert isinstance(result_true[0][0]["a"], torch.Tensor)
+        assert result_true[0][0]["a"].equal(torch.tensor([0, 1, 2, 3]))
+        assert isinstance(result_true[0][0]["b"], list)
+        assert len(result_true[0][0]["b"]) == 2
+        assert result_true[0][0]["b"][0]["c"].equal(torch.tensor(0))
+
+        # Test with tolist_first=False
+        result_false = td.tolist(tolist_first=False)
+        # First element should be a list of 3 dictionaries
+        assert len(result_false[0]) == 3
+        # Each dictionary should have 'a' as tensor and 'b' as a dictionary with 'c' as tensor
+        assert isinstance(result_false[0][0]["a"], torch.Tensor)
+        assert result_false[0][0]["a"].equal(torch.tensor([0, 1, 2, 3]))
+        assert isinstance(result_false[0][0]["b"], dict)
+        assert result_false[0][0]["b"]["c"].equal(torch.tensor([0, 1]))
+
     def test_unbind_batchsize(self):
         td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
         td["a"].batch_size

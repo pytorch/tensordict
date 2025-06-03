@@ -3692,7 +3692,7 @@ class TensorDictBase(MutableMapping):
     def repeat(self, *repeats: int) -> TensorDictBase:
         """Repeats this tensor along the specified dimensions.
 
-        Unlike :meth:`~.expand()`, this function copies the tensor’s data.
+        Unlike :meth:`~.expand()`, this function copies the tensor's data.
 
         .. warning:: :meth:`~.repeat` behaves differently from :func:`~numpy.repeat`, but is more similar to
             :func:`numpy.tile`. For the operator similar to :func:`numpy.repeat`, see :meth:`~tensordict.TensorDictBase.repeat_interleave`.
@@ -12105,7 +12105,11 @@ class TensorDictBase(MutableMapping):
         return self._fast_apply(as_tensor, propagate_lock=True)
 
     def to_dict(
-        self, *, retain_none: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        retain_none: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict.
 
@@ -12115,6 +12119,8 @@ class TensorDictBase(MutableMapping):
                 Otherwise, they will be discarded. Default: ``True``.
             convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
                 Otherwise, they will remain as tensors. Default: ``False``.
+            tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
+                it has batch dimensions. Default: ``False``.
 
         Returns:
             A dictionary representation of the tensordict.
@@ -12157,16 +12163,23 @@ class TensorDictBase(MutableMapping):
                     and value.data is None
                 ):
                     continue
-                value = value.to_dict(
-                    retain_none=retain_none, convert_tensors=convert_tensors
-                )
+                if tolist_first:
+                    value = value.tolist(convert_tensors=convert_tensors)
+                else:
+                    value = value.to_dict(
+                        retain_none=retain_none, convert_tensors=convert_tensors
+                    )
             elif convert_tensors and hasattr(value, "tolist"):
                 value = value.tolist()
             result[key] = value
         return result
 
     def tolist(
-        self, *, convert_nodes: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        convert_nodes: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> List[Any]:
         """Returns a nested list representation of the tensordict.
 
@@ -12178,6 +12191,8 @@ class TensorDictBase(MutableMapping):
                 Otherwise, they will be returned as lists of values. Default: ``True``.
             convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
                 Otherwise, they will remain as tensors. Default: ``False``.
+            tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
+                it has batch dimensions. Default: ``False``.
 
         Returns:
             A nested list representation of the tensordict.
@@ -12191,11 +12206,12 @@ class TensorDictBase(MutableMapping):
             ...     b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
             ...     batch_size=(2, 3)
             ... )
-            >>>
-            >>> print(td.tolist())
+            >>> print(td.tolist(tolist_first=True))
+            [[{'a': tensor([0, 1, 2, 3]), 'b': [{'c': tensor(0)}, {'c': tensor(1)}]}, {'a': tensor([4, 5, 6, 7]), 'b': [{'c': tensor(2)}, {'c': tensor(3)}]}, {'a': tensor([ 8,  9, 10, 11]), 'b': [{'c': tensor(4)}, {'c': tensor(5)}]}], [{'a': tensor([12, 13, 14, 15]), 'b': [{'c': tensor(6)}, {'c': tensor(7)}]}, {'a': tensor([16, 17, 18, 19]), 'b': [{'c': tensor(8)}, {'c': tensor(9)}]}, {'a': tensor([20, 21, 22, 23]), 'b': [{'c': tensor(10)}, {'c': tensor(11)}]}]]
+            >>> print(td.tolist(tolist_first=False))
             [[{'a': tensor([0, 1, 2, 3]), 'b': {'c': tensor([0, 1])}}, {'a': tensor([4, 5, 6, 7]), 'b': {'c': tensor([2, 3])}}, {'a': tensor([ 8,  9, 10, 11]), 'b': {'c': tensor([4, 5])}}], [{'a': tensor([12, 13, 14, 15]), 'b': {'c': tensor([6, 7])}}, {'a': tensor([16, 17, 18, 19]), 'b': {'c': tensor([8, 9])}}, {'a': tensor([20, 21, 22, 23]), 'b': {'c': tensor([10, 11])}}]]
-            >>> print(td.tolist(convert_tensors=True))
-            [[{'a': [0, 1, 2, 3], 'b': {'c': [0, 1]}}, {'a': [4, 5, 6, 7], 'b': {'c': [2, 3]}}, {'a': [8, 9, 10, 11], 'b': {'c': [4, 5]}}], [{'a': [12, 13, 14, 15], 'b': {'c': [6, 7]}}, {'a': [16, 17, 18, 19], 'b': {'c': [8, 9]}}, {'a': [20, 21, 22, 23], 'b': {'c': [10, 11]}}]]
+            >>> print(td.tolist(convert_tensors=False))
+            [[{'a': [0, 1, 2, 3], 'b': [{'c': 0}, {'c': 1}]}, {'a': [4, 5, 6, 7], 'b': [{'c': 2}, {'c': 3}]}, {'a': [8, 9, 10, 11], 'b': [{'c': 4}, {'c': 5}]}], [{'a': [12, 13, 14, 15], 'b': [{'c': 6}, {'c': 7}]}, {'a': [16, 17, 18, 19], 'b': [{'c': 8}, {'c': 9}]}, {'a': [20, 21, 22, 23], 'b': [{'c': 10}, {'c': 11}]}]]
             >>> print(td.tolist(convert_nodes=False))
             [[[tensor([0, 1, 2, 3]), TensorDict(
                 fields={
@@ -12234,7 +12250,9 @@ class TensorDictBase(MutableMapping):
             raise TypeError("convert_tensors requires convert_nodes to be set to True")
         if not self.batch_dims:
             if convert_nodes:
-                return self.to_dict(convert_tensors=convert_tensors)
+                return self.to_dict(
+                    convert_tensors=convert_tensors, tolist_first=tolist_first
+                )
             return self
 
         q = collections.deque()
@@ -12245,7 +12263,12 @@ class TensorDictBase(MutableMapping):
             vals = val.unbind(0)
             if val.ndim == 1:
                 if convert_nodes:
-                    vals = [v.to_dict(convert_tensors=convert_tensors) for v in vals]
+                    vals = [
+                        v.to_dict(
+                            convert_tensors=convert_tensors, tolist_first=tolist_first
+                        )
+                        for v in vals
+                    ]
                 else:
                     vals = list(vals)
                 _result.extend(vals)
