@@ -451,8 +451,22 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @_fails_exclusive_keys
     def to_dict(
-        self, *, retain_none: bool = True, convert_tensors: bool = False
-    ) -> dict[str, Any]: ...
+        self,
+        *,
+        retain_none: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
+    ) -> Dict[str, Any]:
+        result = {}
+        for td in self.tensordicts:
+            result.update(
+                td.to_dict(
+                    retain_none=retain_none,
+                    convert_tensors=convert_tensors,
+                    tolist_first=tolist_first,
+                )
+            )
+        return result
 
     def _reduce_get_metadata(self):
         metadata = {}

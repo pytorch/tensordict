@@ -995,10 +995,18 @@ class TensorClass:
     ): ...
     def as_tensor(self): ...
     def to_dict(
-        self, *, retain_none: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        retain_none: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> dict[str, Any]: ...
     def tolist(
-        self, *, convert_nodes: bool = True, convert_tensors: bool = False
+        self,
+        *,
+        convert_nodes: bool = True,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
     ) -> List[Any]: ...
     def numpy(self): ...
     def to_namedtuple(self, dest_cls: type | None = None): ...

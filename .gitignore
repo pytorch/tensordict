@@ -19,3 +19,5 @@ docs/src
 
 */_C.so
 tensordict/_version.py
+
+scratch/*.py
