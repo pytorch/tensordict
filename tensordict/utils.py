@@ -1603,7 +1603,9 @@ def _check_keys(
     return keys_set
 
 
-def _set_max_batch_size(source: T, batch_dims=None):
+def _set_max_batch_size(
+    source: T, batch_dims: int | None = None, keep_compliant_size: bool = False
+):
     """Updates a tensordict with its maximum batch size."""
     from tensordict.base import _is_tensor_collection
 
@@ -1615,6 +1617,12 @@ def _set_max_batch_size(source: T, batch_dims=None):
 
     for val in tensor_data:
         if _is_tensor_collection(type(val)):
+            if (
+                batch_dims is not None
+                and keep_compliant_size
+                and val.batch_dims >= batch_dims
+            ):
+                continue
             _set_max_batch_size(val, batch_dims=batch_dims)
 
     batch_size = []

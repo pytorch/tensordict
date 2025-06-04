@@ -21,3 +21,5 @@ docs/src
 tensordict/_version.py
 
 scratch/*.py
+
+.DS_Store
