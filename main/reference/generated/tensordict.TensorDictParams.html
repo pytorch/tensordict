@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+g73fe89b)
+                  main (0.0.post1+ga4a0ef2)
                 </div>
               
             
@@ -803,12 +803,19 @@ tensordicts to be used.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.auto_batch_size_">
-<span class="sig-name descname"><span class="pre">auto_batch_size_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.auto_batch_size_" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">auto_batch_size_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_compliant_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.auto_batch_size_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the maximum batch-size for the tensordict, up to an optional batch_dims.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – if provided, the batch-size will be at
-most <code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> long.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – if provided, the batch-size will be at
+most <code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> long.</p></li>
+<li><p><strong>keep_compliant_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>optional</em>) – if <cite>True</cite>, a sub-tensordict with a compliant
+size will not see its shape be changed in case <cite>batch_dims</cite> is passed.
+If <cite>False</cite>, all contained tensordicts will have a <cite>batch_dims</cite> that matches
+<cite>batch_dims</cite>.
+Defaults to <cite>False</cite>.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>self</p>
