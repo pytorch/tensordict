@@ -2076,12 +2076,19 @@ class TensorDictBase(MutableMapping):
     ):
         raise NotImplementedError
 
-    def auto_batch_size_(self, batch_dims: int | None = None) -> T:
+    def auto_batch_size_(
+        self, batch_dims: int | None = None, keep_compliant_size: bool = False
+    ) -> T:
         """Sets the maximum batch-size for the tensordict, up to an optional batch_dims.
 
         Args:
             batch_dims (int, optional): if provided, the batch-size will be at
                 most ``batch_dims`` long.
+            keep_compliant_size (bool, optional): if `True`, a sub-tensordict with a compliant
+                size will not see its shape be changed in case `batch_dims` is passed.
+                If `False`, all contained tensordicts will have a `batch_dims` that matches
+                `batch_dims`.
+                Defaults to `False`.
 
         Returns:
             self
@@ -2098,7 +2105,7 @@ class TensorDictBase(MutableMapping):
             torch.Size([3])
 
         """
-        _set_max_batch_size(self, batch_dims)
+        _set_max_batch_size(self, batch_dims, keep_compliant_size=keep_compliant_size)
         return self
 
     def auto_device_(self) -> T:
@@ -2932,7 +2939,8 @@ class TensorDictBase(MutableMapping):
             return
         if self._lazy:
             raise RuntimeError(
-                "modifying the batch size of a lazy representation of a "
+                f"Received a new batch size {new_batch_size} with an existing batch_size {self.batch_size} in a lazy TD. "
+                "Modifying the batch size of a lazy representation of a "
                 "tensordict is not permitted. Consider instantiating the "
                 "tensordict first by calling `td = td.to_tensordict()` before "
                 "resetting the batch size."
@@ -6880,7 +6888,7 @@ class TensorDictBase(MutableMapping):
             bd = self.batch_dims
             self.batch_size = ()
             # self.batch_size = ()
-            self.auto_batch_size_(bd)
+            self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
 
     def update_(
@@ -12080,7 +12088,9 @@ class TensorDictBase(MutableMapping):
             nested_keys=True,
         )
         if new_batch_size is not None:
-            result = result.auto_batch_size_(batch_dims=self.batch_dims)
+            result = result.auto_batch_size_(
+                batch_dims=self.batch_dims, keep_compliant_size=True
+            )
 
             if mask_key:
                 # take the first of the padded keys

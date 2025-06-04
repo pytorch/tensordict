@@ -3431,7 +3431,7 @@ class NonTensorDataBase(TensorClass):
             convert_tensors (bool, optional): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
-                it has batch dimensions. Default: ``True``.
+                it has batch dimensions. Default: ``False``.
         """
         if not self.batch_size:
             return self.data
@@ -4246,6 +4246,8 @@ class NonTensorStack(LazyStackedTensorDict):
             if self._path_to_memmap.exists():
                 shutil.rmtree(self._path_to_memmap)
             memmap = True
+        if is_tensorclass(input_dict_or_td):
+            input_dict_or_td = input_dict_or_td._tensordict
 
         # update content
         if isinstance(input_dict_or_td, NonTensorStack):

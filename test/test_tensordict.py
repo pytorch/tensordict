@@ -253,7 +253,7 @@ class TestGeneric:
         with pytest.raises(
             RuntimeError,
             match=re.escape(
-                "modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
+                "Modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
             ),
         ):
             td_stack.batch_size = [2]
@@ -264,7 +264,7 @@ class TestGeneric:
         with pytest.raises(
             RuntimeError,
             match=re.escape(
-                "modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
+                "Modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
             ),
         ):
             subtd.batch_size = [3, 2]
@@ -276,7 +276,7 @@ class TestGeneric:
             with pytest.raises(
                 RuntimeError,
                 match=re.escape(
-                    "modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
+                    "Modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
                 ),
             ):
                 td_u.batch_size = [1]
@@ -3370,6 +3370,34 @@ class TestGeneric:
         assert td_dest["tc"].batch_size == td_source["tc"].batch_size
         assert td_dest["tc"].a == td_source["tc"].a
         assert (td_dest["tc"].b == td_source["tc"].b).all()
+
+    def test_update_batch_size_keepdim(self):
+        t = torch.arange(24).view(2, 3, 4)
+        td0 = TensorDict(
+            a=t,
+            b=TensorDict(c=t, batch_size=(2, 3)),
+            d=t,
+            e=TensorDict(f=t, batch_size=(2, 3)),
+            g=t,
+            batch_size=(2,),
+        )
+
+        t1 = torch.arange(16).view(2, 2, 4)
+
+        td1 = TensorDict(
+            a=t,
+            b=TensorDict(c=t1, batch_size=(2, 2)),
+            d=t,
+            e=TensorDict(f=t, batch_size=(2, 3)),
+            g=t,
+            batch_size=(2,),
+        )
+
+        td0.update(td1, update_batch_size=True, is_leaf=lambda cls: True)
+
+        assert td0.batch_size == (2,)
+        assert td0["b"].batch_size == (2, 2)
+        assert td0["e"].batch_size == (2, 3)
 
     def test_update_batch_size_errors(self):
         td0 = TensorDict(batch_size=(3,))
