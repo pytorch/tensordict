@@ -1275,7 +1275,6 @@ def _init_wrapper(
             new_params.append(
                 inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None)
             )
-
     wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
     return wrapper
@@ -2284,7 +2283,9 @@ def _set(
                 self._non_tensordict[key] = value
                 return self
             if non_tensor:
-                value = NonTensorData(value)
+                value = NonTensorData(
+                    value, batch_size=self.batch_size, device=self.device
+                )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
