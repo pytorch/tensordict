@@ -582,9 +582,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self,
         fn: Callable,
         dim: int = 0,
-        num_workers: int = None,
-        chunksize: int = None,
-        num_chunks: int = None,
+        num_workers: int | None = None,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
         pool: mp.Pool = None,
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
@@ -1092,10 +1092,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _cast_reduction(self, **kwargs): ...
 
     @_fallback
-    def all(self, dim: int = None) -> bool | TensorDictBase: ...
+    def all(self, dim: int | None = None) -> bool | TensorDictBase: ...
 
     @_fallback
-    def any(self, dim: int = None) -> bool | TensorDictBase: ...
+    def any(self, dim: int | None = None) -> bool | TensorDictBase: ...
 
     @_fallback
     def expand(self, *args, **kwargs) -> T: ...
@@ -1243,7 +1243,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def fill_(self, key: NestedKey, value: float | bool) -> T: ...
 
     @_apply_on_data
-    def copy_(self, tensordict: T, non_blocking: bool = None) -> T: ...
+    def copy_(self, tensordict: T, non_blocking: bool | None = None) -> T: ...
 
     @_apply_on_data
     def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T: ...
