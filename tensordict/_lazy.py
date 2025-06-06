@@ -2661,7 +2661,7 @@ class LazyStackedTensorDict(TensorDictBase):
             **kwargs,
         )
 
-    def all(self, dim: int = None) -> bool | TensorDictBase:
+    def all(self, dim: int | None = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -2678,7 +2678,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return all(value.all() for value in self.tensordicts)
 
-    def any(self, dim: int = None) -> bool | TensorDictBase:
+    def any(self, dim: int | None = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -2714,7 +2714,7 @@ class LazyStackedTensorDict(TensorDictBase):
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
         return_early: bool = False,
-    ) -> int:
+    ) -> int | list[torch.Future]:
         if _futures is None:
             is_root = True
             _futures = []
@@ -2747,7 +2747,7 @@ class LazyStackedTensorDict(TensorDictBase):
         src: int,
         return_premature: bool = False,
         _tag: int = -1,
-        _future_list: list[torch.Future] = None,
+        _future_list: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
@@ -3539,7 +3539,11 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def repeat_interleave(
-        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+        self,
+        repeats: torch.Tensor | int,
+        dim: int | None = None,
+        *,
+        output_size: int | None = None,
     ) -> TensorDictBase:
         if self.ndim == 0:
             return self.unsqueeze(0).repeat_interleave(

@@ -17,7 +17,12 @@ from tensordict.tensorclass import (
     TD_HANDLED_FUNCTIONS,
     TensorClass,
 )
-from tensordict.utils import _getitem_batch_size, _is_tensorclass, unravel_key
+from tensordict.utils import (
+    _getitem_batch_size,
+    _is_tensorclass,
+    _maybe_correct_neg_dim,
+    unravel_key,
+)
 from torch import Tensor
 
 
@@ -145,6 +150,35 @@ class UnbatchedTensor(TensorClass):
                 for tensordict_result in result
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
+
+    def chunk(self, chunks: int, dim: int | None = None):
+        self_copy = self.copy()
+        if dim is None:
+            dim = 0
+        dim = _maybe_correct_neg_dim(dim, self.batch_size)
+        self_copy.batch_size = (
+            self.batch_size[:dim]
+            + (self.batch_size[dim] // chunks,)
+            + self.batch_size[dim + 1 :]
+        )
+        return self_copy
+
+    def split(self, split_size: int | list[int], dim: int | None = None):
+        self_copy = self.copy()
+        if dim is None:
+            dim = 0
+        dim = _maybe_correct_neg_dim(dim, self.batch_size)
+        chunks = (
+            len(split_size)
+            if isinstance(split_size, (list, tuple))
+            else -(self.batch_size[dim] // -split_size)
+        )
+        self_copy.batch_size = (
+            self.batch_size[:dim]
+            + (self.batch_size[dim] // chunks,)
+            + self.batch_size[dim + 1 :]
+        )
+        return self_copy
 
     def __getitem__(self, index):
         if isinstance(index, (tuple, str)) and unravel_key(index):

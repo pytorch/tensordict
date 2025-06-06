@@ -345,7 +345,7 @@ def merge_tensordicts(
 
 def dense_stack_tds(
     td_list: Sequence[TensorDictBase] | LazyStackedTensorDict,
-    dim: int = None,
+    dim: int | None = None,
 ) -> T:
     """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
 

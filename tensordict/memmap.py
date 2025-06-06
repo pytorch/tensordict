@@ -894,7 +894,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     def _index_wrap(self, tensor, item, check=False):
         if check:
-            if tensor.storage().data_ptr() == self.storage().data_ptr():
+            if tensor.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
                 return self._index_wrap(tensor, item)
             return tensor
         tensor = MemoryMappedTensor(tensor)

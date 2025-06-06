@@ -36,6 +36,8 @@ from tensordict.nn import (
 
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
+from tensordict.tensorclass import TensorClass
+
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -1205,6 +1207,56 @@ class TestCudaGraphs:
                 ValueError, match="Varying inputs must be torch.Tensor subclasses."
             ):
                 func(torch.zeros(()), 2.0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda is not available")
+class TestCompileNontensor:
+    # Same issue with the decorator @tensorclass version
+    @pytest.fixture(scope="class")
+    def data(self):
+        return torch.zeros((4, 3), device="cuda")
+
+    class TensorClassWithNonTensorData(TensorClass["nocast"]):
+        tensor: torch.Tensor
+        non_tensor_data: int
+
+    def fn_no_device_no_batch_size(self, data):
+        a = self.TensorClassWithNonTensorData(tensor=data, non_tensor_data=1)
+        return a.tensor
+
+    def fn_no_device(self, data):
+        a = self.TensorClassWithNonTensorData(
+            tensor=data, non_tensor_data=1, batch_size=[4]
+        )
+        return a.tensor
+
+    def fn_with_device(self, data):
+        a = self.TensorClassWithNonTensorData(
+            tensor=data, non_tensor_data=1, batch_size=[4], device="cuda"
+        )
+        return a.tensor
+
+    def fn_with_device_without_batch_size(self, data):
+        a = self.TensorClassWithNonTensorData(
+            tensor=data, non_tensor_data=1, device="cuda"
+        )
+        return a.tensor
+
+    def test_nontensor_no_device_no_batch_size(self, data):
+        torch._dynamo.reset_code_caches()
+        torch.compile(self.fn_no_device_no_batch_size)(data)
+
+    def test_nontensor_no_device(self, data):
+        torch._dynamo.reset_code_caches()
+        torch.compile(self.fn_no_device)(data)
+
+    def test_nontensor_with_device(self, data):
+        torch._dynamo.reset_code_caches()
+        torch.compile(self.fn_with_device)(data)
+
+    def test_nontensor_with_device_without_batch_size(self, data):
+        torch._dynamo.reset_code_caches()
+        torch.compile(self.fn_with_device_without_batch_size)(data)
 
 
 if __name__ == "__main__":

@@ -973,6 +973,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     cls.__xor__ = _xor
     cls.__bool__ = _bool
 
+    if not hasattr(cls, "_new_unsafe"):
+        cls._new_unsafe = classmethod(_new_unsafe)
     if not hasattr(cls, "non_tensor_items") and "non_tensor_items" not in expected_keys:
         cls.non_tensor_items = _non_tensor_items
     if not hasattr(cls, "set") and "set" not in expected_keys:
@@ -1275,7 +1277,6 @@ def _init_wrapper(
             new_params.append(
                 inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None)
             )
-
     wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
     return wrapper
@@ -1284,6 +1285,10 @@ def _init_wrapper(
 _cast_funcs = KeyDependentDefaultDict(_identity)
 _cast_funcs[torch.Tensor] = torch.as_tensor
 _cast_funcs[np.ndarray] = np.asarray
+
+
+def _new_unsafe(cls, *args, **kwargs) -> T:
+    return _from_tensordict(cls, TensorDict._new_unsafe(*args, **kwargs))
 
 
 def _get_type_hints(cls, with_locals=False, tensor_only=False):
@@ -2284,7 +2289,9 @@ def _set(
                 self._non_tensordict[key] = value
                 return self
             if non_tensor:
-                value = NonTensorData(value)
+                value = NonTensorData(
+                    value, batch_size=self.batch_size, device=self.device
+                )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
@@ -3209,7 +3216,7 @@ class NonTensorDataBase(TensorClass):
         inplace: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
         ignore_lock: bool = False,
@@ -3295,7 +3302,7 @@ class NonTensorDataBase(TensorClass):
         clone: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
     ) -> T:
 
         if isinstance(input_dict_or_td, NonTensorStack):
@@ -4205,7 +4212,7 @@ class NonTensorStack(LazyStackedTensorDict):
         inplace: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
         non_blocking: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
