@@ -28,6 +28,7 @@ from tensordict.utils import (
     _shape,
     _zip_strict,
     DeviceType,
+    is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
 )
@@ -512,7 +513,7 @@ def _stack(
     list_of_tensordicts_orig = list_of_tensordicts
     if is_tc:
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
-        clz = type(list_of_tensordicts[0])
+        clz = type(list_of_tensordicts_orig[0])
     elif issubclass(td_types[0], TensorDict):
         clz = td_types[0]
     else:
@@ -686,16 +687,16 @@ def _stack(
                 ),
                 device=device,
             )
-            if is_tc:
-                return td_types[0]._from_tensordict(result)
+            if is_tc and not is_tensorclass(result):
+                return clz._from_tensordict(result)
             return result
         else:
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,
                 stack_dim=dim,
             )
-            if is_tc:
-                return td_types[0]._from_tensordict(out)
+            if is_tc and not is_tensorclass(out):
+                return clz._from_tensordict(out)
             return out
     else:
         keys = _check_keys(list_of_tensordicts)

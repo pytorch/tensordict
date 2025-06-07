@@ -240,13 +240,13 @@ class TensorDict(TensorDictBase):
 
     def __init__(
         self,
-        source: T | dict[NestedKey, CompatibleType] = None,
+        source: T | dict[NestedKey, CompatibleType] | None = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool | None = None,
         lock: bool = False,
-        **kwargs: dict[str, Any] | None,
+        **kwargs: Any,
     ) -> None:
         if (source is not None) and kwargs:
             raise ValueError(
@@ -309,19 +309,21 @@ class TensorDict(TensorDictBase):
     @classmethod
     def _new_unsafe(
         cls,
-        source: T | dict[NestedKey, CompatibleType] = None,
+        source: T | dict[NestedKey, CompatibleType] | None = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool | None = None,
         lock: bool = False,
         nested: bool = True,
-        **kwargs: dict[str, Any] | None,
+        is_shared: bool = False,
+        is_memmap: bool = False,
+        **kwargs: Any,
     ) -> TensorDict:
         if is_compiling() and cls is TensorDict:
             # If the cls is not TensorDict, we must escape this to keep the same class.
             # That's unfortunate because as of now it graph breaks but that's the best we can do.
-            return TensorDict(
+            td = TensorDict(
                 source,
                 batch_size=batch_size,
                 device=device,
@@ -330,6 +332,11 @@ class TensorDict(TensorDictBase):
                 lock=lock,
                 **kwargs,
             )
+            if is_shared:
+                td.share_memory_()
+            if is_memmap:
+                td.memmap_()
+            return td
         if kwargs and not source:
             source = kwargs
         self = cls.__new__(cls)
@@ -362,6 +369,10 @@ class TensorDict(TensorDictBase):
         self._td_dim_names = names
         if lock:
             self.lock_()
+        if is_shared:
+            self._is_shared = True
+        if is_memmap:
+            self._is_memmap = True
         return self
 
     @classmethod
@@ -877,7 +888,7 @@ class TensorDict(TensorDictBase):
             for key in self.keys():
                 self.set_at_(key, value, index)
 
-    def all(self, dim: int = None) -> bool | TensorDictBase:
+    def all(self, dim: int | None = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -899,7 +910,7 @@ class TensorDict(TensorDictBase):
             )
         return all(value.all() for value in self.values())
 
-    def any(self, dim: int = None) -> bool | TensorDictBase:
+    def any(self, dim: int | None = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -1716,7 +1727,9 @@ class TensorDict(TensorDictBase):
             unbind(key, val)
         return tds
 
-    def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
+    def split(
+        self, split_size: int | list[int], dim: int = 0
+    ) -> tuple[TensorDictBase, ...]:
         # we must use slices to keep the storage of the tensors
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
@@ -1726,7 +1739,6 @@ class TensorDict(TensorDictBase):
         if isinstance(split_size, int):
             idx0 = 0
             idx1 = min(max_size, split_size)
-            split_sizes = [slice(idx0, idx1)]
             batch_sizes.append(
                 torch.Size(
                     tuple(
@@ -1737,7 +1749,6 @@ class TensorDict(TensorDictBase):
             while idx1 < max_size:
                 idx0 = idx1
                 idx1 = min(max_size, idx1 + split_size)
-                split_sizes.append(slice(idx0, idx1))
                 batch_sizes.append(
                     torch.Size(
                         tuple(
@@ -1752,7 +1763,6 @@ class TensorDict(TensorDictBase):
             try:
                 idx0 = 0
                 idx1 = split_size[0]
-                split_sizes = [slice(idx0, idx1)]
                 batch_sizes.append(
                     torch.Size(
                         tuple(
@@ -1764,7 +1774,6 @@ class TensorDict(TensorDictBase):
                 for idx in split_size[1:]:
                     idx0 = idx1
                     idx1 = min(max_size, idx1 + idx)
-                    split_sizes.append(slice(idx0, idx1))
                     batch_sizes.append(
                         torch.Size(
                             tuple(
@@ -1782,11 +1791,31 @@ class TensorDict(TensorDictBase):
                 )
         else:
             raise TypeError(WRONG_TYPE)
-        index = (slice(None),) * dim
-        names = self.names if self._has_names() else None
+        names = self._maybe_names()
+        # Use chunk instead of split to account for nested tensors if possible
+        if isinstance(split_size, int):
+            chuncks = -(self.batch_size[dim] // -split_size)
+            splits = {k: v.chunk(chuncks, dim) for k, v in self.items()}
+        else:
+            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+        splits = [
+            {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
+        ]
+        device = self.device
+        is_shared = self._is_shared
+        is_memmap = self._is_memmap
+        is_locked = self.is_locked
         return tuple(
-            self._index_tensordict(index + (ss,), new_batch_size=bs, names=names)
-            for ss, bs in _zip_strict(split_sizes, batch_sizes)
+            self._new_unsafe(
+                source=splits[ss],
+                batch_size=batch_sizes[ss],
+                names=names,
+                device=device,
+                lock=is_locked,
+                is_shared=is_shared,
+                is_memmap=is_memmap,
+            )
+            for ss in range(len(batch_sizes))
         )
 
     def masked_select(self, mask: Tensor) -> T:
@@ -1850,7 +1879,11 @@ class TensorDict(TensorDictBase):
         )
 
     def repeat_interleave(
-        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+        self,
+        repeats: torch.Tensor | int,
+        dim: int | None = None,
+        *,
+        output_size: int | None = None,
     ) -> T:
         if self.ndim == 0:
             return self.unsqueeze(0).repeat_interleave(
@@ -2067,13 +2100,13 @@ class TensorDict(TensorDictBase):
     @classmethod
     def from_dict(
         cls,
-        input_dict,
+        input_dict: dict[NestedKey, CompatibleType] | TensorDictBase,
         *,
         auto_batch_size: bool | None = None,
-        batch_size=None,
-        device=None,
-        batch_dims=None,
-        names=None,
+        batch_size: list | tuple | torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: Sequence[str] | None = None,
     ):
         if _is_tensor_collection(type(input_dict)):
             return input_dict

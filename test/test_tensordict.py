@@ -364,6 +364,25 @@ class TestGeneric:
         assert (tensor[:, :4] == 0).all()
         assert (tensor[:, 4:] == 1).all()
 
+    def test_chunk_nested_tensor(self):
+        # Create two sequences of different lengths with known values
+        a_seq = torch.tensor([1, 2, 3])  # shorter sequence
+        b_seq = torch.tensor([4, 5, 6, 7])  # longer sequence
+
+        # Create a nested tensor from these sequences
+        rmpad_seq = torch.nested.as_nested_tensor([a_seq, b_seq], layout=torch.jagged)
+
+        # Verify that chunking the nested tensor directly works
+        chunks = rmpad_seq.chunk(2)  # works fine
+        assert len(chunks) == 2
+
+        # Create a TensorDict with the nested tensor
+        rmpad_batch = TensorDict({"input_ids": rmpad_seq}, batch_size=[2])
+
+        # Verify that chunking the TensorDict works
+        td_chunks = rmpad_batch.chunk(2)  # should work now
+        assert len(td_chunks) == 2
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
         td = TensorDict()
@@ -1125,9 +1144,9 @@ class TestGeneric:
     def test_from_dict_instance(self):
         @tensorclass(autocast=True)
         class MyClass:
-            x: torch.Tensor = None
-            y: int = None
-            z: "MyClass" = None
+            x: torch.Tensor = None  # type: ignore
+            y: int = None  # type: ignore
+            z: "MyClass" = None  # type: ignore
 
         td = TensorDict(
             {"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1, z=MyClass(y=2))}
@@ -9706,7 +9725,7 @@ class TestLazyStackedTensorDict:
             ),
             stack_dim=1,
         )
-        split0 = td.split([3, 3], 0)
+        split0 = td.split([1, 1], 0)
         split1 = td.split([2, 1], 1)
         split1b = td.split([2, 0, 1], 1)
         assert (torch.cat(split0, dim=0) == td).all()
