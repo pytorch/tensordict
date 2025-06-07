@@ -277,7 +277,7 @@ class TensorDictBase(MutableMapping):
     _inplace_set: bool = False
     is_meta: bool = False
     _is_locked: bool = False
-    _cache: bool = None
+    _cache: bool | None = None
     _is_non_tensor: bool = False
     _memmap_prefix = None
     _stream: torch.cuda.Stream | None = None
@@ -661,7 +661,7 @@ class TensorDictBase(MutableMapping):
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
-    def all(self, dim: int = None) -> bool | TensorDictBase:
+    def all(self, dim: int | None = None) -> bool | TensorDictBase:
         """Checks if all values are True/non-null in the tensordict.
 
         Args:
@@ -675,7 +675,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def any(self, dim: int = None) -> bool | TensorDictBase:
+    def any(self, dim: int | None = None) -> bool | TensorDictBase:
         """Checks if any value is True/non-null in the tensordict.
 
         Args:
@@ -3095,7 +3095,7 @@ class TensorDictBase(MutableMapping):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
-        pin_memory: bool = None,
+        pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 0.
@@ -3143,7 +3143,7 @@ class TensorDictBase(MutableMapping):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
-        pin_memory: bool = None,
+        pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 1.
@@ -3191,7 +3191,7 @@ class TensorDictBase(MutableMapping):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
-        pin_memory: bool = None,
+        pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` with emtpy tensors.
@@ -3241,7 +3241,7 @@ class TensorDictBase(MutableMapping):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         layout: torch.layout = torch.strided,
-        pin_memory: bool = None,
+        pin_memory: bool | None = None,
         empty_lazy: bool = False,
     ):  # noqa: D417
         """Returns a TensorDict of size ``size`` filled with 1.
@@ -3643,7 +3643,11 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def repeat_interleave(
-        self, repeats: torch.Tensor | int, dim: int = None, *, output_size: int = None
+        self,
+        repeats: torch.Tensor | int,
+        dim: int | None = None,
+        *,
+        output_size: int | None = None,
     ) -> TensorDictBase:
         """Repeat elements of a TensorDict.
 
@@ -4745,7 +4749,7 @@ class TensorDictBase(MutableMapping):
         """
         return self.to("cpu", **kwargs)
 
-    def cuda(self, device: int = None, **kwargs) -> T:
+    def cuda(self, device: int | None = None, **kwargs) -> T:
         """Casts a tensordict to a cuda device (if not already on it).
 
         Args:

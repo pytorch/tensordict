@@ -3210,7 +3210,7 @@ class NonTensorDataBase(TensorClass):
         inplace: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
         ignore_lock: bool = False,
@@ -3296,7 +3296,7 @@ class NonTensorDataBase(TensorClass):
         clone: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
     ) -> T:
 
         if isinstance(input_dict_or_td, NonTensorStack):
@@ -4206,7 +4206,7 @@ class NonTensorStack(LazyStackedTensorDict):
         inplace: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
-        break_on_memmap: bool = None,
+        break_on_memmap: bool | None = None,
         non_blocking: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,

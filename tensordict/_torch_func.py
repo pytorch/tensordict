@@ -512,7 +512,7 @@ def _stack(
     list_of_tensordicts_orig = list_of_tensordicts
     if is_tc:
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
-        clz = type(list_of_tensordicts[0])
+        clz = type(list_of_tensordicts_orig[0])
     elif issubclass(td_types[0], TensorDict):
         clz = td_types[0]
     else:
