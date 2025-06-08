@@ -586,44 +586,8 @@ def _stack(
                     len({len(td.tensordicts) for td in list_of_tensordicts}) == 1
                 )
                 if unique_leaves_len:
-                    for x in _zip_strict(*leaves):
-                        # TODO: check what happens with non-tensor data here
-                        if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
-                            continue
-                        else:
-                            unique_leaves_len = False
-                            break
-                        # make sure we completed the zip_strict, since strict=True is only available for python >= 3.10
-                    if unique_leaves_len:
-                        lazy_stack_dim = list_of_tensordicts[0].stack_dim
-                        if dim <= lazy_stack_dim:
-                            lazy_stack_dim += 1
-                        else:
-                            dim = dim - 1
-                        result = LazyStackedTensorDict(
-                            *[
-                                _stack(
-                                    list(subtds),
-                                    dim=dim,
-                                    maybe_dense_stack=maybe_dense_stack,
-                                )
-                                for subtds in _zip_strict(
-                                    *[td.tensordicts for td in list_of_tensordicts]
-                                )
-                            ],
-                            stack_dim=lazy_stack_dim,
-                        )
-                        if is_tc:
-                            return clz._from_tensordict(result)
-                        return result
-                    else:
-                        from tensordict import lazy_stack
-
-                        return lazy_stack(list_of_tensordicts_orig, dim=dim)
-
-                # If the number of sub-tensordicts is the same, we can stack then
-                #  internally and lazy stack them on the outside.
-                if len({len(td.tensordicts) for td in list_of_tensordicts}) == 1:
+                    # If the number of sub-tensordicts is the same, we can stack them internally
+                    # and lazy stack them on the outside.
                     lazy_stack_dim = list_of_tensordicts[0].stack_dim
                     if dim <= lazy_stack_dim:
                         lazy_stack_dim += 1
@@ -632,7 +596,9 @@ def _stack(
                     result = LazyStackedTensorDict(
                         *[
                             _stack(
-                                list(subtds), dim, maybe_dense_stack=maybe_dense_stack
+                                list(subtds),
+                                dim=dim,
+                                maybe_dense_stack=maybe_dense_stack,
                             )
                             for subtds in _zip_strict(
                                 *[td.tensordicts for td in list_of_tensordicts]
@@ -646,7 +612,7 @@ def _stack(
                 else:
                     from tensordict import lazy_stack
 
-                    return lazy_stack(list_of_tensordicts, dim=dim)
+                    return lazy_stack(list_of_tensordicts_orig, dim=dim, out=out)
 
             out = {}
             for key in keys:
