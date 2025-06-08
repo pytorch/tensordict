@@ -523,17 +523,33 @@ def _stack(
     if dim < 0:
         dim = len(batch_size) + dim + 1
 
-    for td in list_of_tensordicts[1:]:
-        if td.batch_size != list_of_tensordicts[0].batch_size:
-            raise RuntimeError(
-                "stacking tensordicts requires them to have congruent batch sizes, "
-                f"got td1.batch_size={td.batch_size} and td2.batch_size="
-                f"{list_of_tensordicts[0].batch_size}"
-            )
-
     # check that all tensordict match
     # Read lazy_legacy
     _lazy_legacy = lazy_legacy()
+
+    if not _lazy_legacy:
+        for i, td in enumerate(list_of_tensordicts[1:]):
+            if td.batch_size != list_of_tensordicts[0].batch_size:
+                if not maybe_dense_stack:
+                    raise RuntimeError(
+                        "stacking tensordicts requires them to have congruent batch sizes, "
+                        f"got td[{i+1}].batch_size={td.batch_size} and td[0].batch_size="
+                        f"{list_of_tensordicts[0].batch_size}"
+                    )
+                elif td.batch_dims == list_of_tensordicts[0].batch_dims:
+                    from tensordict import lazy_stack
+
+                    return lazy_stack(
+                        list_of_tensordicts_orig,
+                        dim=dim,
+                        out=out,
+                    )
+                else:
+                    raise RuntimeError(
+                        "Lazy stacking of tensordicts requires them to have congruent batch dimensions, "
+                        f"got td[{i+1}].batch_dims={td.batch_dims} and td[0].batch_dims="
+                        f"{list_of_tensordicts[0].batch_dims}"
+                    )
 
     if out is None:
         # We need to handle tensordicts with exclusive keys and tensordicts with
@@ -561,24 +577,24 @@ def _stack(
                         )
                 raise
 
-            if all(
-                isinstance(_tensordict, LazyStackedTensorDict)
-                for _tensordict in list_of_tensordicts
-            ):
+            if all(_tensordict._lazy for _tensordict in list_of_tensordicts):
                 # Let's try to see if all tensors have the same shape
                 # If so, we can assume that we can densly stack the sub-tds
                 leaves = [tree_leaves(td) for td in list_of_tensordicts]
-                for x in _zip_strict(*leaves):
-                    # TODO: check what happens with non-tensor data here
-                    if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
-                        continue
-                    else:
-                        break
-                else:
-                    # make sure we completed the zip_strict, since strict=True is only available for python >= 3.10
-                    if len(leaves) == 1 or all(
-                        len(_leaves) == len(leaves[0]) for _leaves in leaves[1:]
-                    ):
+                unique_leaves_len = len({len(leaf) for leaf in leaves}) == 1
+                unique_leaves_len &= (
+                    len({len(td.tensordicts) for td in list_of_tensordicts}) == 1
+                )
+                if unique_leaves_len:
+                    for x in _zip_strict(*leaves):
+                        # TODO: check what happens with non-tensor data here
+                        if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
+                            continue
+                        else:
+                            unique_leaves_len = False
+                            break
+                        # make sure we completed the zip_strict, since strict=True is only available for python >= 3.10
+                    if unique_leaves_len:
                         lazy_stack_dim = list_of_tensordicts[0].stack_dim
                         if dim <= lazy_stack_dim:
                             lazy_stack_dim += 1
@@ -600,24 +616,37 @@ def _stack(
                         if is_tc:
                             return clz._from_tensordict(result)
                         return result
+                    else:
+                        from tensordict import lazy_stack
 
-                lazy_stack_dim = list_of_tensordicts[0].stack_dim
-                if dim <= lazy_stack_dim:
-                    lazy_stack_dim += 1
+                        return lazy_stack(list_of_tensordicts_orig, dim=dim)
+
+                # If the number of sub-tensordicts is the same, we can stack then
+                #  internally and lazy stack them on the outside.
+                if len({len(td.tensordicts) for td in list_of_tensordicts}) == 1:
+                    lazy_stack_dim = list_of_tensordicts[0].stack_dim
+                    if dim <= lazy_stack_dim:
+                        lazy_stack_dim += 1
+                    else:
+                        dim = dim - 1
+                    result = LazyStackedTensorDict(
+                        *[
+                            _stack(
+                                list(subtds), dim, maybe_dense_stack=maybe_dense_stack
+                            )
+                            for subtds in _zip_strict(
+                                *[td.tensordicts for td in list_of_tensordicts]
+                            )
+                        ],
+                        stack_dim=lazy_stack_dim,
+                    )
+                    if is_tc:
+                        return clz._from_tensordict(result)
+                    return result
                 else:
-                    dim = dim - 1
-                result = LazyStackedTensorDict(
-                    *[
-                        _stack(list_of_td, dim, maybe_dense_stack=maybe_dense_stack)
-                        for list_of_td in _zip_strict(
-                            *[td.tensordicts for td in list_of_tensordicts]
-                        )
-                    ],
-                    stack_dim=lazy_stack_dim,
-                )
-                if is_tc:
-                    return clz._from_tensordict(result)
-                return result
+                    from tensordict import lazy_stack
+
+                    return lazy_stack(list_of_tensordicts, dim=dim)
 
             out = {}
             for key in keys:

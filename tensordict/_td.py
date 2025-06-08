@@ -1794,8 +1794,8 @@ class TensorDict(TensorDictBase):
         names = self._maybe_names()
         # Use chunk instead of split to account for nested tensors if possible
         if isinstance(split_size, int):
-            chuncks = -(self.batch_size[dim] // -split_size)
-            splits = {k: v.chunk(chuncks, dim) for k, v in self.items()}
+            chunks = -(self.batch_size[dim] // -split_size)
+            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
         else:
             splits = {k: v.split(split_size, dim) for k, v in self.items()}
         splits = [
@@ -1805,18 +1805,19 @@ class TensorDict(TensorDictBase):
         is_shared = self._is_shared
         is_memmap = self._is_memmap
         is_locked = self.is_locked
-        return tuple(
+        result = tuple(
             self._new_unsafe(
-                source=splits[ss],
-                batch_size=batch_sizes[ss],
+                source=split,
+                batch_size=bsz,
                 names=names,
                 device=device,
                 lock=is_locked,
                 is_shared=is_shared,
                 is_memmap=is_memmap,
             )
-            for ss in range(len(batch_sizes))
+            for split, bsz in _zip_strict(splits, batch_sizes)
         )
+        return result
 
     def masked_select(self, mask: Tensor) -> T:
         d = {}

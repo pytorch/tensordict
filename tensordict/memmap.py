@@ -19,7 +19,13 @@ from typing import Any, Callable, overload
 import numpy as np
 import torch
 
-from tensordict.utils import _shape, implement_for, IndexType, NESTED_TENSOR_ERR
+from tensordict.utils import (
+    _shape,
+    _zip_strict,
+    implement_for,
+    IndexType,
+    NESTED_TENSOR_ERR,
+)
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -915,7 +921,27 @@ class MemoryMappedTensor(torch.Tensor):
 
     def chunk(self, chunks, dim=0):
         out = super().chunk(chunks, dim)
-        return tuple(self._index_wrap(chunk, None, check=True) for chunk in out)
+        slices = []
+        i = 0
+        for chunk in out:
+            slices.append(slice(i, i + chunk.shape[dim]))
+            i += chunk.shape[dim]
+        return tuple(
+            self._index_wrap(chunk, _slice, check=True)
+            for chunk, _slice in _zip_strict(out, slices)
+        )
+
+    def split(self, split_size, dim=0):
+        out = super().split(split_size, dim)
+        slices = []
+        i = 0
+        for chunk in out:
+            slices.append(slice(i, i + chunk.shape[dim]))
+            i += chunk.shape[dim]
+        return tuple(
+            self._index_wrap(split, _slice, check=True)
+            for split, _slice in _zip_strict(out, slices)
+        )
 
 
 #####################

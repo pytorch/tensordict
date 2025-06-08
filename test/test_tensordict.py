@@ -1727,6 +1727,27 @@ class TestGeneric:
             td_memmap_pm = td_memmap.apply(lambda x: x.clone()).pin_memory()
             assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
+    def test_lazy_stack_tc_weird_case(self):
+
+        class MyClass(TensorClass["nocast"]):
+            a: torch.Tensor
+            b: torch.Tensor
+
+        td = TensorDict(
+            x=MyClass(a=torch.randn(2, 3), b=torch.randn(2, 3), batch_size=(2, 3)),
+            batch_size=(2, 3),
+        )
+        td = lazy_stack(list(td.unbind(0)), 0)
+        td2 = TensorDict(
+            x=MyClass(a=torch.randn(2, 4), b=torch.randn(2, 4), batch_size=(2, 4)),
+            batch_size=(2, 4),
+        )
+        td2 = lazy_stack(list(td2.unbind(1)), 1)
+
+        assert TensorDict.maybe_dense_stack([td, td2], 0).batch_size == (2, 2, -1)
+        assert TensorDict.maybe_dense_stack([td, td2], 1).batch_size == (2, 2, -1)
+        assert TensorDict.maybe_dense_stack([td, td2], 2).batch_size == (2, -1, 2)
+
     def test_load_custom_artifact(self):
         # Build the TD using this
         # td = TensorDict(
