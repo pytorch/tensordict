@@ -438,6 +438,64 @@ class TestIndexing:
         finally:
             p.join()
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    def test_send_across_procs_split(self, tmp_path):
+        t = MemoryMappedTensor.from_tensor(
+            torch.zeros(10), filename=tmp_path / "tensor.memmap"
+        )
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
+        filename = t._filename
+        assert filename is not None
+        p = mp.Process(
+            target=TestIndexing._recv_and_send,
+            args=(queue_in, queue_out, filename, torch.Size([3])),
+        )
+        p.start()
+        try:
+            queue_out.put(t.split((3, 3, 4), 0)[0], block=True)
+            msg = queue_in.get(timeout=TIMEOUT)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue_out.put("modified", block=True)
+            msg = queue_in.get(timeout=TIMEOUT)
+            assert msg == "done!!"
+
+            del t
+            queue_out.put("deleted")
+        finally:
+            p.join()
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    def test_send_across_procs_chunk(self, tmp_path):
+        t = MemoryMappedTensor.from_tensor(
+            torch.zeros(9), filename=tmp_path / "tensor.memmap"
+        )
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
+        filename = t._filename
+        assert filename is not None
+        p = mp.Process(
+            target=TestIndexing._recv_and_send,
+            args=(queue_in, queue_out, filename, torch.Size([3])),
+        )
+        p.start()
+        try:
+            queue_out.put(t.chunk(3, 0)[0], block=True)
+            msg = queue_in.get(timeout=TIMEOUT)
+            assert msg == "done"
+
+            t.fill_(1.0)
+            queue_out.put("modified", block=True)
+            msg = queue_in.get(timeout=TIMEOUT)
+            assert msg == "done!!"
+
+            del t
+            queue_out.put("deleted")
+        finally:
+            p.join()
+
     def test_iteration(self):
         t = MemoryMappedTensor.from_tensor(torch.rand(10))
         for i, _t in enumerate(t):
