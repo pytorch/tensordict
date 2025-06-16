@@ -478,3 +478,15 @@ class CudaGraphModule:
         in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
         out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
         return f"{self.__class__.__name__}(\n{module}, \n{warmup}, \n{in_keys}, \n{out_keys}\n)"
+
+    def state_dict(self):
+        try:
+            return self.module.state_dict()
+        except AttributeError:
+            return {}
+
+    def load_state_dict(self, state_dict):
+        try:
+            self.module.load_state_dict(state_dict)
+        except AttributeError:
+            pass

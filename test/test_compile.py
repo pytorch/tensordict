@@ -1208,6 +1208,39 @@ class TestCudaGraphs:
             ):
                 func(torch.zeros(()), 2.0)
 
+    def test_state_dict(self, compiled):
+        # Create a linear layer and wrap it in CudaGraphModule
+        linear = torch.nn.Linear(3, 4)
+        linear = self._make_cudagraph(linear, compiled)
+
+        # Run some warmup iterations
+        x = torch.randn(10, 3)
+        for _ in range(10):
+            linear(x)
+
+        # Get state dict
+        state_dict = linear.state_dict()
+        if compiled:
+            state_dict_get = TensorDict(state_dict)
+            state_dict_get = state_dict_get.unflatten_keys(".")["_orig_mod"]
+        else:
+            state_dict_get = state_dict
+
+        assert "weight" in state_dict_get
+        assert "bias" in state_dict_get
+        assert state_dict_get["weight"].shape == (4, 3)
+        assert state_dict_get["bias"].shape == (4,)
+
+        # Create a new instance and load state
+        linear2 = torch.nn.Linear(3, 4)
+        linear2 = self._make_cudagraph(linear2, compiled)
+        linear2.load_state_dict(state_dict)
+
+        # Test that both modules produce the same output
+        y1 = linear(x)
+        y2 = linear2(x)
+        torch.testing.assert_close(y1, y2)
+
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda is not available")
 class TestCompileNontensor:
