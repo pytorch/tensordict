@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from tensordict.utils import (
+    _maybe_correct_neg_dim,
     _shape,
     _zip_strict,
     implement_for,
@@ -920,11 +921,15 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     def chunk(self, chunks, dim=0):
+        dim = _maybe_correct_neg_dim(dim, self.shape)
         out = super().chunk(chunks, dim)
         slices = []
         i = 0
         for chunk in out:
-            slices.append(slice(i, i + chunk.shape[dim]))
+            slices.append(
+                tuple(slice(None) for _ in range(dim))
+                + (slice(i, i + chunk.shape[dim]),)
+            )
             i += chunk.shape[dim]
         return tuple(
             self._index_wrap(chunk, _slice, check=True)
@@ -932,11 +937,15 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     def split(self, split_size, dim=0):
+        dim = _maybe_correct_neg_dim(dim, self.shape)
         out = super().split(split_size, dim)
         slices = []
         i = 0
         for chunk in out:
-            slices.append(slice(i, i + chunk.shape[dim]))
+            slices.append(
+                tuple(slice(None) for _ in range(dim))
+                + (slice(i, i + chunk.shape[dim]),)
+            )
             i += chunk.shape[dim]
         return tuple(
             self._index_wrap(split, _slice, check=True)

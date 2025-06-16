@@ -192,6 +192,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_propagate_lock",
     "_propagate_unlock",
     "_reduce_get_metadata",
+    "_set_device",
     "_values_list",
     "batch_dims",
     "batch_size",
