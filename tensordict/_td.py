@@ -4496,7 +4496,9 @@ class _TensorDictKeysView:
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
         if tensordict is None:
             tensordict = self.tensordict
-        if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
+        if is_tensorclass(tensordict):
+            tensordict = tensordict._tensordict
+        if isinstance(tensordict, TensorDict):
             return tensordict._tensordict.items()
         from tensordict.nn import TensorDictParams
 
