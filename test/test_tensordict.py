@@ -9564,6 +9564,20 @@ class TestLazyStackedTensorDict:
         assert "random_string" not in lstd
         assert "a" in lstd
 
+    def test_lazy_stack_keys_tc(self):
+        class MC(TensorClass):
+            a: torch.Tensor
+
+        x = TensorDict(
+            b=MC.from_tensordict(
+                lazy_stack([TensorDict(a=torch.randn(3)), TensorDict(a=torch.randn(5))])
+            )
+        )
+        assert list(x.keys()) == ["b"]
+        assert list(x["b"].keys()) == ["a"]
+        assert set(x.keys(include_nested=True)) == {"b", ("b", "a")}
+        assert set(x.keys(include_nested=True, leaves_only=True)) == {("b", "a")}
+
     @pytest.mark.parametrize("dim", range(2))
     @pytest.mark.parametrize("index", range(2))
     @pytest.mark.parametrize("device", get_available_devices())
