@@ -675,20 +675,32 @@ def _stack(
                 key: stack_fn(key, values, is_not_init, is_tensor)
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
+
+            if (names := list_of_tensordicts[0]._has_names()) is not None:
+                names = list_of_tensordicts[0].names
+                names.insert(dim, None)
+
             result = clz._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
                 ),
+                names=names,
                 device=device,
             )
             if is_tc and not is_tensorclass(result):
                 return clz._from_tensordict(result)
             return result
         else:
+
+            if (names := list_of_tensordicts[0]._has_names()) is not None:
+                names = list_of_tensordicts[0].names
+                names.insert(dim, None)
+
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,
                 stack_dim=dim,
+                names=names,
             )
             if is_tc and not is_tensorclass(out):
                 return clz._from_tensordict(out)
@@ -727,6 +739,7 @@ def _stack(
             out._stack_onto_(list_of_tensordicts, dim)
         except KeyError as err:
             raise err
+
     return out
 
 

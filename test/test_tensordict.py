@@ -10759,6 +10759,7 @@ class TestNamedDims(TestTensorDictsBase):
             td.names = list("abcd")
 
     def test_stack(self):
+        # Q(lf) shoud `tensordict._stack` be tested here?
         td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
         tds = LazyStackedTensorDict.lazy_stack([td, td], 0)
         assert tds.names == [None, "a", "b", "c", "d"]
