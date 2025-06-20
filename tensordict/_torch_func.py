@@ -678,10 +678,10 @@ def _stack(
             # Add names if all tensordicts have the same `names`
             names = list_of_tensordicts[0]._maybe_names()
             if names is not None:
-                if all(td._maybe_names() == names for td in list_of_tensordicts[:1]):
+                if all(td._maybe_names() == names for td in list_of_tensordicts[1:]):
                     names.insert(dim, None)
-            else:
-                names = None
+                else:
+                    names = None
 
             result = clz._new_unsafe(
                 out,
