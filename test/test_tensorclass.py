@@ -1988,6 +1988,24 @@ class TestTensorClass:
                 "bar",
             ]
 
+    def test_stack_names(self):
+        class MyTensorClass(TensorClass):
+            foo: Tensor
+            bar: Tensor
+
+        tc = MyTensorClass(
+            foo=torch.zeros((1, 2)),
+            bar=torch.ones((1, 2)),
+            names=["first", "second"],
+            batch_size=(1, 2),
+        )
+        tc2 = torch.stack([tc, tc], dim=0)
+        assert tc2.names == [None, "first", "second"]
+        tc2 = torch.stack([tc, tc], dim=1)
+        assert tc2.names == ["first", None, "second"]
+        tc2 = torch.stack([tc, tc], dim=-1)
+        assert tc2.names == ["first", "second", None]
+
     def test_statedict_errors(self):
         @tensorclass
         class MyClass:

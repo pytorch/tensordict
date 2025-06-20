@@ -2782,6 +2782,17 @@ class TestGeneric:
         assert (tensor[:, 0] == 0).all()
         assert (tensor[:, 1] == 1).all()
 
+    def test_stack_names(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4)}, batch_size=[3, 4], names=["first", "second"]
+        )
+        td2 = torch.stack([td, td], dim=0)
+        assert td2.names == [None, "first", "second"]
+        td2 = torch.stack([td, td], dim=1)
+        assert td2.names == ["first", None, "second"]
+        td2 = torch.stack([td, td], dim=-1)
+        assert td2.names == ["first", "second", None]
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
