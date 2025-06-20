@@ -2793,6 +2793,12 @@ class TestGeneric:
         td2 = torch.stack([td, td], dim=-1)
         assert td2.names == ["first", "second", None]
 
+        # Mess with the names
+        td_copy = td.clone()
+        td_copy.names = ["first", "third"]
+        td2 = torch.stack([td, td_copy], dim=0)
+        assert td2.names == [None, None, None]
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
