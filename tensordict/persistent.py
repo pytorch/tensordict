@@ -1323,7 +1323,10 @@ class PersistentTensorDict(TensorDictBase):
             clone.file = f_dest
             clone.filename = newfile
             clone._pin_mem = False
-            clone.names = self._td_dim_names
+            names = self._td_dim_names
+            if names is not None:
+                names = list(names)
+            clone.names = names
             clone._nested_tensordicts = {}
             clone._set_metadata(self)
             return clone

@@ -675,12 +675,23 @@ def _stack(
                 key: stack_fn(key, values, is_not_init, is_tensor)
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
+            # Add names if all tensordicts have the same `names`
+            names = list_of_tensordicts[0]._maybe_names()
+            if names is not None:
+                for td in list_of_tensordicts:
+                    if td._maybe_names() != names:
+                        names = None
+                        break
+                else:
+                    names.insert(dim, None)
+
             result = clz._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
                 ),
                 device=device,
+                names=names,
             )
             if is_tc and not is_tensorclass(result):
                 return clz._from_tensordict(result)

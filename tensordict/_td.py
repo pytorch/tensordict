@@ -2272,7 +2272,8 @@ class TensorDict(TensorDictBase):
         if names is None:
             return [None for _ in range(self.batch_dims)]
         # assert len(names) == self.batch_dims, (names, self.batch_dims)
-        return names
+        # Return a copy but don't use copy to make dynamo happy
+        return list(names)
 
     @names.setter
     def names(self, value):
@@ -3288,12 +3289,16 @@ class TensorDict(TensorDictBase):
                         *val, strict=strict, inplace=inplace, set_shared=set_shared
                     )
 
+        names = self._td_dim_names
+        if names is not None:
+            names = list(names)
+
         result = self._new_unsafe(
             device=self.device,
             batch_size=self.batch_size,
             source=source,
             # names=self.names if self._has_names() else None,
-            names=self._td_dim_names,
+            names=names,
         )
         if inplace:
             self._tensordict = result._tensordict
