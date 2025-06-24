@@ -512,6 +512,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "tanh_",
     "to",
     "to_h5",
+    "to_lazystack",
     "to_module",
     "to_namedtuple",
     "to_padded_tensor",
