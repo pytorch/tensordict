@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+gc90df00)
+                  main (0.0.post1+ga5aab97)
                 </div>
               
             
@@ -6952,6 +6952,47 @@ it has batch dimensions. Default: <code class="docutils literal notranslate"><sp
 <span class="go">    batch_size=torch.Size([1000000]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.to_lazystack">
+<span class="sig-name descname"><span class="pre">to_lazystack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.to_lazystack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a TensorDict to a LazyStackedTensorDict or equivalent.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method can be used to swap the stack dimension of a LazyStackedTensorDict.
+For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td2</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td2</span><span class="o">.</span><span class="n">stack_dim</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td3</span> <span class="o">=</span> <span class="n">td2</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td3</span><span class="o">.</span><span class="n">stack_dim</span> <span class="o">==</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td3</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 3])</span>
+</pre></div>
+</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which to stack the tensordict.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A LazyStackedTensorDict instance.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td2</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+gc90df00)
+                  main (0.0.post1+ga5aab97)
                 </div>
               
             
@@ -560,13 +560,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  214.6991 us
-TDM:  273.0158 us
-Sequential:  475.9022 us
+Regular:  220.1052 us
+TDM:  279.5587 us
+Sequential:  475.5050 us
 Compiled versions
-Compiled regular:  300.1560 us
-Compiled TDM:  328.6570 us
-Compiled sequential:  346.1915 us
+Compiled regular:  306.6030 us
+Compiled TDM:  333.3440 us
+Compiled sequential:  339.9250 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -666,7 +666,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.406 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.102 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>
