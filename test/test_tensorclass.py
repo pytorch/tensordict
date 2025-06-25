@@ -1988,6 +1988,18 @@ class TestTensorClass:
                 "bar",
             ]
 
+    def test_to_lazystack(self):
+        class MyTensorClass(TensorClass):
+            foo: Tensor
+            bar: Tensor
+
+        tc = MyTensorClass(
+            foo=torch.zeros((1, 2)), bar=torch.ones((1, 2)), batch_size=(1, 2)
+        )
+        tc2 = tc.to_lazystack(1)
+        assert isinstance(tc2, MyTensorClass)
+        assert isinstance(tc2._tensordict, LazyStackedTensorDict)
+
     def test_stack_names(self):
         class MyTensorClass(TensorClass):
             foo: Tensor

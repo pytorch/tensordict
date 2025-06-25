@@ -7422,6 +7422,13 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_dict["data"]["non_tensor"] == "some text data"
         assert (TensorDict.from_dict(td_dict, auto_batch_size=False) == td).all()
 
+    def test_to_lazystack(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td2 = td.to_lazystack()
+        assert isinstance(td2, LazyStackedTensorDict)
+        assert td2.batch_size == td.batch_size
+        assert td2.names == td.names
+
     def test_to_namedtuple(self, td_name, device):
         def is_namedtuple(obj):
             """Check if obj is a namedtuple."""
@@ -9695,6 +9702,20 @@ class TestLazyStackedTensorDict:
         )
         assert td.new_empty((1, 100, 1), empty_lazy=True)["sparse"].is_empty()
         assert not isinstance(td.new_empty((10, 1)), LazyStackedTensorDict)
+
+    def test_lazy_swap_stack_dim(self):
+        ltd = LazyStackedTensorDict(
+            TensorDict(a=torch.randn(3, 4), batch_size=[3, 4]),
+            TensorDict(a=torch.randn(3, 4), batch_size=[3, 4]),
+            stack_dim=1,
+        )
+        assert len(ltd.tensordicts) == 2
+        ltd2 = ltd.to_lazystack(0)
+        assert_allclose_td(ltd2, ltd)
+        assert len(ltd2.tensordicts) == 3
+        ltd4 = ltd.to_lazystack(-1)
+        assert len(ltd4.tensordicts) == 4
+        assert_allclose_td(ltd4, ltd)
 
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]

@@ -12021,6 +12021,52 @@ class TensorDictBase(MutableMapping):
             names=self._maybe_names(),
         )
 
+    def to_lazystack(self, dim: int = 0):
+        """Converts a TensorDict to a LazyStackedTensorDict or equivalent.
+
+        .. note::
+            This method can be used to swap the stack dimension of a LazyStackedTensorDict.
+            For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
+
+            >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
+            >>> td2 = td.to_lazystack()
+            >>> td2.batch_size
+            torch.Size([2, 3])
+            >>> assert isinstance(td2, LazyStackedTensorDict)
+            >>> assert td2.stack_dim == 0
+            >>> td3 = td2.to_lazystack(1)
+            >>> assert td3.stack_dim == 1
+            >>> td3.batch_size
+            torch.Size([2, 3])
+
+        Args:
+            dim (int, optional): the dimension along which to stack the tensordict.
+                Defaults to ``0``.
+
+        Returns:
+            A LazyStackedTensorDict instance.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
+            >>> td2 = td.to_lazystack()
+            >>> td2.batch_size
+            torch.Size([2, 3])
+            >>> assert isinstance(td2, LazyStackedTensorDict)
+
+        """
+        from tensordict import lazy_stack, LazyStackedTensorDict
+        from tensordict.tensorclass import _is_tensorclass
+
+        dim = _maybe_correct_neg_dim(dim, ndim=self.ndim, shape=None)
+        if (isinstance(self, LazyStackedTensorDict) and self.stack_dim == dim) or (
+            _is_tensorclass(type(self))
+            and isinstance(self._tensordict, LazyStackedTensorDict)
+            and self._tensordict.stack_dim == dim
+        ):
+            return self
+        return lazy_stack(self.unbind(dim), dim=dim)
+
     def clone(self, recurse: bool = True, **kwargs) -> T:
         """Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
 

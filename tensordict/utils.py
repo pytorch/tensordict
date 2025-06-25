@@ -1374,6 +1374,10 @@ def assert_close(
     if isinstance(actual, LazyStackedTensorDict) and isinstance(
         expected, LazyStackedTensorDict
     ):
+        if expected.stack_dim != actual.stack_dim:
+            # turn expected in actual stack dim
+            expected = expected.to_lazystack(actual.stack_dim)
+
         for sub_actual, sub_expected in _zip_strict(
             actual.tensordicts, expected.tensordicts
         ):
