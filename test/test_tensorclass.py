@@ -2267,6 +2267,21 @@ class TestTensorClass:
             assert isinstance(viewed_td._tensordict, _ViewedTensorDict)
         assert viewed_td.z == viewed_td.y.z == z
 
+    def test_view_cm(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+
+        X = torch.ones(3, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [3, 4]
+        data = MyDataNested(X=X, z=z, batch_size=batch_size)
+        with data.view(-1) as viewed_td:
+            assert isinstance(viewed_td, MyDataNested)
+            viewed_td.X *= 0
+        assert (data.X == 0).all()
+
     def test_weakref_attr(self):
         @tensorclass
         class Y:

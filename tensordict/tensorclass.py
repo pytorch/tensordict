@@ -256,7 +256,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "__add__",
     "__and__",
     "__bool__",
+    "__enter__",
     "__eq__",
+    "__exit__",
     "__iadd__",
     "__imul__",
     "__invert__",
@@ -1042,9 +1044,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
     #     cls.batch_size = property(_batch_size, _batch_size_setter)
 
-    cls.__enter__ = __enter__
-    cls.__exit__ = __exit__
-
     # Memmap
     if not hasattr(cls, "load_memmap") and "load_memmap" not in expected_keys:
         cls.load_memmap = TensorDictBase.load_memmap
@@ -1594,14 +1593,6 @@ def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
             raise ValueError("The _tensordict directory seems to be missing.")
         td = TensorDict(device="cpu")
     return cls._from_tensordict(td, non_tensordict)
-
-
-def __enter__(self, *args, **kwargs):
-    return self._tensordict.__enter__(*args, **kwargs)
-
-
-def __exit__(self, *args, **kwargs):
-    return self._tensordict.__exit__(*args, **kwargs)
 
 
 def _getstate(self) -> dict[str, Any]:
