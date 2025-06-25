@@ -162,6 +162,8 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "__enter__",
+    "__exit__",
     "dumps",
     "load_",
     "memmap",
@@ -256,9 +258,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "__add__",
     "__and__",
     "__bool__",
-    "__enter__",
     "__eq__",
-    "__exit__",
     "__iadd__",
     "__imul__",
     "__invert__",
@@ -1637,7 +1637,7 @@ def _getattr(self, item: str, **kwargs) -> Any:
 
     if item in __dataclass_fields__:
         _non_tensordict = self._non_tensordict
-        if _non_tensordict:
+        if _non_tensordict and item not in self._tensordict.keys():
             out = _non_tensordict.get(item, NO_DEFAULT)
             if out is not NO_DEFAULT:
                 if (
