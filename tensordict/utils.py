@@ -1041,10 +1041,7 @@ def _as_context_manager(attr=None):
                 if out is not None:
                     if _attr_post is not _attr_pre:
                         ref = weakref.ref(_self)
-                        if is_tensorclass(out):
-                            out_lo = out._tensordict
-                        else:
-                            out_lo = out
+                        out_lo = out
                         out_lo._last_op = (
                             func.__name__,
                             (
@@ -1064,10 +1061,7 @@ def _as_context_manager(attr=None):
                 out = func(_self, *args, **kwargs)
                 if out is not None:
                     ref = weakref.ref(_self)
-                    if is_tensorclass(out):
-                        out_lo = out._tensordict
-                    else:
-                        out_lo = out
+                    out_lo = out
                     out_lo._last_op = (func.__name__, (args, kwargs, ref))
                 return out
 
