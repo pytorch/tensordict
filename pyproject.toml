@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11", "setuptools_scm"]
+requires = ["setuptools>=61.0", "wheel", "pybind11>=2.13", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.usort]
@@ -38,7 +38,7 @@ dependencies = [
     "cloudpickle",
     "packaging",
     "importlib_metadata",
-    # orjson fails to be installed in python 3.13t
+    # orjson fails to be installed in python 3.13
     'orjson ; python_version < "3.13"',
 ]
 
@@ -55,7 +55,7 @@ tests = [
 ]
 checkpointing = ["torchsnapshot-nightly"]
 h5 = ["h5py>=3.8"]
-dev = ["pybind11", "cmake", "ninja"]
+dev = ["pybind11>=2.13", "cmake>=3.18", "ninja"]
 
 [tool.setuptools]
 include-package-data = false

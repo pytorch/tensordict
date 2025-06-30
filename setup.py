@@ -6,12 +6,14 @@
 import distutils.command.clean
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
-from setuptools import Extension, find_packages, setup
+from setuptools import Command, Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -28,11 +30,46 @@ def get_python_executable():
     return python_executable
 
 
-class clean(distutils.command.clean.clean):
-    def run(self):
-        # Run default behavior first
-        distutils.command.clean.clean.run(self)
+def check_cmake_version():
+    """Check if CMake version is sufficient."""
+    try:
+        result = subprocess.run(
+            ["cmake", "--version"], capture_output=True, text=True, check=True
+        )
+        version_line = result.stdout.split("\n")[0]
+        version_str = version_line.split()[2]
+        major, minor = map(int, version_str.split(".")[:2])
+        if major < 3 or (major == 3 and minor < 18):
+            warnings.warn(
+                f"CMake version {version_str} may be too old. Recommended: 3.18+"
+            )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        warnings.warn("Could not determine CMake version")
+        return False
 
+
+def is_apple_silicon():
+    """Check if running on Apple Silicon (M1/M2)."""
+    return (
+        sys.platform == "darwin" 
+        and platform.machine() in ("arm64", "aarch64")
+    )
+
+
+class clean(Command):
+    """Custom clean command to remove tensordict extensions."""
+
+    description = "remove tensordict extensions and build files"
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
         # Remove tensordict extension
         for path in (ROOT_DIR / "tensordict").glob("**/*.so"):
             logging.info(f"removing '{path}'")
@@ -53,6 +90,13 @@ class CMakeExtension(Extension):
 
 class CMakeBuild(build_ext):
     def run(self):
+        # Check CMake version before building
+        check_cmake_version()
+        
+        # Log architecture information
+        if is_apple_silicon():
+            print("Detected Apple Silicon (ARM64) architecture")
+        
         for ext in self.extensions:
             self.build_extension(ext)
 
@@ -64,6 +108,7 @@ class CMakeBuild(build_ext):
         else:
             # For regular installs, place the extension in the build directory
             extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
+
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
@@ -72,18 +117,33 @@ class CMakeBuild(build_ext):
             # for windows
             "-DCMAKE_BUILD_TYPE=Release",
         ]
+        
+        # Add ARM64-specific arguments for Apple Silicon
+        if is_apple_silicon():
+            cmake_args.extend([
+                "-DCMAKE_OSX_ARCHITECTURES=arm64",
+            ])
 
         build_args = []
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
         if sys.platform == "win32":
             build_args += ["--config", "Release"]
-        subprocess.check_call(
-            ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp
-        )
-        subprocess.check_call(
-            ["cmake", "--build", ".", "--verbose"] + build_args, cwd=self.build_temp
-        )
+
+        try:
+            subprocess.check_call(
+                ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp
+            )
+            subprocess.check_call(
+                ["cmake", "--build", ".", "--verbose"] + build_args, cwd=self.build_temp
+            )
+        except subprocess.CalledProcessError as e:
+            warnings.warn(
+                f"Error building extension: {e}\n"
+                "This might be due to missing dependencies or incompatible compiler. "
+                "Please ensure you have CMake 3.18+ and a C++17 compatible compiler."
+            )
+            raise
 
 
 def get_extensions():
