@@ -11808,9 +11808,24 @@ class TensorDictBase(MutableMapping):
         return value
 
     def __enter__(self):
+        is_tc = _is_tensorclass(type(self))
         if not hasattr(self, "_last_op_queue"):
-            self._last_op_queue = collections.deque()
-        self._last_op_queue.append(self._last_op)
+            if is_tc:
+                _last_op_queue = self._tensordict._last_op_queue = collections.deque()
+            else:
+                _last_op_queue = self._last_op_queue = collections.deque()
+        else:
+            _last_op_queue = (
+                self._last_op_queue
+                if not _is_tensorclass(type(self))
+                else self._tensordict._last_op_queue
+            )
+        if is_tc:
+            # get last-op from tensordict - that's where it's written
+            _last_op = self._tensordict._last_op
+        else:
+            _last_op = self._last_op
+        _last_op_queue.append(_last_op)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -11820,7 +11835,12 @@ class TensorDictBase(MutableMapping):
             self.clear_refs_for_compile_()
         if exc_type is not None and issubclass(exc_type, Exception):
             return False
-        _last_op = self._last_op_queue.pop()
+        is_tc = _is_tensorclass(type(self))
+        _last_op = (
+            self._last_op_queue.pop()
+            if not is_tc
+            else self._tensordict._last_op_queue.pop()
+        )
         if _last_op is not None:
             last_op, (args, kwargs, out_wr) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
@@ -11828,7 +11848,8 @@ class TensorDictBase(MutableMapping):
             _inv_caller = LAST_OP_MAPS.get(last_op)
             if _inv_caller is not None:
                 prev_ref = out_wr()
-                return _inv_caller(self, args, kwargs, prev_ref)
+                result = _inv_caller(self, args, kwargs, prev_ref)
+                return result
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
         return self

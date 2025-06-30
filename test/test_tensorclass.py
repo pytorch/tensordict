@@ -2282,6 +2282,13 @@ class TestTensorClass:
             viewed_td.X *= 0
         assert (data.X == 0).all()
 
+        data = MyDataNested(X=None, z=z, batch_size=batch_size)
+        with data.view(-1) as viewed_td:
+            assert isinstance(viewed_td, MyDataNested)
+            viewed_td.X = torch.zeros(12, 5)
+        assert data.X is not None
+        assert (data.X == 0).all()
+
     def test_weakref_attr(self):
         @tensorclass
         class Y:
