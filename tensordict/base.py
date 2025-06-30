@@ -11820,7 +11820,12 @@ class TensorDictBase(MutableMapping):
                 if not _is_tensorclass(type(self))
                 else self._tensordict._last_op_queue
             )
-        _last_op_queue.append(self._last_op)
+        if is_tc:
+            # get last-op from tensordict - that's where it's written
+            _last_op = self._tensordict._last_op
+        else:
+            _last_op = self._last_op
+        _last_op_queue.append(_last_op)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

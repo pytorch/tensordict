@@ -1042,6 +1042,10 @@ def _as_context_manager(attr=None):
                     if _attr_post is not _attr_pre:
                         ref = weakref.ref(_self)
                         out_lo = out
+                        if is_tensorclass(out_lo):
+                            # We write in the tensordict but the ref is still to self (the tensorclass object)
+                            #  we do this because we don't want to call the __setattr__ of the tensorclass
+                            out_lo = out_lo._tensordict
                         out_lo._last_op = (
                             func.__name__,
                             (
@@ -1062,6 +1066,11 @@ def _as_context_manager(attr=None):
                 if out is not None:
                     ref = weakref.ref(_self)
                     out_lo = out
+                    if is_tensorclass(out_lo):
+                        # We write in the tensordict but the ref is still to self (the tensorclass object)
+                        #  we do this because we don't want to call the __setattr__ of the tensorclass
+                        out_lo = out_lo._tensordict
+
                     out_lo._last_op = (func.__name__, (args, kwargs, ref))
                 return out
 
