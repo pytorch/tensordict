@@ -3086,6 +3086,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 clone=clone,
                 keys_to_update=keys_to_update,
                 is_leaf=is_leaf,
+                update_batch_size=update_batch_size,
                 **kwargs,
             )
         if self.hook_out is not None:
