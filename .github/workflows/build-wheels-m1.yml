@@ -19,12 +19,12 @@ permissions:
 
 jobs:
   generate-matrix:
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@d4d8690863979c0c0384add3ad4a498ab060222a
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
     with:
       package-type: wheel
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: d4d8690863979c0c0384add3ad4a498ab060222a
+      test-infra-ref: main
   build:
     needs: generate-matrix
     strategy:
@@ -37,12 +37,12 @@ jobs:
             post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: ${{ matrix.repository }}
-    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@d4d8690863979c0c0384add3ad4a498ab060222a
+    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
     with:
       repository: ${{ matrix.repository }}
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: d4d8690863979c0c0384add3ad4a498ab060222a
+      test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
       smoke-test-script: ${{ matrix.smoke-test-script }}
@@ -50,5 +50,4 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
-      runner-type: macos-m1-stable
-      # runner-type: macos-m2-15
+      runner-type: macos-m2-15
