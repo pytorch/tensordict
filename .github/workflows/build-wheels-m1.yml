@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   generate-matrix:
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@d4d8690863979c0c0384add3ad4a498ab060222a
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@mnain
     with:
       package-type: wheel
       os: macos-arm64
