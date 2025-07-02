@@ -5518,11 +5518,25 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (item[mask] == 0).all()
 
     @pytest.mark.parametrize("dim", [None, 0])
-    def test_mean_var_std(self, td_name, device, dim):
+    def test_mean(self, td_name, device, dim):
         td = getattr(self, td_name)(device)
         assert is_tensor_collection(torch.mean(td.float(), dim=dim))
+
+    @pytest.mark.parametrize("dim", [None, 0])
+    def test_var(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
         assert is_tensor_collection(torch.var(td.float(), dim=dim))
+
+    @pytest.mark.parametrize("dim", [None, 0])
+    def test_std(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
         assert is_tensor_collection(torch.std(td.float(), dim=dim))
+
+    def test_maximum(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            pytest.skip("Non differentiable output.")
+        assert is_tensor_collection(torch.maximum(td, td))
 
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [0, 2])
