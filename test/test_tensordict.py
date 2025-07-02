@@ -5534,6 +5534,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_maximum(self, td_name, device):
         td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            pytest.skip("Non differentiable output.")
         assert is_tensor_collection(torch.maximum(td, td))
 
     @pytest.mark.parametrize("use_dir", [True, False])
