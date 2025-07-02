@@ -37,7 +37,7 @@ jobs:
             post-script: .github/scripts/linux-post-script.sh
             package-name: tensordict
     name: ${{ matrix.repository }}
-    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@md4d8690863979c0c0384add3ad4a498ab060222a
+    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@d4d8690863979c0c0384add3ad4a498ab060222a
     with:
       repository: ${{ matrix.repository }}
       ref: main
