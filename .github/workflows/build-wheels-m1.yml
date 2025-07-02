@@ -50,5 +50,5 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
-      # runner-type: macos-m1-stable
-      runner-type: macos-m2-15
+      runner-type: macos-m1-stable
+      # runner-type: macos-m2-15
