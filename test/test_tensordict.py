@@ -5441,6 +5441,21 @@ class TestTensorDicts(TestTensorDictsBase):
             tdlse.apply(check, out_c, default=None)
         tdlse._check_batch_size()
 
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_losses(self, td_name, device, reduction):
+        td = getattr(self, td_name)(device)
+        assert is_tensor_collection(
+            torch.nn.functional.l1_loss(td.float(), -td.float(), reduction=reduction)
+        )
+        assert is_tensor_collection(
+            torch.nn.functional.mse_loss(td.float(), -td.float(), reduction=reduction)
+        )
+        assert is_tensor_collection(
+            torch.nn.functional.smooth_l1_loss(
+                td.float(), -td.float(), reduction=reduction
+            )
+        )
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -5501,6 +5516,13 @@ class TestTensorDicts(TestTensorDictsBase):
         td_set[mask] = pseudo_td
         for item in td.values():
             assert (item[mask] == 0).all()
+
+    @pytest.mark.parametrize("dim", [None, 0])
+    def test_mean_var_std(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
+        assert is_tensor_collection(torch.mean(td.float(), dim=dim))
+        assert is_tensor_collection(torch.var(td.float(), dim=dim))
+        assert is_tensor_collection(torch.std(td.float(), dim=dim))
 
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [0, 2])

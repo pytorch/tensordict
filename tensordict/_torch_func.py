@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+from functools import partial
 
 from typing import Any, Callable, Sequence, TypeVar
 
@@ -788,3 +789,89 @@ def _stack_uninit_params(list_of_params, dim: int = 0, out=None):
         )
     out.batch_size = torch.Size([len(list_of_params)])
     return out
+
+
+@implements_for_td(torch.var)
+def _var(td: T, *args: Any, **kwargs: Any) -> T:
+    return td.var(*args, **kwargs)
+
+
+@implements_for_td(torch.std)
+def _std(td: T, *args: Any, **kwargs: Any) -> T:
+    return td.std(*args, **kwargs)
+
+
+@implements_for_td(torch.mean)
+def _mean(td: T, *args: Any, **kwargs: Any) -> T:
+    return td.mean(*args, **kwargs)
+
+
+@implements_for_td(torch.sum)
+def _sum(td: T, *args: Any, **kwargs: Any) -> T:
+    return td.sum(*args, **kwargs)
+
+
+@implements_for_td(torch.nn.functional.l1_loss)
+def _l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
+    reduction = kwargs.pop("reduction", "mean")
+    if reduction == "none":
+        batch_size = None
+    elif reduction == "mean":
+        batch_size = ()
+    elif reduction == "sum":
+        batch_size = ()
+    else:
+        raise ValueError(
+            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
+        )
+    return input.apply(
+        partial(torch.nn.functional.l1_loss, reduction=reduction),
+        target,
+        *args,
+        **kwargs,
+        batch_size=batch_size,
+    )
+
+
+@implements_for_td(torch.nn.functional.mse_loss)
+def _mse_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
+    reduction = kwargs.pop("reduction", "mean")
+    if reduction == "none":
+        batch_size = None
+    elif reduction == "mean":
+        batch_size = ()
+    elif reduction == "sum":
+        batch_size = ()
+    else:
+        raise ValueError(
+            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
+        )
+    return input.apply(
+        partial(torch.nn.functional.mse_loss, reduction=reduction),
+        target,
+        *args,
+        **kwargs,
+        batch_size=batch_size,
+    )
+
+
+@implements_for_td(torch.nn.functional.smooth_l1_loss)
+def _smooth_l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
+    reduction = kwargs.pop("reduction", "mean")
+    if reduction == "none":
+        batch_size = None
+    elif reduction == "mean":
+        batch_size = ()
+    elif reduction == "sum":
+        batch_size = ()
+    else:
+        raise ValueError(
+            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
+        )
+    return input.apply(
+        partial(torch.nn.functional.smooth_l1_loss, reduction=reduction),
+        target,
+        *args,
+        **kwargs,
+        batch_size=batch_size,
+    )
