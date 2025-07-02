@@ -51,4 +51,5 @@ jobs:
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
       setup-miniconda: true
-      runner-type: macos-m1-stable
+      # runner-type: macos-m1-stable
+      runner-type: macos-m2-15
