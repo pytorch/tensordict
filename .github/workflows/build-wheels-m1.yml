@@ -50,7 +50,7 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
-      setup-miniconda: true
+      setup-miniconda: false
       runner-type: macos-m1-stable
       delocate-wheel: false
       # runner-type: macos-m2-15
