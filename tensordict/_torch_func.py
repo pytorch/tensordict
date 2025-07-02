@@ -811,6 +811,11 @@ def _sum(td: T, *args: Any, **kwargs: Any) -> T:
     return td.sum(*args, **kwargs)
 
 
+@implements_for_td(torch.maximum)
+def _maximum(td: T, other: T, *args: Any, **kwargs: Any) -> T:
+    return td.maximum(other, *args, **kwargs)
+
+
 @implements_for_td(torch.nn.functional.l1_loss)
 def _l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
     reduction = kwargs.pop("reduction", "mean")
