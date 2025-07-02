@@ -52,4 +52,5 @@ jobs:
       build-platform: python-build-package
       setup-miniconda: true
       runner-type: macos-m1-stable
+      delocate-wheel: false
       # runner-type: macos-m2-15
