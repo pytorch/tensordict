@@ -3213,7 +3213,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # We should not pass out to stack because this will overwrite the tensors in-place, but
         # we don't want that
         if out is not None:
-            out.update(result)
+            out.update(result, update_batch_size=update_batch_size)
             return out
         return result
 
