@@ -3168,7 +3168,17 @@ class LazyStackedTensorDict(TensorDictBase):
 
     rename_key = _renamed_inplace_method(rename_key_)
 
-    def where(self, condition, other, *, out=None, pad=None):
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):
+        from tensordict import lazy_stack
+
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
@@ -3183,7 +3193,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     return td.where(cond, other, pad=pad)
                 return other if not cond else td
 
-            result = LazyStackedTensorDict.lazy_stack(
+            result = lazy_stack(
                 [
                     where(td, cond, _other, pad=pad)
                     for td, cond, _other in _zip_strict(
@@ -3193,7 +3203,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim,
             )
         else:
-            result = LazyStackedTensorDict.lazy_stack(
+            result = lazy_stack(
                 [
                     td.where(cond, other, pad=pad)
                     for td, cond in _zip_strict(self.tensordicts, condition)
@@ -3203,7 +3213,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # We should not pass out to stack because this will overwrite the tensors in-place, but
         # we don't want that
         if out is not None:
-            out.update(result)
+            out.update(result, update_batch_size=update_batch_size)
             return out
         return result
 
@@ -4094,9 +4104,21 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.detach_()
         return self
 
-    def where(self, condition, other, *, out=None, pad=None):
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):
         return self.to_tensordict().where(
-            condition=condition, other=other, out=out, pad=pad
+            condition=condition,
+            other=other,
+            out=out,
+            pad=pad,
+            update_batch_size=update_batch_size,
         )
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> _CustomOpTensorDict:

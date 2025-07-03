@@ -675,9 +675,21 @@ class PersistentTensorDict(TensorDictBase):
     def masked_fill(self, mask, value):
         return self.to_tensordict().masked_fill(mask, value)
 
-    def where(self, condition, other, *, out=None, pad=None):
+    def where(
+        self,
+        condition: torch.Tensor,
+        other: torch.Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):
         return self.to_tensordict().where(
-            condition=condition, other=other, out=out, pad=pad
+            condition=condition,
+            other=other,
+            out=out,
+            pad=pad,
+            update_batch_size=update_batch_size,
         )
 
     def masked_fill_(self, mask, value):

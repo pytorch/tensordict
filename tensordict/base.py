@@ -13050,7 +13050,15 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
-    def where(self, condition, other, *, out=None, pad=None):  # noqa: D417
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):  # noqa: D417
         """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
 
         Args:
@@ -13065,6 +13073,8 @@ class TensorDictBase(MutableMapping):
                 or destination tensordict will be written as `torch.where(mask, self, pad)`
                 or `torch.where(mask, pad, other)`. Defaults to ``None``, ie
                 missing keys are not tolerated.
+            update_batch_size (bool, optional): if ``True`` and ``out`` is provided, the batch size of the output will be
+                updated to match the batch size of the condition. Defaults to ``False``.
 
         """
         ...
