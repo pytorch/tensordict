@@ -2539,13 +2539,6 @@ class TestNoCasting:
 
         assert isinstance(X(False).a, bool)
 
-    def test_exclusivity(self):
-        with pytest.raises(ValueError, match="exclusive"):
-
-            @tensorclass(nocast=True, autocast=True)
-            class X:
-                a: int  # type is irrelevant
-
 
 class TestAutoCasting:
     @tensorclass(autocast=True)
@@ -3112,6 +3105,29 @@ class TestTensorOnly:
         assert isinstance(x.c, torch.Tensor)
         delattr(x, "c")
         assert not hasattr(x, "c")
+
+    def test_tensor_only_autocast_nocast(self):
+        @tensorclass(tensor_only=True, autocast=False)
+        class TensorOnly:
+            a: torch.Tensor
+            b: torch.Tensor
+            c: torch.Tensor | None = None
+
+        with pytest.raises(TypeError, match="tensor_only"):
+
+            @tensorclass(tensor_only=True, nocast=True)
+            class TensorOnlyNocast:
+                a: torch.Tensor
+                b: torch.Tensor
+                c: torch.Tensor | None = None
+
+        with pytest.raises(TypeError, match="tensor_only"):
+
+            @tensorclass(tensor_only=True, autocast=True)
+            class TensorOnlyAutocast:
+                a: torch.Tensor
+                b: torch.Tensor
+                c: torch.Tensor | None = None
 
     @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
     def test_wrong_tensor_only(self):

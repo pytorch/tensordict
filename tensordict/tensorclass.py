@@ -593,7 +593,11 @@ class _tensorclass_dec:
         tensor_only: bool = False,
     ):
         if autocast and nocast:
-            raise ValueError("autocast is exclusive with nocast.")
+            raise TypeError("autocast is exclusive with nocast.")
+        if tensor_only and (autocast or nocast):
+            raise TypeError(
+                "tensor_only and autocast or nocast are exclusive features."
+            )
         self.autocast = autocast
         self.frozen = frozen
         self.nocast = nocast
@@ -723,6 +727,10 @@ def from_dataclass(
         raise TypeError(f"Expected a obj input, got a {type(obj)} input instead.")
     name = obj.__class__.__name__ + "_tc"
     if dest_cls is None:
+        if tensor_only and (autocast or nocast):
+            raise TypeError(
+                "tensor_only and autocast or nocast are exclusive features."
+            )
         clz = _tensorclass(
             make_dataclass(name, fields=obj.__dataclass_fields__),
             frozen=frozen,
@@ -939,8 +947,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             except AttributeError:
                 pass
     _get_type_hints(cls, tensor_only=tensor_only)
-    if tensor_only and (cls._autocast or cls._nocast):
-        raise TypeError("tensor_only and _autocast or _nocast are exclusive features.")
     cls.__init__ = _init_wrapper(cls.__init__, cls, frozen, shadow, tensor_only)
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
