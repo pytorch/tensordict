@@ -3105,7 +3105,15 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
-    def where(self, condition, other, *, out=None, pad=None):
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):
         if _is_tensor_collection(type(other)):
 
             def func(tensor, _other, key):
@@ -3190,6 +3198,7 @@ class TensorDict(TensorDictBase):
                         input=tensor,
                         other=other,
                         out=_out,
+                        update_batch_size=update_batch_size,
                     )
 
                 return self._fast_apply(func, out, propagate_lock=True)
@@ -4127,9 +4136,21 @@ class _SubTensorDict(TensorDictBase):
     def detach_(self) -> T:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    def where(self, condition, other, *, out=None, pad=None):
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ):
         return self.to_tensordict().where(
-            condition=condition, other=other, out=out, pad=pad
+            condition=condition,
+            other=other,
+            out=out,
+            pad=pad,
+            update_batch_size=update_batch_size,
         )
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> T:

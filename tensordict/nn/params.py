@@ -1057,7 +1057,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _transpose(self, dim0, dim1): ...
 
     @_fallback
-    def where(self, condition, other, *, out=None, pad=None): ...
+    def where(
+        self,
+        condition: Tensor,
+        other: Tensor | TensorDictBase,
+        *,
+        out: TensorDictBase | None = None,
+        pad: int | bool = None,
+        update_batch_size: bool = False,
+    ): ...
 
     @_fallback
     def _permute(
