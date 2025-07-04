@@ -11846,6 +11846,11 @@ class TestNonTensorData:
         assert nd[1, 1].data == 0
         assert nd[1, 2].data == "final"
 
+    def test_new_empty_nontensorstack(self):
+        td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
+        assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
+        assert isinstance(td.new_empty((1,), empty_lazy=True).get("a"), NonTensorStack)
+
     def test_non_tensor_call(self):
         td0 = TensorDict({"a": 0, "b": 0})
         td1 = TensorDict({"a": 1, "b": 1})
