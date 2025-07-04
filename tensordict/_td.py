@@ -850,7 +850,12 @@ class TensorDict(TensorDictBase):
         # Convert index like (True,) or True to (0,) over unsqueezed self
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if isinstance(index, (bool, type(None))) or (isinstance(index, torch.Tensor) and index.shape == () and index.dtype == torch.bool and index.all()):
+        if isinstance(index, (bool, type(None))) or (
+            isinstance(index, torch.Tensor)
+            and index.shape == ()
+            and index.dtype == torch.bool
+            and index.all()
+        ):
             with self.unsqueeze(0) as td_unsqueezed:
                 td_unsqueezed[:] = value
             return
@@ -2533,7 +2538,7 @@ class TensorDict(TensorDictBase):
                         inplace=False,
                         ignore_lock=True,
                     )
-            # TODO: ultimately, we want to get rid of the above logic
+            # TODO: ultimately, we want to get rid of the above logic
             # dest_val = dest.maybe_to_stack()
             # dest_val[idx] = value
             # if dest_val is not dest:

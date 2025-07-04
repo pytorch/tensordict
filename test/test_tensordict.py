@@ -11863,7 +11863,9 @@ class TestNonTensorData:
         assert tdz.get(("a", "b")).tolist() == [["a"], ["b"], ["a"], ["c"]]
 
     def test_new_empty_setitem_2(self):
-        td = TensorDict(a=TensorDict(b=NonTensorStack("a"), batch_size=(1,)), batch_size=(1,)).to_lazystack()
+        td = TensorDict(
+            a=TensorDict(b=NonTensorStack("a"), batch_size=(1,)), batch_size=(1,)
+        ).to_lazystack()
         tdz = td.new_zeros((4,), empty_lazy=True)
         td["a", "b"] = "new"
         tdz[torch.tensor([False, False, False, True])] = td
