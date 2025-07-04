@@ -847,6 +847,15 @@ class TensorDict(TensorDictBase):
             isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
         ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        # Convert index like (True,) or True to (0,) over unsqueezed self
+        if isinstance(index, tuple) and len(index) == 1:
+            index = index[0]
+        if isinstance(index, (bool, type(None))) or (isinstance(index, torch.Tensor) and index.shape == () and index.dtype == torch.bool and index.all()):
+            with self.unsqueeze(0) as td_unsqueezed:
+                print("td_unsqueezed", td_unsqueezed)
+                print("value", value)
+                td_unsqueezed[:] = value
+            return
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)

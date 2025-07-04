@@ -2429,6 +2429,8 @@ class LazyStackedTensorDict(TensorDictBase):
                         value_unbind,
                     ):
                         if mask.any():
+                            print("_idx", _idx)
+                            print("_value", _value)
                             self.tensordicts[i][_idx] = _value
                 else:
                     for (i, _idx), _value in _zip_strict(
