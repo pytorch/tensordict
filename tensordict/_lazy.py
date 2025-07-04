@@ -2345,6 +2345,14 @@ class LazyStackedTensorDict(TensorDictBase):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         elif isinstance(index, (list, range)):
             index = torch.as_tensor(index, device=self.device)
+        elif isinstance(index, (type(None), bool)) or (
+            isinstance(index, torch.Tensor)
+            and index.shape == ()
+            and index.dtype == torch.bool
+            and index.all()
+        ):
+            self.unsqueeze(0).update(value)
+            return self
 
         if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -2448,6 +2456,13 @@ class LazyStackedTensorDict(TensorDictBase):
                         return leaf.tolist()
                     return leaf.data
                 return leaf
+        if isinstance(index, (type(None), bool)) or (
+            isinstance(index, torch.Tensor)
+            and index.shape == ()
+            and index.dtype == torch.bool
+            and index.all()
+        ):
+            return self.unsqueeze(0)
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
