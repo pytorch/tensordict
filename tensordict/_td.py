@@ -2514,18 +2514,16 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     ignore_lock=True,
                 )
-            is_diff = dest[idx].tolist() != value.tolist()
-            if is_diff:
-                dest_val = dest.maybe_to_stack()
-                dest_val[idx] = value
-                if dest_val is not dest:
-                    self._set_str(
-                        key,
-                        dest_val,
-                        validated=True,
-                        inplace=False,
-                        ignore_lock=True,
-                    )
+            dest_val = dest.maybe_to_stack()
+            dest_val[idx] = value
+            if dest_val is not dest:
+                self._set_str(
+                    key,
+                    dest_val,
+                    validated=True,
+                    inplace=False,
+                    ignore_lock=True,
+                )
             return
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
