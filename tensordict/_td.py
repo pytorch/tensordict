@@ -852,8 +852,6 @@ class TensorDict(TensorDictBase):
             index = index[0]
         if isinstance(index, (bool, type(None))) or (isinstance(index, torch.Tensor) and index.shape == () and index.dtype == torch.bool and index.all()):
             with self.unsqueeze(0) as td_unsqueezed:
-                print("td_unsqueezed", td_unsqueezed)
-                print("value", value)
                 td_unsqueezed[:] = value
             return
 
@@ -2523,16 +2521,29 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     ignore_lock=True,
                 )
-            dest_val = dest.maybe_to_stack()
-            dest_val[idx] = value
-            if dest_val is not dest:
-                self._set_str(
-                    key,
-                    dest_val,
-                    validated=True,
-                    inplace=False,
-                    ignore_lock=True,
-                )
+            is_diff = dest[idx].tolist() != value.tolist()
+            if is_diff:
+                dest_val = dest.maybe_to_stack()
+                dest_val[idx] = value
+                if dest_val is not dest:
+                    self._set_str(
+                        key,
+                        dest_val,
+                        validated=True,
+                        inplace=False,
+                        ignore_lock=True,
+                    )
+            # TODO: ultimately, we want to get rid of the above logic
+            # dest_val = dest.maybe_to_stack()
+            # dest_val[idx] = value
+            # if dest_val is not dest:
+            #     self._set_str(
+            #         key,
+            #         dest_val,
+            #         validated=True,
+            #         inplace=False,
+            #         ignore_lock=True,
+            #     )
             return
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
