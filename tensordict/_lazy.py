@@ -342,7 +342,11 @@ class LazyStackedTensorDict(TensorDictBase):
             # TODO: consider starting from the end?
             stack_dim = self.stack_dim  # - self.ndim
             sub_size.pop(stack_dim)
-            td = self.tensordicts[0].empty(recurse=True).new_empty(sub_size)
+            td = (
+                self.tensordicts[0]
+                .empty(recurse=True)
+                .new_empty(sub_size, empty_lazy=empty_lazy)
+            )
             # reproduce td as many times as needed
             return self._new_lazy_unsafe(
                 *[td.copy() for _ in range(size[self.stack_dim])],
