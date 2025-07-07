@@ -471,6 +471,7 @@ class TensorDict(TensorDictBase):
         return destination
 
     def is_empty(self):
+
         for item in self._tensordict.values():
             # we need to check if item is empty
             if _is_tensor_collection(type(item)):
@@ -1147,7 +1148,8 @@ class TensorDict(TensorDictBase):
             is_leaf = _default_is_leaf
         for key, item in self.items():
             if (
-                not call_on_nested and not is_leaf(type(item))
+                not call_on_nested 
+                and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -1268,6 +1270,7 @@ class TensorDict(TensorDictBase):
                 result._tensordict[key] = item_trsf
 
         else:
+
             local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
 
             def setter(
@@ -1292,6 +1295,7 @@ class TensorDict(TensorDictBase):
         for i, (key, local_future) in enumerate(
             _zip_strict(self.keys(), local_futures)
         ):
+
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -1412,7 +1416,8 @@ class TensorDict(TensorDictBase):
 
         for key, item in self.items():
             if (
-                not call_on_nested and not is_leaf(type(item))
+                not call_on_nested 
+                and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
