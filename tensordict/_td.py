@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import itertools
 import numbers
 import os
 import weakref
@@ -465,7 +466,6 @@ class TensorDict(TensorDictBase):
         return destination
 
     def is_empty(self):
-
         for item in self._tensordict.values():
             # we need to check if item is empty
             if _is_tensor_collection(type(item)):
@@ -1130,8 +1130,7 @@ class TensorDict(TensorDictBase):
             is_leaf = _default_is_leaf
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -1252,7 +1251,6 @@ class TensorDict(TensorDictBase):
                 result._tensordict[key] = item_trsf
 
         else:
-
             local_inplace = BEST_ATTEMPT_INPLACE if inplace else False
 
             def setter(
@@ -1277,7 +1275,6 @@ class TensorDict(TensorDictBase):
         for i, (key, local_future) in enumerate(
             _zip_strict(self.keys(), local_futures)
         ):
-
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -1398,8 +1395,7 @@ class TensorDict(TensorDictBase):
 
         for key, item in self.items():
             if (
-                not call_on_nested
-                and not is_leaf(type(item))
+                not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -1733,71 +1729,28 @@ class TensorDict(TensorDictBase):
         # we must use slices to keep the storage of the tensors
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
-        batch_sizes = []
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
-            idx0 = 0
-            idx1 = min(max_size, split_size)
-            batch_sizes.append(
-                torch.Size(
-                    tuple(
-                        d if i != dim else idx1 - idx0 for i, d in enumerate(batch_size)
-                    )
-                )
-            )
-            while idx1 < max_size:
-                idx0 = idx1
-                idx1 = min(max_size, idx1 + split_size)
-                batch_sizes.append(
-                    torch.Size(
-                        tuple(
-                            d if i != dim else idx1 - idx0
-                            for i, d in enumerate(batch_size)
-                        )
-                    )
-                )
+            segments = self.create_segments_from_int(split_size, max_size)
+            chunks = -(self.batch_size[dim] // -split_size)
+            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
-            try:
-                idx0 = 0
-                idx1 = split_size[0]
-                batch_sizes.append(
-                    torch.Size(
-                        tuple(
-                            d if i != dim else idx1 - idx0
-                            for i, d in enumerate(batch_size)
-                        )
-                    )
-                )
-                for idx in split_size[1:]:
-                    idx0 = idx1
-                    idx1 = min(max_size, idx1 + idx)
-                    batch_sizes.append(
-                        torch.Size(
-                            tuple(
-                                d if i != dim else idx1 - idx0
-                                for i, d in enumerate(batch_size)
-                            )
-                        )
-                    )
-            except TypeError:
+            if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
-
-            if idx1 < batch_size[dim]:
-                raise RuntimeError(
-                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
-                )
+            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+            segments = self.create_segments_from_list(split_size, max_size)
         else:
             raise TypeError(WRONG_TYPE)
         names = self._maybe_names()
-        # Use chunk instead of split to account for nested tensors if possible
-        if isinstance(split_size, int):
-            chunks = -(self.batch_size[dim] // -split_size)
-            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
-        else:
-            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+        batch_sizes = [
+            torch.Size(
+                tuple(d if i != dim else end - start for i, d in enumerate(batch_size))
+            )
+            for start, end in segments
+        ]
         splits = [
             {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
         ]
@@ -1818,6 +1771,38 @@ class TensorDict(TensorDictBase):
             for split, bsz in _zip_strict(splits, batch_sizes)
         )
         return result
+
+    def create_segments_from_int(self, split_size, max_size):
+        if split_size <= 0:
+            raise RuntimeError(
+                f"split_size must be a positive integer, but got {split_size}."
+            )
+        splits = [
+            (start, min(start + split_size, max_size))
+            for start in range(0, max_size, split_size)
+        ]
+        return splits
+
+    def create_segments_from_list(
+        self,
+        split_size: list[int] | tuple[int],
+        max_size: int,
+    ):
+        splits = [
+            (start, min(start + size, max_size))
+            for start, size in zip(
+                [0] + list(itertools.accumulate(split_size[:-1])),
+                split_size,
+            )
+        ]
+        total_split_size = sum(split_size)
+        if total_split_size != max_size:
+            raise RuntimeError(
+                f"Split method expects split_size to sum exactly to {max_size}, "
+                f"but got sum({split_size}) = {total_split_size}"
+            )
+
+        return splits
 
     def masked_select(self, mask: Tensor) -> T:
         d = {}
@@ -2167,7 +2152,6 @@ class TensorDict(TensorDictBase):
         batch_dims=None,
         names=None,
     ):
-
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
@@ -2257,7 +2241,7 @@ class TensorDict(TensorDictBase):
     @batch_dims.setter
     def batch_dims(self, value: int) -> None:
         raise RuntimeError(
-            f"Setting batch dims on {type(self).__name__} instances is " f"not allowed."
+            f"Setting batch dims on {type(self).__name__} instances is not allowed."
         )
 
     def _has_names(self):
@@ -2735,7 +2719,6 @@ class TensorDict(TensorDictBase):
         share_non_tensor,
         existsok,
     ) -> T:
-
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -2778,7 +2761,6 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
-
                 if executor is None:
                     _populate_memmap(
                         dest=dest,
