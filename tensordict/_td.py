@@ -852,6 +852,18 @@ class TensorDict(TensorDictBase):
             isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
         ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        # Convert index like (True,) or True to (0,) over unsqueezed self
+        if isinstance(index, tuple) and len(index) == 1:
+            index = index[0]
+        if isinstance(index, (bool, type(None))) or (
+            isinstance(index, torch.Tensor)
+            and index.shape == ()
+            and index.dtype == torch.bool
+            and index.all()
+        ):
+            with self.unsqueeze(0) as td_unsqueezed:
+                td_unsqueezed[:] = value
+            return
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -2531,6 +2543,17 @@ class TensorDict(TensorDictBase):
                         inplace=False,
                         ignore_lock=True,
                     )
+            # TODO: ultimately, we want to get rid of the above logic
+            # dest_val = dest.maybe_to_stack()
+            # dest_val[idx] = value
+            # if dest_val is not dest:
+            #     self._set_str(
+            #         key,
+            #         dest_val,
+            #         validated=True,
+            #         inplace=False,
+            #         ignore_lock=True,
+            #     )
             return
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
