@@ -268,8 +268,13 @@ class TensorDict(TensorDictBase):
                 sub_non_blocking = non_blocking
             device = torch.device(device)
             # Auto-index the device
-            if device.type not in ("cpu", "meta") and device.index is None:
-                device = torch.device(device.type, index=0)
+            if device.index is None:
+                if device.type == "cuda":
+                    device = torch.device(
+                        device.type, index=torch.cuda.current_device()
+                    )
+                elif device.type not in ("cpu", "meta"):
+                    device = torch.device(device.type, index=0)
             if device.type == "cuda":
                 # CUDA does its sync by itself
                 call_sync = False
