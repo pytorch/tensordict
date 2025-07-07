@@ -11859,6 +11859,26 @@ class TestNonTensorData:
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
         assert isinstance(td.new_empty((1,), empty_lazy=True).get("a"), NonTensorStack)
 
+    def test_new_empty_setitem(self):
+        td = TensorDict(
+            a=TensorDict(
+                b=NonTensorStack("a", "b", "c").unsqueeze(-1), batch_size=(3,)
+            ),
+            batch_size=(3,),
+        ).to_lazystack()
+        tdz = td.new_zeros((4,), empty_lazy=True)
+        tdz[torch.tensor([True, True, False, True])] = td
+        assert tdz.get(("a", "b")).tolist() == [["a"], ["b"], ["a"], ["c"]]
+
+    def test_new_empty_setitem_2(self):
+        td = TensorDict(
+            a=TensorDict(b=NonTensorStack("a"), batch_size=(1,)), batch_size=(1,)
+        ).to_lazystack()
+        tdz = td.new_zeros((4,), empty_lazy=True)
+        td["a", "b"] = "new"
+        tdz[torch.tensor([False, False, False, True])] = td
+        assert tdz["a", "b"][-1] == "new"
+
     def test_non_tensor_call(self):
         td0 = TensorDict({"a": 0, "b": 0})
         td1 = TensorDict({"a": 1, "b": 1})
