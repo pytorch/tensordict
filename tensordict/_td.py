@@ -48,6 +48,8 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _check_inbuild,
     _clone_value,
+    _create_segments_from_int,
+    _create_segments_from_list,
     _get_item,
     _get_leaf_tensordict,
     _get_shape_from_args,
@@ -1750,71 +1752,28 @@ class TensorDict(TensorDictBase):
         # we must use slices to keep the storage of the tensors
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
-        batch_sizes = []
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
-            idx0 = 0
-            idx1 = min(max_size, split_size)
-            batch_sizes.append(
-                torch.Size(
-                    tuple(
-                        d if i != dim else idx1 - idx0 for i, d in enumerate(batch_size)
-                    )
-                )
-            )
-            while idx1 < max_size:
-                idx0 = idx1
-                idx1 = min(max_size, idx1 + split_size)
-                batch_sizes.append(
-                    torch.Size(
-                        tuple(
-                            d if i != dim else idx1 - idx0
-                            for i, d in enumerate(batch_size)
-                        )
-                    )
-                )
+            segments = _create_segments_from_int(split_size, max_size)
+            chunks = -(self.batch_size[dim] // -split_size)
+            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
-            try:
-                idx0 = 0
-                idx1 = split_size[0]
-                batch_sizes.append(
-                    torch.Size(
-                        tuple(
-                            d if i != dim else idx1 - idx0
-                            for i, d in enumerate(batch_size)
-                        )
-                    )
-                )
-                for idx in split_size[1:]:
-                    idx0 = idx1
-                    idx1 = min(max_size, idx1 + idx)
-                    batch_sizes.append(
-                        torch.Size(
-                            tuple(
-                                d if i != dim else idx1 - idx0
-                                for i, d in enumerate(batch_size)
-                            )
-                        )
-                    )
-            except TypeError:
+            if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
-
-            if idx1 < batch_size[dim]:
-                raise RuntimeError(
-                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
-                )
+            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+            segments = _create_segments_from_list(split_size, max_size)
         else:
             raise TypeError(WRONG_TYPE)
         names = self._maybe_names()
-        # Use chunk instead of split to account for nested tensors if possible
-        if isinstance(split_size, int):
-            chunks = -(self.batch_size[dim] // -split_size)
-            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
-        else:
-            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+        batch_sizes = [
+            torch.Size(
+                tuple(d if i != dim else end - start for i, d in enumerate(batch_size))
+            )
+            for start, end in segments
+        ]
         splits = [
             {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
         ]
@@ -2184,7 +2143,6 @@ class TensorDict(TensorDictBase):
         batch_dims=None,
         names=None,
     ):
-
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
@@ -2274,7 +2232,7 @@ class TensorDict(TensorDictBase):
     @batch_dims.setter
     def batch_dims(self, value: int) -> None:
         raise RuntimeError(
-            f"Setting batch dims on {type(self).__name__} instances is " f"not allowed."
+            f"Setting batch dims on {type(self).__name__} instances is not allowed."
         )
 
     def _has_names(self):
@@ -2763,7 +2721,6 @@ class TensorDict(TensorDictBase):
         share_non_tensor,
         existsok,
     ) -> T:
-
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -2806,7 +2763,6 @@ class TensorDict(TensorDictBase):
                     )
                 continue
             else:
-
                 if executor is None:
                     _populate_memmap(
                         dest=dest,
