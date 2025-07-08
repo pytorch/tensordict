@@ -10246,6 +10246,19 @@ class TestLazyStackedTensorDict:
         assert (td_void.get(("parent", "a", "b"))[1].get("d") == 0).all()  # unaffected
         assert (td_void.get(("parent", "a", "b")).get("e") == 0).all()  # unaffected
 
+    @pytest.mark.parametrize("source_is_lazy", [True, False])
+    def test_update_batch_size(self, source_is_lazy):
+        td = TensorDict(
+            a=torch.zeros(3, 4), b=torch.randn(3, 4), batch_size=[3, 4]
+        ).to_lazystack(0)
+        td2 = TensorDict(a=torch.ones(2, 4), b=torch.randn(2, 4), batch_size=[2, 4])
+        if source_is_lazy:
+            td2 = td2.to_lazystack(0)
+        td.update(td2, update_batch_size=True)
+        assert td.batch_size == td2.batch_size
+        assert td.batch_size == (2, 4)
+        assert td.batch_size == td2.batch_size
+
 
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
