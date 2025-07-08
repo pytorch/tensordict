@@ -8,6 +8,7 @@ import collections
 import concurrent.futures
 import functools
 import inspect
+import itertools
 import logging
 
 import math
@@ -3050,3 +3051,36 @@ def _check_is_unflatten(new_shape, old_shape, return_flatten_dim=False):
         #     j = len(new_shape) - j - 1
         return out, (i, j)
     return out
+
+
+def _create_segments_from_int(split_size, max_size):
+    if split_size <= 0:
+        raise RuntimeError(
+            f"split_size must be a positive integer, but got {split_size}."
+        )
+    splits = [
+        (start, min(start + split_size, max_size))
+        for start in range(0, max_size, split_size)
+    ]
+    return splits
+
+
+def _create_segments_from_list(
+    split_size: list[int] | tuple[int],
+    max_size: int,
+):
+    splits = [
+        (start, min(start + size, max_size))
+        for start, size in zip(
+            [0] + list(itertools.accumulate(split_size[:-1])),
+            split_size,
+        )
+    ]
+    total_split_size = sum(split_size)
+    if total_split_size != max_size:
+        raise RuntimeError(
+            f"Split method expects split_size to sum exactly to {max_size}, "
+            f"but got sum({split_size}) = {total_split_size}"
+        )
+
+    return splits

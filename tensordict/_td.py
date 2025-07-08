@@ -49,6 +49,8 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _check_inbuild,
     _clone_value,
+    _create_segments_from_int,
+    _create_segments_from_list,
     _get_item,
     _get_leaf_tensordict,
     _get_shape_from_args,
@@ -1148,7 +1150,7 @@ class TensorDict(TensorDictBase):
             is_leaf = _default_is_leaf
         for key, item in self.items():
             if (
-                not call_on_nested 
+                not call_on_nested
                 and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
@@ -1416,7 +1418,7 @@ class TensorDict(TensorDictBase):
 
         for key, item in self.items():
             if (
-                not call_on_nested 
+                not call_on_nested
                 and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
@@ -1754,7 +1756,7 @@ class TensorDict(TensorDictBase):
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
-            segments = self.create_segments_from_int(split_size, max_size)
+            segments = _create_segments_from_int(split_size, max_size)
             chunks = -(self.batch_size[dim] // -split_size)
             splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
         elif isinstance(split_size, (list, tuple)):
@@ -1763,7 +1765,7 @@ class TensorDict(TensorDictBase):
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
             splits = {k: v.split(split_size, dim) for k, v in self.items()}
-            segments = self.create_segments_from_list(split_size, max_size)
+            segments = _create_segments_from_list(split_size, max_size)
         else:
             raise TypeError(WRONG_TYPE)
         names = self._maybe_names()
@@ -1793,38 +1795,6 @@ class TensorDict(TensorDictBase):
             for split, bsz in _zip_strict(splits, batch_sizes)
         )
         return result
-
-    def create_segments_from_int(self, split_size, max_size):
-        if split_size <= 0:
-            raise RuntimeError(
-                f"split_size must be a positive integer, but got {split_size}."
-            )
-        splits = [
-            (start, min(start + split_size, max_size))
-            for start in range(0, max_size, split_size)
-        ]
-        return splits
-
-    def create_segments_from_list(
-        self,
-        split_size: list[int] | tuple[int],
-        max_size: int,
-    ):
-        splits = [
-            (start, min(start + size, max_size))
-            for start, size in zip(
-                [0] + list(itertools.accumulate(split_size[:-1])),
-                split_size,
-            )
-        ]
-        total_split_size = sum(split_size)
-        if total_split_size != max_size:
-            raise RuntimeError(
-                f"Split method expects split_size to sum exactly to {max_size}, "
-                f"but got sum({split_size}) = {total_split_size}"
-            )
-
-        return splits
 
     def masked_select(self, mask: Tensor) -> T:
         d = {}
