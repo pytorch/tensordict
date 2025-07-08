@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import itertools
 import numbers
 import os
 import weakref
