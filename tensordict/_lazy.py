@@ -3085,13 +3085,30 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td.ndim <= self_upd.stack_dim or input_dict_or_td.batch_size[
             self_upd.stack_dim
         ] != len(self_upd.tensordicts):
+            # We receive a tensordict with a different batch-size than self.
+            # If update_batch_size is True, we can just convert the input tensordict to a lazy stack and update.
+            # This will change self, most likely removing a bunch of sub-tensordicts but we're good because the
+            # user is interested in modifying the batch-size.
+            # If update_batch_size is False, we need to try to change the batch-size of the input tensordict.
+            # That can only be done in restricted cases, so we raise an error if the batch-size of self (which must
+            # remain unchanged) is incompatible with the content of the input tensordict.
+            if update_batch_size:
+                return self.update(
+                    input_dict_or_td.to_lazystack(self.stack_dim),
+                    clone=clone,
+                    keys_to_update=keys_to_update,
+                    non_blocking=non_blocking,
+                    is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
+                    **kwargs,
+                )
+            # if the batch-size does not permit unbinding, let's first try to reset the batch-size.
+            input_dict_or_td = input_dict_or_td.copy()
+            batch_size = self_upd.batch_size
+            if self_upd.hook_out is not None:
+                batch_size = list(batch_size)
+                batch_size.insert(self_upd.stack_dim, len(self_upd.tensordicts))
             try:
-                # if the batch-size does not permit unbinding, let's first try to reset the batch-size.
-                input_dict_or_td = input_dict_or_td.copy()
-                batch_size = self_upd.batch_size
-                if self_upd.hook_out is not None:
-                    batch_size = list(batch_size)
-                    batch_size.insert(self_upd.stack_dim, len(self_upd.tensordicts))
                 input_dict_or_td.batch_size = batch_size
             except RuntimeError as err:
                 raise ValueError(
