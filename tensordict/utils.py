@@ -2030,7 +2030,10 @@ def capture_non_tensor_stack(allow_none=False):
         return None
     elif _CAPTURE_NONTENSOR_STACK is None:
         return _DEFAULT_CAPTURE_NONTENSOR_STACK
-    elif _CAPTURE_NONTENSOR_STACK == "none":
+    elif (
+        isinstance(_CAPTURE_NONTENSOR_STACK, str)
+        and _CAPTURE_NONTENSOR_STACK.lower() == "none"
+    ):
         return _DEFAULT_CAPTURE_NONTENSOR_STACK
     return (
         strtobool(_CAPTURE_NONTENSOR_STACK)
@@ -2126,7 +2129,7 @@ def list_to_stack(allow_none=False):
         return None
     elif _LIST_TO_STACK is None:
         return _DEFAULT_LIST_TO_STACK
-    elif _LIST_TO_STACK == "none":
+    elif isinstance(_LIST_TO_STACK, str) and _LIST_TO_STACK.lower() == "none":
         return _DEFAULT_LIST_TO_STACK
     return (
         strtobool(_LIST_TO_STACK) if isinstance(_LIST_TO_STACK, str) else _LIST_TO_STACK
@@ -2860,7 +2863,7 @@ def parse_tensor_dict_string(s: str):
     device_matches = re.findall(device_pattern, s)
     if device_matches:
         device = device_matches[-1]  # Take the last match
-        if device == "None":
+        if isinstance(device, str) and device.lower() == "none":
             device = None
         else:
             device = torch.device(device)
