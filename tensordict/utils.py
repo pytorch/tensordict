@@ -7,14 +7,13 @@ from __future__ import annotations
 import collections
 import concurrent.futures
 import functools
-import inspect
+import importlib.util
 import itertools
 import logging
 
 import math
 import os
 import re
-
 import sys
 import threading
 import time
@@ -23,15 +22,12 @@ import weakref
 from collections import defaultdict
 from collections.abc import KeysView
 from contextlib import nullcontext
-from copy import copy
 from functools import wraps
-from importlib import import_module
 from numbers import Number
 from textwrap import indent
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterator,
     List,
     Sequence,
@@ -43,7 +39,7 @@ from typing import (
 
 import numpy as np
 import torch
-from packaging.version import parse
+from pyvers import get_backend, implement_for, register_backend, set_backend
 
 from tensordict._C import (  # noqa: F401  # @manual=//pytorch/tensordict:_C
     _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
@@ -671,206 +667,6 @@ def _is_tensorclass(cls: type) -> bool:
         if not is_compiling():
             _TENSORCLASS_MEMO[cls] = out
     return out
-
-
-class implement_for:
-    """A version decorator that checks the version in the environment and implements a function with the fitting one.
-
-    If specified module is missing or there is no fitting implementation, call of the decorated function
-    will lead to the explicit error.
-    In case of intersected ranges, last fitting implementation is used.
-
-    Args:
-        module_name (str or callable): version is checked for the module with this
-            name (e.g. "gym"). If a callable is provided, it should return the
-            module.
-        from_version: version from which implementation is compatible. Can be open (None).
-        to_version: version from which implementation is no longer compatible. Can be open (None).
-
-    Examples:
-        >>> @implement_for("torch", None, "1.13")
-        >>> def fun(self, x):
-        ...     # Older torch versions will return x + 1
-        ...     return x + 1
-        ...
-        >>> @implement_for("torch", "0.13", "2.0")
-        >>> def fun(self, x):
-        ...     # More recent torch versions will return x + 2
-        ...     return x + 2
-        ...
-        >>> @implement_for(lambda: import_module("torch"), "0.", None)
-        >>> def fun(self, x):
-        ...     # More recent gym versions will return x + 2
-        ...     return x + 2
-        ...
-        >>> @implement_for("gymnasium", "0.27", None)
-        >>> def fun(self, x):
-        ...     # If gymnasium is to be used instead of gym, x+3 will be returned
-        ...     return x + 3
-        ...
-
-        This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
-    """
-
-    # Stores pointers to fitting implementations: dict[func_name] = func_pointer
-    _implementations = {}
-    _setters = []
-    _cache_modules = {}
-
-    def __init__(
-        self,
-        module_name: Union[str, Callable],
-        from_version: str = None,
-        to_version: str = None,
-    ):
-        self.module_name = module_name
-        self.from_version = from_version
-        self.to_version = to_version
-        implement_for._setters.append(self)
-
-    @staticmethod
-    def check_version(version: str, from_version: str | None, to_version: str | None):
-        version = parse(".".join([str(v) for v in parse(version).release]))
-        return (from_version is None or version >= parse(from_version)) and (
-            to_version is None or version < parse(to_version)
-        )
-
-    @staticmethod
-    def get_class_that_defined_method(f):
-        """Returns the class of a method, if it is defined, and None otherwise."""
-        return f.__globals__.get(f.__qualname__.split(".")[0])
-
-    @classmethod
-    def get_func_name(cls, fn):
-        # produces a name like torchrl.module.Class.method or torchrl.module.function
-        first = str(fn).split(".")[0][len("<function ") :]
-        last = str(fn).split(".")[1:]
-        if last:
-            first = [first]
-            last[-1] = last[-1].split(" ")[0]
-        else:
-            last = [first.split(" ")[0]]
-            first = []
-        return ".".join([fn.__module__] + first + last)
-
-    def _get_cls(self, fn):
-        cls = self.get_class_that_defined_method(fn)
-        if cls is None:
-            # class not yet defined
-            return
-        if type(cls).__name__ == "function":
-            cls = inspect.getmodule(fn)
-        return cls
-
-    def module_set(self):
-        """Sets the function in its module, if it exists already."""
-        prev_setter = type(self)._implementations.get(self.get_func_name(self.fn))
-        if prev_setter is not None:
-            prev_setter.do_set = False
-        type(self)._implementations[self.get_func_name(self.fn)] = self
-        cls = self.get_class_that_defined_method(self.fn)
-        if cls is not None:
-            if type(cls).__name__ == "function":
-                cls = inspect.getmodule(self.fn)
-        else:
-            # class not yet defined
-            return
-        setattr(cls, self.fn.__name__, self.fn)
-
-    @classmethod
-    def import_module(cls, module_name: Union[Callable, str]) -> str:
-        """Imports module and returns its version."""
-        if not callable(module_name):
-            module = cls._cache_modules.get(module_name)
-            if module is None:
-                if module_name in sys.modules:
-                    sys.modules[module_name] = module = import_module(module_name)
-                else:
-                    cls._cache_modules[module_name] = module = import_module(
-                        module_name
-                    )
-        else:
-            module = module_name()
-        return module.__version__
-
-    _lazy_impl = collections.defaultdict(list)
-
-    def _delazify(self, func_name):
-        for local_call in implement_for._lazy_impl[func_name]:
-            out = local_call()
-        return out
-
-    def __call__(self, fn):
-        # function names are unique
-        self.func_name = self.get_func_name(fn)
-        self.fn = fn
-        implement_for._lazy_impl[self.func_name].append(self._call)
-
-        @wraps(fn)
-        def _lazy_call_fn(*args, **kwargs):
-            # first time we call the function, we also do the replacement.
-            # This will cause the imports to occur only during the first call to fn
-            return self._delazify(self.func_name)(*args, **kwargs)
-
-        return _lazy_call_fn
-
-    def _call(self):
-
-        # If the module is missing replace the function with the mock.
-        fn = self.fn
-        func_name = self.func_name
-        implementations = implement_for._implementations
-
-        @wraps(fn)
-        def unsupported(*args, **kwargs):
-            raise ModuleNotFoundError(
-                f"Supported version of '{func_name}' has not been found."
-            )
-
-        self.do_set = False
-        # Return fitting implementation if it was encountered before.
-        if func_name in implementations:
-            try:
-                # check that backends don't conflict
-                version = self.import_module(self.module_name)
-                if self.check_version(version, self.from_version, self.to_version):
-                    self.do_set = True
-                if not self.do_set:
-                    return implementations[func_name].fn
-            except ModuleNotFoundError:
-                # then it's ok, there is no conflict
-                return implementations[func_name].fn
-        else:
-            try:
-                version = self.import_module(self.module_name)
-                if self.check_version(version, self.from_version, self.to_version):
-                    self.do_set = True
-            except ModuleNotFoundError:
-                return unsupported
-        if self.do_set:
-            self.module_set()
-            return fn
-        return unsupported
-
-    @classmethod
-    def reset(cls, setters_dict: Dict[str, implement_for] = None):
-        """Resets the setters in setter_dict.
-
-        ``setter_dict`` is a copy of implementations. We just need to iterate through its
-        values and call :meth:`~.module_set` for each.
-
-        """
-        if setters_dict is None:
-            setters_dict = copy(cls._implementations)
-        for setter in setters_dict.values():
-            setter.module_set()
-
-    def __repr__(self):
-        return (
-            f"{type(self).__name__}("
-            f"module_name={self.module_name}({self.from_version, self.to_version}), "
-            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
-        )
 
 
 def _unfold_sequence(seq):
@@ -3087,3 +2883,50 @@ def _create_segments_from_list(
         )
 
     return splits
+
+
+# Register JSON backends
+register_backend(group="json", backends={"json": "json", "orjson": "orjson"})
+
+
+@implement_for("json")
+def _json_dumps(data, **kwargs):
+    """JSON serialization using standard json module."""
+    import json
+
+    return json.dumps(data, **kwargs)
+
+
+@implement_for("orjson")
+def _json_dumps(data, **kwargs):  # noqa: F811
+    """JSON serialization using orjson module."""
+    import orjson
+
+    # orjson doesn't support separators parameter, so we need to handle it differently
+    if "separators" in kwargs:
+        # Remove separators for orjson and use default compact format
+        kwargs.pop("separators")
+    return orjson.dumps(data, **kwargs)
+
+
+def json_dumps(data, **kwargs):
+    """Unified JSON serialization function that works with both json and orjson backends."""
+    return _json_dumps(data, **kwargs)
+
+
+def set_json_backend(backend):
+    """Set the JSON backend to use (either 'json' or 'orjson')."""
+    if backend not in ["json", "orjson"]:
+        raise ValueError("Backend must be either 'json' or 'orjson'")
+    set_backend("json", backend)
+
+
+def get_json_backend():
+    """Get the current JSON backend."""
+    return get_backend("json")
+
+
+if importlib.util.find_spec("orjson") is not None:
+    set_json_backend("orjson")
+else:
+    set_json_backend("json")

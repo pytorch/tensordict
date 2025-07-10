@@ -56,11 +56,6 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp
 
-try:
-    import orjson as json
-except ImportError:
-    # Fallback for 3.13
-    import json
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 
@@ -768,7 +763,9 @@ class PersistentTensorDict(TensorDictBase):
                 }
             )
             with open(filepath, "wb") as json_metadata:
-                json_str = json.dumps(metadata)
+                from tensordict.utils import json_dumps
+
+                json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
                 if isinstance(json_str, str):
                     json_metadata.write(json_str.encode("utf-8"))

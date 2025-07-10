@@ -81,11 +81,6 @@ from tensordict.utils import (
 from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence
 
-try:
-    import orjson as json
-except ImportError:
-    # Fallback
-    import json
 
 try:
     from functorch import dim as ftdim
@@ -2876,7 +2871,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    json_str = json.dumps(
+                    from tensordict.utils import json_dumps
+
+                    json_str = json_dumps(
                         {"_type": str(type(self)), "stack_dim": self.stack_dim}
                     )
                     # Ensure we write bytes to the binary file
@@ -4204,7 +4201,9 @@ class _CustomOpTensorDict(TensorDictBase):
                 }
             )
             with open(filepath, "wb") as json_metadata:
-                json_str = json.dumps(metadata)
+                from tensordict.utils import json_dumps
+
+                json_str = json_dumps(metadata)
                 # Ensure we write bytes to the binary file
                 if isinstance(json_str, str):
                     json_metadata.write(json_str.encode("utf-8"))

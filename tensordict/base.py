@@ -13,6 +13,9 @@ import enum
 import gc
 import importlib
 import importlib.util
+
+# JSON backend is now handled by utils.json_dumps
+import json
 import os.path
 import queue
 import uuid
@@ -110,12 +113,6 @@ from tensordict.utils import (
 from torch import multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
-
-try:
-    import orjson as json
-except ImportError:
-    # Fallback for 3.13
-    import json
 
 try:
     from torch.compiler import is_compiling
@@ -5355,7 +5352,9 @@ class TensorDictBase(MutableMapping):
         else:
             # Convert the dict to json
             try:
-                metadata_dict_json = json.dumps(metadata_dict)
+                from tensordict.utils import json_dumps
+
+                metadata_dict_json = json_dumps(metadata_dict)
             except TypeError as e:
                 raise RuntimeError(
                     "Failed to convert the metatdata to json. "
@@ -5364,6 +5363,8 @@ class TensorDictBase(MutableMapping):
                     "If you encounter this error, please file an issue on github."
                 ) from e
             # Represent as a tensor
+            if isinstance(metadata_dict_json, str):
+                metadata_dict_json = metadata_dict_json.encode("utf-8")
             metadata_dict_json = torch.as_tensor(
                 bytearray(metadata_dict_json), dtype=torch.uint8
             )
