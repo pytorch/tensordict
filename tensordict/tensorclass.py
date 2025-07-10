@@ -1532,7 +1532,12 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                f.write(json.dumps(metadata))
+                json_str = json.dumps(metadata)
+                # Ensure we write bytes to the binary file
+                if isinstance(json_str, str):
+                    f.write(json_str.encode('utf-8'))
+                else:
+                    f.write(json_str)
                 if to_pickle:
                     with open(prefix / "other.pickle", "wb") as pickle_file:
                         pickle.dump(to_pickle, pickle_file)
@@ -4094,7 +4099,12 @@ class NonTensorStack(LazyStackedTensorDict):
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(json.dumps(jsondict))
+                    json_str = json.dumps(jsondict)
+                    # Ensure we write bytes to the binary file
+                    if isinstance(json_str, str):
+                        f.write(json_str.encode('utf-8'))
+                    else:
+                        f.write(json_str)
 
             if executor is None:
                 save_metadata()

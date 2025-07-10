@@ -4682,7 +4682,12 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
         }
     )
     with open(filepath, "wb") as json_metadata:
-        json_metadata.write(json.dumps(metadata))
+        json_str = json.dumps(metadata)
+        # Ensure we write bytes to the binary file
+        if isinstance(json_str, str):
+            json_metadata.write(json_str.encode("utf-8"))
+        else:
+            json_metadata.write(json_str)
 
 
 # user did specify location and memmap is in wrong place, so we copy
