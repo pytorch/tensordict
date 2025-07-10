@@ -94,11 +94,6 @@ from torch.nn.utils._named_member_accessor import swap_tensor
 from torch.utils._pytree import tree_map
 
 try:
-    import orjson as json
-except ImportError:
-    # Fallback
-    import json
-try:
     from functorch import dim as ftdim
 
     _has_funcdim = True
@@ -4175,14 +4170,17 @@ class _SubTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(
-                        json.dumps(
-                            {
-                                "_type": str(type(self)),
-                                "index": _index_to_str(self.idx),
-                            }
-                        )
+                    from tensordict.utils import json_dumps
+
+                    metadata_json = json_dumps(
+                        {
+                            "_type": str(type(self)),
+                            "index": _index_to_str(self.idx),
+                        }
                     )
+                    if isinstance(metadata_json, str):
+                        metadata_json = metadata_json.encode("utf-8")
+                    f.write(metadata_json)
 
             if executor is None:
                 save_metadata()
@@ -4682,7 +4680,14 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
         }
     )
     with open(filepath, "wb") as json_metadata:
-        json_metadata.write(json.dumps(metadata))
+        from tensordict.utils import json_dumps
+
+        json_str = json_dumps(metadata)
+        # Ensure we write bytes to the binary file
+        if isinstance(json_str, str):
+            json_metadata.write(json_str.encode("utf-8"))
+        else:
+            json_metadata.write(json_str)
 
 
 # user did specify location and memmap is in wrong place, so we copy

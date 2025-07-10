@@ -12,6 +12,7 @@ import ctypes
 import dataclasses
 import functools
 import inspect
+
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -80,11 +81,6 @@ from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_map
 
-try:
-    import orjson as json
-except ImportError:
-    # Fallback for 3.13
-    import json
 try:
     from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
@@ -1532,7 +1528,14 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                f.write(json.dumps(metadata))
+                from tensordict.utils import json_dumps
+
+                json_str = json_dumps(metadata)
+                # Ensure we write bytes to the binary file
+                if isinstance(json_str, str):
+                    f.write(json_str.encode("utf-8"))
+                else:
+                    f.write(json_str)
                 if to_pickle:
                     with open(prefix / "other.pickle", "wb") as pickle_file:
                         pickle.dump(to_pickle, pickle_file)
@@ -4094,7 +4097,14 @@ class NonTensorStack(LazyStackedTensorDict):
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(json.dumps(jsondict))
+                    from tensordict.utils import json_dumps
+
+                    json_str = json_dumps(jsondict, separators=(",", ":"))
+                    # Ensure we write bytes to the binary file
+                    if isinstance(json_str, str):
+                        f.write(json_str.encode("utf-8"))
+                    else:
+                        f.write(json_str)
 
             if executor is None:
                 save_metadata()
