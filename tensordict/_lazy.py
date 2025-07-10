@@ -2881,7 +2881,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                     # Ensure we write bytes to the binary file
                     if isinstance(json_str, str):
-                        f.write(json_str.encode('utf-8'))
+                        f.write(json_str.encode("utf-8"))
                     else:
                         f.write(json_str)
 
