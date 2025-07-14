@@ -1751,8 +1751,8 @@ class TensorDict(TensorDictBase):
         max_size = batch_size[dim]
         if isinstance(split_size, int):
             segments = _create_segments_from_int(split_size, max_size)
-            chunks = -(self.batch_size[dim] // -split_size)
-            splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
+            splits = [end - start for start, end in segments]
+            splits = {k: v.split(splits, dim) for k, v in self.items()}
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
