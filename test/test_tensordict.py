@@ -2665,6 +2665,38 @@ class TestGeneric:
         assert td is td3
         assert "d" not in td
 
+    @pytest.mark.parametrize("sign", ["plus", "minus"])
+    def test_split_uneven(self, sign):
+        a = torch.arange(6).unsqueeze(-1).expand(6, 3)
+        b = torch.arange(18).view(6, 3)
+        c = torch.arange(36).view(6, 3, 2)
+        td = TensorDict({"a": a, "b": b, "c": c}, [6, 3])
+
+        if sign == "plus":
+            tds = td.split(5, 0)
+        else:
+            tds = td.split(5, -2)
+        assert tds[0].shape == torch.Size([5, 3])
+        assert tds[1].shape == torch.Size([1, 3])
+        assert tds[0]["a"].shape == torch.Size([5, 3])
+        assert tds[1]["a"].shape == torch.Size([1, 3])
+        assert tds[0]["b"].shape == torch.Size([5, 3])
+        assert tds[1]["b"].shape == torch.Size([1, 3])
+        assert tds[0]["c"].shape == torch.Size([5, 3, 2])
+        assert tds[1]["c"].shape == torch.Size([1, 3, 2])
+        if sign == "plus":
+            tds = td.split(2, 1)
+        else:
+            tds = td.split(2, -1)
+        assert tds[0].shape == torch.Size([6, 2])
+        assert tds[1].shape == torch.Size([6, 1])
+        assert tds[0]["a"].shape == torch.Size([6, 2])
+        assert tds[1]["a"].shape == torch.Size([6, 1])
+        assert tds[0]["b"].shape == torch.Size([6, 2])
+        assert tds[1]["b"].shape == torch.Size([6, 1])
+        assert tds[0]["c"].shape == torch.Size([6, 2, 2])
+        assert tds[1]["c"].shape == torch.Size([6, 1, 2])
+
     def test_setitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)
