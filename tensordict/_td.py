@@ -1790,6 +1790,46 @@ class TensorDict(TensorDictBase):
         )
         return result
 
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+        if chunks < 1:
+            raise ValueError(
+                f"chunks must be a strictly positive integer, got {chunks}."
+            )
+        # fall back on split, using upper rounding
+        batch_size = self.batch_size
+        dim = _maybe_correct_neg_dim(dim, batch_size)
+        max_size = batch_size[dim]
+        split_size = -(max_size // -chunks)
+        segments = _create_segments_from_int(split_size, max_size)
+        splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
+        names = self._maybe_names()
+        batch_sizes = [
+            torch.Size(
+                tuple(d if i != dim else end - start for i, d in enumerate(batch_size))
+            )
+            for start, end in segments
+        ]
+        splits = [
+            {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
+        ]
+        device = self.device
+        is_shared = self._is_shared
+        is_memmap = self._is_memmap
+        is_locked = self.is_locked
+        result = tuple(
+            self._new_unsafe(
+                source=split,
+                batch_size=bsz,
+                names=names,
+                device=device,
+                lock=is_locked,
+                is_shared=is_shared,
+                is_memmap=is_memmap,
+            )
+            for split, bsz in _zip_strict(splits, batch_sizes)
+        )
+        return result
+
     def masked_select(self, mask: Tensor) -> T:
         d = {}
         mask_expand = mask
@@ -4349,6 +4389,10 @@ class _SubTensorDict(TensorDictBase):
     _repeat = TensorDict._repeat
     reshape = TensorDict.reshape
     split = TensorDict.split
+
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+        splits = -(self.batch_size[dim] // -chunks)
+        return self.split(splits, dim)
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(
