@@ -1429,6 +1429,10 @@ class PersistentTensorDict(TensorDictBase):
             "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
         )
 
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+        splits = -(self.batch_size[dim] // -chunks)
+        return self.split(splits, dim)
+
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__

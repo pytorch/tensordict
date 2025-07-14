@@ -3740,6 +3740,10 @@ class LazyStackedTensorDict(TensorDictBase):
             for tds in _zip_strict(*tds)
         )
 
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+        splits = -(self.batch_size[dim] // -chunks)
+        return self.split(splits, dim)
+
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)
 
@@ -4409,6 +4413,10 @@ class _CustomOpTensorDict(TensorDictBase):
             tuple_ok=tuple_ok,
             **kwargs,
         )
+
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+        splits = -(self.batch_size[dim] // -chunks)
+        return self.split(splits, dim)
 
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__

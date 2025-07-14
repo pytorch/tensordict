@@ -3419,6 +3419,7 @@ class TensorDictBase(MutableMapping):
     def _unbind(self, dim: int) -> tuple[T, ...]:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         """Splits a tensordict into the specified number of chunks, if possible.
 
@@ -3443,13 +3444,7 @@ class TensorDictBase(MutableMapping):
                      [18, 19]]])
 
         """
-        if chunks < 1:
-            raise ValueError(
-                f"chunks must be a strictly positive integer, got {chunks}."
-            )
-        # fall back on split, using upper rounding
-        split_size = -(self.batch_size[dim] // -chunks)
-        return self.split(split_size, dim=dim)
+        raise NotImplementedError
 
     @overload
     def unsqueeze(self, dim: int) -> T: ...
