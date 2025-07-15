@@ -10,14 +10,10 @@ from typing import Any, Callable
 import torch
 from tensordict.base import TensorDictBase
 
-from tensordict.tensorclass import (
-    _arg_to_tensordict,
-    _from_tensordict_with_copy,
-    _TD_PASS_THROUGH,
-    TD_HANDLED_FUNCTIONS,
-    TensorClass,
-)
+from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
+    _create_segments_from_int,
+    _create_segments_from_list,
     _getitem_batch_size,
     _is_tensorclass,
     _maybe_correct_neg_dim,
@@ -151,100 +147,212 @@ class UnbatchedTensor(TensorClass):
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
 
-    def chunk(self, chunks: int, dim: int | None = None):
-        self_copy = self.copy()
-        if dim is None:
-            dim = 0
-        dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        self_copy.batch_size = (
-            self.batch_size[:dim]
-            + (self.batch_size[dim] // chunks,)
-            + self.batch_size[dim + 1 :]
-        )
-        return self_copy
+    def _passthrough_pre(self):
+        copy = self.copy()
+        copy.data = None
+        return copy
 
-    def split(self, split_size: int | list[int], dim: int | None = None):
-        self_copy = self.copy()
-        if dim is None:
-            dim = 0
-        dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        chunks = (
-            len(split_size)
-            if isinstance(split_size, (list, tuple))
-            else -(self.batch_size[dim] // -split_size)
-        )
-        self_copy.batch_size = (
-            self.batch_size[:dim]
-            + (self.batch_size[dim] // chunks,)
-            + self.batch_size[dim + 1 :]
-        )
-        return self_copy
+    def reshape(self, *shape, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).reshape(*shape, **kwargs)
+        copy.data = self.data
+        return copy
 
-    def __getitem__(self, index):
-        if isinstance(index, (tuple, str)) and unravel_key(index):
-            raise ValueError(
-                "TensorClass fields must be accessed as attributes, not items."
-            )
-        self_copy = self.copy()
-        self_copy.batch_size = _getitem_batch_size(self.batch_size, index)
-        return self_copy
+    def view(self, *shape, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).view(*shape, **kwargs)
+        copy.data = self.data
+        return copy
 
+    def squeeze(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).squeeze(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def flatten(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).flatten(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def unflatten(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).unflatten(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def permute(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).permute(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def transpose(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).transpose(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def repeat(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).repeat(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def expand(self, *args, **kwargs):
+        copy = self._passthrough_pre()
+        copy = super(UnbatchedTensor, copy).expand(*args, **kwargs)
+        copy.data = self.data
+        return copy
+
+    def split(self, split_size, dim=0):
+        copy = self._passthrough_pre()
+        copies = super(UnbatchedTensor, copy).split(split_size, dim)
+        for copy in copies:
+            copy.data = self.data
+        return copies
+
+    def chunk(self, *args, **kwargs): 
+        copy = self._passthrough_pre()
+        copies = self._passthrough_pre(UnbatchedTensor, copy).chunk(*args, **kwargs)
+        for copy in copies:
+            copy.data = self.data
+        return copies
+    def unbind(self, dim=0):  # type: ignore[override]
+        copy = self._passthrough_pre()
+        copies = self._passthrough_pre(UnbatchedTensor, copy).unbind(*args, **kwargs)
+        for copy in copies:
+            copy.data = self.data
+        return copies
+    def _wrap_result(self, result):
+        # Only wrap if result is a torch.Tensor, else raise
+        if not isinstance(result, torch.Tensor):
+            raise NotImplementedError("UnbatchedTensor only supports torch.Tensor arithmetic/device ops.")
+        return type(self)(result, batch_size=self.batch_size)
+    def __add__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data") + self._get_data(other))
+    def __sub__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data") - self._get_data(other))
+    def __mul__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data") * self._get_data(other))
+    def __truediv__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data") / self._get_data(other))
+    def __floordiv__(self, other):  # type: ignore[override]
+        left = self._tensordict.get("data")
+        right = self._get_data(other)
+        if not (isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor)):
+            raise NotImplementedError("UnbatchedTensor floordiv only supports torch.Tensor operands.")
+        return self._wrap_result(left // right)
+    def __pow__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data") ** self._get_data(other))
+    def __neg__(self):  # type: ignore[override]
+        return self._wrap_result(-self._tensordict.get("data"))
+    def __abs__(self):  # type: ignore[override]
+        return self._wrap_result(abs(self._tensordict.get("data")))
+    def __radd__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._get_data(other) + self._tensordict.get("data"))
+    def __rsub__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._get_data(other) - self._tensordict.get("data"))
+    def __rmul__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._get_data(other) * self._tensordict.get("data"))
+    def __rtruediv__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._get_data(other) / self._tensordict.get("data"))
+    def __rfloordiv__(self, other):  # type: ignore[override]
+        left = self._get_data(other)
+        right = self._tensordict.get("data")
+        if not (isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor)):
+            raise NotImplementedError("UnbatchedTensor floordiv only supports torch.Tensor operands.")
+        return self._wrap_result(left // right)
+    def __rpow__(self, other):  # type: ignore[override]
+        return self._wrap_result(self._get_data(other) ** self._tensordict.get("data"))
+    def _get_data(self, other):
+        if isinstance(other, UnbatchedTensor):
+            return other._tensordict.get("data")
+        if isinstance(other, torch.Tensor):
+            return other
+        if isinstance(other, (int, float)):
+            # Convert scalars to tensors for arithmetic operations
+            return torch.tensor(other, dtype=self._tensordict.get("data").dtype, device=self._tensordict.get("data").device)
+        # Do not allow TensorDictBase or anything else
+        raise NotImplementedError("UnbatchedTensor arithmetic only supports torch.Tensor, UnbatchedTensor, or scalar operands.")
+
+    # --- Device/dtype ops ---
+    def to(self, *args, **kwargs):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data").to(*args, **kwargs))
+    def cpu(self, *args, **kwargs):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data").cpu(*args, **kwargs))
+    def cuda(self, *args, **kwargs):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data").cuda(*args, **kwargs))
+    def float(self, *args, **kwargs):
+        return self._wrap_result(self._tensordict.get("data").float(*args, **kwargs))
+    def double(self, *args, **kwargs):
+        return self._wrap_result(self._tensordict.get("data").double(*args, **kwargs))
+    def int(self, *args, **kwargs):
+        return self._wrap_result(self._tensordict.get("data").int(*args, **kwargs))
+    def long(self, *args, **kwargs):
+        if not isinstance(self._tensordict.get("data"), torch.Tensor):
+            raise NotImplementedError("UnbatchedTensor.long only supports torch.Tensor data.")
+        return self._wrap_result(self._tensordict.get("data").long(*args, **kwargs))
+    def half(self, *args, **kwargs):
+        if not isinstance(self._tensordict.get("data"), torch.Tensor):
+            raise NotImplementedError("UnbatchedTensor.half only supports torch.Tensor data.")
+        return self._wrap_result(self._tensordict.get("data").half(*args, **kwargs))
+    def bfloat16(self, *args, **kwargs):  # type: ignore[override]
+        return self._wrap_result(self._tensordict.get("data").bfloat16(*args, **kwargs))
+    def type(self, *args, **kwargs):
+        return self._wrap_result(self._tensordict.get("data").type(*args, **kwargs))
     @property
-    def batch_size(self):
-        return self._batch_size
+    def device(self):
+        return self._tensordict.get("data").device
+    @device.setter
+    def device(self, value):
+        # Accepts DeviceType, returns None, matches base class signature
+        raise NotImplementedError("Setting device is not supported for UnbatchedTensor.")
+    @property
+    def dtype(self):
+        return self._tensordict.get("data").dtype
 
-    @batch_size.setter
-    def batch_size(self, batch_size):
-        self.__dict__["_batch_size"] = torch.Size(batch_size)
-
-    shape = batch_size
-
-    def unbind(self, dim: int):
-        return tuple(
-            self[(slice(None),) * dim + (0,)] for _ in range(self.batch_size[dim])
-        )
-
-    @_bypass
-    def reshape(self, *shape): ...
-
-    @_bypass
-    def view(self, *shape): ...
-
-    def unsqueeze(self, dim: int):
-        shape = list(self.batch_size)
-        shape.insert(dim, 0)
-        self_copy = self.copy()
-        self_copy.batch_size = shape
-        return self_copy
-
-    def transpose(self, dim0, dim1):
-        batch_size = list(self.batch_size)
-        batch_size[dim1], batch_size[dim0] = batch_size[dim0], batch_size[dim1]
-        self_copy = self.copy()
-        self_copy.batch_size = batch_size
-        return self_copy
-
-    def permute(self, *dims):
-        if len(dims) == 1 and not isinstance(dims[0], int):
-            return self.permute(*dims[0])
-        batch_size = list(self.batch_size)
-        batch_size = [batch_size[d] for d in dims]
-        self_copy = self.copy()
-        self_copy.batch_size = batch_size
-        return self_copy
-
+    # --- __torch_function__ for torch ops ---
     @classmethod
-    def _stack_non_tensor(
-        cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
-    ):
-        result = list_of_non_tensor[0].copy()
-        batch_size = list(result.batch_size)
-        batch_size.insert(dim, len(list_of_non_tensor))
-        result.batch_size = torch.Size(batch_size)
-        return result
+    def __torch_function__(cls, func, types, args=(), kwargs=None):  # type: ignore[override]
+        if kwargs is None:
+            kwargs = {}
+        shape_ops = {
+            torch.reshape, torch.squeeze, torch.unsqueeze, torch.flatten, torch.unflatten,
+            torch.permute, torch.transpose, torch.repeat_interleave,
+            torch.cat, torch.stack, torch.split, torch.chunk, torch.unbind,
+        }
+        if func in shape_ops:
+            instance = args[0] if args else kwargs.get('input', None)
+            if instance is not None and isinstance(instance, UnbatchedTensor):
+                return instance._shape_passthrough(*args[1:], **kwargs)
+        arithmetic_ops = {
+            torch.add, torch.sub, torch.mul, torch.div, torch.true_divide, torch.floor_divide,
+            torch.pow, torch.neg, torch.abs,
+        }
+        device_ops = {torch.float, torch.double, torch.int, torch.long, torch.half, torch.bfloat16, torch.cuda, torch.cpu}
+        if func in arithmetic_ops or func in device_ops:
+            instance = args[0] if args else kwargs.get('input', None)
+            if instance is not None and isinstance(instance, UnbatchedTensor):
+                new_args = tuple(a._tensordict.get("data") if isinstance(a, UnbatchedTensor) else a for a in args[1:])
+                result = func(instance._tensordict.get("data"), *new_args, **kwargs)
+                return instance._wrap_result(result)
+        # If we don't recognize the function, return NotImplemented to let Python fall back
+        return NotImplemented
 
-    @_bypass
-    def unflatten(self, dim, unflattened_size): ...
+    # --- copy method ---
+    def copy(self):
+        # Create a new UnbatchedTensor with the same data (not cloned)
+        return type(self)(self._tensordict.get("data"), batch_size=self.batch_size)
 
-    @_bypass
-    def flatten(self, start_dim: int = 0, end_dim=-1): ...
+    # --- __getitem__ returns self (same instance) for all indexing operations ---
+    def __getitem__(self, index):
+        return self
+
+    def _getitem(self, item):
+        return self
+
+    # --- repr for debugging ---
+    def __repr__(self):
+        return f"UnbatchedTensor(data={self._tensordict.get('data')!r}, batch_size={self.batch_size})"

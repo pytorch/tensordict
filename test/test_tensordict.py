@@ -12631,6 +12631,7 @@ class TestUnbatchedTensor:
             batch_dims=2
         )
         assert td.shape == (2, 3)
+        assert td["a"].shape == ()
         assert td["a"] == 0
 
     def test_unbatched(self):
@@ -12732,6 +12733,346 @@ class TestUnbatchedTensor:
         assert td.exclude("b")["a"] is td["a"]
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
+
+    def test_unbatched_arithmetic_ops(self):
+        """Test that arithmetic operations work and return UnbatchedTensor."""
+        ub1 = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        ub2 = UnbatchedTensor(torch.tensor([4.0, 5.0, 6.0]), batch_size=(3,))
+        tensor = torch.tensor([7.0, 8.0, 9.0])
+        
+        # Test basic arithmetic operations
+        result = ub1 + ub2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([5.0, 7.0, 9.0]))
+        assert result.batch_size == (3,)
+        
+        result = ub1 - ub2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([-3.0, -3.0, -3.0]))
+        
+        result = ub1 * ub2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([4.0, 10.0, 18.0]))
+        
+        result = ub1 / ub2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([0.25, 0.4, 0.5]))
+        
+        result = ub1 ** 2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([1.0, 4.0, 9.0]))
+        
+        result = -ub1
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([-1.0, -2.0, -3.0]))
+        
+        result = abs(ub1)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([1.0, 2.0, 3.0]))
+        
+        # Test with regular tensors
+        result = ub1 + tensor
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([8.0, 10.0, 12.0]))
+        
+        result = tensor + ub1
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([8.0, 10.0, 12.0]))
+        
+        # Test floordiv
+        ub_int1 = UnbatchedTensor(torch.tensor([10, 20, 30]), batch_size=(3,))
+        ub_int2 = UnbatchedTensor(torch.tensor([3, 4, 5]), batch_size=(3,))
+        result = ub_int1 // ub_int2
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([3, 5, 6]))
+
+    def test_unbatched_device_dtype_ops(self):
+        """Test that device and dtype operations work and return UnbatchedTensor."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        # Test device operations
+        if torch.cuda.is_available():
+            result = ub.cuda()
+            assert isinstance(result, UnbatchedTensor)
+            assert result.data.is_cuda
+            assert result.batch_size == (3,)
+        
+        result = ub.cpu()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.is_cpu
+        assert result.batch_size == (3,)
+        
+        # Test dtype operations
+        result = ub.float()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float32
+        assert result.batch_size == (3,)
+        
+        result = ub.double()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float64
+        assert result.batch_size == (3,)
+        
+        result = ub.int()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.int32
+        assert result.batch_size == (3,)
+        
+        result = ub.long()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.int64
+        assert result.batch_size == (3,)
+        
+        result = ub.half()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float16
+        assert result.batch_size == (3,)
+        
+        result = ub.bfloat16()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.bfloat16
+        assert result.batch_size == (3,)
+        
+        # Test to() method
+        result = ub.to(torch.float64)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float64
+        assert result.batch_size == (3,)
+        
+        result = ub.to(device='cpu')
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.device.type == 'cpu'
+        assert result.batch_size == (3,)
+        
+        # Test properties
+        assert ub.device == ub.data.device
+        assert ub.dtype == ub.data.dtype
+
+    def test_unbatched_shape_ops_comprehensive(self):
+        """Test all shape operations return the same UnbatchedTensor instance."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        # Test reshape
+        result = ub.reshape((1, 3))
+        assert isinstance(result, UnbatchedTensor)
+        assert result is not ub  # Should be a copy
+        assert result.batch_size == (1, 3)
+        assert result.data is ub.data  # Same underlying data
+        
+        # Test view
+        result = ub.view((1, 3))
+        assert isinstance(result, UnbatchedTensor)
+        assert result is not ub
+        assert result.batch_size == (1, 3)
+        
+        # Test squeeze/unsqueeze
+        ub_2d = UnbatchedTensor(torch.tensor([[1.0], [2.0], [3.0]]), batch_size=(3, 1))
+        result = ub_2d.squeeze()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (3,)
+        
+        result = ub.unsqueeze(0)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (1, 3)
+        
+        # Test flatten/unflatten
+        result = ub.flatten()
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (3,)
+        
+        result = ub.unflatten(0, (1, 3))
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (1, 3)
+        
+        # Test permute/transpose
+        ub_2d = UnbatchedTensor(torch.tensor([[1.0, 2.0], [3.0, 4.0]]), batch_size=(2, 2))
+        result = ub_2d.permute(1, 0)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (2, 2)
+        
+        result = ub_2d.transpose(0, 1)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (2, 2)
+        
+        # Test repeat/expand
+        result = ub.repeat(2, 1)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (6,)
+        
+        result = ub.expand(2, 3)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (2, 3)
+        
+        # Test split/chunk/unbind
+        result = ub.split(1)
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        assert all(isinstance(r, UnbatchedTensor) for r in result)
+        assert all(r.batch_size == (1,) for r in result)
+        
+        result = ub.chunk(2)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert all(isinstance(r, UnbatchedTensor) for r in result)
+        
+        result = ub.unbind(0)
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        assert all(isinstance(r, UnbatchedTensor) for r in result)
+        assert all(r.batch_size == () for r in result)
+
+    def test_unbatched_torch_function_comprehensive(self):
+        """Test torch function operations work correctly."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        # Test torch shape functions
+        result = torch.reshape(ub, (1, 3))
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (1, 3)
+        
+        result = torch.squeeze(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (3,)
+        
+        result = torch.unsqueeze(ub, 0)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (1, 3)
+        
+        result = torch.flatten(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (3,)
+        
+        result = torch.permute(ub, (0,))
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (3,)
+        
+        # Test torch arithmetic functions
+        result = torch.add(ub, ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([2.0, 4.0, 6.0]))
+        
+        result = torch.mul(ub, 2.0)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([2.0, 4.0, 6.0]))
+        
+        result = torch.pow(ub, 2)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([1.0, 4.0, 9.0]))
+        
+        result = torch.neg(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([-1.0, -2.0, -3.0]))
+        
+        result = torch.abs(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert torch.allclose(result.data, torch.tensor([1.0, 2.0, 3.0]))
+        
+        # Test torch device/dtype functions
+        result = torch.float(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float32
+        
+        result = torch.double(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.float64
+        
+        result = torch.int(ub)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data.dtype == torch.int32
+
+    def test_unbatched_indexing(self):
+        """Test that indexing returns UnbatchedTensor with updated batch_size."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        # Test single index
+        result = ub[0]
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == ()
+        assert result.data is ub.data  # Same underlying data
+        
+        # Test slice
+        result = ub[1:3]
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (2,)
+        assert result.data is ub.data  # Same underlying data
+        
+        # Test with boolean mask
+        mask = torch.tensor([True, False, True])
+        result = ub[mask]
+        assert isinstance(result, UnbatchedTensor)
+        assert result.batch_size == (2,)
+        assert result.data is ub.data  # Same underlying data
+
+    def test_unbatched_copy(self):
+        """Test that copy method works correctly."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        result = ub.copy()
+        assert isinstance(result, UnbatchedTensor)
+        assert result is not ub  # Different instance
+        assert result.batch_size == ub.batch_size
+        assert torch.allclose(result.data, ub.data)  # Same data values
+        assert result.data is not ub.data  # Different tensor instance
+
+    def test_unbatched_batch_size_property(self):
+        """Test batch_size property works correctly."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        assert ub.batch_size == torch.Size((3,))
+        assert ub.shape == torch.Size((3,))
+        
+        # Test setting batch_size
+        ub.batch_size = (2, 3)
+        assert ub.batch_size == torch.Size((2, 3))
+        assert ub.shape == torch.Size((2, 3))
+
+    def test_unbatched_error_cases(self):
+        """Test that appropriate errors are raised for unsupported operations."""
+        ub = UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,))
+        
+        # Test that device setter raises NotImplementedError
+        with pytest.raises(NotImplementedError, match="Setting device is not supported"):
+            ub.device = torch.device('cpu')
+        
+        # Test that arithmetic with non-tensor types raises NotImplementedError
+        with pytest.raises(NotImplementedError, match="UnbatchedTensor arithmetic only supports"):
+            ub + "not a tensor"
+        
+        with pytest.raises(NotImplementedError, match="UnbatchedTensor arithmetic only supports"):
+            ub + 42  # int is not a torch.Tensor
+        
+        # Test that floordiv with non-tensor types raises NotImplementedError
+        with pytest.raises(NotImplementedError, match="UnbatchedTensor floordiv only supports"):
+            ub // "not a tensor"
+
+    def test_unbatched_in_tensordict_operations(self):
+        """Test UnbatchedTensor works correctly within TensorDict operations."""
+        td = TensorDict({
+            'ub': UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0]), batch_size=(3,)),
+            'regular': torch.tensor([4.0, 5.0, 6.0])
+        }, batch_size=(3,))
+        
+        # Test that shape operations on TensorDict preserve UnbatchedTensor
+        reshaped = td.reshape((1, 3))
+        assert reshaped['ub'] is td['ub']  # Same instance
+        
+        squeezed = td.squeeze()
+        assert squeezed['ub'] is td['ub']  # Same instance
+        
+        # Test that arithmetic operations work
+        result = td + td
+        assert isinstance(result['ub'], UnbatchedTensor)
+        assert torch.allclose(result['ub'].data, torch.tensor([2.0, 4.0, 6.0]))
+        
+        # Test that device operations work
+        result = td.to('cpu')
+        assert isinstance(result['ub'], UnbatchedTensor)
+        assert result['ub'].device.type == 'cpu'
+        
+        # Test that dtype operations work
+        result = td.float()
+        assert isinstance(result['ub'], UnbatchedTensor)
+        assert result['ub'].dtype == torch.float32
 
 
 def _to_float(td, td_name, tmpdir):
