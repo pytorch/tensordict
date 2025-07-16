@@ -12130,6 +12130,7 @@ class TestNonTensorData:
             raise RuntimeError
 
         # Test that the Value is unpacked
+        assert "data" not in td.get("val").__dict__
         assert td.get("val").data == val0
         assert td["val"] == val0
 
