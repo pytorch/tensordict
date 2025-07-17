@@ -132,7 +132,7 @@ _TensorTypes = (
     torch.Tensor,  # The base tensor class
 )
 _TENSOR_ONLY_TYPE_ERR = TypeError(
-    "tensor_only requires types to be Tensor, Tensor-subtrypes or None"
+    "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
@@ -1034,7 +1034,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 method_name,
                 _wrap_td_method(method_name, no_wrap=True, is_property=is_property),
             )
-
     for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
         if not hasattr(cls, method_name):
             setattr(
@@ -1685,7 +1684,16 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
     if (
         "_tensordict" not in __dict__
         or "_non_tensordict" not in __dict__
-        or (not self._shadow and (key in SET_ATTRIBUTES or key in type(self).__dict__))
+        or (
+            not self._shadow
+            and (
+                key in SET_ATTRIBUTES
+                or (
+                    key in type(self).__dict__
+                    and key not in getattr(self, "__expected_keys__", set())
+                )
+            )
+        )
     ):
         # if we ever decide to allow anything to be written in a tc
         # or key not in self.__dataclass_fields__):
@@ -2565,8 +2573,12 @@ def _data(self):
 
 
 def _data_setter(self, new_data):
+    if self._is_non_tensor:
+        self._non_tensor["data"] = new_data
+        return
     if "data" in self.__dataclass_fields__:
-        return self.set("data", new_data)
+        self.set("data", new_data)
+        return
     raise AttributeError("property 'data' is read-only.")
 
 
@@ -2889,6 +2901,74 @@ def _mp_manager():
     return _MP_MANAGER
 
 
+def _patch_tc(cls):
+    cls.__setattr__ = _setattr
+    cls.__getattr__ = _getattr
+    cls.__getitem__ = _getitem
+    cls.__setitem__ = _setitem
+    cls.__len__ = _len
+    cls.__repr__ = _repr
+    cls.__eq__ = _eq
+    cls.__ne__ = _ne
+    cls.__or__ = _or
+    cls.__xor__ = _xor
+    cls.__bool__ = _bool
+
+    cls.device = property(_device, _device_setter)
+    # cls.data = property(_data, _data_setter)
+    cls.grad = property(_grad)
+
+    cls._from_tensordict = classmethod(_from_tensordict)
+    cls.from_tensordict = _from_tensordict
+    cls._new_unsafe = classmethod(_new_unsafe)
+    cls._load_memmap = classmethod(_load_memmap)
+    cls.from_dict = classmethod(_from_dict)
+
+    cls.set = _set
+    cls.get = _get
+    cls.update = _update
+    cls.update_ = _update_
+    cls.update_at_ = _update_at_
+    cls.to_tensordict = _to_tensordict
+    cls.to_dict = _to_dict
+    cls.non_tensor_items = _non_tensor_items
+    cls.unbind = _unbind
+    cls._unbind = _unbind
+    cls.state_dict = _state_dict
+    cls.load_state_dict = _load_state_dict
+    cls._memmap_ = _memmap_
+    cls.share_memory_ = _share_memory_
+    cls.load_memmap = TensorDictBase.load_memmap
+    cls.load = TensorDictBase.load
+    cls.from_dict_instance = _from_dict_instance
+
+    # # Methods from lists
+    for method_name in _METHOD_FROM_TD:
+        setattr(cls, method_name, getattr(TensorDict, method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD:
+        setattr(cls, method_name, _wrap_td_method(method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
+        setattr(cls, method_name, _wrap_td_method(method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
+        is_property = isinstance(getattr(TensorDictBase, method_name, None), property)
+        # if is_property:
+        #     print("method_name", method_name)
+        #     continue
+        setattr(
+            cls,
+            method_name,
+            _wrap_td_method(method_name, no_wrap=True, is_property=is_property),
+        )
+    for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
+        setattr(
+            cls,
+            method_name,
+            _wrap_td_method(method_name, copy_non_tensor=True),
+        )
+    return cls
+    # _set_methods(TensorClass)
+
+
 class _TensorClassMeta(abc.ABCMeta):
     def __new__(
         mcs,
@@ -2916,10 +2996,19 @@ class _TensorClassMeta(abc.ABCMeta):
             tensor_only = cls._tensor_only
         if shadow is None and hasattr(cls, "_shadow"):
             shadow = cls._shadow
-        if name == "TensorClass" and "tensordict.tensorclass" in namespace.get(
-            "__module__", ""
-        ):
-            pass
+        if name == "TensorClass":
+            # if "tensordict.tensorclass" in namespace.get(
+            #     "__module__", ""
+            # ):
+            cls = _patch_tc(cls)
+            # ideally we could make it a dataclass but that won't work because:
+            # - we cannot have a frozen dataclass inherit from a non frozen one
+            # - if we freeze it we cannot set new methods
+            # cls = dataclass(cls, init=False)
+
+            delattr(cls, "batch_size")
+            delattr(cls, "device")
+            delattr(cls, "names")
         else:
             cls = tensorclass(
                 frozen=bool(frozen),
@@ -2950,9 +3039,12 @@ class _TensorClassMeta(abc.ABCMeta):
         #  If they are present, the dataclass decorator applied within tensorclass will look for a default value
         #  for these guys (when shadow=True) and it will actually find them (since they're properties of the base
         #  class). This is bad because then we'll be using the property as default value - not what we want.
-        delattr(result, "device")
-        delattr(result, "batch_size")
-        delattr(result, "names")
+        if "device" in result.__dict__:
+            delattr(result, "device")
+        if "batch_size" in result.__dict__:
+            delattr(result, "batch_size")
+        if "names" in result.__dict__:
+            delattr(result, "names")
         return result
 
 
@@ -3028,14 +3120,15 @@ class TensorClass(metaclass=_TensorClassMeta):
 
     """
 
-    _autocast: bool = False
-    _nocast: bool = False
-    _frozen: bool = False
-    _tensor_only: bool = False
-    ...
+    _autocast = False
+    _nocast = False
+    _frozen = False
+    _tensor_only = False
+
+    _is_tensorclass = True
+    _is_non_tensor = False
 
 
-# TODO: v0.9: remove this func entirely
 def _check_equal(a, b):
     # A util to check that two non-tensor data match
     #  We're replacing this by an identity match, not a value check (which will be faster and easier to handle).
@@ -3272,6 +3365,9 @@ class NonTensorDataBase(TensorClass):
 
     def __getattr__(self, item):
         if item == "data":
+            if self.is_memmap:
+                # unwrap the shared object
+                return _from_shared_nontensor(self._non_tensor["data"])
             return self._non_tensor["data"]
         return _getattr(self, item)
 
@@ -3473,7 +3569,7 @@ class NonTensorDataBase(TensorClass):
         if self._tensordict._is_shared:
             return self
         with self.unlock_():
-            self._non_tensordict["data"] = _share_memory_nontensor(
+            self.__dict__["_non_tensordict"]["data"] = _share_memory_nontensor(
                 self.data, manager=_mp_manager()
             )
         self._tensordict.share_memory_()

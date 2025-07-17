@@ -2985,23 +2985,50 @@ class TestPointWise:
 
 class TestSubClassing:
     def test_subclassing(self):
+        is_called = False
+
         class SubClass(TensorClass):
             a: int
+
+            def __setattr__(self, name, val):
+                nonlocal is_called
+                is_called = True
+                super().__setattr__(name, val)
 
         assert is_tensorclass(SubClass)
         assert not SubClass._autocast
         assert not SubClass._nocast
         assert issubclass(SubClass, TensorClass)
+        obj = SubClass(a=0)
+        assert is_called
+        is_called = False
+        obj.a = 1
+        assert obj.a == 1
+        assert is_called
 
     def test_subclassing_autocast(self):
+        is_called = False
+
         class SubClass(TensorClass, autocast=True):
             a: int
+
+            def __setattr__(self, name, val):
+                nonlocal is_called
+                is_called = True
+                super().__setattr__(name, val)
 
         assert is_tensorclass(SubClass)
         assert SubClass._autocast
         assert not SubClass._nocast
         assert issubclass(SubClass, TensorClass)
         assert isinstance(SubClass(torch.ones(())).a, int)
+
+        obj = SubClass(a=0)
+        assert is_called
+        is_called = False
+        obj.a = 1
+        assert obj.a == 1
+        assert is_called
 
         class SubClass(TensorClass["autocast"]):
             a: int
@@ -3014,8 +3041,15 @@ class TestSubClassing:
         assert isinstance(SubClass(torch.ones(())).a, int)
 
     def test_subclassing_nocast(self):
+        is_called = False
+
         class SubClass(TensorClass, nocast=True):
             a: int
+
+            def __setattr__(self, name, val):
+                nonlocal is_called
+                is_called = True
+                super().__setattr__(name, val)
 
         assert is_tensorclass(SubClass)
         assert not SubClass._autocast
@@ -3023,8 +3057,22 @@ class TestSubClassing:
         assert issubclass(SubClass, TensorClass)
         assert isinstance(SubClass(1).a, int)
 
+        obj = SubClass(a=0)
+        assert is_called
+        is_called = False
+        obj.a = 1
+        assert obj.a == 1
+        assert is_called
+
+        is_called = False
+
         class SubClass(TensorClass["nocast"]):
             a: int
+
+            def __setattr__(self, name, val):
+                nonlocal is_called
+                is_called = True
+                super().__setattr__(name, val)
 
         assert not TensorClass._nocast
         assert is_tensorclass(SubClass)
@@ -3032,6 +3080,13 @@ class TestSubClassing:
         assert SubClass._nocast
         assert issubclass(SubClass, TensorClass)
         assert isinstance(SubClass(1).a, int)
+
+        obj = SubClass(a=0)
+        assert is_called
+        is_called = False
+        obj.a = 1
+        assert obj.a == 1
+        assert is_called
 
     def test_subclassing_mult(self):
         class SubClass(TensorClass, nocast=True, frozen=True):
@@ -3062,20 +3117,29 @@ class TestSubClassing:
             s.a = 2
 
     def test_subclassing_super_call(self):
+        is_called = False
+
         class SubClass(TensorClass, nocast=True):
             a: int
             b: int
 
             def __setattr__(self, key, value):
+                nonlocal is_called
+                is_called = True
                 if key == "b":
                     return super().__setattr__("b", value + 1)
                 return super().__setattr__("a", value - 1)
 
         s = SubClass(a=torch.zeros(3), b=torch.zeros(3))
+        assert is_called
+        is_called = False
         assert (s.a == -1).all()
         assert (s.b == 1).all()
         s.a = torch.ones(())
+        assert is_called
+        is_called = False
         s.b = torch.ones(())
+        assert is_called
         assert (s.a == 0).all()
         assert (s.b == 2).all()
 
