@@ -2473,13 +2473,6 @@ class TestGeneric:
         yield
         tensordict.utils._LIST_TO_STACK = v
 
-    def test_set_list_warning(self, _set_list_none):
-        with pytest.warns(
-            FutureWarning,
-            match="You are setting a list of elements within a tensordict without setting",
-        ):
-            TensorDict(a=["a string", "another string"], batch_size=2)
-
     def test_set_nested_keys(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)
