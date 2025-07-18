@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+g6c9a615)
+                  main (0.0.post1+g244f7de)
                 </div>
               
             
@@ -369,21 +369,12 @@ within a TensorDict.</p>
 </dd>
 </dl>
 </dd>
-<dt>Future Behavior:</dt><dd><p>In version 0.10.0, lists will be automatically stacked by default.</p>
-</dd>
 </dl>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – If True, enables list-to-stack conversion. If False, disables it.</p>
 </dd>
 </dl>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<dl class="simple">
-<dt>A FutureWarning will be raised if a list is assigned to a TensorDict without setting this context manager</dt><dd><p>or the global flag, indicating that the behavior will change in the future.</p>
-</dd>
-</dl>
-</div>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())],</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
