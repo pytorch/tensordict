@@ -31,25 +31,6 @@ import tensordict.base as tensordict_base
 import torch
 from packaging import version
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    IS_FB = True
-    from pytorch.tensordict.test._utils_internal import (
-        decompose,
-        DummyPicklableClass,
-        get_available_devices,
-        prod,
-        TestTensorDictsBase,
-    )
-else:
-    IS_FB = False
-    from _utils_internal import (
-        decompose,
-        DummyPicklableClass,
-        get_available_devices,
-        prod,
-        TestTensorDictsBase,
-    )
-
 from tensordict import (
     capture_non_tensor_stack,
     get_defaults_to_none,
@@ -82,6 +63,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     is_non_tensor,
     is_tensorclass,
+    LinkedList,
     logger as tdlogger,
     set_lazy_legacy,
     set_list_to_stack,
@@ -89,6 +71,25 @@ from tensordict.utils import (
 from torch import multiprocessing as mp, nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.nn.parameter import UninitializedTensorMixin
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    IS_FB = True
+    from pytorch.tensordict.test._utils_internal import (
+        decompose,
+        DummyPicklableClass,
+        get_available_devices,
+        prod,
+        TestTensorDictsBase,
+    )
+else:
+    IS_FB = False
+    from _utils_internal import (
+        decompose,
+        DummyPicklableClass,
+        get_available_devices,
+        prod,
+        TestTensorDictsBase,
+    )
 
 try:
     from functorch import dim as ftdim
@@ -11898,6 +11899,20 @@ class TestNonTensorData:
         assert nd[1, 0].data == "another"
         assert nd[1, 1].data == 0
         assert nd[1, 2].data == "final"
+
+    @set_list_to_stack(True)
+    def test_linked_list(self):
+        td = TensorDict(a=["foo", "bar"], batch_size=(2,))
+        assert isinstance(td["a"], LinkedList)
+        td["a"][0] = "baz"
+        assert td["a"] == ["baz", "bar"]
+        td["a"][:2] = ["baz", "qux"]
+        assert td["a"] == ["baz", "qux"]
+
+        result = td["a"]
+        assert result._td() is td.get("a")
+        result.extend(["baz", "qux"])
+        assert result._td() is None
 
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))

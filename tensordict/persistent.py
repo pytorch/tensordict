@@ -447,7 +447,7 @@ class PersistentTensorDict(TensorDictBase):
             if is_non_tensor(result):
                 result_data = getattr(result, "data", NO_DEFAULT)
                 if result_data is NO_DEFAULT:
-                    return result.tolist()
+                    return result.tolist(as_linked_list=True)
                 return result_data
             return result
         if isinstance(item, list):

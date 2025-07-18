@@ -100,6 +100,7 @@ from tensordict.utils import (
     is_namedtuple_class,
     is_non_tensor,
     lazy_legacy,
+    LinkedList,
     list_to_stack,
     lock_blocked,
     prod,
@@ -6343,10 +6344,10 @@ class TensorDictBase(MutableMapping):
             from tensordict import NonTensorStack
 
             if isinstance(value, NonTensorStack) and not capture_non_tensor_stack():
-                return value.tolist()
+                return value.tolist(as_linked_list=True)
             data = getattr(value, "data", None)
             if data is None:
-                return value.tolist()
+                return value.tolist(as_linked_list=True)
             return data
         return value
 
@@ -6564,7 +6565,7 @@ class TensorDictBase(MutableMapping):
         if _pass_through(result):
             # Only lazy stacks of non tensors are actually tensordict instances
             if isinstance(result, TensorDictBase):
-                return result.tolist()
+                return result.tolist(as_linked_list=True)
             return result.data
         return result
 
@@ -12257,6 +12258,7 @@ class TensorDictBase(MutableMapping):
         convert_nodes: bool = True,
         convert_tensors: bool = False,
         tolist_first: bool = False,
+        as_linked_list: bool = False,
     ) -> List[Any]:
         """Returns a nested list representation of the tensordict.
 
@@ -12270,6 +12272,8 @@ class TensorDictBase(MutableMapping):
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
+            as_linked_list (bool): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
+                which will automatically update the tensordict when the list is modified. Default: ``False``.
 
         Returns:
             A nested list representation of the tensordict.
@@ -12354,6 +12358,8 @@ class TensorDictBase(MutableMapping):
                     local_res = []
                     _result.append(local_res)
                     q.append((local_val, local_res))
+        if as_linked_list:
+            return LinkedList(result, td=self)
         return result
 
     def numpy(self):
