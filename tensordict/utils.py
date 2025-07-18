@@ -1839,7 +1839,7 @@ def capture_non_tensor_stack(allow_none=False):
 
 
 # list to stack constrol
-_DEFAULT_LIST_TO_STACK = None
+_DEFAULT_LIST_TO_STACK = "1"
 _LIST_TO_STACK = os.environ.get("LIST_TO_STACK")
 
 
@@ -1854,15 +1854,8 @@ class set_list_to_stack(_DecoratorContextManager):
         If a list is assigned to a TensorDict without this context manager, it will be converted to a numpy array
             and wrapped in a NonTensorData if it cannot be cast to a Tensor.
 
-    Future Behavior:
-        In version 0.10.0, lists will be automatically stacked by default.
-
     Args:
         mode (bool): If True, enables list-to-stack conversion. If False, disables it.
-
-    .. warning::
-        A FutureWarning will be raised if a list is assigned to a TensorDict without setting this context manager
-            or the global flag, indicating that the behavior will change in the future.
 
     Example:
         >>> with set_list_to_stack(True):
@@ -1907,9 +1900,6 @@ def list_to_stack(allow_none=False):
     Current Behavior:
         Returns the current setting for list-to-stack conversion. If the setting is not defined and `allow_none`
             is True, it returns None. Otherwise, it returns the default setting.
-
-    Future Behavior:
-        The default behavior will change in version 0.10.0 to automatically stack lists.
 
     Args:
         allow_none (bool): If True, allows the function to return None if the setting is not defined.
