@@ -2920,3 +2920,78 @@ if importlib.util.find_spec("orjson") is not None:
     set_json_backend("orjson")
 else:
     set_json_backend("json")
+
+
+class LinkedList(list):
+    """A thin wrapper around a list that automatically updates a tensordict when the list is modified."""
+
+    def __init__(self, *args, td: TensorDictBase, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._td = weakref.ref(td)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        td = self._td()
+        if td is not None:
+            td[key] = value
+
+    def append(self, object: Any) -> None:
+        self._td = lambda: None
+        return super().append(object)
+
+    def extend(self, object: Any) -> None:
+        self._td = lambda: None
+        return super().extend(object)
+
+    def insert(self, index: int, object: Any) -> None:
+        self._td = lambda: None
+        return super().insert(index, object)
+
+    def pop(self, index: int = -1) -> Any:
+        self._td = lambda: None
+        return super().pop(index)
+
+    def remove(self, value: Any) -> None:
+        self._td = lambda: None
+        return super().remove(value)
+
+    def clear(self) -> None:
+        self._td = lambda: None
+        return super().clear()
+
+    def __delitem__(self, index: int) -> None:
+        self._td = lambda: None
+        return super().__delitem__(index)
+
+    def __repr__(self) -> str:
+        return f"LinkedList({super().__repr__()})"
+
+    def __str__(self) -> str:
+        return f"LinkedList({super().__str__()})"
+
+    def __eq__(self, other: Any) -> bool:
+        return list(self) == other
+
+    def __ne__(self, other: Any) -> bool:
+        return list(self) != other
+
+    def __getstate__(self) -> object:
+        return list(self).__getstate__()
+
+    def __iadd__(self, other: Any) -> Any:
+        self._td = lambda: None
+        return super().__iadd__(other)
+
+    def __imul__(self, other: Any) -> Any:
+        self._td = lambda: None
+        return super().__imul__(other)
+
+
+# register LinkedList in PyTree
+torch.utils._pytree.register_pytree_node(
+    LinkedList,
+    torch.utils._pytree._list_flatten,
+    torch.utils._pytree._list_unflatten,
+    serialized_type_name="builtins.list",
+    flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
+)

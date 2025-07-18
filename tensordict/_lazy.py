@@ -2448,7 +2448,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 if is_non_tensor(leaf):
                     # Only lazy stacks of non tensors are actually tensordict instances
                     if isinstance(leaf, TensorDictBase):
-                        return leaf.tolist()
+                        return leaf.tolist(as_linked_list=True)
                     return leaf.data
                 return leaf
         if isinstance(index, (type(None), bool)) or (

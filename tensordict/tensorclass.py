@@ -74,6 +74,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     IndexType,
     is_tensorclass,
     KeyDependentDefaultDict,
+    LinkedList,
     list_to_stack,
     set_capture_non_tensor_stack,
 )
@@ -1635,7 +1636,11 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
                 if not callable(out) and not is_non_tensor(out):
                     return out
                 if is_non_tensor(out):
-                    return out.data if hasattr(out, "data") else out.tolist()
+                    return (
+                        out.data
+                        if hasattr(out, "data")
+                        else out.tolist(as_linked_list=True)
+                    )
                 return _wrap_method(self, item, out)
             raise AttributeError(item)
 
@@ -1657,7 +1662,11 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 return out
         out = self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
         if is_non_tensor(out):
-            return out.data if not isinstance(out, NonTensorStack) else out.tolist()
+            return (
+                out.data
+                if not isinstance(out, NonTensorStack)
+                else out.tolist(as_linked_list=True)
+            )
         return out
 
     out = getattr(self._tensordict, item, NO_DEFAULT)
@@ -1665,7 +1674,7 @@ def _getattr(self, item: str, **kwargs) -> Any:
         if not callable(out) and not is_non_tensor(out):
             return out
         if is_non_tensor(out):
-            return out.data if hasattr(out, "data") else out.tolist()
+            return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
     raise AttributeError(item)
 
@@ -3527,7 +3536,13 @@ class NonTensorDataBase(TensorClass):
             nowarn=True,
         )(*args, **kwargs)
 
-    def tolist(self, *, convert_tensors: bool = False, tolist_first: bool = False):
+    def tolist(
+        self,
+        *,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
+        as_linked_list: bool = False,
+    ):
         """Converts the data in a list if the batch-size is non-empty.
 
         If the batch-size is empty, returns the data.
@@ -3537,13 +3552,22 @@ class NonTensorDataBase(TensorClass):
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
+            as_linked_list (bool, optional): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
+                which will automatically update the tensordict when the list is modified. Default: ``False``.
         """
         if not self.batch_size:
             return self.data
-        return [
-            ntd.tolist(convert_tensors=convert_tensors, tolist_first=tolist_first)
+        result = [
+            ntd.tolist(
+                convert_tensors=convert_tensors,
+                tolist_first=tolist_first,
+                as_linked_list=as_linked_list,
+            )
             for ntd in self.unbind(0)
         ]
+        if as_linked_list:
+            return LinkedList(result, td=self)
+        return result
 
     def copy_(
         self, src: NonTensorDataBase | NonTensorStack, non_blocking: bool = False
@@ -4055,7 +4079,13 @@ class NonTensorStack(LazyStackedTensorDict):
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
 
-    def tolist(self, *, convert_tensors: bool = False, tolist_first: bool = False):
+    def tolist(
+        self,
+        *,
+        convert_tensors: bool = False,
+        tolist_first: bool = False,
+        as_linked_list: bool = False,
+    ):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
 
         Keyword Args:
@@ -4063,6 +4093,8 @@ class NonTensorStack(LazyStackedTensorDict):
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``True``.
+            as_linked_list (bool, optional): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
+                which will automatically update the tensordict when the list is modified. Default: ``False``.
 
         Examples:
             >>> from tensordict import NonTensorData
@@ -4075,10 +4107,17 @@ class NonTensorStack(LazyStackedTensorDict):
 
         """
         iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
-        return [
-            td.tolist(convert_tensors=convert_tensors, tolist_first=tolist_first)
+        result = [
+            td.tolist(
+                convert_tensors=convert_tensors,
+                tolist_first=tolist_first,
+                as_linked_list=as_linked_list,
+            )
             for td in iterator
         ]
+        if as_linked_list:
+            return LinkedList(result, td=self)
+        return result
 
     def maybe_to_stack(self):
         """Placeholder for interchangeability between stack and non-stack of non-tensors."""
@@ -4152,8 +4191,13 @@ class NonTensorStack(LazyStackedTensorDict):
         retain_none: bool = True,
         convert_tensors: bool = False,
         tolist_first: bool = False,
+        as_linked_list: bool = False,
     ) -> dict[str, Any]:
-        return self.tolist(convert_tensors=convert_tensors)
+        return self.tolist(
+            convert_tensors=convert_tensors,
+            tolist_first=tolist_first,
+            as_linked_list=as_linked_list,
+        )
 
     def to_tensordict(self, *, retain_none: bool | None = None):
         return self
@@ -4391,6 +4435,11 @@ class NonTensorStack(LazyStackedTensorDict):
             _BREAK_ON_MEMMAP = False
             memmap = True
         try:
+            if not is_tensor_collection(value):
+                if isinstance(value, list):
+                    value = NonTensorStack(*value)
+                else:
+                    value = NonTensorData(value)
             super().__setitem__(index, value)
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)
