@@ -4764,6 +4764,11 @@ class TensorDictBase(MutableMapping):
     def is_cpu(self):
         return self.device is not None and self.device.type == "cpu"
 
+    @property
+    def is_meta(self):
+        dtype = self.dtype
+        return dtype is not None and self.dtype == torch.meta
+
     # Serialization functionality
     def state_dict(
         self,
