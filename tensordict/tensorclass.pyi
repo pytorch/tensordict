@@ -1076,6 +1076,11 @@ class TensorClass:
         is_leaf: Callable[[type], bool] | None = None,
     ) -> T: ...
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T: ...
+    def tensor_split(
+        self,
+        indices_or_sections: int | list[int] | tuple[int, ...] | torch.Tensor,
+        dim: int = 0,
+    ) -> tuple[TensorDictBase, ...]: ...
     def split_keys(
         self,
         *key_sets,

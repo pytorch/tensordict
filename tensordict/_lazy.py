@@ -3717,7 +3717,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 for s in split_size:
                     if s == 0:
                         batch_size = list(self._batch_size)
-                        batch_size[self.stack_dim] = 0
+                        batch_size.pop(self.stack_dim)
                         yield LazyStackedTensorDict(
                             batch_size=batch_size,
                             device=self.device,

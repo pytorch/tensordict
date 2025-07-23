@@ -7362,6 +7362,41 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError):
             td_zero.load_state_dict(sd, strict=True)
 
+    def test_tensor_split(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert td.batch_size == (4, 3, 2, 1)
+        tensor_compare = torch.zeros(td.shape)
+        tensor_split = torch.tensor_split(tensor_compare, (1, 3))
+        assert len(tensor_split) == 3, tensor_split
+        assert tensor_split[0].shape == (1, 3, 2, 1)
+        assert tensor_split[1].shape == (2, 3, 2, 1)
+        assert tensor_split[2].shape == (1, 3, 2, 1)
+        tensor_split = torch.tensor_split(tensor_compare, (1, 3), 1)
+        assert len(tensor_split) == 3, [t.shape for t in tensor_split]
+        assert tensor_split[0].shape == (4, 1, 2, 1)
+        assert tensor_split[1].shape == (4, 2, 2, 1)
+        assert tensor_split[2].shape == (4, 0, 2, 1)
+        tensor_split = torch.tensor_split(tensor_compare, 2, 2)
+        assert len(tensor_split) == 2, [t.shape for t in tensor_split]
+        assert tensor_split[0].shape == (4, 3, 1, 1)
+        assert tensor_split[1].shape == (4, 3, 1, 1)
+
+        td_split = td.tensor_split((1, 3))
+        assert len(td_split) == 3, td_split
+        assert td_split[0].batch_size == torch.Size([1, *td.shape[1:]])
+        assert td_split[1].batch_size == torch.Size([2, *td.shape[1:]])
+        assert td_split[2].batch_size == torch.Size([1, *td.shape[1:]])
+        td_split = td.tensor_split((1, 3), 1)
+        assert len(td_split) == 3, td_split
+        assert td_split[0].batch_size == torch.Size([4, 1, *td.shape[2:]])
+        assert td_split[1].batch_size == torch.Size([4, 2, *td.shape[2:]])
+        assert td_split[2].batch_size == torch.Size([4, 0, *td.shape[2:]])
+        td_split = td.tensor_split(2, 2)
+        assert len(td_split) == 2, td_split
+        assert td_split[0].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
+        assert td_split[1].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
+
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)
         np.random.seed(1)

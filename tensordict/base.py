@@ -16,6 +16,7 @@ import importlib.util
 
 # JSON backend is now handled by utils.json_dumps
 import json
+import math
 import os.path
 import queue
 import uuid
@@ -3420,13 +3421,23 @@ class TensorDictBase(MutableMapping):
     def _unbind(self, dim: int) -> tuple[T, ...]:
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def tensor_split(self, indices_or_sections: int | list[int], dim=0) -> tuple[TensorDictBase, ...]:
-        """Splits a tensor into multiple sub-tensors, all of which are views of input,
-        along dimension dim according to the indices or number of sections specified by indices_or_sections.
+    def tensor_split(
+        self,
+        indices_or_sections: int | list[int] | tuple[int, ...] | torch.Tensor,
+        dim=0,
+    ) -> tuple[TensorDictBase, ...]:
+        """Splits a TensorDict into multiple sub-tensordicts, all of which are views of input, along dimension dim according to the indices or number of sections specified by indices_or_sections.
 
         Args:
-            indices_or_sections (int or List(int):
+            indices_or_sections (int or List(int) or tuple(int) or 1D tensor of ints): If `indices_or_sections` is an integer
+                `n` or a zero dimensional long tensordict with value `n`, input is split into `n` sections along dimension `dim`.
+                If input is divisible by `n` along dimension `dim`, each section will be of equal size, `input.size(dim) / n`.
+                If input is not divisible by `n`, the sizes of the first `int(input.size(dim) % n)` sections will have
+                size `int(input.size(dim) / n) + 1`, and the rest will have size `int(input.size(dim) / n)`.
+                If `indices_or_sections` is a list or tuple of ints, or a one-dimensional long tensor, then input is split
+                along dimension `dim` at each of the indices in the list, tuple or tensor.
+                For instance, `indices_or_sections=[2, 3]` and `dim=0` would result in the tensors `input[:2]`, `input[2:3]`, and `input[3:]`.
+                If `indices_or_sections` is a tensor, it must be a zero-dimensional or one-dimensional long tensor on the CPU.
             dim (int, optional): dimension along which to split the tensor. Default: 0
 
         Examples:
@@ -3443,7 +3454,46 @@ class TensorDictBase(MutableMapping):
                      [18, 19]]])
 
         """
-        raise NotImplementedError
+        if not isinstance(indices_or_sections, (int, list, tuple, torch.Tensor)):
+            raise ValueError(
+                "indices_or_sections must be an integer, a list of integers, or a 1D tensor of integers"
+            )
+
+        batch_size = self.batch_size
+        dim = _maybe_correct_neg_dim(dim, batch_size)
+
+        if self.ndim == 0:
+            msg = "tensor_split: received a rank zero tensor, but expected a tensor of rank one or greater!"
+            raise ValueError(msg)
+
+        # Case 0 -- indices_or_sections is an integer or a scalar tensor n and a is split along dim into n parts of equal-ish length
+        if isinstance(indices_or_sections, int):
+            sections: int = indices_or_sections  # type: ignore[assignment]
+
+            if sections <= 0:
+                msg = f"tensor_split: number of sections must be greater than 0, but was {sections}"
+                raise ValueError(msg)
+
+            dim_size = self.shape[dim]
+            min_split_size = math.floor(dim_size / sections)
+            num_splits_one_extra = dim_size % sections
+
+            split_sizes = []
+            for split_idx in range(sections):
+                split_size = (
+                    min_split_size + 1
+                    if (split_idx < num_splits_one_extra)
+                    else min_split_size
+                )
+                split_sizes.append(split_size)
+
+            return tuple(self.split(split_sizes, dim=dim))
+        # Case 1 -- indices_or_sections is a sequence of integers or a 1D tensor describing the splits
+        else:
+            indices = indices_or_sections
+            indices = [0] + list(indices) + [self.shape[dim]]
+            split_sizes = [indices[i + 1] - indices[i] for i in range(len(indices) - 1)]
+            return tuple(self.split(split_sizes, dim=dim))
 
     @abc.abstractmethod
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
