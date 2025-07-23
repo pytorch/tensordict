@@ -55,6 +55,7 @@ import torch
 
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey
+from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
@@ -268,7 +269,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1):
     return wrap_func
 
 
-class TensorDictBase(MutableMapping):
+class TensorDictBase(MutableMapping, TensorCollection):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
     _safe: bool = False
