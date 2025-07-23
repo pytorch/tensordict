@@ -76,6 +76,17 @@ class InteractionType(StrEnum):
         """Return the interaction_type with name matched to the provided string (case insensitive)."""
         return cls(type_str.lower())
 
+    @classmethod
+    def _missing_(cls, value):
+        # Normalize input: if a string, lower it
+        if isinstance(value, str):
+            value = value.lower()
+            # Try to match with the enum values
+            for member in cls:
+                if member.value == value:
+                    return member
+        return None  # Default behavior if not found
+
 
 _interaction_type = _ContextManager()
 

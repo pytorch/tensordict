@@ -111,6 +111,49 @@ if PYTORCH_TEST_FBCODE:
 
 
 class TestInteractionType:
+    def test_base(self):
+        with set_interaction_type("DETERMINISTIC"):
+            assert interaction_type() == InteractionType.DETERMINISTIC
+
+        with set_interaction_type("MODE"):
+            assert interaction_type() == InteractionType.MODE
+
+        with set_interaction_type("MEDIAN"):
+            assert interaction_type() == InteractionType.MEDIAN
+
+        with set_interaction_type("MEAN"):
+            assert interaction_type() == InteractionType.MEAN
+
+        with set_interaction_type("RANDOM"):
+            assert interaction_type() == InteractionType.RANDOM
+
+        with set_interaction_type("mode"):
+            assert interaction_type() == InteractionType.MODE
+
+        with set_interaction_type("median"):
+            assert interaction_type() == InteractionType.MEDIAN
+
+        with set_interaction_type("mean"):
+            assert interaction_type() == InteractionType.MEAN
+
+        with set_interaction_type("random"):
+            assert interaction_type() == InteractionType.RANDOM
+
+        with set_interaction_type(InteractionType.DETERMINISTIC):
+            assert interaction_type() == InteractionType.DETERMINISTIC
+
+        with set_interaction_type(InteractionType.MODE):
+            assert interaction_type() == InteractionType.MODE
+
+        with set_interaction_type(InteractionType.MEDIAN):
+            assert interaction_type() == InteractionType.MEDIAN
+
+        with set_interaction_type(InteractionType.MEAN):
+            assert interaction_type() == InteractionType.MEAN
+
+        with set_interaction_type(InteractionType.RANDOM):
+            assert interaction_type() == InteractionType.RANDOM
+
     @pytest.mark.parametrize(
         "str_and_expected_type",
         [
