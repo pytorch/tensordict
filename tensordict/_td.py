@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 import numbers
 import os
 import weakref
@@ -1789,6 +1790,47 @@ class TensorDict(TensorDictBase):
             for split, bsz in _zip_strict(splits, batch_sizes)
         )
         return result
+
+    def tensor_split(self, indices_or_sections: int | list[int], dim=0) -> tuple[TensorDictBase, ...]:
+        assert isinstance(indices_or_sections, int | list)
+
+        batch_size = self.batch_size
+        dim = _maybe_correct_neg_dim(dim, batch_size)
+
+        if self.ndim == 0:
+            msg = "tensor_split: received a rank zero tensor, but expected a tensor of rank one or greater!"
+            raise ValueError(msg)
+
+        # Case 0 -- indices_or_sections is an integer or a scalar tensor n and a is split along dim into n parts of equal-ish length
+        if isinstance(indices_or_sections, int):
+            sections: int = (
+                indices_or_sections  # type: ignore[assignment]
+            )
+
+            if sections <= 0:
+                msg = f"tensor_split: number of sections must be greater than 0, but was {sections}"
+                raise ValueError(msg)
+
+            dim_size = self.shape[dim]
+            min_split_size = math.floor(dim_size / sections)
+            num_splits_one_extra = dim_size % sections
+
+            split_sizes = []
+            for split_idx in range(sections):
+                split_size = (
+                    min_split_size + 1
+                    if (split_idx < num_splits_one_extra)
+                    else min_split_size
+                )
+                split_sizes.append(split_size)
+
+            return tuple(self.split(split_sizes, dim=dim))
+        # Case 1 -- indices_or_sections is a sequence of integers or a 1D tensor describing the splits
+        else:
+            indices = indices_or_sections
+            indices = [0] + list(indices) + [self.shape[dim]]
+            split_sizes = [indices[i + 1] - indices[i] for i in range(len(indices) - 1)]
+            return tuple(self.split(split_sizes, dim=dim))
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         if chunks < 1:

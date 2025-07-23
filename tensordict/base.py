@@ -3421,6 +3421,31 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def tensor_split(self, indices_or_sections: int | list[int], dim=0) -> tuple[TensorDictBase, ...]:
+        """Splits a tensor into multiple sub-tensors, all of which are views of input,
+        along dimension dim according to the indices or number of sections specified by indices_or_sections.
+
+        Args:
+            indices_or_sections (int or List(int):
+            dim (int, optional): dimension along which to split the tensor. Default: 0
+
+        Examples:
+            >>> td = TensorDict({
+            ...     'x': torch.arange(24).reshape(3, 4, 2),
+            ... }, batch_size=[3, 4])
+            >>> td0, td1 = td.tensor_split(dim=-1, indices_or_sections=2)
+            >>> td0['x']
+            tensor([[[ 0,  1],
+                     [ 2,  3]],
+                    [[ 8,  9],
+                     [10, 11]],
+                    [[16, 17],
+                     [18, 19]]])
+
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
         """Splits a tensordict into the specified number of chunks, if possible.
 
