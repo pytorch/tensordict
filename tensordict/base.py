@@ -4573,10 +4573,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self
 
     @abc.abstractmethod
-    def _has_names(self):
+    def _has_names(self) -> bool:
         raise NotImplementedError
 
-    def _maybe_names(self):
+    def _maybe_names(self) -> Sequence[str] | None:
         if self._has_names():
             return self.names
         return None
@@ -10451,10 +10451,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("bitwise_and")
     def bitwise_and(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase:  # noqa: D417
+    ) -> TensorCollection:  # noqa: D417
         r"""Performs a bitwise AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10504,10 +10504,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("logical_and")
     def logical_and(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase:  # noqa: D417
+    ) -> TensorCollection:  # noqa: D417
         r"""Performs a logical AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10557,11 +10557,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("add")
     def add(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase:  # noqa: D417
+    ) -> TensorCollection:  # noqa: D417
         r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
 
         .. math::
@@ -10615,10 +10615,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def add_(
         self,
-        other: TensorDictBase | torch.Tensor | float,
+        other: TensorCollection | torch.Tensor | float,
         *,
         alpha: float | None = None,
-    ):
+    ) -> T:
         """In-place version of :meth:`~.add`.
 
         .. note::
@@ -10639,9 +10639,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("lerp", 2)
     def lerp(
         self,
-        end: TensorDictBase | torch.Tensor,
-        weight: TensorDictBase | torch.Tensor | float,
-    ):
+        end: TensorCollection | torch.Tensor,
+        weight: TensorCollection | torch.Tensor | float,
+    ) -> T:
         r"""Does a linear interpolation of two tensors :attr:`start` (given by ``self``) and :attr:`end` based on a scalar or tensor :attr:`weight`.
 
         .. math::
@@ -11111,7 +11111,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def minimum_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def minimum_(self, other: TensorCollection | torch.Tensor) -> T:
         """In-place version of :meth:`~.minimum`.
 
         .. note::
@@ -11130,7 +11130,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("minimum")
     def minimum(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> T:  # noqa: D417
@@ -11178,7 +11178,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def clamp_max_(self, other: TensorCollection | torch.Tensor) -> T:
         """In-place version of :meth:`~.clamp_max`.
 
         .. note::
@@ -11576,17 +11576,19 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # Functorch compatibility
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _add_batch_dim(self, *, in_dim, vmap_level):
+    def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> T:
         raise NotImplementedError
 
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+    def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> T:
         raise NotImplementedError
 
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+    def _maybe_remove_batch_dim(
+        self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
+    ) -> T:
         raise NotImplementedError
 
     # Validation and checks
