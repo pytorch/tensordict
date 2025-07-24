@@ -509,6 +509,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "tan_",
     "tanh",
     "tanh_",
+    "tensor_split",
     "to",
     "to_h5",
     "to_lazystack",

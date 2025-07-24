@@ -1823,6 +1823,27 @@ class TestTensorClass:
         assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
         assert split_tcs[0].y[0].z == split_tcs[0].y[1].z == split_tcs[0].y[2].z == z
 
+    def test_tensor_split(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        data_in = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", batch_size=[3, 6]
+        )
+        data_out = MyDataNested(
+            X=torch.ones(3, 6, 5), z="test_tensorclass", y=data_in, batch_size=[3, 6]
+        )
+
+        data_split = data_out.tensor_split((1, 4, 5), 1)
+        assert len(data_split) == 4
+        assert data_split[0].batch_size == torch.Size([3, 1])
+        assert data_split[1].batch_size == torch.Size([3, 3])
+        assert data_split[2].batch_size == torch.Size([3, 1])
+        assert data_split[2].batch_size == torch.Size([3, 1])
+
     def test_update(self):
         @tensorclass
         class MyDataNested:
