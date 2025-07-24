@@ -72,15 +72,13 @@ except ImportError:  # torch 2.0
     from torch._dynamo import assume_constant_result, is_compiling
 
 if TYPE_CHECKING:
+    from tensordict.base import TensorDictBase
     from tensordict.tensorclass import NonTensorStack
-    from tensordict.tensordict import TensorDictBase
 
 try:
-    from dataclasses import _FIELDS, GenericAlias
+    from dataclasses import GenericAlias
 except ImportError:
     # python < 3.9
-    from dataclasses import _FIELDS
-
     class GenericAlias:
         """Placeholder."""
 
@@ -2721,14 +2719,19 @@ def _mismatch_keys(keys1, keys2):
 
 
 def _is_dataclass(obj):
-    """Like dataclasses.is_dataclass but compatible with compile."""
-    cls = (
-        obj
-        if isinstance(obj, type) and not isinstance(obj, GenericAlias)
-        else type(obj)
-    )
-    # return hasattr(cls, _FIELDS)
-    return getattr(cls, _FIELDS, None) is not None
+    """Check if an object is a dataclass."""
+    try:
+        from dataclasses import is_dataclass
+
+        return is_dataclass(obj)
+    except ImportError:
+        # Fallback for older Python versions
+        cls = (
+            obj
+            if isinstance(obj, type) and not isinstance(obj, GenericAlias)
+            else type(obj)
+        )
+        return hasattr(cls, "__dataclass_fields__")
 
 
 def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:

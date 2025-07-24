@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Tuple, type_check_only
+from typing import Tuple, TypeAlias, Union
 
-NestedKey = type_check_only(str | Tuple["NestedKeyType", ...])
+NestedKeyType = Union[str, Tuple["NestedKeyType", ...]]
+NestedKey: TypeAlias = NestedKeyType
