@@ -12,7 +12,17 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Dict, Iterator, List, OrderedDict, Sequence, Type
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    OrderedDict,
+    Sequence,
+    Type,
+    TYPE_CHECKING,
+)
 
 import torch
 
@@ -64,6 +74,11 @@ try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 def _apply_leaves(data, fn):
@@ -677,7 +692,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _set_device(self, device: torch.device) -> T: ...
 
     @_fallback
-    def auto_device_(self) -> T: ...
+    def auto_device_(self) -> Self: ...
 
     __getitems__ = __getitem__
 
@@ -1245,7 +1260,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
             yield k, self._apply_get_post_hook(v)
 
     @_apply_on_data
-    def zero_(self) -> T: ...
+    def zero_(self) -> Self: ...
 
     @_apply_on_data
     def fill_(self, key: NestedKey, value: float | bool) -> T: ...

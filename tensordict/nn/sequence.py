@@ -214,7 +214,7 @@ class TensorDictSequential(TensorDictModule):
     ) -> None:
 
         if len(modules) == 1 and isinstance(modules[0], collections.OrderedDict):
-            modules_vals = self._convert_modules(modules[0].values())
+            modules_vals = self._convert_modules(modules[0].values())  # type: ignore[unreachable]
             in_keys, out_keys = self._compute_in_and_out_keys(modules_vals)
             self._complete_out_keys = list(out_keys)
             modules = collections.OrderedDict(
@@ -228,7 +228,7 @@ class TensorDictSequential(TensorDictModule):
         elif len(modules) == 1 and isinstance(
             modules[0], collections.abc.MutableSequence
         ):
-            modules = self._convert_modules(modules[0])
+            modules = self._convert_modules(modules[0])  # type: ignore[unreachable]
             in_keys, out_keys = self._compute_in_and_out_keys(modules)
             self._complete_out_keys = list(out_keys)
             super().__init__(
@@ -237,7 +237,7 @@ class TensorDictSequential(TensorDictModule):
                 out_keys=out_keys,
             )
         elif len(modules) == 1 and isinstance(modules[0], dict):
-            return self.__init__(
+            return self.__init__(  # type: ignore[unreachable]
                 collections.OrderedDict(modules[0]),
                 partial_tolerant=partial_tolerant,
                 selected_out_keys=selected_out_keys,
@@ -282,8 +282,8 @@ class TensorDictSequential(TensorDictModule):
     def _compute_in_and_out_keys(
         self, modules: list[TensorDictModule]
     ) -> tuple[list[NestedKey], list[NestedKey]]:
-        in_keys = []
-        out_keys = []
+        in_keys = []  # type: ignore[var-annotated]
+        out_keys = []  # type: ignore[var-annotated]
         for module in modules:
             # we sometimes use in_keys to select keys of a tensordict that are
             # necessary to run a TensorDictModule. If a key is an intermediary in

@@ -1162,7 +1162,7 @@ class TensorDictModule(TensorDictModuleBase):
                 )
                 tensors = ()
             else:
-                tensors = tuple(
+                tensors = tuple(  # type: ignore[unreachable]
                     tensordict._get_tuple_maybe_non_tensor(
                         _unravel_key_to_tuple(in_key),
                         default,
