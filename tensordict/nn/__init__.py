@@ -47,3 +47,45 @@ from .common import as_tensordict_module
 
 from .cudagraphs import CudaGraphModule
 from .utils import composite_lp_aggregate, set_composite_lp_aggregate
+
+__all__ = [
+    # Core modules
+    "TensorDictModule",
+    "TensorDictModuleBase",
+    "TensorDictModuleWrapper",
+    "WrapModule",
+    "TensorDictSequential",
+    "EnsembleModule",
+    "CudaGraphModule",
+    # Probabilistic modules
+    "ProbabilisticTensorDictModule",
+    "ProbabilisticTensorDictSequential",
+    "InteractionType",
+    "set_interaction_type",
+    # Functional modules
+    "make_functional",
+    "get_functional",
+    "is_functional",
+    "repopulate_module",
+    # Distributions
+    "AddStateIndependentNormalScale",
+    "CompositeDistribution",
+    "NormalParamExtractor",
+    "OneHotCategorical",
+    "rand_one_hot",
+    "TruncatedNormal",
+    # Parameters
+    "TensorDictParams",
+    # Utilities
+    "dispatch",
+    "make_tensordict",
+    "as_tensordict_module",
+    "add_custom_mapping",
+    "biased_softplus",
+    "inv_softplus",
+    "mappings",
+    "skip_existing",
+    "set_skip_existing",
+    "composite_lp_aggregate",
+    "set_composite_lp_aggregate",
+]

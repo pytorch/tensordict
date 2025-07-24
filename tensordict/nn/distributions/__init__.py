@@ -18,3 +18,19 @@ distributions_maps = {
     distribution_class.lower(): eval(distribution_class)
     for distribution_class in (*continuous.__all__, *discrete.__all__)
 }
+
+__all__ = [
+    # Distribution classes
+    "CompositeDistribution",
+    "AddStateIndependentNormalScale",
+    "Delta",
+    "NormalParamExtractor",
+    "OneHotCategorical",
+    "rand_one_hot",
+    "TruncatedNormal",
+    # Submodules
+    "continuous",
+    "discrete",
+    # Utilities
+    "distributions_maps",
+]

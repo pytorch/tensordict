@@ -15,3 +15,10 @@ warnings.warn(
     "tensordict._tensordict will soon be removed in favour of tensordict._C.",
     category=DeprecationWarning,
 )
+
+__all__ = [
+    "_unravel_key_to_tuple",
+    "unravel_key",
+    "unravel_key_list",
+    "unravel_keys",
+]

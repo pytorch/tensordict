@@ -79,3 +79,77 @@ try:
     from tensordict._version import __version__  # @manual=//pytorch/tensordict:version
 except ImportError:
     __version__ = None
+
+__all__ = [
+    # Core classes
+    "TensorDict",
+    "TensorDictBase",
+    "LazyStackedTensorDict",
+    "UnbatchedTensor",
+    "TensorClass",
+    "MemoryMappedTensor",
+    "PersistentTensorDict",
+    "NestedKey",
+    # Factory functions
+    "from_dict",
+    "from_any",
+    "from_h5",
+    "from_namedtuple",
+    "from_struct_array",
+    "from_tuple",
+    "from_dataclass",
+    "fromkeys",
+    "from_module",
+    "from_modules",
+    "from_pytree",
+    "from_consolidated",
+    "make_tensordict",
+    # Stacking and concatenation
+    "stack",
+    "cat",
+    "lazy_stack",
+    "maybe_dense_stack",
+    "dense_stack_tds",
+    # Memory mapping
+    "memmap",
+    "load_memmap",
+    # Saving and loading
+    "save",
+    "load",
+    # Merging and padding
+    "merge_tensordicts",
+    "pad",
+    "pad_sequence",
+    # Utility functions
+    "is_tensor_collection",
+    "is_batchedtensor",
+    "is_non_tensor",
+    "is_tensorclass",
+    "assert_close",
+    "assert_allclose_td",
+    "unravel_key",
+    "unravel_key_list",
+    "parse_tensor_dict_string",
+    # Configuration
+    "default_is_leaf",
+    "is_leaf_nontensor",
+    "get_defaults_to_none",
+    "set_get_defaults_to_none",
+    "capture_non_tensor_stack",
+    "set_capture_non_tensor_stack",
+    "lazy_legacy",
+    "set_lazy_legacy",
+    "list_to_stack",
+    "set_list_to_stack",
+    # TensorClass components
+    "tensorclass",
+    "MetaData",
+    "NonTensorData",
+    "NonTensorDataBase",
+    "NonTensorStack",
+    # NN imports
+    "as_tensordict_module",
+    "TensorDictParams",
+    # Version
+    "__version__",
+]
