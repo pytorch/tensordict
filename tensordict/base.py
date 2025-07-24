@@ -45,6 +45,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TYPE_CHECKING,
     TypeVar,
     Union,
 )
@@ -143,6 +144,12 @@ class _NoDefault(enum.IntEnum):
 
 NO_DEFAULT = _NoDefault.ZERO
 T = TypeVar("T", bound="TensorCollection")
+
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 class _BEST_ATTEMPT_INPLACE:
@@ -295,7 +302,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
 
-    def __abs__(self) -> T:
+    def __abs__(self) -> Self:
         """Returns a new TensorDict instance with absolute values of all tensors.
 
         Returns:
@@ -307,7 +314,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         return self.abs()
 
-    def __neg__(self) -> T:
+    def __neg__(self) -> Self:
         """Returns a new TensorDict instance with negated values of all tensors.
 
         Returns:
@@ -320,7 +327,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.neg()
 
     @abc.abstractmethod
-    def __ne__(self, other: object) -> T:
+    def __ne__(self, other: object) -> Self:
         """NOT operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -359,7 +366,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.__xor__(other)
 
     @abc.abstractmethod
-    def __or__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __or__(self, other: TensorCollection | torch.Tensor) -> Self:
         """OR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -374,14 +381,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def __ror__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __ror__(self, other: TensorCollection | torch.Tensor) -> Self:
         """Right-side OR operation over two tensordicts, for evey key.
 
         This is a wrapper around `__or__` since it is assumed to be commutative.
         """
         return self | other
 
-    def __invert__(self) -> T:
+    def __invert__(self) -> Self:
         """Returns a new TensorDict instance with all tensors inverted (i.e., bitwise NOT operation).
 
         Returns:
@@ -403,7 +410,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def __and__(self, other: TensorCollection | torch.Tensor | float) -> T:
+    def __and__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         """Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.
 
         Args:
@@ -440,7 +447,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     __rand__ = __and__
 
     @abc.abstractmethod
-    def __eq__(self, other: object) -> T:
+    def __eq__(self, other: object) -> Self:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -451,7 +458,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def __ge__(self, other: object) -> T:
+    def __ge__(self, other: object) -> Self:
         """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -462,7 +469,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def __gt__(self, other: object) -> T:
+    def __gt__(self, other: object) -> Self:
         """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -473,7 +480,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def __le__(self, other: object) -> T:
+    def __le__(self, other: object) -> Self:
         """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -484,7 +491,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def __lt__(self, other: object) -> T:
+    def __lt__(self, other: object) -> Self:
         """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -600,7 +607,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # will always be achieved one element at a time.
     __getitems__ = __getitem__
 
-    def _get_sub_tensordict(self, idx: IndexType) -> T:
+    def _get_sub_tensordict(self, idx: IndexType) -> Self:
         """Returns a _SubTensorDict with the desired index."""
         from tensordict._td import _SubTensorDict
 
@@ -614,7 +621,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     ) -> None:
         raise NotImplementedError
 
-    def __delitem__(self, key: NestedKey) -> T:
+    def __delitem__(self, key: NestedKey) -> Self:
         return self.del_(key)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -688,7 +695,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def isfinite(self) -> T:
+    def isfinite(self) -> Self:
         """Returns a new tensordict with boolean elements representing if each element is finite or not.
 
         Real values are finite when they are not NaN, negative infinity, or infinity. Complex values are finite when both their real and imaginary parts are finite.
@@ -709,7 +716,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def isnan(self) -> T:
+    def isnan(self) -> Self:
         """Returns a new tensordict with boolean elements representing if each element of input is NaN or not.
 
         Complex values are considered NaN when either their real and/or imaginary part is NaN.
@@ -730,7 +737,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def isneginf(self) -> T:
+    def isneginf(self) -> Self:
         """Tests if each element of input is negative infinity or not."""
         keys, vals = self._items_list(True, True)
         vals = [val.isneginf() for val in vals]
@@ -747,7 +754,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def isposinf(self) -> T:
+    def isposinf(self) -> Self:
         """Tests if each element of input is negative infinity or not."""
         keys, vals = self._items_list(True, True)
         vals = [val.isposinf() for val in vals]
@@ -764,7 +771,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def isreal(self) -> T:
+    def isreal(self) -> Self:
         """Returns a new tensordict with boolean elements representing if each element of input is real-valued or not."""
         keys, vals = self._items_list(True, True)
         vals = [val.isreal() for val in vals]
@@ -2078,7 +2085,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def auto_batch_size_(
         self, batch_dims: int | None = None, keep_compliant_size: bool = False
-    ) -> T:
+    ) -> Self:
         """Sets the maximum batch-size for the tensordict, up to an optional batch_dims.
 
         Args:
@@ -2108,7 +2115,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         _set_max_batch_size(self, batch_dims, keep_compliant_size=keep_compliant_size)
         return self
 
-    def auto_device_(self) -> T:
+    def auto_device_(self) -> Self:
         """Automatically sets the device, if it is unique.
 
         Returns: self with the edited ``device`` attribute.
@@ -2899,7 +2906,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         self._fast_apply(set_grad, grad)
 
-    def zero_grad(self, set_to_none: bool = True) -> T:
+    def zero_grad(self, set_to_none: bool = True) -> Self:
         """Zeros all the gradients of the TensorDict recursively.
 
         Args:
@@ -3022,13 +3029,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return depth
 
     @overload
-    def expand(self, *shape: int) -> T: ...
+    def expand(self, *shape: int) -> Self: ...
 
     @overload
-    def expand(self, shape: torch.Size) -> T: ...
+    def expand(self, shape: torch.Size) -> Self: ...
 
     @abc.abstractmethod
-    def expand(self, *args: int | torch.Size) -> T:
+    def expand(self, *args: int | torch.Size) -> Self:
         """Expands each tensor of the tensordict according to the :func:`~torch.expand` function, ignoring the feature dimensions.
 
         Supports iterables to specify the shape.
@@ -3342,7 +3349,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         pin_memory: bool | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Returns a new TensorDict with data as the tensor ``data``.
 
         By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
@@ -3524,7 +3531,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @overload
-    def unsqueeze(self, dim: int) -> T: ...
+    def unsqueeze(self, dim: int) -> Self: ...
 
     @_as_context_manager()
     def unsqueeze(self, *args, **kwargs):
@@ -3570,7 +3577,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _unsqueeze(self, dim: int):
         raise NotImplementedError
 
-    def _legacy_unsqueeze(self, dim: int) -> T:
+    def _legacy_unsqueeze(self, dim: int) -> Self:
         if dim < 0:
             dim = self.batch_dims + dim + 1
 
@@ -3591,7 +3598,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
 
     @overload
-    def squeeze(self, dim: int | None = None) -> T: ...
+    def squeeze(self, dim: int | None = None) -> Self: ...
 
     @_as_context_manager()
     def squeeze(self, *args, **kwargs):
@@ -3640,7 +3647,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _squeeze(self, dim=None):
         raise NotImplementedError
 
-    def _legacy_squeeze(self, dim: int | None = None) -> T:
+    def _legacy_squeeze(self, dim: int | None = None) -> Self:
         from tensordict._lazy import _SqueezedTensorDict
 
         if dim is None:
@@ -3690,7 +3697,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *args,
         **kwargs,
-    ) -> T:
+    ) -> Self:
         """Returns a contiguous, reshaped tensor of the desired shape.
 
         Args:
@@ -3838,7 +3845,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out_key: NestedKey,
         dim: int = 0,
         keep_entries: bool = False,
-    ) -> T:
+    ) -> Self:
         """Concatenates entries into a new entry and possibly remove the original values.
 
         Args:
@@ -3872,7 +3879,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out_key: NestedKey,
         dim: int = 0,
         keep_entries: bool = False,
-    ) -> T:
+    ) -> Self:
         """Stacks entries into a new entry and possibly remove the original values.
 
         Args:
@@ -4039,7 +4046,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def gather(self, dim: int, index: Tensor, out: T | None = None) -> T:
+    def gather(self, dim: int, index: Tensor, out: T | None = None) -> Self:
         """Gathers values along an axis specified by `dim`.
 
         Args:
@@ -4096,7 +4103,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *args,
         **kwargs,
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
     @_as_context_manager()
@@ -4159,7 +4166,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *shape: int,
         size: list | tuple | torch.Size | None = None,
-    ) -> T:
+    ) -> Self:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
@@ -4313,7 +4320,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *dims_list: int,
         dims: list[int] | None = None,
-    ) -> T:
+    ) -> Self:
         if len(dims_list) == 0:
             dims_list = dims
         elif len(dims_list) == 1 and not isinstance(dims_list[0], int):
@@ -4444,7 +4451,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             return False
 
-    def refine_names(self, *names) -> T:
+    def refine_names(self, *names) -> Self:
         """Refines the dimension names of self according to names.
 
         Refining is a special case of renaming that "lifts" unnamed dimensions.
@@ -4642,7 +4649,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @lock_blocked
-    def clear(self) -> T:
+    def clear(self) -> Self:
         """Erases the content of the tensordict."""
         for key in list(self.keys()):
             del self[key]
@@ -4668,7 +4675,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def clear_device_(self) -> T:
+    def clear_device_(self) -> Self:
         """Clears the device of the tensordict.
 
         Returns: self
@@ -4682,7 +4689,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 value.clear_device_()
         return self
 
-    def _set_device(self, device: torch.device) -> T:
+    def _set_device(self, device: torch.device) -> Self:
         self._device = device
         if self._validate_value_cached is not None:
             delattr(self, "_validate_value_cached")
@@ -4778,7 +4785,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             total += tensor.numel() * tensor.dtype.itemsize
         return total
 
-    def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
+    def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> Self:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
         Args:
@@ -4802,7 +4809,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def pin_memory_(self, num_threads: int | str = 0) -> T:
+    def pin_memory_(self, num_threads: int | str = 0) -> Self:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors and returns the TensorDict modifies in-place.
 
         Args:
@@ -4813,14 +4820,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         return self.pin_memory(num_threads=num_threads, inplace=True)
 
-    def cpu(self, **kwargs) -> T:
+    def cpu(self, **kwargs) -> Self:
         """Casts a tensordict to CPU.
 
         This function also supports all the keyword arguments of :meth:`~.to`.
         """
         return self.to("cpu", **kwargs)
 
-    def cuda(self, device: int | None = None, **kwargs) -> T:
+    def cuda(self, device: int | None = None, **kwargs) -> Self:
         """Casts a tensordict to a cuda device (if not already on it).
 
         Args:
@@ -4914,7 +4921,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         strict=True,
         assign=False,
         from_flatten=False,
-    ) -> T:
+    ) -> Self:
         """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
 
         Args:
@@ -5060,7 +5067,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self._is_memmap
 
     @abc.abstractmethod
-    def share_memory_(self) -> T:
+    def share_memory_(self) -> Self:
         """Places all the tensors in shared memory.
 
         The TensorDict is then locked, meaning that any writing operations that
@@ -5088,7 +5095,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         like,
         share_non_tensor,
         existsok,
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
     def densify(self, layout: torch.layout = torch.strided):
@@ -5698,7 +5705,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
-    ) -> T:
+    ) -> Self:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
         Args:
@@ -5875,7 +5882,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
-    ) -> T:
+    ) -> Self:
         """Saves the tensordict to disk.
 
         This function is a proxy to :meth:`~.memmap`.
@@ -5899,7 +5906,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
-    ) -> T:
+    ) -> Self:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
         Args:
@@ -5986,7 +5993,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
-    ) -> T:
+    ) -> Self:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
         Args:
@@ -6087,7 +6094,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         ).lock_()
 
     @classmethod
-    def load(cls, prefix: str | Path, *args, **kwargs) -> T:
+    def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
         """Loads a tensordict from disk.
 
         This class method is a proxy to :meth:`~.load_memmap`.
@@ -6109,7 +6116,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         out: TensorDictBase | None = None,
-    ) -> T:
+    ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
         Args:
@@ -6263,7 +6270,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         non_blocking: bool = False,
         **kwargs: Any,
-    ) -> T:
+    ) -> Self:
         """Sets a new key-value pair.
 
         Args:
@@ -6429,7 +6436,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return data
         return value
 
-    def filter_non_tensor_data(self) -> T:
+    def filter_non_tensor_data(self) -> Self:
         """Filters out all non-tensor-data."""
 
         def _filter(x):
@@ -6466,7 +6473,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         index: IndexType,
         *,
         non_blocking: bool = False,
-    ) -> T:
+    ) -> Self:
         """Sets the values in-place at the index indicated by ``index``.
 
         Args:
@@ -6508,7 +6515,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         item: CompatibleType,
         *,
         non_blocking: bool = False,
-    ) -> T:
+    ) -> Self:
         """Sets a value to an existing key while keeping the original storage.
 
         Args:
@@ -6543,7 +6550,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         list_item: list[CompatibleType],
         dim: int,
-    ) -> T:
+    ) -> Self:
         """Stacks a list of values onto an existing key while keeping the original storage.
 
         Args:
@@ -6563,7 +6570,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
-    ) -> T:
+    ) -> Self:
         """Similar to _stack_onto_ but on a specific index. Only works with regular TensorDicts."""
         raise RuntimeError(
             f"Cannot call _stack_onto_at_ with {type(self).__name__}. "
@@ -6734,7 +6741,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
         ignore_lock: bool = False,
-    ) -> T:
+    ) -> Self:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
 
         .. warning:: `update` will corrupt the data if called within a try/except block. Do not user this method within
@@ -6977,7 +6984,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
-    ) -> T:
+    ) -> Self:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
 
         Unlike :meth:`~.update`, this function will throw an error if the key is unknown to ``self``.
@@ -7083,7 +7090,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
-    ) -> T:
+    ) -> Self:
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
 
         Unlike  TensorDict.update, this function will throw an error if the key is unknown to the TensorDict.
@@ -7247,7 +7254,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if len(key) > 1:
             td._create_nested_tuple(key[1:])
 
-    def copy_(self, tensordict: T, non_blocking: bool = False) -> T:
+    def copy_(self, tensordict: T, non_blocking: bool = False) -> Self:
         """See :obj:`TensorDictBase.update_`.
 
         The non-blocking argument will be ignored and is just present for
@@ -7255,7 +7262,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         return self.update_(tensordict, non_blocking=non_blocking)
 
-    def copy_at_(self, tensordict: T, idx: IndexType, non_blocking: bool = False) -> T:
+    def copy_at_(
+        self, tensordict: T, idx: IndexType, non_blocking: bool = False
+    ) -> Self:
         """See :obj:`TensorDictBase.update_at_`."""
         return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
@@ -7806,7 +7815,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @abc.abstractmethod
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> T:
+    ) -> Self:
         """Renames a key with a new string and returns the same tensordict with the updated key name.
 
         Args:
@@ -7822,7 +7831,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def del_(self, key: NestedKey) -> T:
+    def del_(self, key: NestedKey) -> Self:
         """Deletes a key of the tensordict.
 
         Args:
@@ -7837,7 +7846,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # Distributed functionality
     def gather_and_stack(
         self, dst: int, group: "torch.distributed.ProcessGroup" | None = None
-    ) -> T | None:
+    ) -> Self | None:
         """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
 
         Args:
@@ -8198,7 +8207,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
-    ) -> T:
+    ) -> Self:
         """Creates a new tensordict instance initialized from remotely sent metadata.
 
         This class method receives the metadata sent by `init_remote`, creates a new tensordict with matching shape and dtype,
@@ -8543,7 +8552,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return
 
     # Apply and map functionality
-    def apply_(self, fn: Callable, *others, **kwargs) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> Self:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
 
         Args:
@@ -8574,7 +8583,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         call_on_nested: bool = False,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
-    ) -> T | None:
+    ) -> Self | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
         The callable signature must be ``Callable[Tuple[Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
@@ -8729,7 +8738,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         call_on_nested: bool = False,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
-    ) -> T | None:
+    ) -> Self | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
 
         The callable signature must be ``Callable[Tuple[str, Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
@@ -8953,7 +8962,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int,
         call_when_done: Callable | None = None,
         **constructor_kwargs,
-    ) -> T | None:
+    ) -> Self | None:
         """A deadlock-safe multithread wrapper around TD.apply.
 
         First launches fn for all the leaves, then rebuilds the tensordicts out of them.
@@ -9039,7 +9048,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
-    ) -> T | None:
+    ) -> Self | None:
         raise NotImplementedError
 
     def _fast_apply(
@@ -9063,7 +9072,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int = 0,
         checked: bool = True,
         **constructor_kwargs,
-    ) -> T | None:
+    ) -> Self | None:
         """A faster apply method.
 
         This method does not run any check after performing the func. This
@@ -9117,7 +9126,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         index_with_generator: bool = False,
         pbar: bool = False,
         mp_start_method: str | None = None,
-    ) -> T:
+    ) -> Self:
         """Maps a function to splits of the tensordict across one dimension.
 
         This method will apply a function to a tensordict instance by chunking
@@ -9577,7 +9586,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return out
 
     # Stream
-    def record_stream(self, stream: torch.cuda.Stream) -> T:
+    def record_stream(self, stream: torch.cuda.Stream) -> Self:
         """Marks the tensordict as having been used by this stream.
 
         When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
@@ -9603,55 +9612,55 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.copy()
 
     # point-wise arithmetic ops
-    def __add__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __add__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.add(other)
 
-    def __radd__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __radd__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.add(other)
 
-    def __iadd__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __iadd__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.add_(other)
 
-    def __truediv__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __truediv__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.div(other)
 
-    def __itruediv__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __itruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.div_(other)
 
-    def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
         return other * self.reciprocal()
 
-    def __mul__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __mul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul(other)
 
-    def __rmul__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __rmul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul(other)
 
-    def __imul__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __imul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul_(other)
 
-    def __sub__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __sub__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.sub(other)
 
-    def __isub__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __isub__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.sub_(other)
 
-    def __rsub__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __rsub__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.rsub(other)
 
-    def __pow__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __pow__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.pow(other)
 
-    def __rpow__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __rpow__(self, other: TensorCollection | torch.Tensor) -> Self:
         raise NotImplementedError(
             "rpow isn't implemented for tensordict yet. Make sure both elements are wrapped "
             "in a tensordict for this to work."
         )
 
-    def __ipow__(self, other: TensorCollection | torch.Tensor) -> T:
+    def __ipow__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.pow_(other)
 
-    def abs(self) -> T:
+    def abs(self) -> Self:
         """Computes the absolute value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_abs(vals)
@@ -9668,12 +9677,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def abs_(self) -> T:
+    def abs_(self) -> Self:
         """Computes the absolute value of each element of the TensorDict in-place."""
         torch._foreach_abs_(self._values_list(True, True))
         return self
 
-    def acos(self) -> T:
+    def acos(self) -> Self:
         """Computes the :meth:`~torch.acos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_acos(vals)
@@ -9690,12 +9699,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def acos_(self) -> T:
+    def acos_(self) -> Self:
         """Computes the :meth:`~torch.acos` value of each element of the TensorDict in-place."""
         torch._foreach_acos_(self._values_list(True, True))
         return self
 
-    def exp(self) -> T:
+    def exp(self) -> Self:
         """Computes the :meth:`~torch.exp` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_exp(vals)
@@ -9712,12 +9721,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def exp_(self) -> T:
+    def exp_(self) -> Self:
         """Computes the :meth:`~torch.exp` value of each element of the TensorDict in-place."""
         torch._foreach_exp_(self._values_list(True, True))
         return self
 
-    def neg(self) -> T:
+    def neg(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_neg(vals)
@@ -9734,12 +9743,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def neg_(self) -> T:
+    def neg_(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict in-place."""
         torch._foreach_neg_(self._values_list(True, True))
         return self
 
-    def reciprocal(self) -> T:
+    def reciprocal(self) -> Self:
         """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_reciprocal(vals)
@@ -9756,12 +9765,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def reciprocal_(self) -> T:
+    def reciprocal_(self) -> Self:
         """Computes the :meth:`~torch.reciprocal` value of each element of the TensorDict in-place."""
         torch._foreach_reciprocal_(self._values_list(True, True))
         return self
 
-    def sigmoid(self) -> T:
+    def sigmoid(self) -> Self:
         """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sigmoid(vals)
@@ -9778,12 +9787,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def sigmoid_(self) -> T:
+    def sigmoid_(self) -> Self:
         """Computes the :meth:`~torch.sigmoid` value of each element of the TensorDict in-place."""
         torch._foreach_sigmoid_(self._values_list(True, True))
         return self
 
-    def sign(self) -> T:
+    def sign(self) -> Self:
         """Computes the :meth:`~torch.sign` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sign(vals)
@@ -9800,12 +9809,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def sign_(self) -> T:
+    def sign_(self) -> Self:
         """Computes the :meth:`~torch.sign` value of each element of the TensorDict in-place."""
         torch._foreach_sign_(self._values_list(True, True))
         return self
 
-    def sin(self) -> T:
+    def sin(self) -> Self:
         """Computes the :meth:`~torch.sin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sin(vals)
@@ -9822,12 +9831,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def sin_(self) -> T:
+    def sin_(self) -> Self:
         """Computes the :meth:`~torch.sin` value of each element of the TensorDict in-place."""
         torch._foreach_sin_(self._values_list(True, True))
         return self
 
-    def sinh(self) -> T:
+    def sinh(self) -> Self:
         """Computes the :meth:`~torch.sinh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sinh(vals)
@@ -9844,12 +9853,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def sinh_(self) -> T:
+    def sinh_(self) -> Self:
         """Computes the :meth:`~torch.sinh` value of each element of the TensorDict in-place."""
         torch._foreach_sinh_(self._values_list(True, True))
         return self
 
-    def tan(self) -> T:
+    def tan(self) -> Self:
         """Computes the :meth:`~torch.tan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tan(vals)
@@ -9866,12 +9875,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def tan_(self) -> T:
+    def tan_(self) -> Self:
         """Computes the :meth:`~torch.tan` value of each element of the TensorDict in-place."""
         torch._foreach_tan_(self._values_list(True, True))
         return self
 
-    def tanh(self) -> T:
+    def tanh(self) -> Self:
         """Computes the :meth:`~torch.tanh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_tanh(vals)
@@ -9888,12 +9897,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def tanh_(self) -> T:
+    def tanh_(self) -> Self:
         """Computes the :meth:`~torch.tanh` value of each element of the TensorDict in-place."""
         torch._foreach_tanh_(self._values_list(True, True))
         return self
 
-    def trunc(self) -> T:
+    def trunc(self) -> Self:
         """Computes the :meth:`~torch.trunc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_trunc(vals)
@@ -9910,7 +9919,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def trunc_(self) -> T:
+    def trunc_(self) -> Self:
         """Computes the :meth:`~torch.trunc` value of each element of the TensorDict in-place."""
         torch._foreach_trunc_(self._values_list(True, True))
         return self
@@ -9977,7 +9986,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             out=out,
         )
 
-    def lgamma(self) -> T:
+    def lgamma(self) -> Self:
         """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_lgamma(vals)
@@ -9994,12 +10003,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def lgamma_(self) -> T:
+    def lgamma_(self) -> Self:
         """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict in-place."""
         torch._foreach_lgamma_(self._values_list(True, True))
         return self
 
-    def frac(self) -> T:
+    def frac(self) -> Self:
         """Computes the :meth:`~torch.frac` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_frac(vals)
@@ -10016,12 +10025,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def frac_(self) -> T:
+    def frac_(self) -> Self:
         """Computes the :meth:`~torch.frac` value of each element of the TensorDict in-place."""
         torch._foreach_frac_(self._values_list(True, True))
         return self
 
-    def expm1(self) -> T:
+    def expm1(self) -> Self:
         """Computes the :meth:`~torch.expm1` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_expm1(vals)
@@ -10038,12 +10047,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def expm1_(self) -> T:
+    def expm1_(self) -> Self:
         """Computes the :meth:`~torch.expm1` value of each element of the TensorDict in-place."""
         torch._foreach_expm1_(self._values_list(True, True))
         return self
 
-    def log(self) -> T:
+    def log(self) -> Self:
         """Computes the :meth:`~torch.log` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log(vals)
@@ -10060,7 +10069,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def log_(self) -> T:
+    def log_(self) -> Self:
         """Computes the :meth:`~torch.log` value of each element of the TensorDict in-place."""
         torch._foreach_log_(self._values_list(True, True))
         return self
@@ -10134,7 +10143,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             lambda x: torch.softmax(x, dim=dim, dtype=dtype),
         )
 
-    def log10(self) -> T:
+    def log10(self) -> Self:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log10(vals)
@@ -10151,12 +10160,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def log10_(self) -> T:
+    def log10_(self) -> Self:
         """Computes the :meth:`~torch.log10` value of each element of the TensorDict in-place."""
         torch._foreach_log10_(self._values_list(True, True))
         return self
 
-    def log1p(self) -> T:
+    def log1p(self) -> Self:
         """Computes the :meth:`~torch.log1p` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log1p(vals)
@@ -10173,12 +10182,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def log1p_(self) -> T:
+    def log1p_(self) -> Self:
         """Computes the :meth:`~torch.log1p` value of each element of the TensorDict in-place."""
         torch._foreach_log1p_(self._values_list(True, True))
         return self
 
-    def log2(self) -> T:
+    def log2(self) -> Self:
         """Computes the :meth:`~torch.log2` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_log2(vals)
@@ -10195,12 +10204,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def log2_(self) -> T:
+    def log2_(self) -> Self:
         """Computes the :meth:`~torch.log2` value of each element of the TensorDict in-place."""
         torch._foreach_log2_(self._values_list(True, True))
         return self
 
-    def ceil(self) -> T:
+    def ceil(self) -> Self:
         """Computes the :meth:`~torch.ceil` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_ceil(vals)
@@ -10217,12 +10226,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def ceil_(self) -> T:
+    def ceil_(self) -> Self:
         """Computes the :meth:`~torch.ceil` value of each element of the TensorDict in-place."""
         torch._foreach_ceil_(self._values_list(True, True))
         return self
 
-    def floor(self) -> T:
+    def floor(self) -> Self:
         """Computes the :meth:`~torch.floor` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_floor(vals)
@@ -10239,12 +10248,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def floor_(self) -> T:
+    def floor_(self) -> Self:
         """Computes the :meth:`~torch.floor` value of each element of the TensorDict in-place."""
         torch._foreach_floor_(self._values_list(True, True))
         return self
 
-    def round(self) -> T:
+    def round(self) -> Self:
         """Computes the :meth:`~torch.round` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_round(vals)
@@ -10261,12 +10270,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def round_(self) -> T:
+    def round_(self) -> Self:
         """Computes the :meth:`~torch.round` value of each element of the TensorDict in-place."""
         torch._foreach_round_(self._values_list(True, True))
         return self
 
-    def erf(self) -> T:
+    def erf(self) -> Self:
         """Computes the :meth:`~torch.erf` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erf(vals)
@@ -10283,12 +10292,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def erf_(self) -> T:
+    def erf_(self) -> Self:
         """Computes the :meth:`~torch.erf` value of each element of the TensorDict in-place."""
         torch._foreach_erf_(self._values_list(True, True))
         return self
 
-    def erfc(self) -> T:
+    def erfc(self) -> Self:
         """Computes the :meth:`~torch.erfc` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_erfc(vals)
@@ -10305,12 +10314,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def erfc_(self) -> T:
+    def erfc_(self) -> Self:
         """Computes the :meth:`~torch.erfc` value of each element of the TensorDict in-place."""
         torch._foreach_erfc_(self._values_list(True, True))
         return self
 
-    def asin(self) -> T:
+    def asin(self) -> Self:
         """Computes the :meth:`~torch.asin` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_asin(vals)
@@ -10327,12 +10336,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def asin_(self) -> T:
+    def asin_(self) -> Self:
         """Computes the :meth:`~torch.asin` value of each element of the TensorDict in-place."""
         torch._foreach_asin_(self._values_list(True, True))
         return self
 
-    def atan(self) -> T:
+    def atan(self) -> Self:
         """Computes the :meth:`~torch.atan` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_atan(vals)
@@ -10349,12 +10358,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def atan_(self) -> T:
+    def atan_(self) -> Self:
         """Computes the :meth:`~torch.atan` value of each element of the TensorDict in-place."""
         torch._foreach_atan_(self._values_list(True, True))
         return self
 
-    def cos(self) -> T:
+    def cos(self) -> Self:
         """Computes the :meth:`~torch.cos` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cos(vals)
@@ -10371,12 +10380,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def cos_(self) -> T:
+    def cos_(self) -> Self:
         """Computes the :meth:`~torch.cos` value of each element of the TensorDict in-place."""
         torch._foreach_cos_(self._values_list(True, True))
         return self
 
-    def cosh(self) -> T:
+    def cosh(self) -> Self:
         """Computes the :meth:`~torch.cosh` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_cosh(vals)
@@ -10393,7 +10402,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def cosh_(self) -> T:
+    def cosh_(self) -> Self:
         """Computes the :meth:`~torch.cosh` value of each element of the TensorDict in-place."""
         torch._foreach_cosh_(self._values_list(True, True))
         return self
@@ -10618,7 +10627,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor | float,
         *,
         alpha: float | None = None,
-    ) -> T:
+    ) -> Self:
         """In-place version of :meth:`~.add`.
 
         .. note::
@@ -10641,7 +10650,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         end: TensorCollection | torch.Tensor,
         weight: TensorCollection | torch.Tensor | float,
-    ) -> T:
+    ) -> Self:
         r"""Does a linear interpolation of two tensors :attr:`start` (given by ``self``) and :attr:`end` based on a scalar or tensor :attr:`weight`.
 
         .. math::
@@ -10972,7 +10981,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def mul_(self, other: TensorCollection | torch.Tensor) -> T:
+    def mul_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.mul`.
 
         .. note::
@@ -10994,7 +11003,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Multiplies :attr:`other` to ``self``.
 
         .. math::
@@ -11044,7 +11053,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def maximum_(self, other: TensorCollection | torch.Tensor) -> T:
+    def maximum_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.maximum`.
 
         .. note::
@@ -11066,7 +11075,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Computes the element-wise maximum of ``self`` and :attr:`other`.
 
         Args:
@@ -11111,7 +11120,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def minimum_(self, other: TensorCollection | torch.Tensor) -> T:
+    def minimum_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.minimum`.
 
         .. note::
@@ -11133,7 +11142,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Computes the element-wise minimum of ``self`` and :attr:`other`.
 
         Args:
@@ -11178,7 +11187,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def clamp_max_(self, other: TensorCollection | torch.Tensor) -> T:
+    def clamp_max_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.clamp_max`.
 
         .. note::
@@ -11207,7 +11216,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Clamps the elements of ``self`` to :attr:`other` if they're superior to that value.
 
         Args:
@@ -11259,7 +11268,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.clamp_min`.
 
         .. note::
@@ -11288,7 +11297,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         other: TensorDictBase | torch.Tensor,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Clamps the elements of ``self`` to :attr:`other` if they're inferior to that value.
 
         Args:
@@ -11406,7 +11415,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         with out.unlock_() if out.is_locked else contextlib.nullcontext():
             return out.update(result)
 
-    def pow_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def pow_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.pow`.
 
         .. note::
@@ -11428,7 +11437,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Takes the power of each element in ``self`` with :attr:`other` and returns a tensor with the result.
 
         :attr:`other` can be either a single ``float`` number, a `Tensor` or a ``TensorDict``.
@@ -11478,7 +11487,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def div_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def div_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.div`.
 
         .. note::
@@ -11500,7 +11509,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Divides each element of the input ``self`` by the corresponding element of :attr:`other`.
 
         .. math::
@@ -11576,19 +11585,19 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # Functorch compatibility
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> T:
+    def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
     @cache  # noqa: B019
-    def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> T:
+    def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
     @cache  # noqa: B019
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
     # Validation and checks
@@ -11628,7 +11637,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
 
     @abc.abstractmethod
-    def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
+    def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> Self:
         raise NotImplementedError
 
     def _check_batch_size(self, *, raise_exception: bool = True) -> None | bool:
@@ -11917,7 +11926,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
         return self
 
-    def clear_refs_for_compile_(self) -> T:
+    def clear_refs_for_compile_(self) -> Self:
         """Clears the weakrefs in order for the tensordict to get out of the compile region safely.
 
         Use this whenever you hit `torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable()`
@@ -11933,7 +11942,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self
 
     # Clone, select, exclude, empty
-    def select(self, *keys: NestedKey, inplace: bool = False, strict: bool = True) -> T:
+    def select(
+        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
+    ) -> Self:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
         The values are not copied: in-place modifications a tensor of either
@@ -12005,10 +12016,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
-    def exclude(self, *keys: NestedKey, inplace: bool = False) -> T:
+    def exclude(self, *keys: NestedKey, inplace: bool = False) -> Self:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
 
         The values are not copied: in-place modifications a tensor of either
@@ -12059,7 +12070,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *keys: NestedKey,
         inplace: bool = False,
         set_shared: bool = True,
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
     def _maybe_set_shared_attributes(self, result, lock=False):
@@ -12073,7 +12084,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if lock:
                 result.lock_()
 
-    def to_tensordict(self, *, retain_none: bool | None = None) -> T:
+    def to_tensordict(self, *, retain_none: bool | None = None) -> Self:
         """Returns a regular TensorDict instance from the TensorDictBase.
 
         Args:
@@ -12151,7 +12162,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return self
         return lazy_stack(self.unbind(dim), dim=dim)
 
-    def clone(self, recurse: bool = True, **kwargs) -> T:
+    def clone(self, recurse: bool = True, **kwargs) -> Self:
         """Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
 
         To create a TensorDict instance from any other TensorDictBase subtype, call the :meth:`~.to_tensordict` method
@@ -12184,7 +12195,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         return self.clone(recurse=False)
 
-    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None) -> T:
+    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None) -> Self:
         """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
 
         Args:
@@ -12847,7 +12858,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         batch_dims: int | None = None,
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
-    ) -> T:
+    ) -> Self:
         """Converts a structured numpy array to a TensorDict.
 
         The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation).
@@ -13004,7 +13015,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Returns a new, empty tensordict with the same device and batch size.
 
         Args:
@@ -13036,7 +13047,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return result
 
     # Filling
-    def zero_(self) -> T:
+    def zero_(self) -> Self:
         """Zeros all tensors in the tensordict in-place."""
 
         def fn(item):
@@ -13045,7 +13056,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self._fast_apply(fn=fn, call_on_nested=True, propagate_lock=True)
         return self
 
-    def fill_(self, key: NestedKey, value: float | bool) -> T:
+    def fill_(self, key: NestedKey, value: float | bool) -> Self:
         """Fills a tensor pointed by the key with a given scalar value.
 
         Args:
@@ -13071,7 +13082,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     # Masking
     @abc.abstractmethod
-    def masked_fill_(self, mask: Tensor, value: float | bool) -> T:
+    def masked_fill_(self, mask: Tensor, value: float | bool) -> Self:
         """Fills the values corresponding to the mask with the desired value.
 
         Args:
@@ -13095,7 +13106,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def masked_fill(self, mask: Tensor, value: float | bool) -> T:
+    def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
         """Out-of-place version of masked_fill.
 
         Args:
@@ -13148,7 +13159,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         ...
 
     @abc.abstractmethod
-    def masked_select(self, mask: Tensor) -> T:
+    def masked_select(self, mask: Tensor) -> Self:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
 
         Args:
@@ -13176,7 +13187,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def contiguous(self) -> T:
+    def contiguous(self) -> Self:
         """Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous)."""
         raise NotImplementedError
 
@@ -13187,7 +13198,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         separator: str = ".",
         inplace: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
-    ) -> T:
+    ) -> Self:
         """Converts a nested tensordict into a flat one, recursively.
 
         The TensorDict type will be lost and the result will be a simple TensorDict instance.
@@ -13350,7 +13361,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     @cache  # noqa: B019
     @_as_context_manager()
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 
         The TensorDict type will be lost and the result will be a simple TensorDict instance.
@@ -13546,7 +13557,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         default: Any = NO_DEFAULT,
         strict: bool = True,
         filter_empty: bool = True,
-    ) -> T:
+    ) -> Self:
         """Separates the specified keys from the tensordict in-place.
 
         .. seealso:: This method is equivalent to calling :meth:`~tensordict.TensorDictBase.split_keys` with
@@ -13623,7 +13634,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         index: IndexType,
         new_batch_size: torch.Size | None = None,
         names: List[str] | None = None,
-    ) -> T:
+    ) -> Self:
         raise NotImplementedError
 
     # Locking functionality
@@ -13675,7 +13686,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self.__dict__["__lock_parents_weakrefs"] = value
 
     @_as_context_manager("is_locked")
-    def lock_(self) -> T:
+    def lock_(self) -> Self:
         """Locks a tensordict for non in-place operations.
 
         Functions such as :meth:`~.set`, :meth:`~.__setitem__`, :meth:`~.update`,
@@ -13761,7 +13772,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
 
     @_as_context_manager("is_locked")
-    def unlock_(self) -> T:
+    def unlock_(self) -> Self:
         """Unlocks a tensordict for non in-place operations.
 
         Can be used as a decorator.
@@ -13787,19 +13798,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
         dtype: Optional[Union[torch.device, str]] = ...,
         non_blocking: bool = ...,
         inplace: bool = False,
-    ) -> T: ...
+    ) -> Self: ...
 
     @overload
-    def to(self: T, dtype: Union[torch.device, str], non_blocking: bool = ...) -> T: ...
+    def to(
+        self: T, dtype: Union[torch.device, str], non_blocking: bool = ...
+    ) -> Self: ...
 
     @overload
-    def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> T: ...
+    def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
 
     @overload
-    def to(self: T, *, other: T, non_blocking: bool = ...) -> T: ...
+    def to(self: T, *, other: T, non_blocking: bool = ...) -> Self: ...
 
     @overload
-    def to(self: T, *, batch_size: torch.Size) -> T: ...
+    def to(self: T, *, batch_size: torch.Size) -> Self: ...
 
     def _to_cuda_with_pin_mem(
         self,
@@ -13852,7 +13865,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         return result
 
-    def to(self, *args, **kwargs) -> T:
+    def to(self, *args, **kwargs) -> Self:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
         Casting tensors to a new dtype is not allowed, as tensordicts are not bound to contain a single
@@ -14214,7 +14227,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
 
-    def requires_grad_(self, requires_grad=True) -> T:
+    def requires_grad_(self, requires_grad=True) -> Self:
         """Change if autograd should record operations on this tensor: sets this tensor's requires_grad attribute in-place.
 
         Returns this tensordict.
@@ -14229,7 +14242,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self
 
     @abc.abstractmethod
-    def detach_(self) -> T:
+    def detach_(self) -> Self:
         """Detach the tensors in the tensordict in-place.
 
         Returns:
@@ -14239,7 +14252,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @cache  # noqa: B019
-    def detach(self) -> T:
+    def detach(self) -> Self:
         """Detach the tensors in the tensordict.
 
         Returns:
