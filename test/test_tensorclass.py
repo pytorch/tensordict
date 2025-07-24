@@ -1363,6 +1363,24 @@ class TestTensorClass:
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         assert data.repeat_interleave(2, dim=1).shape == torch.Size((3, 8))
 
+    def test_repeat_interleave_tensor(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        X = torch.ones(3, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [3, 4]
+        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+        repeated = data.repeat_interleave(torch.tensor([2, 3, 4, 5]), dim=1)
+        assert repeated.shape == torch.Size((3, 14))
+        assert (
+            repeated.X == X.repeat_interleave(torch.tensor([2, 3, 4, 5]), dim=1)
+        ).all()
+
     def test_reshape(self):
         @tensorclass
         class MyDataNested:

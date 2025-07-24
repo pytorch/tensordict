@@ -3606,7 +3606,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
         if dim_corrected == self.stack_dim:
-            new_list_of_tds = [t for t in self.tensordicts for _ in range(repeats)]
+            if isinstance(repeats, int):
+                repeats: list[int] = [repeats] * len(self.tensordicts)
+            else:
+                repeats = repeats.tolist()
+            new_list_of_tds = [
+                t for t, r in zip(self.tensordicts, repeats) for _ in range(r)
+            ]
             result = type(self)(
                 *new_list_of_tds,
                 stack_dim=self.stack_dim,
