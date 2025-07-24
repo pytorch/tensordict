@@ -3432,7 +3432,7 @@ class NonTensorDataBase(TensorClass):
         clone: bool = False,
         *,
         non_blocking: bool = False,
-    ) -> NonTensorDataBase:
+    ) -> T:
         if index != () and index != slice(None):
             raise RuntimeError("Cannot update a part of a NonTensorDataBase.")
         return self.update_(
@@ -4160,7 +4160,7 @@ class NonTensorStack(LazyStackedTensorDict):
     @classmethod
     def lazy_stack(
         cls,
-        items: Sequence[TensorDictBase],
+        items: Sequence[TensorCollection],
         dim: int = 0,
         *,
         device: DeviceType | None = None,

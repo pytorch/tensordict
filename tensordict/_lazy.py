@@ -32,6 +32,7 @@ import numpy as np
 
 import torch
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
+from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -1144,7 +1145,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim_name=self._td_dim_name,
         )
 
-    def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
+    def _unbind(self, dim: int) -> tuple[TensorCollection, ...]:
         if dim == self.stack_dim:
             return tuple(self.tensordicts)
         else:
@@ -3741,7 +3742,7 @@ class LazyStackedTensorDict(TensorDictBase):
             for tds in _zip_strict(*tds)
         )
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 

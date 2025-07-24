@@ -1193,7 +1193,7 @@ class TensorDict(TensorDictBase):
         names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         filter_empty: bool = False,
         executor: ThreadPoolExecutor,
         futures: List[Future],
@@ -1487,10 +1487,10 @@ class TensorDict(TensorDictBase):
 
     # Functorch compatibility
     @cache  # noqa: B019
-    def _add_batch_dim(self, *, in_dim, vmap_level):
+    def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> T:
         td = self
 
-        def _add_batch_dim_wrapper(key, value):
+        def _add_batch_dim_wrapper(key: str, value: Any) -> Any:
             if is_tensor_collection(value):
                 return value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
 
@@ -1517,7 +1517,7 @@ class TensorDict(TensorDictBase):
         return out
 
     @cache  # noqa: B019
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+    def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> T:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
         names = self._maybe_names()
@@ -1544,7 +1544,9 @@ class TensorDict(TensorDictBase):
         return out
 
     @cache  # noqa: B019
-    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+    def _maybe_remove_batch_dim(
+        self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
+    ) -> T:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
         names = self._maybe_names()
@@ -3132,12 +3134,12 @@ class TensorDict(TensorDictBase):
     def where(
         self,
         condition: Tensor,
-        other: Tensor | TensorDictBase,
+        other: Tensor | TensorCollection,
         *,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         pad: int | bool = None,
         update_batch_size: bool = False,
-    ):
+    ) -> T:
         if _is_tensor_collection(type(other)):
 
             def func(tensor, _other, key):
@@ -3860,7 +3862,7 @@ class _SubTensorDict(TensorDictBase):
     @lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -3952,7 +3954,7 @@ class _SubTensorDict(TensorDictBase):
 
     def update_(
         self,
-        input_dict: dict[str, CompatibleType] | TensorDictBase,
+        input_dict: dict[str, CompatibleType] | TensorCollection,
         clone: bool = False,
         *,
         non_blocking: bool = False,
@@ -3969,7 +3971,7 @@ class _SubTensorDict(TensorDictBase):
 
     def update_at_(
         self,
-        input_dict: dict[str, CompatibleType] | TensorDictBase,
+        input_dict: dict[str, CompatibleType] | TensorCollection,
         idx: IndexType,
         *,
         discard_idx_attr: bool = False,
@@ -4437,7 +4439,12 @@ class _SubTensorDict(TensorDictBase):
 
     _get_names_idx = TensorDict._get_names_idx
 
-    def _index_tensordict(self, index, new_batch_size=None, names=None):
+    def _index_tensordict(
+        self,
+        index: IndexType,
+        new_batch_size: torch.Size | None = None,
+        names: Sequence[str] | None = None,
+    ) -> _SubTensorDict:
         # we ignore the names and new_batch_size which are only provided for
         # efficiency purposes
         return self._get_sub_tensordict(index)
@@ -4683,7 +4690,7 @@ def _set_tensor_dict(  # noqa: F811
     return out
 
 
-def _index_to_str(index):
+def _index_to_str(index: IndexType) -> Any:
     if isinstance(index, tuple):
         return tuple(_index_to_str(elt) for elt in index)
     if isinstance(index, slice):
@@ -4695,7 +4702,7 @@ def _index_to_str(index):
     return index
 
 
-def _str_to_index(index):
+def _str_to_index(index: Any) -> IndexType:
     if isinstance(index, tuple):
         if not len(index):
             return index
@@ -4716,7 +4723,7 @@ _register_tensor_class(TensorDict)
 _register_tensor_class(_SubTensorDict)
 
 
-def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
+def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
     """Saves the metadata of a memmap tensordict on disk."""
     filepath = prefix / "meta.json"
     if metadata is None:
@@ -5127,8 +5134,8 @@ def load(
     device: torch.device | None = None,
     non_blocking: bool = False,
     *,
-    out: TensorDictBase | None = None,
-):
+    out: TensorCollection | None = None,
+) -> T:
     """Loads a tensordict from disk.
 
     This class method is a proxy to :meth:`~.load_memmap`.
@@ -5143,7 +5150,7 @@ def load_memmap(
     device: torch.device | None = None,
     non_blocking: bool = False,
     *,
-    out: TensorDictBase | None = None,
+    out: TensorCollection | None = None,
 ) -> T:
     """Loads a memory-mapped tensordict from disk.
 
@@ -5220,14 +5227,14 @@ def load_memmap(
 
 
 def save(
-    data: TensorDictBase,
+    data: TensorCollection,
     prefix: str | None = None,
     copy_existing: bool = False,
     *,
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
-):
+) -> None:
     """Saves the tensordict to disk.
 
     This function is a proxy to :meth:`~.memmap`.
@@ -5242,14 +5249,14 @@ def save(
 
 
 def memmap(
-    data: TensorDictBase,
+    data: TensorCollection,
     prefix: str | None = None,
     copy_existing: bool = False,
     *,
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
-):
+) -> T:
     """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
     Args:
