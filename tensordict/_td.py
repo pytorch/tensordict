@@ -1910,12 +1910,16 @@ class TensorDict(TensorDictBase):
             raise ValueError(
                 f"dim {dim} is out of range for tensordict with shape {self.shape}."
             )
-        new_batch_size = torch.Size(
-            [
-                s if i != dim_corrected else s * repeats
-                for i, s in enumerate(self.batch_size)
-            ]
-        )
+        new_batch_size = []
+        for i, s in enumerate(self.batch_size):
+            if i == dim_corrected:
+                if isinstance(repeats, int):
+                    new_batch_size.append(s * repeats)
+                else:
+                    new_batch_size.append(repeats.sum().item())
+            else:
+                new_batch_size.append(s)
+        new_batch_size = torch.Size(new_batch_size)
 
         def rep(leaf):
             return leaf.repeat_interleave(

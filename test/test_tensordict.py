@@ -6521,6 +6521,26 @@ class TestTensorDicts(TestTensorDictsBase):
         t_shape = t.repeat_interleave(3).shape
         assert t_shape == td.repeat_interleave(3).shape
 
+    def test_repeat_interleave_tensor(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        d = 1
+        t = torch.empty(td.shape)
+        t_shape = t.repeat_interleave(torch.tensor([3, 4, 5]), dim=d).shape
+        td_repeat = td.repeat_interleave(torch.tensor([3, 4, 5]), dim=d)
+        assert td_repeat.shape == t_shape
+        assert td_repeat.device == td.device
+        if d < 0:
+            d = td.ndim + d
+        a = td["a"]
+        a_repeat = td_repeat["a"]
+        torch.testing.assert_close(
+            a.repeat_interleave(torch.tensor([3, 4, 5]), dim=d), a_repeat
+        )
+
+        t = torch.empty(td.shape)
+        t_shape = t.repeat_interleave(torch.tensor([3, 4, 5]), 1).shape
+        assert t_shape == td.repeat_interleave(torch.tensor([3, 4, 5]), 1).shape
+
     def test_replace(self, td_name, device):
         td = getattr(self, td_name)(device)
         td_dict = td.to_dict()
