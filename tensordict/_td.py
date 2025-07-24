@@ -21,6 +21,7 @@ import numpy as np
 
 import torch
 from tensordict._nestedkey import NestedKey
+from tensordict._tensorcollection import TensorCollection
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -902,7 +903,7 @@ class TensorDict(TensorDictBase):
             for key in self.keys():
                 self.set_at_(key, value, index)
 
-    def all(self, dim: int | None = None) -> bool | TensorDictBase:
+    def all(self, dim: int | None = None) -> bool | TensorCollection:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -924,7 +925,7 @@ class TensorDict(TensorDictBase):
             )
         return all(value.all() for value in self.values())
 
-    def any(self, dim: int | None = None) -> bool | TensorDictBase:
+    def any(self, dim: int | None = None) -> bool | TensorCollection:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
                 "dim must be greater than or equal to -tensordict.batch_dims and "
@@ -1790,7 +1791,7 @@ class TensorDict(TensorDictBase):
         )
         return result
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         if chunks < 1:
             raise ValueError(
                 f"chunks must be a strictly positive integer, got {chunks}."
@@ -1934,7 +1935,7 @@ class TensorDict(TensorDictBase):
             names=self._maybe_names(),
         )
 
-    def _repeat(self, *repeats: int) -> TensorDictBase:
+    def _repeat(self, *repeats: int) -> TensorCollection:
         new_batch_size = torch.Size([i * r for i, r in zip(self.batch_size, repeats)])
 
         def rep(leaf):
@@ -4394,7 +4395,7 @@ class _SubTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
 
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         splits = -(self.batch_size[dim] // -chunks)
         return self.split(splits, dim)
 

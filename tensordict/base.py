@@ -142,7 +142,7 @@ class _NoDefault(enum.IntEnum):
 
 
 NO_DEFAULT = _NoDefault.ZERO
-T = TypeVar("T", bound="TensorDictBase")
+T = TypeVar("T", bound="TensorCollection")
 
 
 class _BEST_ATTEMPT_INPLACE:
@@ -216,7 +216,7 @@ class _RecordDeviceTransfer:
 _device_recorder = _RecordDeviceTransfer()
 
 
-def _maybe_broadcast_other(op: str, n_other: int = 1):
+def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
 
     def wrap_func(func):
@@ -283,7 +283,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     _stream: torch.cuda.Stream | None = None
 
     @classmethod
-    def _new_unsafe(cls, *args, **kwargs):
+    def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
         # This to make sure all TensorDictBase subclasses have a proper fallback if they don't have a _new_unsafe
         # In other words, only TensorDict subclasses will have their type preserved, others will become TensorDict
         # instances (note that TensorDictBase should not be directly subclassed outside of this codebase, as it is
@@ -336,7 +336,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def __xor__(self, other: TensorDictBase | torch.Tensor | float):
+    def __xor__(self, other: TensorCollection | torch.Tensor | float):
         """XOR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -351,7 +351,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def __rxor__(self, other: TensorDictBase | torch.Tensor | float):
+    def __rxor__(self, other: TensorCollection | torch.Tensor | float):
         """XOR operation over two tensordicts, for evey key.
 
         Wraps `__xor__` as it is assumed to be commutative.
@@ -359,7 +359,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.__xor__(other)
 
     @abc.abstractmethod
-    def __or__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __or__(self, other: TensorCollection | torch.Tensor) -> T:
         """OR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -374,7 +374,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def __ror__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __ror__(self, other: TensorCollection | torch.Tensor) -> T:
         """Right-side OR operation over two tensordicts, for evey key.
 
         This is a wrapper around `__or__` since it is assumed to be commutative.
@@ -403,7 +403,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
-    def __and__(self, other: TensorDictBase | torch.Tensor | float) -> T:
+    def __and__(self, other: TensorCollection | torch.Tensor | float) -> T:
         """Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.
 
         Args:
@@ -617,7 +617,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def __delitem__(self, key: NestedKey) -> T:
         return self.del_(key)
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         result = dict(self.__dict__)
         for key in (
             "_last_op",
@@ -628,7 +628,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.pop(key, None)
         return result
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any]) -> None:
         for key, value in state.items():
             setattr(self, key, value)
         self._cache = None
@@ -661,7 +661,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
-    def all(self, dim: int | None = None) -> bool | TensorDictBase:
+    def all(self, dim: int | None = None) -> bool | TensorCollection:
         """Checks if all values are True/non-null in the tensordict.
 
         Args:
@@ -675,7 +675,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def any(self, dim: int | None = None) -> bool | TensorDictBase:
+    def any(self, dim: int | None = None) -> bool | TensorCollection:
         """Checks if any value is True/non-null in the tensordict.
 
         Args:
@@ -3044,7 +3044,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def expand_as(self, other: TensorDictBase | torch.Tensor) -> TensorDictBase:
+    def expand_as(self, other: TensorCollection | torch.Tensor) -> TensorCollection:
         """Broadcasts the shape of the tensordict to the shape of `other` and expands it accordingly.
 
         If the input is a tensor collection (tensordict or tensorclass),
@@ -3336,13 +3336,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def new_tensor(
         self,
-        data: torch.Tensor | TensorDictBase,
+        data: torch.Tensor | TensorCollection,
         *,
         dtype: torch.dtype = None,
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         pin_memory: bool | None = None,
-    ):  # noqa: D417
+    ) -> T:  # noqa: D417
         """Returns a new TensorDict with data as the tensor ``data``.
 
         By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
@@ -3497,7 +3497,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return tuple(self.split(split_sizes, dim=dim))
 
     @abc.abstractmethod
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
         """Splits a tensordict into the specified number of chunks, if possible.
 
         Each chunk is a view of the input tensordict.
@@ -3770,7 +3770,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @overload
     def repeat(self, repeats: torch.Size): ...
 
-    def repeat(self, *repeats: int) -> TensorDictBase:
+    def repeat(self, *repeats: int) -> TensorCollection:
         """Repeats this tensor along the specified dimensions.
 
         Unlike :meth:`~.expand()`, this function copies the tensor's data.
@@ -3829,7 +3829,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self._repeat(*repeats)
 
     @abc.abstractmethod
-    def _repeat(self, *repeats: int) -> TensorDictBase:
+    def _repeat(self, *repeats: int) -> TensorCollection:
         raise NotImplementedError
 
     def cat_tensors(
@@ -4015,7 +4015,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
 
     @abc.abstractmethod
-    def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
+    def split(
+        self, split_size: int | list[int], dim: int = 0
+    ) -> list[TensorCollection]:
         """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
 
         Returns a list of ``TensorDict`` instances with the view of split chunks of items.
@@ -9101,11 +9103,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def map(
         self,
-        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        fn: Callable[[TensorCollection], TensorCollection | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
@@ -9115,7 +9117,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         index_with_generator: bool = False,
         pbar: bool = False,
         mp_start_method: str | None = None,
-    ):
+    ) -> T:
         """Maps a function to splits of the tensordict across one dimension.
 
         This method will apply a function to a tensordict instance by chunking
@@ -9281,7 +9283,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def map_iter(
         self,
-        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        fn: Callable[[TensorCollection], TensorCollection | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
@@ -9295,7 +9297,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         index_with_generator: bool = True,
         pbar: bool = False,
         mp_start_method: str | None = None,
-    ):
+    ) -> Iterator[T]:
         """Maps a function to splits of the tensordict across one dimension iteratively.
 
         This is the iterable version of :meth:`~TensorDictBase.map`.
@@ -9601,52 +9603,52 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.copy()
 
     # point-wise arithmetic ops
-    def __add__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __add__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.add(other)
 
-    def __radd__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __radd__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.add(other)
 
-    def __iadd__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __iadd__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.add_(other)
 
-    def __truediv__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __truediv__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.div(other)
 
-    def __itruediv__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __itruediv__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.div_(other)
 
-    def __rtruediv__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> T:
         return other * self.reciprocal()
 
-    def __mul__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __mul__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.mul(other)
 
-    def __rmul__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __rmul__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.mul(other)
 
-    def __imul__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __imul__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.mul_(other)
 
-    def __sub__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __sub__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.sub(other)
 
-    def __isub__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __isub__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.sub_(other)
 
-    def __rsub__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __rsub__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.rsub(other)
 
-    def __pow__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __pow__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.pow(other)
 
-    def __rpow__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __rpow__(self, other: TensorCollection | torch.Tensor) -> T:
         raise NotImplementedError(
             "rpow isn't implemented for tensordict yet. Make sure both elements are wrapped "
             "in a tensordict for this to work."
         )
 
-    def __ipow__(self, other: TensorDictBase | torch.Tensor) -> T:
+    def __ipow__(self, other: TensorCollection | torch.Tensor) -> T:
         return self.pow_(other)
 
     def abs(self) -> T:
@@ -10970,7 +10972,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def mul_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def mul_(self, other: TensorCollection | torch.Tensor) -> T:
         """In-place version of :meth:`~.mul`.
 
         .. note::
@@ -10989,7 +10991,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("mul")
     def mul(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> T:  # noqa: D417
@@ -11042,7 +11044,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def maximum_(self, other: TensorDictBase | torch.Tensor) -> T:
+    def maximum_(self, other: TensorCollection | torch.Tensor) -> T:
         """In-place version of :meth:`~.maximum`.
 
         .. note::
@@ -11061,7 +11063,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @_maybe_broadcast_other("maximum")
     def maximum(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> T:  # noqa: D417
@@ -14500,7 +14502,7 @@ def from_tuple(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
-):
+) -> "TensorDictBase":
     """Converts a tuple to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_tuple` for more information.
@@ -14521,7 +14523,7 @@ def from_namedtuple(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
-):
+) -> "TensorDictBase":
     """Converts a namedtuple to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_namedtuple` for more information.
@@ -14544,7 +14546,7 @@ def from_struct_array(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
-):
+) -> "TensorDictBase":
     """Converts a structured numpy array to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_struct_array` for more information.
@@ -14579,7 +14581,7 @@ def from_dict(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
-):
+) -> "TensorDictBase":
     """Converts a dictionary to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
@@ -14647,7 +14649,7 @@ def from_h5(
     batch_dims: int | None = None,
     device: torch.device | None = None,
     batch_size: torch.Size | None = None,
-):
+) -> "TensorDictBase":
     """Converts an HDF5 file to a TensorDict.
 
     .. seealso:: :meth:`TensorDictBase.from_h5` for more information.

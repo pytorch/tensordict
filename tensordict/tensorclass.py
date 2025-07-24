@@ -104,7 +104,7 @@ except ImportError:
         return _identity
 
 
-T = TypeVar("T", bound=TensorDictBase)
+T = TypeVar("T", bound=TensorCollection)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
 if (major, minor) < (3, 10):
@@ -3427,7 +3427,7 @@ class NonTensorDataBase(TensorClass):
 
     def update_at_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         index: IndexType,
         clone: bool = False,
         *,
@@ -4445,7 +4445,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def update_at_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         index: IndexType,
         clone: bool = False,
         *,
