@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+ga9c028d)
+                  main (0.0.post1+gad65992)
                 </div>
               
             
@@ -6772,6 +6772,42 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict.tanh_">
 <span class="sig-name descname"><span class="pre">tanh_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.tanh_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the <code class="xref py py-meth docutils literal notranslate"><span class="pre">tanh()</span></code> value of each element of the TensorDict in-place.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.tensor_split">
+<span class="sig-name descname"><span class="pre">tensor_split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices_or_sections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">tensordict.base.TensorDictBase</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.tensor_split" title="Permalink to this definition">¶</a></dt>
+<dd><p>Splits a TensorDict into multiple sub-tensordicts, all of which are views of input, along dimension dim according to the indices or number of sections specified by indices_or_sections.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices_or_sections</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>List</em><em>(</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>) or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>(</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>) or </em><em>1D tensor of ints</em>) – If <cite>indices_or_sections</cite> is an integer
+<cite>n</cite> or a zero dimensional long tensordict with value <cite>n</cite>, input is split into <cite>n</cite> sections along dimension <cite>dim</cite>.
+If input is divisible by <cite>n</cite> along dimension <cite>dim</cite>, each section will be of equal size, <cite>input.size(dim) / n</cite>.
+If input is not divisible by <cite>n</cite>, the sizes of the first <cite>int(input.size(dim) % n)</cite> sections will have
+size <cite>int(input.size(dim) / n) + 1</cite>, and the rest will have size <cite>int(input.size(dim) / n)</cite>.
+If <cite>indices_or_sections</cite> is a list or tuple of ints, or a one-dimensional long tensor, then input is split
+along dimension <cite>dim</cite> at each of the indices in the list, tuple or tensor.
+For instance, <cite>indices_or_sections=[2, 3]</cite> and <cite>dim=0</cite> would result in the tensors <cite>input[:2]</cite>, <cite>input[2:3]</cite>, and <cite>input[3:]</cite>.
+If <cite>indices_or_sections</cite> is a tensor, it must be a zero-dimensional or one-dimensional long tensor on the CPU.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – dimension along which to split the tensor. Default: 0</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">tensor_split</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">indices_or_sections</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span>
+<span class="go">tensor([[[ 0,  1],</span>
+<span class="go">         [ 2,  3]],</span>
+<span class="go">        [[ 8,  9],</span>
+<span class="go">         [10, 11]],</span>
+<span class="go">        [[16, 17],</span>
+<span class="go">         [18, 19]]])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
