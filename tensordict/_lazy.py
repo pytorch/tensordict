@@ -1430,12 +1430,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     "Check the TensorDict.lazy_stack documentation!"
                 ) from err
         if all(is_non_tensor(tensordict) for tensordict in items):
-            # Non-tensor data (Data or Stack) are stacked using NonTensorStack
-            # If the content is identical (not equal but same id) this does not
-            # require additional memory.
-            from .tensorclass import NonTensorStack
-
-            return NonTensorStack(*items, stack_dim=dim)
+            return items[0]._stack_non_tensor(items, dim=dim)
         if all(
             is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
             for item in items

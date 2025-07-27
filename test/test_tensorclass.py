@@ -32,6 +32,7 @@ from tensordict import (
     lazy_legacy,
     LazyStackedTensorDict,
     MemoryMappedTensor,
+    MetaData,
     set_capture_non_tensor_stack,
     set_list_to_stack,
     tensorclass,
@@ -40,6 +41,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
+from tensordict._td import lazy_stack
 from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
 from torch import Tensor
@@ -2026,6 +2028,21 @@ class TestTensorClass:
                 "foo",
                 "bar",
             ]
+
+    def test_stack_metadata(self):
+        class MyTensorClass(TensorClass):
+            custom_data: MetaData
+
+        my_tc = MyTensorClass(custom_data=MetaData("abc"))
+        assert isinstance(my_tc._tensordict._tensordict.get("custom_data"), MetaData)
+        stacked_tc = torch.stack([my_tc, my_tc], dim=0)
+        assert isinstance(
+            stacked_tc._tensordict._tensordict.get("custom_data"), MetaData
+        )
+        assert stacked_tc.custom_data == "abc"
+        stacked_tc = lazy_stack([my_tc, my_tc], dim=0)
+        assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData)
+        assert stacked_tc.custom_data == "abc"
 
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
