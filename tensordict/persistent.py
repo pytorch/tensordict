@@ -27,6 +27,7 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
+from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
@@ -54,7 +55,7 @@ from tensordict.utils import (
     NUMPY_TO_TORCH_DTYPE_DICT,
     unravel_key,
 )
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
@@ -444,7 +445,7 @@ class PersistentTensorDict(TensorDictBase):
             return np.asarray(idx)
         return idx
 
-    def __getitem__(self, item: IndexType) -> Any:
+    def __getitem__(self, item: IndexType) -> Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
         ):

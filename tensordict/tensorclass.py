@@ -1996,7 +1996,7 @@ def _wrap_classmethod(td_cls, cls, func):
     return wrapped_func
 
 
-def _getitem(self, item: NestedKey) -> Any:
+def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
     """Retrieve the class object at the given index. Indexing will happen for nested tensors as well.
 
     Args:
@@ -3309,7 +3309,7 @@ class NonTensorDataBase(TensorClass):
         """Calling a NonTensorDataBase falls back to a call of its data."""
         return self.data(*args, **kwargs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Tensor | TensorCollection | Any:
         if isinstance(self.data, list):
             new_data = [self.data[i] for i in torch.as_tensor(idx).tolist()]
         else:

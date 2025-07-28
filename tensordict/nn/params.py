@@ -29,6 +29,7 @@ import torch
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
+from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
@@ -686,7 +687,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def __getitem__(self, index: IndexType) -> Any: ...
+    def __getitem__(self, index: IndexType) -> Tensor | TensorCollection | Any: ...
 
     @_fallback
     def _set_device(self, device: torch.device) -> T: ...
