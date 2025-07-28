@@ -3296,13 +3296,7 @@ class NonTensorDataBase(TensorClass):
         """Calling a NonTensorDataBase falls back to a call of its data."""
         return self.data(*args, **kwargs)
 
-    def __getitem__(self, idx):
-        if isinstance(self.data, list):
-            new_data = [self.data[i] for i in torch.as_tensor(idx).tolist()]
-        else:
-            new_data = self.data[idx]
-        new_batch_size = torch.Size(torch.Size(self.batch_size)[idx]) if self.batch_size else torch.Size([])
-        return NonTensorData(new_data, new_batch_size, self.device)
+
 
     def update(
         self,
@@ -3923,6 +3917,24 @@ class NonTensorData(NonTensorDataBase):
     _from_dict = classmethod(_from_dict)
     _from_tensordict = classmethod(_from_tensordict)
     __repr__ = NonTensorDataBase.__repr__
+
+    def __getitem__(self, index: IndexType) -> Any:
+        if isinstance(self.data, list):
+            idx = torch.as_tensor(index)
+            index = idx.tolist() if idx.dtype != torch.bool else idx.nonzero(as_tuple=False).squeeze(-1).tolist()
+            new_data = [self.data[i] for i in index]
+        else:
+            new_data = self.data[index]
+
+        if isinstance(index, (int, np.integer)):
+            new_batch_size = torch.Size([])
+        else:
+            try:
+                new_batch_size = torch.Size([len(new_data)])
+            except TypeError:
+                new_batch_size = torch.Size([])
+
+        return NonTensorData(new_data, new_batch_size, self.device)
 
     def expand(self, *args, **kwargs) -> T:
         # tensordict_dims = self.batch_dims
