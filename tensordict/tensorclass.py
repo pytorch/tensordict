@@ -924,7 +924,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     cls = dataclass(cls, frozen=frozen)
     _TENSORCLASS_MEMO[cls] = True
 
-    expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
+    # Use dataclasses.fields() to get the correct field list (excludes ClassVar fields)
+    # rather than __dataclass_fields__ which may incorrectly include them
+    expected_keys = cls.__expected_keys__ = {
+        field.name for field in dataclasses.fields(cls)
+    }
 
     if not shadow:
         for attr in expected_keys:
@@ -1186,7 +1190,7 @@ def _init_wrapper(
             lock = frozen
         if not is_compiling():
             # zip not supported by dynamo
-            for value, key in zip(args, self.__dataclass_fields__):
+            for value, key in zip(args, type(self).__dataclass_fields__):
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
@@ -1198,17 +1202,21 @@ def _init_wrapper(
 
         if not is_compiling():
             for key, field in type(self).__dataclass_fields__.items():
-                if field.default_factory not in (
-                    dataclasses.MISSING,
-                ) and not isinstance(
-                    field.default_factory,
-                    getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)),
-                ):
-                    default = field.default_factory()
-                else:
-                    default = field.default
-                if default not in (None, dataclasses.MISSING):
-                    kwargs.setdefault(key, default)
+                # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
+                if key in self.__expected_keys__:
+                    if field.default_factory not in (
+                        dataclasses.MISSING,
+                    ) and not isinstance(
+                        field.default_factory,
+                        getattr(
+                            dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
+                        ),
+                    ):
+                        default = field.default_factory()
+                    else:
+                        default = field.default
+                    if default not in (None, dataclasses.MISSING):
+                        kwargs.setdefault(key, default)
         else:
             # TODO: Decide what to do here
             pass

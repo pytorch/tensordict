@@ -19,7 +19,7 @@ from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Optional, Tuple, Union
+from typing import Any, ClassVar, Optional, Tuple, Union
 
 import numpy as np
 import pytest
@@ -555,6 +555,17 @@ class TestTensorClass:
             match=("Multiple dispatch failed|no implementation found"),
         ):
             torch.cat([data1, data3], dim=0)
+
+    def test_classvar(self):
+        @tensorclass
+        class MyData:
+            X: torch.Tensor
+            y: ClassVar[float] = 0.5
+
+        data = MyData(X=torch.ones(3, 4, 5), batch_size=[3, 4])
+        assert data.y == 0.5
+        assert MyData.y == 0.5
+        assert "y" not in data.__expected_keys__
 
     def test_clone(self):
         @tensorclass
