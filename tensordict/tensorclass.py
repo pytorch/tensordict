@@ -35,6 +35,7 @@ from typing import (
     List,
     Sequence,
     Type,
+    TYPE_CHECKING,
     TypeVar,
     Union,
 )
@@ -86,6 +87,11 @@ try:
     from torch.compiler import is_compiling
 except ImportError:  # torch 2.0
     from torch._dynamo import is_compiling
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 def _identity(cls):
@@ -1436,12 +1442,18 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
         cls._type_hints = None
 
 
-def _from_tensordict(cls, tensordict, non_tensordict=None, safe=True):  # noqa: D417
+def _from_tensordict(
+    cls,
+    tensordict: TensorDictBase,
+    non_tensordict: dict | None = None,
+    safe: bool = True,
+) -> Self:  # noqa: D417
     """Tensor class wrapper to instantiate a new tensor class object.
 
     Args:
-        tensordict (TensorDict): Dictionary of tensor types
+        tensordict (TensorDictBase): Dictionary of tensor types
         non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
+        safe (bool): Whether to raise an error if the tensordict is not a TensorDictBase instance
 
     """
     if safe and not isinstance(tensordict, TensorDictBase):
