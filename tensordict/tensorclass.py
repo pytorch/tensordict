@@ -1237,10 +1237,6 @@ def _init_wrapper(
         self.__setattr_parent__("_is_initialized", True)
 
         # convert the non tensor data in a regular data
-        kwargs = {
-            key: value.data if isinstance(value, NonTensorDataBase) else value
-            for key, value in kwargs.items()
-        }
         __init__(self, **kwargs)
         if frozen:
             local_setattr = _setattr
