@@ -562,10 +562,55 @@ class TestTensorClass:
             X: torch.Tensor
             y: ClassVar[float] = 0.5
 
+        # Test with keyword arguments
         data = MyData(X=torch.ones(3, 4, 5), batch_size=[3, 4])
         assert data.y == 0.5
         assert MyData.y == 0.5
         assert "y" not in data.__expected_keys__
+
+        # Test with positional arguments
+        data_pos = MyData(torch.ones(3, 4, 5), batch_size=[3, 4])
+        assert data_pos.y == 0.5
+        assert data_pos.X.shape == (3, 4, 5)
+        assert "y" not in data_pos.__expected_keys__
+
+        # Test with multiple fields and ClassVar in the middle
+        @tensorclass
+        class MyDataComplex:
+            a: torch.Tensor
+            b: ClassVar[str] = "constant"
+            c: torch.Tensor
+            d: ClassVar[int] = 42
+
+        # Test with keyword arguments
+        data_complex = MyDataComplex(
+            a=torch.ones(2, 3), c=torch.zeros(2, 3), batch_size=[2, 3]
+        )
+        assert data_complex.b == "constant"
+        assert data_complex.d == 42
+        assert "b" not in data_complex.__expected_keys__
+        assert "d" not in data_complex.__expected_keys__
+        assert "a" in data_complex.__expected_keys__
+        assert "c" in data_complex.__expected_keys__
+
+        # Test with positional arguments
+        data_complex_pos = MyDataComplex(
+            torch.ones(2, 3), torch.zeros(2, 3), batch_size=[2, 3]
+        )
+        assert data_complex_pos.b == "constant"
+        assert data_complex_pos.d == 42
+        assert data_complex_pos.a.shape == (2, 3)
+        assert data_complex_pos.c.shape == (2, 3)
+
+        # Test that passing too many positional arguments (including ClassVar fields) raises an error
+        # This should behave the same as regular dataclass
+        with pytest.raises(
+            TypeError, match="takes 3 positional arguments but 5 were given"
+        ):
+            # This should fail because we're passing 4 args (a, b, c, d) but only 2 are actual fields
+            MyDataComplex(
+                torch.ones(2, 3), "constant", torch.zeros(2, 3), 42, batch_size=[2, 3]
+            )
 
     def test_clone(self):
         @tensorclass
