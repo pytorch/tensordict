@@ -1190,7 +1190,20 @@ def _init_wrapper(
             lock = frozen
         if not is_compiling():
             # zip not supported by dynamo
-            for value, key in zip(args, type(self).__dataclass_fields__):
+            # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
+            expected_keys_list = [
+                key
+                for key in type(self).__dataclass_fields__
+                if key in self.__expected_keys__
+            ]
+
+            # Check that we don't have too many positional arguments
+            if len(args) > len(expected_keys_list):
+                raise TypeError(
+                    f"{type(self).__name__}.__init__() takes {len(expected_keys_list) + 1} positional arguments but {len(args) + 1} were given"
+                )
+
+            for value, key in zip(args, expected_keys_list):
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
@@ -3295,6 +3308,18 @@ class NonTensorDataBase(TensorClass):
     def __call__(self, *args, **kwargs):
         """Calling a NonTensorDataBase falls back to a call of its data."""
         return self.data(*args, **kwargs)
+
+    def __getitem__(self, idx):
+        if isinstance(self.data, list):
+            new_data = [self.data[i] for i in torch.as_tensor(idx).tolist()]
+        else:
+            new_data = self.data[idx]
+        new_batch_size = (
+            torch.Size(torch.Size(self.batch_size)[idx])
+            if self.batch_size
+            else torch.Size([])
+        )
+        return NonTensorData(new_data, new_batch_size, self.device)
 
     def update(
         self,
