@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.5937, 0.0000, 0.0000, 0.0219]], grad_fn=<ReluBackward0>), tensor([[0.0471, 0.4171, 0.3061, 0.1855]], grad_fn=<AddmmBackward0>), tensor([[0.0471, 0.4171]], grad_fn=<SplitBackward0>), tensor([[1.2030, 1.1205]], grad_fn=<ClampMinBackward0>), tensor([[0.0471, 0.4171]], grad_fn=<SplitBackward0>))
+    (tensor([[0.8969, 0.4022, 0.3480, 0.0000]], grad_fn=<ReluBackward0>), tensor([[ 0.4512, -0.4505, -0.6211, -0.4099]], grad_fn=<AddmmBackward0>), tensor([[ 0.4512, -0.4505]], grad_fn=<SplitBackward0>), tensor([[0.6565, 0.7626]], grad_fn=<ClampMinBackward0>), tensor([[ 0.4512, -0.4505]], grad_fn=<SplitBackward0>))
 
 
 
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  550.03 micro-seconds
-    Time for exported module:  712.39 micro-seconds
+    Time for TDModule:  556.71 micro-seconds
+    Time for exported module:  699.04 micro-seconds
 
 
 
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[0.0471, 0.4171]], grad_fn=<SplitBackward0>)
+    tensor([[ 0.4512, -0.4505]], grad_fn=<SplitBackward0>)
 
 
 
@@ -657,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.147 seconds)
+   **Total running time of the script:** (0 minutes 5.193 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
