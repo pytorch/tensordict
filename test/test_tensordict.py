@@ -6543,7 +6543,9 @@ class TestTensorDicts(TestTensorDictsBase):
         )
 
         t = torch.empty(td.shape, device=td.device)
-        t_shape = t.repeat_interleave(torch.tensor([3, 4, 5], device=td.device), 1).shape
+        t_shape = t.repeat_interleave(
+            torch.tensor([3, 4, 5], device=td.device), 1
+        ).shape
         assert (
             t_shape
             == td.repeat_interleave(torch.tensor([3, 4, 5], device=td.device), 1).shape
