@@ -227,11 +227,11 @@ class CudaGraphModule:
                 **kwargs: Any,
             ) -> Any:
                 if self.counter >= self._warmup:
-                    self._tensordict.update_(tensordict, non_blocking=True)
+                    self._tensordict.update_(tensordict, non_blocking=True)  # type: ignore[attr-defined]
                     torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._out_matches_in:
-                        result = tensordict.update(
+                        result = tensordict.update(  # type-ignore[unreachable]
                             self._out, keys_to_update=self._selected_keys
                         )
                     elif tensordict_out is not None:
@@ -396,7 +396,7 @@ class CudaGraphModule:
                     if not self._out:
                         self._return_unchanged = True
                     else:
-                        self._out = [
+                        self._out = [  # type: ignore[unreachable]
                             out.lock_() if is_tensor_collection(out) else out
                             for out in self._out
                         ]

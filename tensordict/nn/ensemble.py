@@ -6,8 +6,10 @@
 import warnings
 
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict
-from tensordict.nn.common import TensorDictBase, TensorDictModuleBase
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import TensorDict
+from tensordict.base import TensorDictBase
+from tensordict.nn.common import TensorDictModuleBase
 
 from tensordict.nn.params import TensorDictParams
 

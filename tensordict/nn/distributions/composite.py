@@ -9,7 +9,8 @@ from collections.abc import Mapping
 from typing import Dict
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict._td import TensorDict
+from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
 from tensordict.utils import NestedKey, unravel_key, unravel_keys
 from torch import distributions as d

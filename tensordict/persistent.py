@@ -14,7 +14,7 @@ import warnings
 import weakref
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Tuple, Type
+from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
 
@@ -58,6 +58,11 @@ from torch import multiprocessing as mp
 
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 class _Visitor:
@@ -649,7 +654,7 @@ class PersistentTensorDict(TensorDictBase):
             sub_tds.append(_td)
         return sub_tds
 
-    def zero_(self) -> T:
+    def zero_(self) -> Self:
         for key in self.keys():
             self.fill_(key, 0)
         return self

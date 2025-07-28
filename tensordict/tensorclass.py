@@ -19,7 +19,6 @@ import numbers
 import os
 import pickle
 import shutil
-
 import sys
 import warnings
 from copy import copy, deepcopy
@@ -49,6 +48,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
+from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -104,7 +104,7 @@ except ImportError:
         return _identity
 
 
-T = TypeVar("T", bound=TensorDictBase)
+T = TypeVar("T", bound=TensorCollection)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
 major, minor = sys.version_info[:2]
 if (major, minor) < (3, 10):
@@ -3054,7 +3054,7 @@ class _TensorClassMeta(abc.ABCMeta):
         return result
 
 
-class TensorClass(metaclass=_TensorClassMeta):
+class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     """TensorClass is the inheritance-based version of the @tensorclass decorator.
 
     TensorClass allows you to code dataclasses that are better type-checked and more pythonic than those built with
@@ -3427,12 +3427,12 @@ class NonTensorDataBase(TensorClass):
 
     def update_at_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         index: IndexType,
         clone: bool = False,
         *,
         non_blocking: bool = False,
-    ) -> NonTensorDataBase:
+    ) -> T:
         if index != () and index != slice(None):
             raise RuntimeError("Cannot update a part of a NonTensorDataBase.")
         return self.update_(
@@ -4160,7 +4160,7 @@ class NonTensorStack(LazyStackedTensorDict):
     @classmethod
     def lazy_stack(
         cls,
-        items: Sequence[TensorDictBase],
+        items: Sequence[TensorCollection],
         dim: int = 0,
         *,
         device: DeviceType | None = None,
@@ -4445,7 +4445,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def update_at_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         index: IndexType,
         clone: bool = False,
         *,

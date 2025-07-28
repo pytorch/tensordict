@@ -102,7 +102,7 @@ for dist_name in dir(D):
     if isinstance(dist_cls, type) and issubclass(dist_cls, D.Distribution):
         if dist_cls is D.LogisticNormal:
             DETERMINISTIC_REGISTER[dist_cls] = InteractionType.DETERMINISTIC
-        elif dist_cls.has_enumerate_support:
+        elif getattr(dist_cls, "has_enumerate_support", False):
             DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MODE
         else:
             DETERMINISTIC_REGISTER[dist_cls] = InteractionType.MEAN
@@ -1042,8 +1042,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
         super().__init__(*modules, partial_tolerant=partial_tolerant, inplace=inplace)
-        if return_composite is None:
-            return_composite = True
         self.return_composite = return_composite
 
     def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:

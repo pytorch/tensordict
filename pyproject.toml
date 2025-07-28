@@ -57,6 +57,7 @@ tests = [
 checkpointing = ["torchsnapshot-nightly"]
 h5 = ["h5py>=3.8"]
 dev = ["pybind11", "cmake", "ninja"]
+typecheck = ["mypy>=1.0.0"]
 
 [tool.setuptools]
 include-package-data = false
@@ -73,3 +74,40 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 [tool.setuptools_scm]
 version_scheme = "post-release"
 write_to = "tensordict/_version.py"
+
+[tool.mypy]
+files = "tensordict"
+show_error_codes = true
+pretty = true
+allow_redefinition = true
+warn_redundant_casts = true
+# Be more lenient with type checking
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_untyped_decorators = false
+no_implicit_optional = false
+warn_unused_ignores = true
+warn_return_any = false
+warn_unreachable = true
+strict_equality = false
+# Ignore missing imports for external libraries
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "torch.*"
+ignore_errors = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "torchvision.*"
+ignore_errors = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "numpy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scipy.*"
+ignore_missing_imports = true
