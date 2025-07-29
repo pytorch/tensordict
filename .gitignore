@@ -6,12 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+poetry.lock
+
 # Distribution / packaging
 *.egg
 *.egg-info/
 .Python
 .eggs/
 .installed.cfg
+./scratch
 MANIFEST
 build/
 dump/
@@ -145,3 +148,10 @@ dmypy.json
 # OS files
 Thumbs.db
 .DS_Store
+MYPY_SUMMARY.md
+RELEASE_NOTES_0.9.0.md
+rn.md
+*.ipynb
+.github/scripts/debug-build.sh
+0.8/0.9
+scratch/*
