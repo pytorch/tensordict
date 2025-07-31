@@ -170,7 +170,6 @@ class PersistentTensorDict(TensorDictBase):
             raise ModuleNotFoundError("Could not load h5py.")
         import h5py
 
-        super().__init__()
         self.filename = filename
         self.mode = mode
         if backend != "h5":
