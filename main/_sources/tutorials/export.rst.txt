@@ -43,7 +43,7 @@ Key learnings
 
 - Executing a ``tensordict.nn`` module without :class:`~tensordict.TensorDict` inputs;
 - Selecting the output(s) of a model;
-- Handling stochstic models;
+- Handling stochastic models;
 - Exporting such model using `torch.export`;
 - Saving the model to a file;
 - Isolating the pytorch model;
@@ -79,18 +79,18 @@ Designing the model
 
 In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
 deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-models will often generate different outputs when the same input if provided, because they sample the output based
+models will often generate different outputs when the same input is provided, because they sample the output based
 on a distribution which parameters are defined by the input.
 
 The ``tensordict`` library deals with this through the :class:`~tensordict.nn.ProbabilisticTensorDictModule` class.
-This primitive is built using a distribtion class (:class:`~torch.distributions.Normal` in our case) and an indicator
+This primitive is built using a distribution class (:class:`~torch.distributions.Normal` in our case) and an indicator
 of the input keys that will be used at execution time to build that distribution.
 
 The network we are building is therefore going to be the combination of three main components:
 
 - A network mapping the input to a latent parameter;
 - A :class:`tensordict.nn.NormalParamExtractor` module splitting the input in a location `"loc"` and `"scale"`
-  parameters to be passed to the ``Normal`` distrbution;
+  parameters to be passed to the ``Normal`` distribution;
 - A distribution constructor module.
 
 
@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.2401, 0.0000, 0.8915, 0.0227]], grad_fn=<ReluBackward0>), tensor([[0.1972, 0.2244, 0.4943, 0.2391]], grad_fn=<AddmmBackward0>), tensor([[0.1972, 0.2244]], grad_fn=<SplitBackward0>), tensor([[1.3377, 1.1568]], grad_fn=<ClampMinBackward0>), tensor([[0.1972, 0.2244]], grad_fn=<SplitBackward0>))
+    (tensor([[0.1068, 0.0000, 0.0000, 1.1505]], grad_fn=<ReluBackward0>), tensor([[-0.6246,  0.0708, -0.1452, -0.1824]], grad_fn=<AddmmBackward0>), tensor([[-0.6246,  0.0708]], grad_fn=<SplitBackward0>), tensor([[0.9112, 0.8893]], grad_fn=<ClampMinBackward0>), tensor([[-0.6246,  0.0708]], grad_fn=<SplitBackward0>))
 
 
 
@@ -156,10 +156,10 @@ Using ``torch.export`` with a ``TensorDictModule``
 --------------------------------------------------
 
 Now that we have successfully built our model, we would like to extract its computational graph in a single object that
-is independent of ``tensordict``. ``torch.export`` is a PyTorch module dedicated to isolate the graph of a module and
-represent it in a standardized way. Its main entry point is :func:`~torch.export.export` which returns a ``ExportedProgram``
+is independent of ``tensordict``. ``torch.export`` is a PyTorch module dedicated to isolating the graph of a module and
+represent it in a standardized way. Its main entry point is :func:`~torch.export.export` which returns an ``ExportedProgram``
 object. In turn, this object has several attributes of interest that we will explore below: a ``graph_module``,
-which represents the FX graph captured by ``export``, a ``graph_signature`` with input, outputs etc of the graph,
+which represents the FX graph captured by ``export``, a ``graph_signature`` with inputs, outputs, etc., of the graph,
 and finally a ``module()`` that returns a callable that can be used in-place of the original module.
 
 Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
@@ -266,8 +266,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  541.21 micro-seconds
-    Time for exported module:  674.25 micro-seconds
+    Time for TDModule:  543.59 micro-seconds
+    Time for exported module:  662.57 micro-seconds
 
 
 
@@ -353,7 +353,7 @@ Working with nested keys
 
 Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
 nested entries is therefore an important feature to support.
-Because keyword arguments must be regualar strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
+Because keyword arguments must be regular strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
 directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
 following example shows.
 
@@ -414,7 +414,7 @@ Recall that the ``tensordict.nn`` is to keep every intermediate value in the out
 for only a specific value. During training, this can be very useful: one can easily log intermediate values of the
 graph, or use them for other purposes (e.g., reconstruct a distribution based on its saved parameters, rather than
 saving the :class:`~torch.distributions.Distribution` object itself). One could also argue that, during training, the
-impact on memory of registering intermediate values is negligeable since they are part of the computational graph
+impact on memory of registering intermediate values is negligible since they are part of the computational graph
 used by ``torch.autograd`` to compute the parameter gradients.
 
 During inference, though, we most likely are only interested in the final sample of the model.
@@ -450,7 +450,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[0.1972, 0.2244]], grad_fn=<SplitBackward0>)
+    tensor([[-0.6246,  0.0708]], grad_fn=<SplitBackward0>)
 
 
 
@@ -536,7 +536,7 @@ can be changed using the ``default_interaction_type`` keyword argument of ``Prob
 Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
 constructor, or override it at runtime through the ``set_interaction_type`` context manager.
 
-As we can see from the following example, ``torch.export`` respond correctly the usage of the decorator: if we ask for
+As we can see from the following example, ``torch.export`` respond correctly to the usage of the decorator: if we ask for
 a random sample, the output is different than if we ask for the mean:
 
 
@@ -657,7 +657,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.159 seconds)
+   **Total running time of the script:** (0 minutes 5.152 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

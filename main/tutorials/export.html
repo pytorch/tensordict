@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+g875d2fe)
+                  main (0.0.post1+g021bdf1)
                 </div>
               
             
@@ -374,7 +374,7 @@ compatible with <code class="docutils literal notranslate"><span class="pre">ten
 <ul class="simple">
 <li><p>Executing a <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code> module without <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> inputs;</p></li>
 <li><p>Selecting the output(s) of a model;</p></li>
-<li><p>Handling stochstic models;</p></li>
+<li><p>Handling stochastic models;</p></li>
 <li><p>Exporting such model using <cite>torch.export</cite>;</p></li>
 <li><p>Saving the model to a file;</p></li>
 <li><p>Isolating the pytorch model;</p></li>
@@ -397,16 +397,16 @@ compatible with <code class="docutils literal notranslate"><span class="pre">ten
 <h3>Designing the model<a class="headerlink" href="#designing-the-model" title="Permalink to this heading">¶</a></h3>
 <p>In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
 deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-models will often generate different outputs when the same input if provided, because they sample the output based
+models will often generate different outputs when the same input is provided, because they sample the output based
 on a distribution which parameters are defined by the input.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> library deals with this through the <a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> class.
-This primitive is built using a distribtion class (<code class="xref py py-class docutils literal notranslate"><span class="pre">Normal</span></code> in our case) and an indicator
+This primitive is built using a distribution class (<code class="xref py py-class docutils literal notranslate"><span class="pre">Normal</span></code> in our case) and an indicator
 of the input keys that will be used at execution time to build that distribution.</p>
 <p>The network we are building is therefore going to be the combination of three main components:</p>
 <ul class="simple">
 <li><p>A network mapping the input to a latent parameter;</p></li>
 <li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.NormalParamExtractor</span></code> module splitting the input in a location <cite>“loc”</cite> and <cite>“scale”</cite>
-parameters to be passed to the <code class="docutils literal notranslate"><span class="pre">Normal</span></code> distrbution;</p></li>
+parameters to be passed to the <code class="docutils literal notranslate"><span class="pre">Normal</span></code> distribution;</p></li>
 <li><p>A distribution constructor module.</p></li>
 </ul>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span>
@@ -430,7 +430,7 @@ parameters to be passed to the <code class="docutils literal notranslate"><span 
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.2401, 0.0000, 0.8915, 0.0227]], grad_fn=&lt;ReluBackward0&gt;), tensor([[0.1972, 0.2244, 0.4943, 0.2391]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[0.1972, 0.2244]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.3377, 1.1568]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[0.1972, 0.2244]], grad_fn=&lt;SplitBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.1068, 0.0000, 0.0000, 1.1505]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.6246,  0.0708, -0.1452, -0.1824]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.6246,  0.0708]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.9112, 0.8893]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[-0.6246,  0.0708]], grad_fn=&lt;SplitBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -440,10 +440,10 @@ model to deal with this issue.</p>
 <section id="using-torch-export-with-a-tensordictmodule">
 <h3>Using <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> with a <code class="docutils literal notranslate"><span class="pre">TensorDictModule</span></code><a class="headerlink" href="#using-torch-export-with-a-tensordictmodule" title="Permalink to this heading">¶</a></h3>
 <p>Now that we have successfully built our model, we would like to extract its computational graph in a single object that
-is independent of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>. <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> is a PyTorch module dedicated to isolate the graph of a module and
-represent it in a standardized way. Its main entry point is <a class="reference external" href="https://docs.pytorch.org/docs/stable/export.html#torch.export.export" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> which returns a <code class="docutils literal notranslate"><span class="pre">ExportedProgram</span></code>
+is independent of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>. <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> is a PyTorch module dedicated to isolating the graph of a module and
+represent it in a standardized way. Its main entry point is <a class="reference external" href="https://docs.pytorch.org/docs/stable/export.html#torch.export.export" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> which returns an <code class="docutils literal notranslate"><span class="pre">ExportedProgram</span></code>
 object. In turn, this object has several attributes of interest that we will explore below: a <code class="docutils literal notranslate"><span class="pre">graph_module</span></code>,
-which represents the FX graph captured by <code class="docutils literal notranslate"><span class="pre">export</span></code>, a <code class="docutils literal notranslate"><span class="pre">graph_signature</span></code> with input, outputs etc of the graph,
+which represents the FX graph captured by <code class="docutils literal notranslate"><span class="pre">export</span></code>, a <code class="docutils literal notranslate"><span class="pre">graph_signature</span></code> with inputs, outputs, etc., of the graph,
 and finally a <code class="docutils literal notranslate"><span class="pre">module()</span></code> that returns a callable that can be used in-place of the original module.</p>
 <p>Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.export</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a>
@@ -504,8 +504,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  541.21 micro-seconds
-Time for exported module:  674.25 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  543.59 micro-seconds
+Time for exported module:  662.57 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -571,7 +571,7 @@ fx graph: class GraphModule(torch.nn.Module):
 <h2>Working with nested keys<a class="headerlink" href="#working-with-nested-keys" title="Permalink to this heading">¶</a></h2>
 <p>Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
 nested entries is therefore an important feature to support.
-Because keyword arguments must be regualar strings, it is not possible for <a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a> to work
+Because keyword arguments must be regular strings, it is not possible for <a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a> to work
 directly with them. Instead, <code class="docutils literal notranslate"><span class="pre">dispatch</span></code> will unpack nested keys joined with a regular underscore (<cite>“_”</cite>), as the
 following example shows.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model_nested</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span>
@@ -612,7 +612,7 @@ Conventionally, the <cite>“.pt2”</cite> extension is to be used:</p>
 for only a specific value. During training, this can be very useful: one can easily log intermediate values of the
 graph, or use them for other purposes (e.g., reconstruct a distribution based on its saved parameters, rather than
 saving the <code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code> object itself). One could also argue that, during training, the
-impact on memory of registering intermediate values is negligeable since they are part of the computational graph
+impact on memory of registering intermediate values is negligible since they are part of the computational graph
 used by <code class="docutils literal notranslate"><span class="pre">torch.autograd</span></code> to compute the parameter gradients.</p>
 <p>During inference, though, we most likely are only interested in the final sample of the model.
 Because we want to extract the model for usages that are independent of the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> library, it makes sense to
@@ -636,7 +636,7 @@ distribution:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[0.1972, 0.2244]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.6246,  0.0708]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor, corresponding to the sample of the distribution.
@@ -699,7 +699,7 @@ the mean of distributions with a real domain, or the mode of distributions with 
 can be changed using the <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code> keyword argument of <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code>.</p>
 <p>Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
 constructor, or override it at runtime through the <code class="docutils literal notranslate"><span class="pre">set_interaction_type</span></code> context manager.</p>
-<p>As we can see from the following example, <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> respond correctly the usage of the decorator: if we ask for
+<p>As we can see from the following example, <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> respond correctly to the usage of the decorator: if we ask for
 a random sample, the output is different than if we ask for the mean:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">set_interaction_type</span><span class="p">(</span><span class="n">InteractionType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">):</span>
     <a href="https://docs.pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
@@ -798,7 +798,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.159 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.152 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
