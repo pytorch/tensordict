@@ -366,7 +366,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         lock: bool = False,
         **kwargs,
     ):
-        super().__init__()
+        nn.Module.__init__(self)
         if parameters is None:
             parameters = kwargs
         elif kwargs:
