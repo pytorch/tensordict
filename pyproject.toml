@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11", "setuptools_scm"]
+requires = ["setuptools", "wheel", "pybind11[global]", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.usort]
@@ -56,7 +56,7 @@ tests = [
 ]
 checkpointing = ["torchsnapshot-nightly"]
 h5 = ["h5py>=3.8"]
-dev = ["pybind11", "cmake", "ninja"]
+dev = ["pybind11", "ninja"]
 typecheck = ["mypy>=1.0.0"]
 
 [tool.setuptools]

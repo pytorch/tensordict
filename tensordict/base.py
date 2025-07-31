@@ -163,7 +163,7 @@ BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
-CompatibleType = Union[Tensor,]
+CompatibleType = Union[Tensor, TensorCollection]
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -3839,6 +3839,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _repeat(self, *repeats: int) -> TensorCollection:
         raise NotImplementedError
 
+    def copy(self) -> Self:
+        """Return a shallow copy of the tensordict (ie, copies the structure but not the data).
+
+        Equivalent to `TensorDictBase.clone(recurse=False)`
+        """
+        return self.clone(recurse=False)
+
     def cat_tensors(
         self,
         *keys: NestedKey,
@@ -7276,7 +7283,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     # Dict features: setdefault, items, values, keys, ...
     def setdefault(
-        self, key: NestedKey, default: CompatibleType, inplace: bool = False
+        self, key: NestedKey, default: CompatibleType | Any, inplace: bool = False
     ) -> CompatibleType:
         """Insert the ``key`` entry with a value of ``default`` if ``key`` is not in the tensordict.
 
@@ -8100,7 +8107,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         dst: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
-    ):
+    ) -> None:
         """Initializes a remote tensordict by sending its metadata and content.
 
         This method sends the metadata (shape, dtype, etc.) of the current tensordict to the specified destination rank (`dst`).
@@ -9930,7 +9937,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out=None,
         dtype: torch.dtype | None = None,
-    ):
+    ) -> Self:
         """Computes the norm of each tensor in the tensordict.
 
         Keyword Args:
@@ -9962,7 +9969,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out=None,
         dtype: torch.dtype | None = None,
-    ):
+    ) -> Self:
         """Computes the norm of each tensor in the tensordict.
 
         Keyword Args:
@@ -10715,7 +10722,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other1: TensorDictBase | torch.Tensor,
         other2: TensorDictBase | torch.Tensor,
         value: float | None = 1,
-    ):  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Performs the element-wise division of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
 
         .. math::
@@ -10779,7 +10786,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other2: TensorDictBase | torch.Tensor,
         *,
         value: float | None = 1,
-    ):  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Performs the element-wise multiplication of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
 
         .. math::
@@ -10843,7 +10850,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ):  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Subtracts :attr:`other`, scaled by :attr:`alpha`, from ``self``.
 
         .. math::
@@ -10926,7 +10933,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ):  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Subtracts `self` from :attr:`other`, scaled by :attr:`alpha`, from ``self``.
 
         .. math::
@@ -11357,7 +11364,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         max: TensorDictBase | torch.Tensor = None,
         *,
         out=None,
-    ):  # noqa: W605
+    ) -> Self:  # noqa: D417, W605
         r"""Clamps all elements in :attr:`self` into the range `[` :attr:`min`, :attr:`max` `]`.
 
         Letting min_value and max_value be :attr:`min` and :attr:`max`, respectively, this returns:
@@ -11560,12 +11567,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
-    def sqrt_(self):
+    def sqrt_(self) -> Self:
         """In-place version of :meth:`~.sqrt`."""
         torch._foreach_sqrt_(self._values_list(True, True))
         return self
 
-    def sqrt(self):
+    def sqrt(self) -> Self:
         """Computes the element-wise square root of ``self``."""
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sqrt(vals)
@@ -12188,13 +12195,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _clone(self, recurse: bool = False):
         raise NotImplementedError
 
-    def copy(self):
-        """Return a shallow copy of the tensordict (ie, copies the structure but not the data).
-
-        Equivalent to `TensorDictBase.clone(recurse=False)`
-        """
-        return self.clone(recurse=False)
-
     def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None) -> Self:
         """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
 
@@ -12250,7 +12250,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 result.set(mask_key, val)
         return result
 
-    def as_tensor(self):
+    def as_tensor(self) -> Self:
+        """Converts every leaf of a tensordict to a plain torch.Tensor."""
+
         def as_tensor(tensor):
             try:
                 return tensor.as_tensor()
@@ -12439,7 +12441,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return LinkedList(result, td=self)
         return result
 
-    def numpy(self):
+    def numpy(self) -> np.ndarray | dict[str, Any]:
         """Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
 
         Non-tensor data is exposed as such.
@@ -12478,7 +12480,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return torch.utils._pytree.tree_map(to_numpy, as_dict)
 
-    def to_namedtuple(self, dest_cls: type | None = None):
+    def to_namedtuple(self, dest_cls: type | None = None) -> Any:
         """Converts a tensordict to a namedtuple.
 
         Args:
@@ -12917,7 +12919,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             td.auto_batch_size_(batch_dims=batch_dims)
         return td
 
-    def to_struct_array(self):
+    def to_struct_array(self) -> np.ndarray:
         """Converts a tensordict to a numpy structured array.
 
         In a :meth:`.from_struct_array` - :meth:`.to_struct_array` loop, the content of the input and output arrays should match.
@@ -12964,7 +12966,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         filename,
         **kwargs,
-    ):
+    ) -> Any:
         """Converts a tensordict to a PersistentTensorDict with the h5 backend.
 
         Args:
@@ -13137,7 +13139,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out: TensorDictBase | None = None,
         pad: int | bool = None,
         update_batch_size: bool = False,
-    ):  # noqa: D417
+    ) -> Self:  # noqa: D417
         """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
 
         Args:
@@ -14162,14 +14164,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if mps is not None:
                 mps.synchronize()
 
-    def is_floating_point(self):
+    def is_floating_point(self) -> bool:
+        """Checks if all tensors in the tensordict are floating point."""
         for item in self.values(include_nested=True, leaves_only=True):
             if not item.is_floating_point():
                 return False
         else:
             return True
 
-    def double(self):
+    def double(self) -> Self:
         r"""Casts all tensors to ``torch.bool``."""
 
         def dble(x):
@@ -14177,7 +14180,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return self._fast_apply(dble, propagate_lock=True)
 
-    def float(self):
+    def float(self) -> Self:
         r"""Casts all tensors to ``torch.float``."""
 
         def tofloat(x):
@@ -14185,7 +14188,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return self._fast_apply(tofloat, propagate_lock=True)
 
-    def int(self):
+    def int(self) -> Self:
         r"""Casts all tensors to ``torch.int``."""
 
         def toint(x):
@@ -14193,7 +14196,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return self._fast_apply(toint, propagate_lock=True)
 
-    def bool(self):
+    def bool(self) -> Self:
         r"""Casts all tensors to ``torch.bool``."""
 
         def tobool(x):
@@ -14201,7 +14204,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return self._fast_apply(tobool, propagate_lock=True)
 
-    def half(self):
+    def half(self) -> Self:
         r"""Casts all tensors to ``torch.half``."""
 
         def tohalf(x):
@@ -14209,7 +14212,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return self._fast_apply(tohalf, propagate_lock=True)
 
-    def type(self, dst_type):
+    def type(self, dst_type: torch.dtype) -> Self:
         r"""Casts all tensors to :attr:`dst_type`.
 
         Args:
@@ -14269,61 +14272,61 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
 
     @_make_dtype_promotion
-    def bfloat16(self): ...
+    def bfloat16(self) -> Self: ...
 
     @_make_dtype_promotion
-    def complex128(self): ...
+    def complex128(self) -> Self: ...
 
     @_make_dtype_promotion
-    def complex32(self): ...
+    def complex32(self) -> Self: ...
 
     @_make_dtype_promotion
-    def complex64(self): ...
+    def complex64(self) -> Self: ...
 
     @_make_dtype_promotion
-    def float16(self): ...
+    def float16(self) -> Self: ...
 
     @_make_dtype_promotion
-    def float32(self): ...
+    def float32(self) -> Self: ...
 
     @_make_dtype_promotion
-    def float64(self): ...
+    def float64(self) -> Self: ...
 
     @_make_dtype_promotion
-    def int16(self): ...
+    def int16(self) -> Self: ...
 
     @_make_dtype_promotion
-    def int32(self): ...
+    def int32(self) -> Self: ...
 
     @_make_dtype_promotion
-    def int64(self): ...
+    def int64(self) -> Self: ...
 
     @_make_dtype_promotion
-    def int8(self): ...
+    def int8(self) -> Self: ...
 
     @_make_dtype_promotion
-    def qint32(self): ...
+    def qint32(self) -> Self: ...
 
     @_make_dtype_promotion
-    def qint8(self): ...
+    def qint8(self) -> Self: ...
 
     @_make_dtype_promotion
-    def quint4x2(self): ...
+    def quint4x2(self) -> Self: ...
 
     @_make_dtype_promotion
-    def quint8(self): ...
+    def quint8(self) -> Self: ...
 
     @_make_dtype_promotion
-    def uint16(self): ...
+    def uint16(self) -> Self: ...
 
     @_make_dtype_promotion
-    def uint32(self): ...
+    def uint32(self) -> Self: ...
 
     @_make_dtype_promotion
-    def uint64(self): ...
+    def uint64(self) -> Self: ...
 
     @_make_dtype_promotion
-    def uint8(self): ...
+    def uint8(self) -> Self: ...
 
 
 _ACCEPTED_CLASSES = (

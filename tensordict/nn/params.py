@@ -170,7 +170,7 @@ class _unlock_and_set:
         name = func.__name__
 
         @wraps(func)
-        def new_func(_self, *args, **kwargs):
+        def new_func(_self, *args, **kwargs):  # type: ignore[misc]
             if self.only_for_kwargs:
                 arg_dict = _get_args_dict(func, (_self, *args), kwargs)
                 for kwarg, exp_value in self.only_for_kwargs.items():
@@ -206,7 +206,7 @@ class _unlock_and_set:
 
 def _get_post_hook(func):
     @wraps(func)
-    def new_func(self, *args, **kwargs):
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
         out = func(self, *args, **kwargs)
         return self._apply_get_post_hook(out)
 
@@ -218,7 +218,7 @@ def _fallback(func):
     name = func.__name__
 
     @wraps(func)
-    def new_func(self, *args, **kwargs):
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
         out = getattr(self._param_td, name)(*args, **kwargs)
         if out is self._param_td:
             # if the output does not change, return the wrapper
@@ -232,13 +232,13 @@ def _fallback_property(func):
     name = func.__name__
 
     @wraps(func)
-    def new_func(self):
+    def new_func(self):  # type: ignore[misc]
         out = getattr(self._param_td, name)
         if out is self._param_td:
             return self
         return out
 
-    def setter(self, value):
+    def setter(self, value):  # type: ignore[misc]
         return getattr(type(self._param_td), name).fset(self._param_td, value)
 
     return property(new_func, setter)
@@ -248,7 +248,7 @@ def _replace(func):
     name = func.__name__
 
     @wraps(func)
-    def new_func(self, *args, **kwargs):
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
         out = getattr(self._param_td, name)(*args, **kwargs)
         if out is self._param_td:
             return self
@@ -262,7 +262,7 @@ def _carry_over(func):
     name = func.__name__
 
     @wraps(func)
-    def new_func(self, *args, **kwargs):
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
         out = getattr(self._param_td, name)(*args, **kwargs)
         if out is self._param_td:
             return self
@@ -276,14 +276,14 @@ def _carry_over(func):
 
 def _apply_on_data(func):
     @wraps(func)
-    def new_func(self, *args, **kwargs):
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
         getattr(self.data, func.__name__)(*args, **kwargs)
         return self
 
     return new_func
 
 
-class TensorDictParams(TensorDictBase, nn.Module):
+class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc,attr-defined]
     r"""A Wrapper for TensorDictBase with Parameter Exposure.
 
     This class is designed to hold a `TensorDictBase` instance that contains parameters, making them accessible to a
@@ -366,7 +366,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         lock: bool = False,
         **kwargs,
     ):
-        super().__init__()
+        nn.Module.__init__(self)
         if parameters is None:
             parameters = kwargs
         elif kwargs:
@@ -533,7 +533,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @lock_blocked
     @_unlock_and_set
-    def __setitem__(
+    def __setitem__(  # type: ignore[misc]
         self,
         index: IndexType,
         value: Any,
@@ -690,7 +690,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __getitem__(self, index: IndexType) -> Tensor | TensorCollection | Any: ...
 
     @_fallback
-    def _set_device(self, device: torch.device) -> T: ...
+    def _set_device(self, device: torch.device) -> Self: ...  # type: ignore[misc]
 
     @_fallback
     def auto_device_(self) -> Self: ...
@@ -1122,10 +1122,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def any(self, dim: int | None = None) -> bool | TensorDictBase: ...
 
     @_fallback
-    def expand(self, *args, **kwargs) -> T: ...
+    def expand(self, *args, **kwargs) -> Self: ...
 
     @_fallback
-    def masked_select(self, mask: Tensor) -> T: ...
+    def masked_select(self, mask: Tensor) -> Self: ...
 
     @_fallback
     def memmap_like(
@@ -1133,7 +1133,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         prefix: str | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
-    ) -> T: ...
+    ) -> Self: ...
 
     @_fallback
     def reshape(self, *shape: int): ...
@@ -1264,27 +1264,29 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def zero_(self) -> Self: ...
 
     @_apply_on_data
-    def fill_(self, key: NestedKey, value: float | bool) -> T: ...
+    def fill_(self, key: NestedKey, value: float | bool) -> Self: ...
 
     @_apply_on_data
     def copy_(self, tensordict: T, non_blocking: bool | None = None) -> T: ...
 
     @_apply_on_data
-    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T: ...
+    def set_at_(
+        self, key: NestedKey, value: CompatibleType, index: IndexType
+    ) -> Self: ...
 
     @_apply_on_data
     def set_(
         self,
         key: NestedKey,
         item: CompatibleType,
-    ) -> T: ...
+    ) -> Self: ...
 
     @_apply_on_data
     def _stack_onto_(
         self,
         list_item: list[CompatibleType],
         dim: int,
-    ) -> T: ...
+    ) -> Self: ...
 
     @_apply_on_data
     def _stack_onto_at_(
@@ -1293,7 +1295,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
-    ) -> T: ...
+    ) -> Self: ...
 
     @_apply_on_data
     def update_(
@@ -1317,7 +1319,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> T: ...
 
     @_apply_on_data
-    def apply_(self, fn: Callable, *others, **kwargs) -> T: ...
+    def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
 
     @implement_for("torch", "2.1")
     def _apply(self, fn, recurse=True):
