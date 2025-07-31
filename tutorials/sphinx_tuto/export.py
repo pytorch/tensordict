@@ -26,7 +26,7 @@ Key learnings
 
 - Executing a ``tensordict.nn`` module without :class:`~tensordict.TensorDict` inputs;
 - Selecting the output(s) of a model;
-- Handling stochstic models;
+- Handling stochastic models;
 - Exporting such model using `torch.export`;
 - Saving the model to a file;
 - Isolating the pytorch model;
@@ -52,18 +52,18 @@ from torch import distributions as dists, nn
 #
 # In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
 # deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-# models will often generate different outputs when the same input if provided, because they sample the output based
+# models will often generate different outputs when the same input is provided, because they sample the output based
 # on a distribution which parameters are defined by the input.
 #
 # The ``tensordict`` library deals with this through the :class:`~tensordict.nn.ProbabilisticTensorDictModule` class.
-# This primitive is built using a distribtion class (:class:`~torch.distributions.Normal` in our case) and an indicator
+# This primitive is built using a distribution class (:class:`~torch.distributions.Normal` in our case) and an indicator
 # of the input keys that will be used at execution time to build that distribution.
 #
 # The network we are building is therefore going to be the combination of three main components:
 #
 # - A network mapping the input to a latent parameter;
 # - A :class:`tensordict.nn.NormalParamExtractor` module splitting the input in a location `"loc"` and `"scale"`
-#   parameters to be passed to the ``Normal`` distrbution;
+#   parameters to be passed to the ``Normal`` distribution;
 # - A distribution constructor module.
 #
 model = Seq(
@@ -97,10 +97,10 @@ print(model(x=x))
 # --------------------------------------------------
 #
 # Now that we have successfully built our model, we would like to extract its computational graph in a single object that
-# is independent of ``tensordict``. ``torch.export`` is a PyTorch module dedicated to isolate the graph of a module and
-# represent it in a standardized way. Its main entry point is :func:`~torch.export.export` which returns a ``ExportedProgram``
+# is independent of ``tensordict``. ``torch.export`` is a PyTorch module dedicated to isolating the graph of a module and
+# represent it in a standardized way. Its main entry point is :func:`~torch.export.export` which returns an ``ExportedProgram``
 # object. In turn, this object has several attributes of interest that we will explore below: a ``graph_module``,
-# which represents the FX graph captured by ``export``, a ``graph_signature`` with input, outputs etc of the graph,
+# which represents the FX graph captured by ``export``, a ``graph_signature`` with inputs, outputs, etc., of the graph,
 # and finally a ``module()`` that returns a callable that can be used in-place of the original module.
 #
 # Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
@@ -138,7 +138,7 @@ print("fx graph:", model_export.graph_module.print_readable())
 #
 # Nested keys are a core feature of the tensordict library, and being able to export modules that read and write
 # nested entries is therefore an important feature to support.
-# Because keyword arguments must be regualar strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
+# Because keyword arguments must be regular strings, it is not possible for :class:`~tensordict.nn.dispatch` to work
 # directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
 # following example shows.
 
@@ -170,7 +170,7 @@ print("exported module with nested input:", model_nested_export.module())
 # for only a specific value. During training, this can be very useful: one can easily log intermediate values of the
 # graph, or use them for other purposes (e.g., reconstruct a distribution based on its saved parameters, rather than
 # saving the :class:`~torch.distributions.Distribution` object itself). One could also argue that, during training, the
-# impact on memory of registering intermediate values is negligeable since they are part of the computational graph
+# impact on memory of registering intermediate values is negligible since they are part of the computational graph
 # used by ``torch.autograd`` to compute the parameter gradients.
 #
 # During inference, though, we most likely are only interested in the final sample of the model.
@@ -220,7 +220,7 @@ print("module:", model_export.module())
 # Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
 # constructor, or override it at runtime through the ``set_interaction_type`` context manager.
 #
-# As we can see from the following example, ``torch.export`` respond correctly the usage of the decorator: if we ask for
+# As we can see from the following example, ``torch.export`` respond correctly to the usage of the decorator: if we ask for
 # a random sample, the output is different than if we ask for the mean:
 #
 
