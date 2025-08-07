@@ -553,6 +553,169 @@ class TestGeneric:
         assert td_c_device["d"] == "a string!"
         assert len(dataptrs) == 1
 
+    def test_consolidated_locking_behavior(self):
+        """Test that consolidated TensorDicts are automatically locked and unlock properly."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(1, 1),
+                "b": {"c": torch.zeros(1, 1)},
+                "d": "a string!",
+            },
+            device="cpu",
+            batch_size=[1],
+        )
+
+        # Test that consolidation automatically locks the TensorDict
+        td_consolidated = td.consolidate()
+        assert td_consolidated.is_consolidated()
+        assert td_consolidated.is_locked
+
+        # Test that modifications are blocked when locked
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_consolidated["new_key"] = torch.ones(1, 1)
+
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_consolidated.set("new_key", torch.ones(1, 1))
+
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_consolidated.update({"new_key": torch.ones(1, 1)})
+
+        # Test that in-place modifications are still allowed
+        td_consolidated.set("a", torch.ones(1, 1), inplace=True)
+        assert (td_consolidated["a"] == 1).all()
+
+        # Test that unlocking removes consolidated metadata
+        td_consolidated.unlock_()
+        assert not td_consolidated.is_locked
+        assert not td_consolidated.is_consolidated()
+
+        # Test that modifications are now allowed
+        td_consolidated["new_key"] = torch.ones(1, 1)
+        assert "new_key" in td_consolidated
+
+        # Test that device transfer maintains locking
+        td_consolidated = td.consolidate()
+        td_consolidated_device = td_consolidated.to("cpu")  # Should stay on CPU
+        assert td_consolidated_device.is_consolidated()
+        assert td_consolidated_device.is_locked
+
+        # Test that unlocking after device transfer removes consolidated metadata
+        td_consolidated_device.unlock_()
+        assert not td_consolidated_device.is_consolidated()
+        assert not td_consolidated_device.is_locked
+
+    def test_consolidated_locking_with_context_manager(self):
+        """Test consolidated TensorDict locking behavior with context managers."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(1, 1),
+                "b": {"c": torch.zeros(1, 1)},
+            },
+            device="cpu",
+            batch_size=[1],
+        )
+
+        td_consolidated = td.consolidate()
+
+        # Test that we can temporarily unlock for modifications
+        with td_consolidated.unlock_():
+            assert not td_consolidated.is_locked
+            assert not td_consolidated.is_consolidated()
+            td_consolidated["new_key"] = torch.ones(1, 1)
+
+        # After context manager, should be locked again but not consolidated
+        assert td_consolidated.is_locked
+        assert not td_consolidated.is_consolidated()
+
+        # Test that we can't modify after context manager
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_consolidated["another_key"] = torch.ones(1, 1)
+
+    def test_consolidated_locking_nested(self):
+        """Test that nested TensorDicts in consolidated structures are properly locked."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(1, 1),
+                "b": TensorDict({"c": torch.zeros(1, 1)}, batch_size=[1]),
+            },
+            device="cpu",
+            batch_size=[1],
+        )
+
+        td_consolidated = td.consolidate()
+        assert td_consolidated.is_consolidated()
+        assert td_consolidated.is_locked
+        assert td_consolidated["b"].is_locked
+
+        # Test that nested modifications are blocked
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_consolidated["b"]["new_key"] = torch.ones(1, 1)
+
+        # Test that unlocking propagates to nested structures
+        td_consolidated.unlock_()
+        assert not td_consolidated.is_consolidated()
+        assert not td_consolidated.is_locked
+        assert not td_consolidated["b"].is_locked
+
+        # Test that nested modifications are now allowed
+        td_consolidated["b"]["new_key"] = torch.ones(1, 1)
+        assert "new_key" in td_consolidated["b"]
+
+    def test_consolidated_locking_device_transfer(self):
+        """Test that device transfers maintain consolidated locking behavior."""
+        td = TensorDict(
+            {
+                "a": torch.zeros(1, 1),
+                "b": {"c": torch.zeros(1, 1)},
+            },
+            device="cpu",
+            batch_size=[1],
+        )
+
+        td_consolidated = td.consolidate()
+
+        # Test device transfer maintains consolidated state and locking
+        td_transferred = td_consolidated.to("cpu")  # Should stay on CPU
+        assert td_transferred.is_consolidated()
+        assert td_transferred.is_locked
+
+        # Test that modifications are blocked
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            td_transferred["new_key"] = torch.ones(1, 1)
+
+        # Test that unlocking removes consolidated metadata
+        td_transferred.unlock_()
+        assert not td_transferred.is_consolidated()
+        assert not td_transferred.is_locked
+
+        # Test that modifications are now allowed
+        td_transferred["new_key"] = torch.ones(1, 1)
+        assert "new_key" in td_transferred
+
+    def test_consolidated_locking_issue_1406_reproduction(self):
+        """Test reproduction of the issue described in #1406."""
+        # This test reproduces the scenario from the GitHub issue
+        a = TensorDict({"a": torch.zeros(1, 1)}, device="cpu", batch_size=[1])
+        a_consolidated = a.consolidate()
+
+        # Add a new key to the original (non-consolidated) TensorDict
+        a["b"] = torch.ones(1, 1)
+
+        # Try to add the same key to the consolidated TensorDict - should fail
+        with pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+            a_consolidated["b"] = torch.ones(1, 1)
+
+        # Unlock the consolidated TensorDict to allow modifications
+        a_consolidated.unlock_()
+        a_consolidated["b"] = torch.ones(1, 1)
+
+        # Now both should have the same content
+        assert (a["a"] == a_consolidated["a"]).all()
+        assert (a["b"] == a_consolidated["b"]).all()
+
+        # The consolidated TensorDict should no longer be consolidated
+        assert not a_consolidated.is_consolidated()
+
     def test_construct_from_kwargs(self):
         with pytest.raises(ValueError, match="not both"):
             TensorDict(a=1, source={"b": 2})

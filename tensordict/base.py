@@ -5669,6 +5669,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             device=device,
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
+        # Lock the consolidated TensorDict to prevent modifications that could break consolidation
+        result.lock_()
         if filename is not None:
             if use_buffer:
                 with open(filename, "w+b") as f:
@@ -13736,6 +13738,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self._is_shared = False
         self._is_memmap = False
 
+        # Remove consolidated metadata when unlocking to prevent silent errors
+        if hasattr(self, "_consolidated"):
+            delattr(self, "_consolidated")
+
         sub_tds = []
         for value in self.values():
             if _is_tensor_collection(type(value)):
@@ -14122,6 +14128,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 }
 
             result._consolidated["metadata"] = copy_dict(self._consolidated["metadata"])
+        # Ensure the result remains locked to maintain consolidated state integrity
+        result.lock_()
         if non_blocking in (False, None):
             if device.type == "cuda" and non_blocking is False:
                 # sending to CUDA force sync
