@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+gc852a9d)
+                  main (0.0.post1+g6e6f1f5)
                 </div>
               
             
@@ -393,7 +393,7 @@ to another is undefined.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.chunk">
 <span class="sig-name descname"><span class="pre">chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span> <span class="pre">of</span> <span class="pre">Tensors</span></span></span><a class="headerlink" href="#tensordict.MemoryMappedTensor.chunk" title="Permalink to this definition">¶</a></dt>
-<dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.chunk.html#torch.chunk" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.chunk()</span></code></a></p>
+<dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.chunk.html#torch.chunk" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.chunk()</span></code></a></p>
 </dd></dl>
 
 <dl class="py method">
@@ -404,12 +404,12 @@ to another is undefined.</p>
 <dd><p>Creates a tensor with empty content, specific shape, dtype and filename.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
+<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
 are accepted, any other device will raise an exception.</p></li>
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
 is provided, a handler is used.</p></li>
@@ -426,7 +426,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dd><p>Creates a tensor with no content but the same shape and dtype as the input tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
@@ -445,8 +445,8 @@ is provided, a handler is used.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
 are accepted, any other device will raise an exception.</p></li>
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
 is provided, a handler is used.</p></li>
@@ -472,8 +472,8 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
 a tensor is provided, it is assumed that the tensor is a nested_tensor
 instance.</p></li>
 <li><p><strong>index</strong> (<em>torch-compatible index type</em>) – an index to use to build the
@@ -491,8 +491,8 @@ tensor.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>handler</strong> (<em>compatible file handler</em>) – the handler for the tensor.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
 a tensor is provided, it is assumed that the tensor is a nested_tensor
 instance.</p></li>
 <li><p><strong>index</strong> (<em>torch-compatible index type</em><em>, </em><em>optional</em>) – an index to use to build the
@@ -504,14 +504,14 @@ tensor.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.from_tensor">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existsok</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_tensor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existsok</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_tensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Creates a MemoryMappedTensor with the same content as another tensor.</p>
 <p>If the tensor is already a MemoryMappedTensor the original tensor is
 returned if the <cite>filename</cite> argument is <cite>None</cite> or if the two paths match.
 In all other cases, a new <a class="reference internal" href="#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> is produced.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the tensor which content must be copied onto
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the tensor which content must be copied onto
 the MemoryMappedTensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -528,7 +528,7 @@ exception is thrown. This behaviour exists to prevent
 inadvertently duplicating data on disk.</p></li>
 <li><p><strong>copy_data</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensor
 will be copied on the storage. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – a shape to override the tensor
+<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – a shape to override the tensor
 shape. If a tensor is passed, it must represent the nested shapes of a
 nested tensor.</p></li>
 </ul>
@@ -544,13 +544,13 @@ nested tensor.</p></li>
 <dd><p>Creates a tensor with a single content specified by <cite>fill_value</cite>, specific shape, dtype and filename.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
+<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>fill_value</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.float" title="tensordict.LazyStackedTensorDict.float"><em>float</em></a><em> or </em><em>equivalent</em>) – content of the tensor.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
 are accepted, any other device will raise an exception.</p></li>
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
 is provided, a handler is used.</p></li>
@@ -568,7 +568,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p></li>
+<li><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p></li>
 <li><p><strong>fill_value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em> or </em><em>equivalent</em>) – content of the tensor.</p></li>
 </ul>
 </dd>
@@ -587,12 +587,12 @@ is provided, a handler is used.</p>
 <dd><p>Creates a tensor with a 1-filled content, specific shape, dtype and filename.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
+<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
 are accepted, any other device will raise an exception.</p></li>
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
 is provided, a handler is used.</p></li>
@@ -609,7 +609,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dd><p>Creates a tensor with a 1-filled content, but the same shape and dtype as the input tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
@@ -621,7 +621,7 @@ is provided, a handler is used.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.unbind">
 <span class="sig-name descname"><span class="pre">unbind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">seq</span></span></span><a class="headerlink" href="#tensordict.MemoryMappedTensor.unbind" title="Permalink to this definition">¶</a></dt>
-<dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.unbind.html#torch.unbind" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.unbind()</span></code></a></p>
+<dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.unbind.html#torch.unbind" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.unbind()</span></code></a></p>
 </dd></dl>
 
 <dl class="py method">
@@ -632,12 +632,12 @@ is provided, a handler is used.</p>
 <dd><p>Creates a tensor with a 0-filled content, specific shape, dtype and filename.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
+<dd class="field-odd"><p><strong>shape</strong> (<em>integers</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a>) – the shape of the tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
 are accepted, any other device will raise an exception.</p></li>
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
 is provided, a handler is used.</p></li>
@@ -654,7 +654,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <dd><p>Creates a tensor with a 0-filled content, but the same shape and dtype as the input tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><em>torch.Tensor</em></a>) – the tensor to use as an example.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none

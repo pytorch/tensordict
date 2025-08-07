@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.0.post1+gc852a9d)
+                  main (0.0.post1+g6e6f1f5)
                 </div>
               
             
@@ -358,7 +358,7 @@
 ML pipelines.</p>
 <p>Since TensorDict turns parts of one’s code to a key-based structure, it is now
 possible to build complex graph structures using these keys as hooks.
-The basic building block is <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, which wraps an <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
+The basic building block is <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, which wraps an <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
 instance with a list of input and output keys:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transformer</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -378,7 +378,7 @@ instance with a list of input and output keys:</p>
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
-<p>One does not necessarily need to use <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, a custom <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
+<p>One does not necessarily need to use <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>, a custom <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>
 with an ordered list of input and output keys (named <code class="xref py py-obj docutils literal notranslate"><span class="pre">module.in_keys</span></code> and
 <code class="xref py py-obj docutils literal notranslate"><span class="pre">module.out_keys</span></code>) will suffice.</p>
 <p>A key pain-point of multiple PyTorch users is the inability of nn.Sequential to
@@ -596,7 +596,7 @@ We can duplicate and reinitialize model copies using the <a class="reference int
 </section>
 <section id="compiling-tensordictmodules">
 <h2>Compiling TensorDictModules<a class="headerlink" href="#compiling-tensordictmodules" title="Permalink to this heading">¶</a></h2>
-<p>Since v0.5, TensorDict components are compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.
+<p>Since v0.5, TensorDict components are compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.
 For instance, a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code> module can be compiled with
 <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and reach a runtime similar to a regular PyTorch module wrapped in
 a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>.</p>
