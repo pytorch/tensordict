@@ -3059,15 +3059,15 @@ class _TensorClassMeta(abc.ABCMeta):
 
         return cls
 
-    def __getitem__(cls, item):
+    def __getitem__(cls, item: IndexType) -> Self:
         if not isinstance(item, tuple):
             item = (item,)
-        name = "_".join(item)
+        name = "_".join(item)  # type: ignore
         cls_name = f"TensorClass_{name}"
         bases = (cls,)
         class_dict = {}
         # Copy the __init__ method from the original class
-        result = _TensorClassMeta(
+        result = _TensorClassMeta(  # type: ignore
             cls_name,
             bases,
             class_dict,
@@ -3166,6 +3166,12 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
     _is_tensorclass = True
     _is_non_tensor = False
+
+    # Provide typing-friendly indexing support. Static type checkers look for
+    # __class_getitem__ on the class rather than a metaclass __getitem__.
+    # Delegate to the metaclass implementation that builds the configured subclass.
+    def __class_getitem__(cls, item: IndexType) -> Self:  # type: ignore[override]
+        return _TensorClassMeta.__getitem__(cls, item)
 
 
 def _check_equal(a, b):
@@ -3321,7 +3327,7 @@ class NonTensorDataBase(TensorClass):
         """Calling a NonTensorDataBase falls back to a call of its data."""
         return self.data(*args, **kwargs)
 
-    def __getitem__(self, idx) -> Tensor | TensorCollection | Any:
+    def __getitem__(self, idx: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(self.data, list):
             new_data = [self.data[i] for i in torch.as_tensor(idx).tolist()]
         else:

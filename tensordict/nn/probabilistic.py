@@ -10,7 +10,7 @@ import re
 import warnings
 from collections.abc import MutableSequence
 from textwrap import indent
-from typing import Any, Dict, List, OrderedDict, overload
+from typing import Any, Dict, List, OrderedDict, overload, TYPE_CHECKING
 
 import torch
 
@@ -47,6 +47,11 @@ try:
     from enum import StrEnum
 except ImportError:
     from .utils import StrEnum
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
@@ -1044,7 +1049,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         super().__init__(*modules, partial_tolerant=partial_tolerant, inplace=inplace)
         self.return_composite = return_composite
 
-    def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
+    def __getitem__(self, index: int | slice | str) -> Self | TensorDictModuleBase:
         if isinstance(index, (int, str)):
             return self.module.__getitem__(index)
         else:

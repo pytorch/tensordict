@@ -9,7 +9,7 @@ import collections
 import logging
 import sys
 from copy import deepcopy
-from typing import Any, Callable, Iterable, List, OrderedDict, overload
+from typing import Any, Callable, Iterable, List, OrderedDict, overload, TYPE_CHECKING
 
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
@@ -44,6 +44,12 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 _has_py311_or_greater = sys.version_info >= (3, 11)
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
+
 
 __all__ = ["TensorDictSequential"]
 
@@ -661,7 +667,7 @@ class TensorDictSequential(TensorDictModule):
     def __len__(self) -> int:
         return len(self.module)
 
-    def __getitem__(self, index: int | slice | str) -> TensorDictModuleBase:
+    def __getitem__(self, index: int | slice | str) -> Self | TensorDictModuleBase:
         if isinstance(index, (int, str)):
             return self.module.__getitem__(index)
         else:

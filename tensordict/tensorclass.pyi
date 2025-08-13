@@ -15,6 +15,7 @@ from typing import (
     dataclass_transform,
     Generator,
     Iterator,
+    Literal,
     OrderedDict,
     overload,
     Sequence,
@@ -83,11 +84,28 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-@dataclasses.dataclass
 class TensorClass:
     _autocast: bool = False
     _nocast: bool = False
     _frozen: bool = False
+
+    @overload
+    def __class_getitem__(cls, item: Literal["autocast"]) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(cls, item: Literal["nocast"]) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(cls, item: Literal["frozen"]) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(cls, item: Literal["tensor_only"]) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(cls, item: Literal["shadow"]) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(
+        cls,
+        item: tuple[
+            Literal["autocast", "nocast", "frozen", "tensor_only", "shadow"], ...
+        ],
+    ) -> Type["TensorClass"]: ...
     def __init__(
         self,
         *args,
@@ -115,7 +133,9 @@ class TensorClass:
     def __iter__(self) -> Generator: ...
     def __len__(self) -> int: ...
     def __contains__(self, key: NestedKey) -> bool: ...
-    def __getitem__(self, index: IndexType) -> Tensor | TensorCollection | Any: ...
+    def __getitem__(
+        self, index: IndexType
+    ) -> Self | Tensor | TensorCollection | Any: ...
     __getitems__ = __getitem__
 
     def __setitem__(self, index: IndexType, value: Any) -> None: ...
@@ -628,6 +648,19 @@ class TensorClass:
     def get(self, key: NestedKey, default: CompatibleType | Any) -> CompatibleType: ...
     @overload
     def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType: ...
+    @overload
+    def get(
+        self,
+        key: NestedKey,
+        *,
+        as_list: bool = False,
+        as_padded_tensor: bool = False,
+        as_nested_tensor: bool = False,
+        padding_side: str = "right",
+        layout: torch.layout | None = None,
+        padding_value: float | int | bool = 0.0,
+        **kwargs,
+    ) -> CompatibleType: ...
     @overload
     def get_at(self, key: NestedKey, index: IndexType) -> CompatibleType: ...
     @overload

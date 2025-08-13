@@ -547,7 +547,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
-    def __getitem__(self, index: IndexType) -> Tensor | TensorCollection | Any:
+    def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         """Indexes all tensors according to the provided index.
 
         The index can be a (nested) key or any valid shape index given the

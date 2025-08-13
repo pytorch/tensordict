@@ -14,11 +14,10 @@ import sys
 import tempfile
 from multiprocessing import reduction, util
 from pathlib import Path
-from typing import Any, Callable, overload
+from typing import Any, Callable, overload, TYPE_CHECKING
 
 import numpy as np
 import torch
-
 from tensordict.utils import (
     _maybe_correct_neg_dim,
     _shape,
@@ -27,6 +26,11 @@ from tensordict.utils import (
     IndexType,
     NESTED_TENSOR_ERR,
 )
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -870,7 +874,7 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError("Could not find handler or filename.")
 
     @implement_for("torch", "2.0", None)
-    def __getitem__(self, item: IndexType) -> torch.Tensor:
+    def __getitem__(self, item: IndexType) -> Self | torch.Tensor:
         try:
             out = super().__getitem__(item)
         except ValueError as err:
@@ -885,7 +889,7 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     @implement_for("torch", None, "2.0")
-    def __getitem__(self, item: IndexType) -> torch.Tensor:  # noqa: F811
+    def __getitem__(self, item: IndexType) -> Self | torch.Tensor:  # noqa: F811
         try:
             out = super().__getitem__(item)
         except ValueError as err:

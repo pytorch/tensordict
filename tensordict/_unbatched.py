@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
 import torch
+from tensordict._tensorcollection import TensorCollection
 from tensordict.base import TensorDictBase
 
 from tensordict.tensorclass import (
@@ -21,9 +22,15 @@ from tensordict.utils import (
     _getitem_batch_size,
     _is_tensorclass,
     _maybe_correct_neg_dim,
+    IndexType,
     unravel_key,
 )
 from torch import Tensor
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 def _arg_to_tensordict_unbatched(arg, batch_size):
@@ -180,7 +187,7 @@ class UnbatchedTensor(TensorClass):
         )
         return self_copy
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(index, (tuple, str)) and unravel_key(index):
             raise ValueError(
                 "TensorClass fields must be accessed as attributes, not items."
