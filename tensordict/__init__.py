@@ -78,7 +78,7 @@ from tensordict.nn import as_tensordict_module, TensorDictParams
 try:
     from tensordict._version import __version__  # @manual=//pytorch/tensordict:version
 except ImportError:
-    __version__ = None
+    __version__ = None  # type: ignore
 
 __all__ = [
     # Core classes

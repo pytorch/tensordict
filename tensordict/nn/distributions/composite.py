@@ -6,14 +6,19 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping
-from typing import Dict
+from typing import Any, Dict, TYPE_CHECKING
 
 import torch
 from tensordict._td import TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.utils import composite_lp_aggregate, set_composite_lp_aggregate
-from tensordict.utils import NestedKey, unravel_key, unravel_keys
+from tensordict.utils import IndexType, NestedKey, unravel_key, unravel_keys
 from torch import distributions as d
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 class CompositeDistribution(d.Distribution, Mapping):
@@ -130,7 +135,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     def __iter__(self):
         yield from self.dists
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: IndexType) -> Self:
         return self.dists[item]
 
     def __len__(self):

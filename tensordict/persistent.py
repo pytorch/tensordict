@@ -444,7 +444,7 @@ class PersistentTensorDict(TensorDictBase):
             return np.asarray(idx)
         return idx
 
-    def __getitem__(self, item: IndexType) -> Tensor | TensorCollection | Any:
+    def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
         ):

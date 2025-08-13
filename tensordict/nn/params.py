@@ -687,7 +687,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_get_post_hook
     @_fallback
-    def __getitem__(self, index: IndexType) -> Tensor | TensorCollection | Any: ...
+    def __getitem__(
+        self, index: IndexType
+    ) -> Self | Tensor | TensorCollection | Any: ...
 
     @_fallback
     def _set_device(self, device: torch.device) -> Self: ...  # type: ignore[misc]
