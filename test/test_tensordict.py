@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -3402,6 +3403,25 @@ class TestGeneric:
         assert td_padded.shape == torch.Size([2, 3, 6])
         if mask_key:
             assert (td_padded[td_padded["mask"]] != 0).all()
+
+    @set_list_to_stack(True)
+    def test_to_struct_array_string(self):
+        class TC(TensorClass["nocast"]):
+            foo: str | list[str]
+            bar: torch.Tensor | list[torch.Tensor]
+
+        tc = TC(
+            foo=[[f"foo{i}-{j}" for i in range(5)] for j in range(4)],
+            bar=torch.zeros(4, 5, 6),
+        )
+        td = TensorDict(
+            a=torch.arange(120).view(4, 5, 6),
+            b=[[f"a{i}", f"b{i}", f"c{i}", f"d{i}", f"e{i}"] for i in range(4)],
+            c=tc,
+            batch_size=(4, 5),
+        )
+        sa = td.to_struct_array()
+        assert (TensorDict.from_struct_array(sa) == td).all()
 
     @pytest.mark.parametrize("convert_nodes", [False, True])
     @pytest.mark.parametrize("convert_tensors", [False, True])
