@@ -12468,6 +12468,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> print(data.numpy())
             {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
 
+        seealso: :meth:`~tensordict.TensorDictBase.to_struct_array` to convert to a struct array.
+
         """
         as_dict = self.to_dict(retain_none=False)
 
@@ -12908,7 +12910,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             from tensordict._td import TensorDict
 
             cls = TensorDict
-        td = cls(
+        td: Self = cls(
             {name: struct_array[name] for name in struct_array.dtype.names},
             batch_size=struct_array.shape if batch_size is None else batch_size,
             device=device,
@@ -12929,6 +12931,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         .. seealso:: :meth:`.from_struct_array` for more information.
 
+        .. seealso:: :meth:`.numpy` to convert to a dictionary of numpy arrays.
+
         Returns:
             A numpy structured array representation of the input TensorDict.
 
@@ -12948,7 +12952,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         for v in vals:
             if is_tensor_collection(v):
                 if is_non_tensor(v):
-                    _vals.append(v.data)
+                    from tensordict import NonTensorDataBase
+
+                    _vals.append(
+                        v.data if isinstance(v, NonTensorDataBase) else v.tolist()
+                    )
                     continue
                 _vals.append(v.to_struct_array())
                 continue
@@ -12956,13 +12964,91 @@ class TensorDictBase(MutableMapping, TensorCollection):
         vals = _vals
         del _vals
         vals = tuple(v if not is_non_tensor(v) else v.data for v in vals)
-        dtype = [
-            (key, TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype))
-            for key, val in zip(keys, vals)
-        ]
+
+        # Convert values to numpy arrays and handle string inputs
+        processed_vals = []
+        for v in vals:
+            if isinstance(v, torch.Tensor):
+                processed_vals.append(v.detach().cpu().numpy())
+            elif isinstance(v, (list, tuple, str)):
+                # Handle lists/tuples which may contain strings, or strings
+                processed_vals.append(np.array(v))
+            else:
+                # Keep other types as-is (already numpy arrays, etc.)
+                processed_vals.append(v)
+        vals = processed_vals
+
+        def _get_dtype(val):
+            if isinstance(val, np.ndarray):
+                if val.dtype.kind in ["U", "S"]:  # Unicode or byte strings
+                    # Calculate appropriate string length
+                    if val.size > 0:
+                        max_len = max(len(str(item)) for item in val.flat)
+                        return (
+                            f"U{max(10, max_len)}"  # At least U10, but longer if needed
+                        )
+                    return "U10"
+                elif val.ndim > self.ndim:
+                    # For arrays with more dimensions than batch dims, we need to specify shape
+                    extra_shape = val.shape[self.ndim :]
+                    return (val.dtype, extra_shape)
+                return val.dtype
+            elif isinstance(val, torch.Tensor):
+                return TORCH_TO_NUMPY_DTYPE_DICT.get(val.dtype, val.dtype)
+            else:
+                return "U10"
+
+        dtype = [(key, _get_dtype(val)) for key, val in zip(keys, vals)]
+
         if self.ndim:
-            return np.array(list(zip(*vals)), dtype=dtype)
-        return np.array(vals, dtype=dtype)
+            # For multi-dimensional tensordicts, we need to create structured arrays properly
+            # Reshape each value to have batch dimensions first, then flatten the batch dimensions
+            batch_shape = self.shape
+            batch_size = int(np.prod(batch_shape))
+
+            # Reshape and prepare data for structured array
+            reshaped_vals = []
+            for val in vals:
+                if isinstance(val, np.ndarray):
+                    # Ensure the array has the right batch shape
+                    if val.shape[: self.ndim] == batch_shape:
+                        # Flatten batch dimensions
+                        new_shape = (batch_size,) + val.shape[self.ndim :]
+                        reshaped_vals.append(val.reshape(new_shape))
+                    else:
+                        # If shapes don't match, try to broadcast
+                        try:
+                            reshaped_vals.append(
+                                np.broadcast_to(
+                                    val, batch_shape + val.shape[self.ndim :]
+                                ).reshape((batch_size,) + val.shape[self.ndim :])
+                            )
+                        except ValueError:
+                            reshaped_vals.append(val)
+                else:
+                    reshaped_vals.append(val)
+
+            # Create structured array
+            result = np.empty(batch_size, dtype=dtype)
+            for key, val in zip(keys, reshaped_vals):
+                if isinstance(val, np.ndarray) and val.shape[0] == batch_size:
+                    result[key] = val
+                else:
+                    result[key] = val
+
+            # Reshape back to original batch shape
+            return result.reshape(batch_shape)
+
+        # For scalar case, create structured array properly
+        result = np.empty((), dtype=dtype)
+        for key, val in zip(keys, vals):
+            if isinstance(val, np.ndarray) and val.ndim == 0:
+                result[key] = val.item()
+            elif isinstance(val, (np.ndarray, torch.Tensor)) and val.size == 1:
+                result[key] = val.item()
+            else:
+                result[key] = val
+        return result
 
     def to_h5(
         self,
