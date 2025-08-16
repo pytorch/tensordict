@@ -1358,7 +1358,7 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
         )
 
     def forward(self, *args: Any, **kwargs: Any) -> TensorDictBase:
-        return self.td_module.forward(*args, **kwargs)
+        return self.td_module(*args, **kwargs)
 
 
 class WrapModule(TensorDictModuleBase):
