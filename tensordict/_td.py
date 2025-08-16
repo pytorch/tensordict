@@ -4505,7 +4505,7 @@ class _TensorDictKeysView:
         tensordict: T,
         include_nested: bool,
         leaves_only: bool,
-        is_leaf: Callable[[Type], bool] = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         sort: bool = False,
     ) -> None:
         self.tensordict = tensordict
@@ -4516,7 +4516,7 @@ class _TensorDictKeysView:
         self.is_leaf = is_leaf
         self.sort = sort
 
-    def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
+    def __iter__(self) -> Iterator[str | tuple[str, ...]]:
         def _iter():
             if not self.include_nested:
                 if self.leaves_only:
@@ -4546,8 +4546,8 @@ class _TensorDictKeysView:
             yield from _iter()
 
     def _iter_helper(
-        self, tensordict: T, prefix: str | None = None
-    ) -> Iterable[str] | Iterable[tuple[str, ...]]:
+        self, tensordict: T, prefix: tuple | None = None
+    ) -> Iterable[str | tuple[str, ...]]:
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = type(value)
@@ -4583,6 +4583,7 @@ class _TensorDictKeysView:
         from tensordict.nn import TensorDictParams
 
         if isinstance(tensordict, TensorDictParams):
+            assert tensordict._param_td is not None
             return tensordict._param_td.items()
         from tensordict._lazy import (
             _CustomOpTensorDict,
@@ -4768,7 +4769,7 @@ def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok)
     if value.is_nested:
         shape = value._nested_tensor_size()
         # Make the shape a memmap tensor too
-        if prefix is not None:
+        if prefix is not None and filename is not None:
             shape_filename = Path(filename)
             shape_filename = shape_filename.with_suffix(".shape.memmap")
             MemoryMappedTensor.from_tensor(
