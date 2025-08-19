@@ -3051,7 +3051,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def expand_as(self, other: TensorCollection | torch.Tensor) -> TensorCollection:
+    def expand_as(
+        self, other: TensorCollection | torch.Tensor
+    ) -> Self | TensorCollection:
         """Broadcasts the shape of the tensordict to the shape of `other` and expands it accordingly.
 
         If the input is a tensor collection (tensordict or tensorclass),
@@ -3777,7 +3779,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @overload
     def repeat(self, repeats: torch.Size): ...
 
-    def repeat(self, *repeats: int) -> TensorCollection:
+    def repeat(self, *repeats: int) -> Self | TensorCollection:
         """Repeats this tensor along the specified dimensions.
 
         Unlike :meth:`~.expand()`, this function copies the tensor's data.
@@ -3836,7 +3838,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self._repeat(*repeats)
 
     @abc.abstractmethod
-    def _repeat(self, *repeats: int) -> TensorCollection:
+    def _repeat(self, *repeats: int) -> Self | TensorCollection:
         raise NotImplementedError
 
     def copy(self) -> Self:
@@ -9637,7 +9639,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.div_(other)
 
     def __rtruediv__(self, other: TensorCollection | torch.Tensor) -> Self:
-        return other * self.reciprocal()
+        return self.reciprocal() * other
 
     def __mul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul(other)
@@ -10472,7 +10474,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection:  # noqa: D417
+    ) -> Self | TensorCollection:  # noqa: D417
         r"""Performs a bitwise AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10525,7 +10527,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection:  # noqa: D417
+    ) -> Self | TensorCollection:  # noqa: D417
         r"""Performs a logical AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10579,7 +10581,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection:  # noqa: D417
+    ) -> Self | TensorCollection:  # noqa: D417
         r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
 
         .. math::
@@ -10631,6 +10633,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("add_")
     def add_(
         self,
         other: TensorCollection | torch.Tensor | float,
@@ -10766,6 +10769,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
+    @_maybe_broadcast_other("addcdiv_", 2)
     def addcdiv_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcdiv`."""
         if _is_tensor_collection(type(other1)):
@@ -10830,6 +10834,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
+    @_maybe_broadcast_other("addcmul_", 2)
     def addcmul_(self, other1, other2, *, value: float | None = 1):
         """The in-place version of :meth:`~.addcmul`."""
         if _is_tensor_collection(type(other1)):
@@ -10907,6 +10912,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("sub_")
     def sub_(
         self, other: TensorDictBase | torch.Tensor | float, alpha: float | None = None
     ):
@@ -10928,7 +10934,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             torch._foreach_sub_(vals, other_val)
         return self
 
-    @_maybe_broadcast_other("sub")
+    @_maybe_broadcast_other("rsub")
     def rsub(
         self,
         other: TensorDictBase | torch.Tensor | float,
@@ -10990,6 +10996,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("mul_")
     def mul_(self, other: TensorCollection | torch.Tensor) -> Self:
         """In-place version of :meth:`~.mul`.
 
@@ -11424,6 +11431,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         with out.unlock_() if out.is_locked else contextlib.nullcontext():
             return out.update(result)
 
+    @_maybe_broadcast_other("pow_")
     def pow_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.pow`.
 
@@ -11496,6 +11504,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.update(items)
         return result
 
+    @_maybe_broadcast_other("div_")
     def div_(self, other: TensorDictBase | torch.Tensor) -> Self:
         """In-place version of :meth:`~.div`.
 
