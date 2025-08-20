@@ -19,6 +19,7 @@ from typing import (
     OrderedDict,
     overload,
     Sequence,
+    Tuple,
     Type,
     TYPE_CHECKING,
     TypeVar,
@@ -120,9 +121,9 @@ class TensorClass:
     def is_meta(self) -> bool: ...
     def __bool__(self) -> bool: ...
     def __ne__(self, other: object) -> Self | TensorCollection: ...
-    def __xor__(self, other: TensorDictBase | float) -> Self: ...
+    def __xor__(self, other: TensorCollection | float) -> Self: ...
     def __or__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __eq__(self, other: object) -> Self | TensorCollection: ...
     def __ge__(self, other: object) -> Self | TensorCollection: ...
@@ -161,7 +162,7 @@ class TensorClass:
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def min(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -169,14 +170,14 @@ class TensorClass:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def amax(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def max(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -184,13 +185,13 @@ class TensorClass:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def cummin(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def cummax(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def mean(
         self,
         dim: int | tuple[int] = ...,
@@ -198,7 +199,7 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def nanmean(
         self,
         dim: int | tuple[int] = ...,
@@ -206,7 +207,7 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def prod(
         self,
         dim: int | tuple[int] = ...,
@@ -214,7 +215,7 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def sum(
         self,
         dim: int | tuple[int] = ...,
@@ -222,7 +223,7 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def nansum(
         self,
         dim: int | tuple[int] = ...,
@@ -230,7 +231,7 @@ class TensorClass:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def std(
         self,
         dim: int | tuple[int] = ...,
@@ -238,7 +239,7 @@ class TensorClass:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def var(
         self,
         dim: int | tuple[int] = ...,
@@ -246,7 +247,7 @@ class TensorClass:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor: ...
+    ) -> Self | TensorCollection | torch.Tensor: ...
     def auto_batch_size_(self, batch_dims: int | None = None) -> Self: ...
     def auto_device_(self) -> Self: ...
     @classmethod
@@ -344,7 +345,7 @@ class TensorClass:
     def expand(self, *shape: int) -> Self: ...
     @overload
     def expand(self, shape: torch.Size) -> Self: ...
-    def expand_as(self, other: TensorDictBase | torch.Tensor) -> TensorDictBase: ...
+    def expand_as(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def new_zeros(
         self,
         *size: torch.Size,
@@ -397,7 +398,7 @@ class TensorClass:
         pin_memory: bool | None = None,
     ) -> Self: ...
     def unbind(self, dim: int) -> tuple[T, ...]: ...
-    def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
+    def chunk(self, chunks: int, dim: int = 0) -> tuple[Self, ...]: ...
     def unsqueeze(self, dim: int) -> Self: ...
     def squeeze(self, dim: int | None = None) -> Self: ...
     @overload
@@ -411,7 +412,7 @@ class TensorClass:
         *,
         output_size: int | None = None,
     ) -> Self: ...
-    def repeat(self, *repeats: int) -> TensorDictBase: ...
+    def repeat(self, *repeats: int) -> Self: ...
     def cat_tensors(
         self,
         *keys: NestedKey,
@@ -452,9 +453,7 @@ class TensorClass:
     def maybe_dense_stack(
         cls, input, dim: int = 0, *, out: Incomplete | None = None, **kwargs
     ) -> Self: ...
-    def split(
-        self, split_size: int | list[int], dim: int = 0
-    ) -> list[TensorDictBase]: ...
+    def split(self, split_size: int | list[int], dim: int = 0) -> list[Self]: ...
     def gather(self, dim: int, index: Tensor, out: T | None = None) -> Self: ...
     @overload
     def view(self, *shape: int) -> Self: ...
@@ -613,7 +612,7 @@ class TensorClass:
         device: torch.device | None = None,
         non_blocking: bool = False,
         *,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
     ) -> Self: ...
     def load_memmap_(self, prefix: str | Path) -> Self: ...
     def memmap_refresh_(self) -> Self: ...
@@ -819,7 +818,7 @@ class TensorClass:
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
     def named_apply(
@@ -835,7 +834,7 @@ class TensorClass:
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
     def map(
@@ -844,7 +843,7 @@ class TensorClass:
         dim: int = 0,
         num_workers: int | None = None,
         *,
-        out: TensorDictBase | None = None,
+        out: TensorCollection | None = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
@@ -874,35 +873,35 @@ class TensorClass:
     ) -> Self: ...
     def record_stream(self, stream: torch.cuda.Stream) -> Self: ...
     def __add__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __iadd__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __abs__(self) -> Self: ...
     def __truediv__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __itruediv__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __mul__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __imul__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __sub__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __isub__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __pow__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def __ipow__(
-        self, other: TensorDictBase | torch.Tensor
+        self, other: TensorCollection | torch.Tensor
     ) -> Self | TensorCollection: ...
     def abs(self) -> Self | TensorCollection: ...
     def abs_(self) -> Self | TensorCollection: ...
@@ -962,26 +961,26 @@ class TensorClass:
     def cosh_(self) -> Self | TensorCollection: ...
     def add(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
     def add_(
-        self, other: TensorDictBase | float, *, alpha: float | None = None
+        self, other: TensorCollection | float, *, alpha: float | None = None
     ) -> Self: ...
     def lerp(
         self,
-        end: TensorDictBase | torch.Tensor,
-        weight: TensorDictBase | torch.Tensor | float,
+        end: TensorCollection | torch.Tensor,
+        weight: TensorCollection | torch.Tensor | float,
     ) -> Self: ...
     def lerp_(
-        self, end: TensorDictBase | float, weight: TensorDictBase | float
+        self, end: TensorCollection | float, weight: TensorCollection | float
     ) -> Self: ...
     def addcdiv(
         self,
-        other1: TensorDictBase | torch.Tensor,
-        other2: TensorDictBase | torch.Tensor,
+        other1: TensorCollection | torch.Tensor,
+        other2: TensorCollection | torch.Tensor,
         value: float | None = 1,
     ) -> Self: ...
     def addcdiv_(self, other1, other2, *, value: float | None = 1) -> Self: ...
@@ -989,74 +988,74 @@ class TensorClass:
     def addcmul_(self, other1, other2, *, value: float | None = 1) -> Self: ...
     def sub(
         self,
-        other: TensorDictBase | float,
+        other: TensorCollection | float,
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
     def rsub(
         self,
-        other: TensorDictBase | float,
+        other: TensorCollection | float,
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
     def sub_(
-        self, other: TensorDictBase | float, alpha: float | None = None
+        self, other: TensorCollection | float, alpha: float | None = None
     ) -> Self: ...
-    def mul_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def mul_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def mul(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
-    def maximum_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def maximum_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def maximum(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
-    def minimum_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def minimum_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def minimum(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
     def clamp(
         self,
-        min: TensorDictBase | torch.Tensor = None,
-        max: TensorDictBase | torch.Tensor = None,
+        min: TensorCollection | torch.Tensor = None,
+        max: TensorCollection | torch.Tensor = None,
         *,
         out=None,
     ) -> Self: ...
     def logsumexp(self, dim=None, keepdim=False, *, out=None) -> Self: ...
-    def clamp_max_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def clamp_max_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def clamp_max(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
-    def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def clamp_min_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def clamp_min(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
-    def pow_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def pow_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def pow(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
-    def div_(self, other: TensorDictBase | torch.Tensor) -> Self: ...
+    def div_(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def div(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
     ) -> Self: ...
@@ -1101,19 +1100,19 @@ class TensorClass:
     @classmethod
     def _from_tensordict(
         cls,
-        tensordict: TensorDictBase,
+        tensordict: TensorCollection,
         non_tensordict: dict | None = None,
         safe: bool = True,
     ) -> Self: ...
     @classmethod
     def from_tensordict(
         cls,
-        tensordict: TensorDictBase,
+        tensordict: TensorCollection,
         non_tensordict: dict | None = None,
         safe: bool = True,
     ) -> Self: ...
-    def _from_tensordict_with_copy(self, tensordict: TensorDictBase) -> Self: ...
-    def _from_tensordict_with_none(self, tensordict: TensorDictBase) -> Self: ...
+    def _from_tensordict_with_copy(self, tensordict: TensorCollection) -> Self: ...
+    def _from_tensordict_with_none(self, tensordict: TensorCollection) -> Self: ...
     @classmethod
     def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False) -> Self: ...
     def from_tuple(
@@ -1127,16 +1126,16 @@ class TensorClass:
     ) -> Self: ...
     def logical_and(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase: ...
+    ) -> Self: ...
     def bitwise_and(
         self,
-        other: TensorDictBase | torch.Tensor,
+        other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorDictBase: ...
+    ) -> Self: ...
     @classmethod
     def from_struct_array(
         cls, struct_array: np.ndarray, device: torch.device | None = None
@@ -1178,7 +1177,7 @@ class TensorClass:
         self,
         indices_or_sections: int | list[int] | tuple[int, ...] | torch.Tensor,
         dim: int = 0,
-    ) -> tuple[TensorDictBase, ...]: ...
+    ) -> tuple[Self, ...]: ...
     def split_keys(
         self,
         *key_sets,
