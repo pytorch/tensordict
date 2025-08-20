@@ -2138,11 +2138,11 @@ class TensorDict(TensorDictBase):
         input_dict: dict[NestedKey, CompatibleType] | TensorDictBase,
         *,
         auto_batch_size: bool | None = None,
-        batch_size: list | tuple | torch.Size | None = None,
+        batch_size: Sequence[int] | torch.Size | None = None,
         device: torch.device | None = None,
         batch_dims: int | None = None,
         names: Sequence[str] | None = None,
-    ):
+    ) -> Self:
         if _is_tensor_collection(type(input_dict)):
             return input_dict
 
@@ -5097,7 +5097,7 @@ def from_pytree(
     )
 
 
-def stack(input, dim: int = 0, *, out=None):
+def stack(input: Sequence[T], dim: int = 0, *, out=None) -> T:
     """Stacks tensordicts into a single tensordict along the given dimension.
 
     This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
@@ -5106,7 +5106,7 @@ def stack(input, dim: int = 0, *, out=None):
     return TensorDict.stack(input, dim=dim, out=out)
 
 
-def lazy_stack(input, dim: int = 0, *, out=None):
+def lazy_stack(input: Sequence[T], dim: int = 0, *, out=None) -> T:
     """Creates a lazy stack of tensordicts.
 
     See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
@@ -5114,7 +5114,7 @@ def lazy_stack(input, dim: int = 0, *, out=None):
     return TensorDict.lazy_stack(input, dim=dim, out=out)
 
 
-def cat(input, dim: int = 0, *, out=None):
+def cat(input: Sequence[T], dim: int = 0, *, out=None) -> T:
     """Concatenates tensordicts into a single tensordict along the given dimension.
 
     This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
@@ -5123,7 +5123,7 @@ def cat(input, dim: int = 0, *, out=None):
     return TensorDict.cat(input, dim=dim, out=out)
 
 
-def maybe_dense_stack(input, dim: int = 0, *, out=None, **kwargs):
+def maybe_dense_stack(input: Sequence[T], dim: int = 0, *, out=None, **kwargs) -> T:
     """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
 
     See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
