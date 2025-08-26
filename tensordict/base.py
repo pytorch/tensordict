@@ -53,6 +53,7 @@ from typing import (
 import numpy as np
 
 import torch
+from torch._utils import _get_available_device_type, _get_device_module
 
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey
@@ -14258,14 +14259,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return val
 
     def _sync_all(self):
-        if self._has_cuda:
+        device_type = _get_available_device_type()
+        if device_type is None:
+            return
+
+        if device_type == "cuda":
             # TODO: dynamo doesn't like torch.cuda.is_initialized
             if not is_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
-        elif self._has_mps:
-            mps = getattr(torch, "mps", None)
-            if mps is not None:
-                mps.synchronize()
+        else:
+            device_module = _get_device_module(device_type)
+            device_module.synchronize()
 
     def is_floating_point(self) -> bool:
         """Checks if all tensors in the tensordict are floating point."""
