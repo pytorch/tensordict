@@ -33,6 +33,7 @@ from typing import (
     get_origin,
     get_type_hints,
     List,
+    Literal,
     Sequence,
     Type,
     TYPE_CHECKING,
@@ -243,6 +244,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "shape",
     "size",
     "sorted_keys",
+    "to_mds",
     "to_struct_array",
     "tolist",
     "values",
@@ -395,6 +397,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "from_consolidated",
     "from_dataclass",
     "from_h5",
+    "from_list",
     "from_modules",
     "from_namedtuple",
     "from_pytree",
@@ -1072,7 +1075,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     ):
         cls.from_dict_instance = _from_dict_instance
 
-    for attr in TensorDict.__dict__.keys():
+    for attr in set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys()):
+        if attr in ("__torch_function__",):
+            continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
             tdcls = func.__self__
@@ -3519,7 +3524,7 @@ class NonTensorDataBase(TensorClass):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]:
         # override to_dict to return just the data
@@ -3587,7 +3592,7 @@ class NonTensorDataBase(TensorClass):
     def tolist(
         self,
         *,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ):
@@ -3596,7 +3601,8 @@ class NonTensorDataBase(TensorClass):
         If the batch-size is empty, returns the data.
 
         Keyword Args:
-            convert_tensors (bool, optional): if ``True``, tensors will be converted to lists.
+            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
+                If "numpy", tensors will be converted to numpy arrays.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
@@ -4130,7 +4136,7 @@ class NonTensorStack(LazyStackedTensorDict):
     def tolist(
         self,
         *,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ):
@@ -4237,7 +4243,7 @@ class NonTensorStack(LazyStackedTensorDict):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> dict[str, Any]:

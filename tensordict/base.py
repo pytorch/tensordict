@@ -39,6 +39,7 @@ from typing import (
     Iterator,
     List,
     Literal,
+    Mapping,
     Optional,
     OrderedDict,
     overload,
@@ -55,6 +56,7 @@ import numpy as np
 import torch
 
 from tensordict._contextlib import LAST_OP_MAPS
+from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
@@ -530,10 +532,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return 0
         return batch_size[0]
 
-    def __deepcopy__(self, memo: Dict[Any, Any]) -> "tensordict.TensorDict":  # noqa
+    def __deepcopy__(
+        self, memo: Dict[Any, Any]
+    ) -> "tensordict.TensorDict":  # noqa  # type: ignore
         return self.clone()
 
-    def __contains__(self, key: NestedKey) -> bool:
+    def __contains__(self, key: NestedKey) -> bool:  # type: ignore
         if isinstance(key, str):
             return key in self.keys()
         if isinstance(key, tuple):
@@ -2132,6 +2136,59 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             self.clear_device_()
         return self
+
+    @classmethod
+    def from_list(
+        cls,
+        input,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: list[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self:
+        if lazy is None:
+            stack = cls.maybe_dense_stack
+        elif lazy:
+            stack = cls.lazy_stack
+        else:
+            stack = torch.stack
+        if batch_size is not None:
+            if isinstance(batch_size, int):
+                batch_size = torch.Size([batch_size])
+            if batch_size[0] != len(input):
+                raise ValueError(
+                    f"The provided batch size ({batch_size}) does not match the length of the list ({len(input)})."
+                )
+            bsz = batch_size[1:]
+        else:
+            bsz = None
+        if batch_dims is not None:
+            batch_dims -= 1
+        if names is not None:
+            names = names[1:]
+        if cls is TensorDictBase:
+            from tensordict import TensorDict
+
+            cls = TensorDict
+        input = [
+            (
+                cls.from_dict(
+                    d,
+                    auto_batch_size=auto_batch_size,
+                    batch_size=bsz,
+                    batch_dims=batch_dims,
+                    device=device,
+                    names=names,
+                )
+                if not is_tensor_collection(d)
+                else d
+            )
+            for d in input
+        ]
+        return stack(input)
 
     @classmethod
     @abc.abstractmethod
@@ -5704,6 +5761,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def is_consolidated(self):
         """Checks if a TensorDict has a consolidated storage."""
         return hasattr(self, "_consolidated")
+
+    to_mds = to_mds
 
     def memmap_(
         self,
@@ -11634,6 +11693,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             array = array.numpy()
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         if castable:
+            if hasattr(array, "flags") and not array.flags.writeable:
+                array = array.copy()
             return torch.as_tensor(array, device=self.device)
         else:
             from tensordict.tensorclass import NonTensorData
@@ -12267,7 +12328,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict.
@@ -12276,7 +12337,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
                 will be written in the dictionary.
                 Otherwise, they will be discarded. Default: ``True``.
-            convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
+            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
+                If "numpy", tensors will be converted to numpy arrays.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
@@ -12328,8 +12390,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     value = value.to_dict(
                         retain_none=retain_none, convert_tensors=convert_tensors
                     )
-            elif convert_tensors and hasattr(value, "tolist"):
-                value = value.tolist()
+            elif convert_tensors:
+                if isinstance(value, torch.Tensor) and convert_tensors == "numpy":
+                    value = value.numpy()
+                elif hasattr(value, "tolist"):
+                    value = value.tolist()
             result[key] = value
         return result
 
@@ -12337,7 +12402,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         *,
         convert_nodes: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> List[Any]:
@@ -12349,7 +12414,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             convert_nodes (bool): if ``True``, leaf nodes will be converted to dictionaries.
                 Otherwise, they will be returned as lists of values. Default: ``True``.
-            convert_tensors (bool): if ``True``, tensors will be converted to lists when creating the dictionary.
+            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
+                If "numpy", tensors will be converted to numpy arrays.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
@@ -14683,6 +14749,33 @@ def from_struct_array(
         batch_dims=batch_dims,
         device=device,
         batch_size=batch_size,
+    )
+
+
+def from_list(
+    input: list[TensorCollection | Mapping],
+    *,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    device: torch.device | None = None,
+    batch_size: torch.Size | None = None,
+    cls: Type | None = None,
+    lazy_stack: bool = None,
+) -> TensorCollection:
+    """Converts a list of dictionaries or TensorDicts to a TensorDict.
+
+    .. seealso:: :meth:`TensorDictBase.from_dict` for more information.
+    """
+    if cls is not None:
+        cls = TensorDictBase
+    return cls.from_list(
+        input,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+        device=device,
+        batch_size=batch_size,
+        type=type,
+        lazy_stack=lazy_stack,
     )
 
 

@@ -101,6 +101,8 @@ except ImportError:
 
     _has_funcdim = False
 
+_has_streaming = importlib.util.find_spec("streaming", None) is not None
+
 try:
     import torchsnapshot
 
@@ -3339,6 +3341,36 @@ class TestGeneric:
             inplace=False,
         )
         assert td["key1"].shape == td._tensordict["key1"].shape
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = TensorDict(
+            a=[0, 1, 2],
+            b=[0, 1, 0],
+            c=torch.tensor([[4, 5], [6, 7], [8, 9]]),
+            d=["a string!", "another string!", "again!"],
+            batch_size=[3],
+        )
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=TensorDict.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = torch.stack(batches)
+        assert_allclose_td(td, test_td)
 
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
@@ -9309,6 +9341,34 @@ class TestLazyStackedTensorDict:
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = LazyStackedTensorDict(
+            TensorDict(a=0, b=1, c=torch.randn(2), d="a string"),
+            TensorDict(a=0, b=1, c=torch.randn(3), d="another string"),
+            TensorDict(a=0, b=1, c=torch.randn(3), d="yet another string"),
+        )
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = LazyStackedTensorDict(*batches)
+        assert_allclose_td(td, test_td)
 
     def test_all_keys(self):
         td = TensorDict({"a": torch.zeros(1)}, [])

@@ -1085,14 +1085,33 @@ class TensorClass:
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
+    def to_mds(
+        self,
+        *,
+        out: str | tuple[str, str],
+        columns: dict[str, str] | None = None,
+        writer: "MDSWriter" | None = None,
+    ) -> None: ...
+    @classmethod
+    def from_list(
+        cls,
+        input,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: List[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self: ...
     def tolist(
         self,
         *,
         convert_nodes: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> list[Any]: ...

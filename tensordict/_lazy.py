@@ -23,6 +23,8 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
+    Mapping,
     OrderedDict,
     Sequence,
     Tuple,
@@ -462,7 +464,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
 
@@ -476,7 +478,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @classmethod
     def from_dict(
         cls,
-        input_dict: List[Dict[NestedKey, Any]],
+        input_dict: Dict[str, Dict[NestedKey, Any]] | List[Dict[NestedKey, Any]],
         *other,
         auto_batch_size: bool = False,
         batch_size=None,
@@ -484,21 +486,53 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_dims=None,
         stack_dim_name=None,
         stack_dim=0,
+        names: list[str] | None = None,
     ):
+        if names is not None:
+            if stack_dim_name is not None:
+                raise ValueError("names and stack_dim_name are exclusive.")
+            stack_dim_name = list(names).pop(stack_dim)
+
         return cls._new_lazy_unsafe(
             *(
                 TensorDict.from_dict(
-                    input_dict[str(i)],
+                    (
+                        input_dict[str(i)]
+                        if isinstance(input_dict, Mapping)
+                        else input_dict[i]
+                    ),
                     *other,
                     auto_batch_size=auto_batch_size,
                     device=device,
                     batch_dims=batch_dims,
                     batch_size=batch_size,
+                    names=names,
                 )
                 for i in range(len(input_dict))
             ),
             stack_dim=stack_dim,
             stack_dim_name=stack_dim_name,
+        )
+
+    @classmethod
+    def from_list(
+        cls,
+        input: list[Mapping],
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: list[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self:
+        return cls.from_dict(
+            input,
+            auto_batch_size=auto_batch_size,
+            batch_dims=batch_dims,
+            batch_size=batch_size,
+            device=device,
+            names=names,
         )
 
     @_fails_exclusive_keys

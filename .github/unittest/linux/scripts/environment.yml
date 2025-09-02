@@ -21,3 +21,4 @@ dependencies:
     - orjson
     - ninja
     - numpy<2.0.0
+    - mosaicml-streaming
