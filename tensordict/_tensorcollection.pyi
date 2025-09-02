@@ -128,7 +128,7 @@ class TensorCollection:
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def min(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -136,14 +136,14 @@ class TensorCollection:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def amax(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def max(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -151,13 +151,13 @@ class TensorCollection:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def cummin(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def cummax(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def mean(
         self,
         dim: int | tuple[int] = ...,
@@ -165,7 +165,7 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def nanmean(
         self,
         dim: int | tuple[int] = ...,
@@ -173,7 +173,7 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def prod(
         self,
         dim: int | tuple[int] = ...,
@@ -181,7 +181,7 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def sum(
         self,
         dim: int | tuple[int] = ...,
@@ -189,7 +189,7 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def nansum(
         self,
         dim: int | tuple[int] = ...,
@@ -197,7 +197,7 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def std(
         self,
         dim: int | tuple[int] = ...,
@@ -205,7 +205,7 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def var(
         self,
         dim: int | tuple[int] = ...,
@@ -213,7 +213,7 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> Self | TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
     def auto_batch_size_(self, batch_dims: int | None = None) -> Self: ...
     def auto_device_(self) -> Self: ...
     @classmethod
@@ -311,9 +311,7 @@ class TensorCollection:
     def expand(self, *shape: int) -> Self: ...
     @overload
     def expand(self, shape: torch.Size) -> Self: ...
-    def expand_as(
-        self, other: TensorCollection | torch.Tensor
-    ) -> Self | TensorCollection: ...
+    def expand_as(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def new_zeros(
         self,
         *size: torch.Size,
@@ -381,8 +379,8 @@ class TensorCollection:
         dim: int | None = None,
         *,
         output_size: int | None = None,
-    ) -> Self | TensorCollection: ...
-    def repeat(self, *repeats: int) -> Self | TensorCollection: ...
+    ) -> Self: ...
+    def repeat(self, *repeats: int) -> Self: ...
     def cat_tensors(
         self,
         *keys: NestedKey,
@@ -899,7 +897,7 @@ class TensorCollection:
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection: ...
+    ) -> Self: ...
     def add_(self, other: TensorCollection | float, *, alpha: float | None = None): ...
     def lerp(
         self,
@@ -1043,13 +1041,13 @@ class TensorCollection:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection: ...
+    ) -> Self: ...
     def bitwise_and(
         self,
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection: ...
+    ) -> Self: ...
     @classmethod
     def from_struct_array(
         cls, struct_array: np.ndarray, device: torch.device | None = None
