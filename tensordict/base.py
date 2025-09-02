@@ -115,6 +115,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import multiprocessing as mp, nn, Tensor
+from torch._utils import _get_available_device_type, _get_device_module
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -14226,16 +14227,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Ensure the result remains locked to maintain consolidated state integrity
         result.lock_()
         if non_blocking in (False, None):
-            if device.type == "cuda" and non_blocking is False:
-                # sending to CUDA force sync
-                cuda_device = device
-            elif storage.device.type == "cuda":
-                # sending from cuda: need sync unless intentionally not asked for
-                cuda_device = storage.device.type
+            if device.type != "cpu" and non_blocking is False:
+                # sending to non-cpu device force sync
+                non_cpu_device = device
+            elif storage.device.type != "cpu":
+                # sending from non-cpu device: need sync unless intentionally not asked for
+                non_cpu_device = storage.device.type
             else:
-                cuda_device = None
-            if cuda_device is not None:
-                torch.cuda.current_stream(cuda_device).synchronize()
+                non_cpu_device = None
+            if non_cpu_device is not None:
+                device_type = _get_available_device_type()
+                device_module = _get_device_module(device_type)
+                if hasattr(device_module, "current_stream"):
+                    device_module.current_stream(non_cpu_device).synchronize()
+                else:
+                    # Some device modules, such as torch.mps, don't have current_stream attr
+                    device_module.synchronize()
 
         return result
 
@@ -14258,14 +14265,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return val
 
     def _sync_all(self):
-        if self._has_cuda:
+        device_type = _get_available_device_type()
+        if device_type is None:
+            return
+
+        if device_type == "cuda":
             # TODO: dynamo doesn't like torch.cuda.is_initialized
             if not is_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
-        elif self._has_mps:
-            mps = getattr(torch, "mps", None)
-            if mps is not None:
-                mps.synchronize()
+        else:
+            device_module = _get_device_module(device_type)
+            device_module.synchronize()
 
     def is_floating_point(self) -> bool:
         """Checks if all tensors in the tensordict are floating point."""
