@@ -4033,7 +4033,61 @@ class NonTensorData(NonTensorDataBase):
         return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
 
-class MetaData(NonTensorDataBase):
+class _MetaDataMeta(_TensorClassMeta):
+    def __new__(
+        mcs,
+        name,
+        bases,
+        namespace,
+        datatype=None,
+        **kwargs,
+    ):
+        # Create the class using the parent's __new__ method
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        if datatype is not None:
+            cls._datatype = datatype
+        # Initialize cache for typed classes
+        if not hasattr(cls, "_typed_class_cache"):
+            cls._typed_class_cache = {}
+        return cls
+
+    def __getitem__(cls, item):
+        """Create a typed version of MetaData that validates the data type."""
+        if cls.__name__ != "MetaData":
+            # Only allow type specification on the base MetaData class
+            raise TypeError(f"Cannot specify type for {cls.__name__}")
+
+        # Check cache first
+        if item in cls._typed_class_cache:  # type: ignore
+            return cls._typed_class_cache[item]  # type: ignore
+
+        # Create a new class that validates the data type
+        type_name = getattr(item, "__name__", str(item))
+        class_name = f"MetaData[{type_name}]"
+
+        class TypedMetaData(cls):
+            _expected_type = item
+
+            def __post_init__(self):
+                super().__post_init__()
+                # Validate the data type
+                if not isinstance(self.data, item):
+                    expected_name = getattr(item, "__name__", str(item))
+                    actual_name = type(self.data).__name__
+                    raise TypeError(
+                        f"Expected data of type {expected_name}, got {actual_name}"
+                    )
+
+        TypedMetaData.__name__ = class_name
+        TypedMetaData.__qualname__ = class_name
+
+        # Cache the class
+        cls._typed_class_cache[item] = TypedMetaData  # type: ignore
+
+        return TypedMetaData
+
+
+class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
     """A non-tensor, metadata carrier class for `TensorDict`.
 
     This class mainly behaves as :class:`~tensordict.NonTensorData`, except for indexing,
@@ -4048,6 +4102,8 @@ class MetaData(NonTensorDataBase):
     :class:`~tensordict.NonTensorData`).
 
     """
+
+    # Remove the __class_getitem__ method since the metaclass handles it
 
     _load_memmap = classmethod(_load_memmap)
     _from_dict = classmethod(_from_dict)

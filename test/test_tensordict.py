@@ -12853,6 +12853,18 @@ class TestNonTensorData:
 
 
 class TestMetaData:
+    def test_typed_metadata(self):
+        d = MetaData[int](0, batch_size=(3,))
+        assert d.data == 0
+        assert isinstance(d, MetaData[int])
+        with pytest.raises(TypeError, match="Expected data of type int, got str"):
+            MetaData[int]("a string")
+        cls = MetaData[int]
+        assert issubclass(cls, MetaData)
+        d = cls(0, batch_size=(3,))
+        assert isinstance(d, MetaData)
+        # Test caching
+        assert isinstance(d, MetaData[int])
 
     def test_expand(self):
         d = MetaData(0, batch_size=(3,))
