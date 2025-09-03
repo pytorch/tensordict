@@ -32,56 +32,42 @@ jobs:
       repository: pytorch/tensordict
       upload-artifact: docs
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         set -e
         set -v
-        apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
-        root_dir="$(pwd)"
-        conda_dir="${root_dir}/conda"
-        env_dir="${root_dir}/env"
-        os=Linux
+        
+        # Set up environment variables
+        export PYTHON_VERSION=3.10
+        export CU_VERSION="cpu"
+        export TORCH_VERSION=nightly
+        export ARCH=x86_64
 
-        # 1. Install conda at ./conda
-        printf "* Installing conda\n"
-        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-        bash ./miniconda.sh -b -f -p "${conda_dir}"
-        eval "$(${conda_dir}/bin/conda shell.bash hook)"
-        printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.10
-        printf "* Activating\n"
-        conda activate "${env_dir}"
+        # Use existing setup script
+        bash .github/unittest/linux/scripts/setup_env.sh
 
-        # 2. upgrade pip, ninja and packaging
-        apt-get install python3-pip unzip -y -f
-        conda install anaconda::cmake -y
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging "pybind11[global]" -U
+        # Activate the conda environment
+        eval "$(./conda/bin/conda shell.bash hook)"
+        conda activate "./env"
 
-        # 3. check python version
-        python3 --version
+        # Install PyTorch (CPU version for docs)
+        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
-        # 4. Check git version
-        git version
+        # Install tensordict
+        python setup.py develop
 
-        # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-
-        # 6. Install tensordict
-        python3 setup.py develop
-
-        # 7. Install requirements
+        # Install docs requirements
         export TD_GET_DEFAULTS_TO_NONE='1'
-        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
-        # 8. Test tensordict installation
+        # Test tensordict installation
         mkdir _tmp
         cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from tensordict import *"""
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
         cd ..
 
-        # 9. Set sanitize version
+        # Set sanitize version for releases
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
           echo '::group::Enable version string sanitization'
           # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
@@ -90,11 +76,12 @@ jobs:
           echo '::endgroup::'
         fi
 
-        # 10. Build doc
+        # Build documentation
         cd ./docs
         make docs
         cd ..
 
+        # Copy artifacts
         cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         if [[ ${{ github.event_name == 'pull_request' }} ]]; then
