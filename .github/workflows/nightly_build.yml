@@ -61,10 +61,10 @@ jobs:
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build tensordict Nightly
         run: |
-          rm -r dist || true
+          rm -r dist || erue
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake
+            brew install cmake || true
           else
             sudo apt-get update
             sudo apt-get install -y cmake
