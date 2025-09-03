@@ -26,41 +26,10 @@ if "%GITHUB_REF_TYPE%"=="tag" (
 
 echo Setting development version for build: %GITHUB_REF_NAME%
 
-REM Debug: Print available environment variables
-echo Debug environment variables:
-echo   GITHUB_SHA: %GITHUB_SHA%
-echo   GITHUB_REF_TYPE: %GITHUB_REF_TYPE%
-echo   GITHUB_REF_NAME: %GITHUB_REF_NAME%
-echo   GITHUB_RUN_NUMBER: %GITHUB_RUN_NUMBER%
-echo   GITHUB_RUN_ATTEMPT: %GITHUB_RUN_ATTEMPT%
-
-REM Use environment variables instead of git commands
-REM Get first 9 characters of commit hash
-set GIT_COMMIT=%GITHUB_SHA:~0,9%
-if "%GIT_COMMIT%"=="" set GIT_COMMIT=unknown
-
-REM Use GitHub run number as substitute for commit count
-set GIT_COMMIT_COUNT=%GITHUB_RUN_NUMBER%
-if "%GIT_COMMIT_COUNT%"=="" set GIT_COMMIT_COUNT=0
-
-REM Get current date in YYYYMMDD format
-for /f "tokens=2 delims==" %%i in ('wmic os get localdatetime /value') do (
-    set datetime=%%i
-    goto :break
-)
-:break
-set DATE_STR=%datetime:~0,8%
-echo Debug: Raw datetime: %datetime%
-echo Debug: Parsed date: %DATE_STR%
-
-REM Format: <base_version>.dev<commits>+g<hash>.d<date>
-set DEV_VERSION=%BASE_VERSION%.dev%GIT_COMMIT_COUNT%+g%GIT_COMMIT%.d%DATE_STR%
-echo Using development version: %DEV_VERSION%
-set SETUPTOOLS_SCM_PRETEND_VERSION=%DEV_VERSION%
-set TENSORDICT_BUILD_VERSION=%DEV_VERSION%
-
 :setup_build
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
+echo SETUPTOOLS_SCM_PRETEND_VERSION is set to %SETUPTOOLS_SCM_PRETEND_VERSION%
+echo DEBUG: About to run build command with version environment
 
 if "%CONDA_RUN%"=="" (
     echo CONDA_RUN is not set. Please activate your conda environment or set CONDA_RUN.
@@ -101,6 +70,7 @@ if "%CU_VERSION%" == "xpu" call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat
 
 set DISTUTILS_USE_SDK=1
 
+REM Capture all arguments passed to this script
 set args=%1
 shift
 :start
@@ -110,9 +80,6 @@ shift
 goto start
 
 :done
-if "%args%" == "" (
-    echo Usage: vc_env_helper.bat [command] [args]
-    echo e.g. vc_env_helper.bat cl /c test.cpp
-)
-
+REM Execute the build command with environment variables set
+echo Executing build command: %args%
 %args% || exit /b 1
