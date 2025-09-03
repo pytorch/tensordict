@@ -37,7 +37,7 @@ jobs:
       script: |
         set -e
         set -v
-        
+
         # Set up environment variables
         export PYTHON_VERSION=3.10
         export CU_VERSION="cpu"
@@ -46,7 +46,7 @@ jobs:
 
         # Use existing setup script
         bash .github/unittest/linux/scripts/setup_env.sh
-        
+
         # Install additional tools needed for docs build
         apt update && apt install -y unzip
 

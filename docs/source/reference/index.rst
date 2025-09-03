@@ -4,6 +4,6 @@ API Reference
 .. toctree::
     :maxdepth: 2
 
-    tensordict
+    td
     nn
-    tensorclass
+    tc
