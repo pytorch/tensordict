@@ -8,6 +8,7 @@ import argparse
 import ast
 import contextlib
 import dataclasses
+import importlib.util
 import inspect
 import os
 import pathlib
@@ -54,6 +55,7 @@ try:
 except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
+_has_streaming = importlib.util.find_spec("streaming", None) is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -2115,6 +2117,44 @@ class TestTensorClass:
         tc2 = tc.to_lazystack(1)
         assert isinstance(tc2, MyTensorClass)
         assert isinstance(tc2._tensordict, LazyStackedTensorDict)
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = LazyStackedTensorDict(
+            TensorDict(a=0, b=1, c=torch.randn(2), d="a string"),
+            TensorDict(a=1, b=1, c=torch.randn(3), d="another string"),
+            TensorDict(a=2, b=1, c=torch.randn(3), d="yet another string"),
+        )
+
+        class MC(TensorClass):
+            a: Any
+            b: Any
+            c: Any
+            d: Any
+
+        td = MC.from_tensordict(td)
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=MC.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = TensorDict.lazy_stack(batches)
+        assert isinstance(test_td, MC)
+        assert isinstance(test_td._tensordict, LazyStackedTensorDict)
+        assert_allclose_td(td, test_td)
 
     def test_stack_names(self):
         class MyTensorClass(TensorClass):

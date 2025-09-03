@@ -14,6 +14,7 @@ from typing import (
     dataclass_transform,
     Generator,
     Iterator,
+    Literal,
     OrderedDict,
     overload,
     Sequence,
@@ -1200,18 +1201,37 @@ class TensorCollection:
     ) -> Self: ...
     def as_tensor(self) -> Self: ...
     def to_lazystack(self, dim: int = 0) -> Self: ...
+    def to_mds(
+        self,
+        *,
+        out: str | tuple[str, str],
+        columns: dict[str, str] | None = None,
+        writer: "MDSWriter" | None = None,
+    ) -> None: ...
     def to_dict(
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
+    @classmethod
+    def from_list(
+        cls,
+        input,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: list[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self: ...
     def tolist(
         self,
         *,
         convert_nodes: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> list[Any]: ...
