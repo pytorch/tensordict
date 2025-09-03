@@ -789,13 +789,29 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
         )
 
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+    ) -> Self: ...
+
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def amin(
         self,
         dim: int | NO_DEFAULT = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the minimum values of all elements in the input tensordict.
 
         Same as :meth:`~.min` with ``return_indices=False``.
@@ -810,6 +826,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             call_on_nested=False,
         )
 
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
+
     def min(
         self,
         dim: int | NO_DEFAULT = NO_DEFAULT,
@@ -817,7 +852,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the minimum values of all elements in the input tensordict.
 
         Args:
@@ -922,13 +957,29 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         return result
 
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+    ) -> Self: ...
+
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def amax(
         self,
         dim: int | NO_DEFAULT = NO_DEFAULT,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the maximum values of all elements in the input tensordict.
 
         Same as :meth:`~.max` with ``return_indices=False``.
@@ -943,6 +994,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             call_on_nested=False,
         )
 
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = NO_DEFAULT,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
+
     def max(
         self,
         dim: int | NO_DEFAULT = NO_DEFAULT,
@@ -950,7 +1020,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the maximum values of all elements in the input tensordict.
 
         Args:
@@ -1055,13 +1125,30 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         return result
 
+    @overload
+    def cummin(
+        self,
+        dim: int,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+
+    @overload
+    def cummin(
+        self,
+        dim: int,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
+
     def cummin(
         self,
         dim: int,
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the cumulative minimum values of all elements in the input tensordict.
 
         Args:
@@ -1158,13 +1245,30 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         return result
 
+    @overload
+    def cummax(
+        self,
+        dim: int,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+
+    @overload
+    def cummax(
+        self,
+        dim: int,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
+
     def cummax(
         self,
         dim: int,
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the cumulative maximum values of all elements in the input tensordict.
 
         Args:
@@ -1261,6 +1365,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         return result
 
+    @overload
+    def mean(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+
+    @overload
+    def mean(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def mean(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1268,7 +1391,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the mean value of all elements in the input tensordict.
 
         Args:
@@ -1379,6 +1502,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def nanmean(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+
+    @overload
+    def nanmean(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def nanmean(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1386,7 +1528,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the mean of all non-NaN elements in the input tensordict.
 
         Args:
@@ -1493,6 +1635,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def prod(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+
+    @overload
+    def prod(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def prod(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1500,7 +1661,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the produce of values of all elements in the input tensordict.
 
         Args:
@@ -1616,6 +1777,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 result = result.reshape([1 for _ in self.shape])
         return result
 
+    @overload
+    def sum(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+
+    @overload
+    def sum(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def sum(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1623,7 +1803,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the sum value of all elements in the input tensordict.
 
         Args:
@@ -1730,6 +1910,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def nansum(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+
+    @overload
+    def nansum(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def nansum(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1737,7 +1936,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the sum of all non-NaN elements in the input tensordict.
 
         Args:
@@ -1844,6 +2043,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def std(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+
+    @overload
+    def std(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def std(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1851,7 +2069,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the standard deviation value of all elements in the input tensordict.
 
         Args:
@@ -1957,6 +2175,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def var(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+
+    @overload
+    def var(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
     def var(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1964,7 +2201,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorDictBase | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the variance value of all elements in the input tensordict.
 
         Args:
@@ -3052,9 +3289,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def expand_as(
-        self, other: TensorCollection | torch.Tensor
-    ) -> Self | TensorCollection:
+    def expand_as(self, other: TensorCollection | torch.Tensor) -> Self:
         """Broadcasts the shape of the tensordict to the shape of `other` and expands it accordingly.
 
         If the input is a tensor collection (tensordict or tensorclass),
@@ -3727,7 +3962,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         dim: int | None = None,
         *,
         output_size: int | None = None,
-    ) -> TensorDictBase:
+    ) -> Self:
         """Repeat elements of a TensorDict.
 
         .. warning:: This is different from :meth:`~torch.Tensor.repeat` but similar to :func:`numpy.repeat`.
@@ -3780,7 +4015,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @overload
     def repeat(self, repeats: torch.Size): ...
 
-    def repeat(self, *repeats: int) -> Self | TensorCollection:
+    def repeat(self, *repeats: int) -> Self:
         """Repeats this tensor along the specified dimensions.
 
         Unlike :meth:`~.expand()`, this function copies the tensor's data.
@@ -3839,7 +4074,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self._repeat(*repeats)
 
     @abc.abstractmethod
-    def _repeat(self, *repeats: int) -> Self | TensorCollection:
+    def _repeat(self, *repeats: int) -> Self:
         raise NotImplementedError
 
     def copy(self) -> Self:
@@ -10419,7 +10654,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
-    def _clone_recurse(self) -> TensorDictBase:  # noqa: D417
+    def _clone_recurse(self) -> Self:  # noqa: D417
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}
@@ -10475,7 +10710,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Performs a bitwise AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10528,7 +10763,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Performs a logical AND operation between ``self`` and :attr:`other`.
 
         .. math::
@@ -10582,7 +10817,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> Self | TensorCollection:  # noqa: D417
+    ) -> Self:  # noqa: D417
         r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
 
         .. math::
