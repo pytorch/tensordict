@@ -4143,7 +4143,7 @@ class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
         if not return_stack:
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
-            return MetaData(
+            return cls(
                 data=first.data,
                 batch_size=batch_size,
                 names=first._maybe_names(),

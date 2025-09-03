@@ -2106,6 +2106,21 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData)
         assert stacked_tc.custom_data == "abc"
 
+    def test_stack_metadata_typed(self):
+        class MyTensorClass(TensorClass):
+            custom_data: MetaData[str]
+
+        my_tc = MyTensorClass(custom_data=MetaData[str]("abc"))
+        assert isinstance(my_tc._tensordict._tensordict.get("custom_data"), MetaData)
+        stacked_tc = torch.stack([my_tc, my_tc], dim=0)
+        assert isinstance(
+            stacked_tc._tensordict._tensordict.get("custom_data"), MetaData[str]
+        )
+        assert stacked_tc.custom_data == "abc"
+        stacked_tc = lazy_stack([my_tc, my_tc], dim=0)
+        assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData[str])
+        assert stacked_tc.custom_data == "abc"
+
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
             foo: Tensor
