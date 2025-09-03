@@ -64,7 +64,7 @@ jobs:
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake
+            brew install cmake || true
           else
             sudo apt-get update
             sudo apt-get install -y cmake
