@@ -46,6 +46,9 @@ jobs:
 
         # Use existing setup script
         bash .github/unittest/linux/scripts/setup_env.sh
+        
+        # Install additional tools needed for docs build
+        apt update && apt install -y unzip
 
         # Activate the conda environment
         eval "$(./conda/bin/conda shell.bash hook)"
