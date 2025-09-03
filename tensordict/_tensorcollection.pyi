@@ -122,12 +122,43 @@ class TensorCollection:
     def isneginf(self) -> Self: ...
     def isposinf(self) -> Self: ...
     def isreal(self) -> Self: ...
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+    ) -> Self: ...
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def amin(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
     def min(
         self,
@@ -137,12 +168,43 @@ class TensorCollection:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+    ) -> Self: ...
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def amax(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
     def max(
         self,
@@ -152,11 +214,40 @@ class TensorCollection:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def cummin(self, dim: int, *, return_indices: bool = True) -> Self: ...
+    @overload
+    def cummin(
+        self, dim: int, *, reduce: bool, return_indices: bool = True
+    ) -> Self | torch.Tensor: ...
     def cummin(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
     ) -> Self | torch.Tensor: ...
+    @overload
+    def cummax(self, dim: int, *, return_indices: bool = True) -> Self: ...
+    @overload
+    def cummax(
+        self, dim: int, *, reduce: bool, return_indices: bool = True
+    ) -> Self | torch.Tensor: ...
     def cummax(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
     ) -> Self | torch.Tensor: ...
     def mean(
         self,
@@ -166,6 +257,23 @@ class TensorCollection:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def nanmean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def nanmean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def nanmean(
         self,
         dim: int | tuple[int] = ...,
@@ -173,6 +281,23 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def prod(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def prod(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
     ) -> Self | torch.Tensor: ...
     def prod(
         self,
@@ -182,6 +307,23 @@ class TensorCollection:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def sum(
         self,
         dim: int | tuple[int] = ...,
@@ -189,6 +331,23 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def nansum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def nansum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
     ) -> Self | torch.Tensor: ...
     def nansum(
         self,
@@ -198,6 +357,23 @@ class TensorCollection:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+    @overload
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def std(
         self,
         dim: int | tuple[int] = ...,
@@ -205,6 +381,23 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+    @overload
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool,
     ) -> Self | torch.Tensor: ...
     def var(
         self,
@@ -365,14 +558,13 @@ class TensorCollection:
     ): ...
     def unbind(self, dim: int) -> tuple[T, ...]: ...
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]: ...
-    @overload
     def unsqueeze(self, dim: int) -> Self: ...
-    @overload
     def squeeze(self, dim: int | None = None) -> Self: ...
     @overload
-    def reshape(self, *shape: int): ...
+    def reshape(self, *shape: int) -> Self: ...
     @overload
-    def reshape(self, shape: list | tuple): ...
+    def reshape(self, shape: list | tuple) -> Self: ...
+    def reshape(self, *args, **kwargs) -> Self: ...
     def repeat_interleave(
         self,
         repeats: torch.Tensor | int,
