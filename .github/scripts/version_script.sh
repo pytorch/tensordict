@@ -13,7 +13,7 @@ if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" == release/* ]] || [[
     export SETUPTOOLS_SCM_PRETEND_VERSION=$TENSORDICT_BUILD_VERSION
 else
     echo "Setting development version for build: $GITHUB_REF_NAME"
-    
+
     # Debug: Print available environment variables
     echo "Debug environment variables:"
     echo "  GITHUB_SHA: ${GITHUB_SHA:-not set}"
@@ -21,18 +21,18 @@ else
     echo "  GITHUB_REF_NAME: ${GITHUB_REF_NAME:-not set}"
     echo "  GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER:-not set}"
     echo "  GITHUB_RUN_ATTEMPT: ${GITHUB_RUN_ATTEMPT:-not set}"
-    
+
     # Use environment variables instead of git commands
     GIT_COMMIT="${GITHUB_SHA:0:9}"  # First 9 chars of commit hash
     if [[ -z "$GIT_COMMIT" ]]; then
         GIT_COMMIT="unknown"
     fi
-    
+
     # Use GitHub run number as substitute for commit count
     GIT_COMMIT_COUNT="${GITHUB_RUN_NUMBER:-0}"
-    
+
     DATE_STR=$(date +%Y%m%d)
-    
+
     # Format: <base_version>.dev<commits>+g<hash>.d<date>
     DEV_VERSION="${BASE_VERSION}.dev${GIT_COMMIT_COUNT}+g${GIT_COMMIT}.d${DATE_STR}"
     echo "Using development version: $DEV_VERSION"
@@ -42,9 +42,22 @@ fi
 # TODO: consider lower this
 export MACOSX_DEPLOYMENT_TARGET=14.0
 
-${CONDA_RUN} pip install --upgrade pip
+# Set CONDA_RUN if not set
+if [[ -z "${CONDA_RUN:-}" ]]; then
 
-# for orjson
-export UNSAFE_PYO3_BUILD_FREE_THREADED=1
+    pip install --upgrade pip
 
-${CONDA_RUN} conda install -c conda-forge pybind11 -y
+    # for orjson
+    export UNSAFE_PYO3_BUILD_FREE_THREADED=1
+
+    pip install "pybind11[global]"
+
+else
+
+    ${CONDA_RUN} pip install --upgrade pip
+
+    # for orjson
+    export UNSAFE_PYO3_BUILD_FREE_THREADED=1
+
+    ${CONDA_RUN} conda install -c conda-forge pybind11 -y
+fi
