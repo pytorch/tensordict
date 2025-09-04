@@ -57,8 +57,12 @@ jobs:
         # Install PyTorch (CPU version for docs)
         python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
-        # Install tensordict
-        python setup.py develop
+        # Install tensordict -- install as develop if not on a release branch
+        if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]]; then
+          python -m pip install .
+        else
+          python -m pip install -e .
+        fi
 
         # Install docs requirements
         export TD_GET_DEFAULTS_TO_NONE='1'
