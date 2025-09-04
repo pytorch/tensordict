@@ -16,7 +16,7 @@ target-version = ["py39"]
 
 [project]
 name = "tensordict"
-version = "0.10.0"
+dynamic = ["version"]
 description = "TensorDict is a pytorch dedicated tensor container."
 authors = [
   { name="Vincent Moens", email="vincentmoens@gmail.com" }
@@ -72,8 +72,10 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 "tensordict" = ["*.so", "*.pyd", "*.dll"]
 
 [tool.setuptools_scm]
+# Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases
 version_scheme = "post-release"
-write_to = "tensordict/_version.py"
+local_scheme = "node-and-date"
+version_file = "tensordict/_version.py"
 
 [tool.mypy]
 files = "tensordict"
