@@ -1,11 +1,15 @@
 @echo off
 
+REM Read base version from version.txt
+set /p BASE_VERSION=<version.txt
+echo Base version from version.txt: %BASE_VERSION%
+
 REM Only set static version for release branches and release candidate tags
 if "%GITHUB_REF_TYPE%"=="branch" (
     echo %GITHUB_REF_NAME% | findstr /R "^release/" >nul
     if not errorlevel 1 (
         echo Setting static version for release branch: %GITHUB_REF_NAME%
-        set TENSORDICT_BUILD_VERSION=0.10.0
+        set TENSORDICT_BUILD_VERSION=%BASE_VERSION%
         set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
         goto setup_build
     )
@@ -15,15 +19,23 @@ if "%GITHUB_REF_TYPE%"=="tag" (
     echo %GITHUB_REF_NAME% | findstr /R "^v[0-9]*\.[0-9]*\.[0-9]*-rc[0-9]*$" >nul
     if not errorlevel 1 (
         echo Setting static version for release candidate tag: %GITHUB_REF_NAME%
-        set TENSORDICT_BUILD_VERSION=0.10.0
+        set TENSORDICT_BUILD_VERSION=%BASE_VERSION%
         set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
         goto setup_build
     )
 )
 
-echo Using dynamic versioning for development build: %GITHUB_REF_NAME%
-REM Ensure the variable is unset for dynamic versioning
-set SETUPTOOLS_SCM_PRETEND_VERSION=
+echo Setting development version for build: %GITHUB_REF_NAME%
+REM Get git info for development version
+for /f %%i in ('git rev-parse --short HEAD') do set GIT_COMMIT=%%i
+for /f %%i in ('git rev-list --count HEAD') do set GIT_COMMIT_COUNT=%%i
+for /f "tokens=1-3 delims=/ " %%a in ('date /t') do set DATE_STR=%%c%%a%%b
+set DATE_STR=%DATE_STR: =%
+
+REM Format: <base_version>.dev<commits>+g<hash>.d<date>
+set DEV_VERSION=%BASE_VERSION%.dev%GIT_COMMIT_COUNT%+g%GIT_COMMIT%.d%DATE_STR%
+echo Using development version: %DEV_VERSION%
+set SETUPTOOLS_SCM_PRETEND_VERSION=%DEV_VERSION%
 
 :setup_build
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
