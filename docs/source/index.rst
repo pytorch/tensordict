@@ -54,7 +54,7 @@ or via a `git clone` if you're willing to contribute to the library:
   $ cd path/to/root
   $ git clone https://github.com/pytorch/tensordict
   $ cd tensordict
-  $ python setup.py develop
+  $ pip install -e .
 
 Tutorials
 =========
