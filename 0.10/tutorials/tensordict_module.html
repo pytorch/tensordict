@@ -1,0 +1,1396 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>TensorDictModule &mdash; tensordict 0.10 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Exporting tensordict modules" href="export.html" />
+    <link rel="prev" title="Building tensordicts from streams" href="streamed_tensordict.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="active docs-active">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.10
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>TensorDictModule</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/tutorials/tensordict_module.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+          
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-tutorials-tensordict-module-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="tensordictmodule">
+<span id="sphx-glr-tutorials-tensordict-module-py"></span><h1>TensorDictModule<a class="headerlink" href="#tensordictmodule" title="Permalink to this heading">¶</a></h1>
+<p id="id1"><strong>Author</strong>: <a class="reference external" href="https://github.com/nicolas-dufour">Nicolas Dufour</a>, <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
+<p>In this tutorial you will learn how to use <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> and
+<a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> to create generic and reusable modules that can accept
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> as input.</p>
+<p>For a convenient usage of the <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> class with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>,
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict</span></code> provides an interface between the two named <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>.</p>
+<p>The <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> class is an <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> that takes a
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> as input when called. It will read a sequence of input keys, pass them to the wrapped
+module or function as input, and write the outputs in the same tensordict after completing the execution.</p>
+<p>It is up to the user to define the keys to be read as input and output.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a>
+</pre></div>
+</div>
+<section id="simple-example-coding-a-recurrent-layer">
+<h2>Simple example: coding a recurrent layer<a class="headerlink" href="#simple-example-coding-a-recurrent-layer" title="Permalink to this heading">¶</a></h2>
+<p>The simplest usage of <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> is exemplified below.
+If at first it may look like using this class introduces an unwated level of complexity, we will see
+later on that this API enables users to programatically concatenate modules together, cache values
+in between modules or programmatically build one.
+One of the simplest examples of this is a recurrent module in an architecture like ResNet, where the input of the
+module is cached and added to the output of a tiny multi-layered perceptron (MLP).</p>
+<p>To start, let’s first consider we you would chunk an MLP, and code it using <code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code>.
+The first layer of the stack would presumably be a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Linear</span></code></a> layer, taking an entry as input
+(let us name it <cite>x</cite>) and outputting another entry (which we will name <cite>y</cite>).</p>
+<p>To feed to our module, we have a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance with a single entry,
+<code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code>:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Now, we build our simple module using <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a>. By default, this class writes in the
+input tensordict in-place (meaning that entries are written in the same tensordict as the input, not that entries
+are overwritten in-place!), such that we don’t need to explicitly indicate what the output is:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">linear0</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;linear0&quot;</span><span class="p">])</span>
+<span class="n">linear0</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="s2">&quot;linear0&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+</pre></div>
+</div>
+<p>If the module outputs multiple tensors (or tensordicts!) their entries must be passed to
+<a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> in the right order.</p>
+<section id="support-for-callables">
+<h3>Support for Callables<a class="headerlink" href="#support-for-callables" title="Permalink to this heading">¶</a></h3>
+<p>When designing a model, it often happens that you want to incorporate an arbitrary non-parametric function into
+the network. For instance, you may wish to permute the dimensions of an image when it is passed to a convolutional network
+or a vision transformer, or divide the values by 255.
+There are several ways to do this: you could use a <cite>forward_hook</cite>, for example, or design a new
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> that performs this operation.</p>
+<p><a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> works with any callable, not just modules, which makes it easy to
+incorporate arbitrary functions into a module. For instance, let’s see how we can integrate the <code class="docutils literal notranslate"><span class="pre">relu</span></code> activation
+function without using the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReLU</span></code></a> module:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">relu0</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;linear0&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;relu0&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="stacking-modules">
+<h3>Stacking modules<a class="headerlink" href="#stacking-modules" title="Permalink to this heading">¶</a></h3>
+<p>Our MLP isn’t made of a single layer, so we now need to add another layer to it.
+This layer will be an activation function, for instance <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReLU</span></code></a>.
+We can stack this module and the previous one using <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Here comes the true power of <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code>: unlike <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a>,
+<a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> will keep in memory all the previous inputs and outputs
+(with the possibility to filter them out afterwards), making it easy to have complex network structures
+built on-the-fly and programmatically.</p>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">block0</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><span class="n">linear0</span><span class="p">,</span> <span class="n">relu0</span><span class="p">)</span>
+
+<span class="n">block0</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+<span class="k">assert</span> <span class="s2">&quot;linear0&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+<span class="k">assert</span> <span class="s2">&quot;relu0&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+</pre></div>
+</div>
+<p>We can repeat this logic to get a full MLP:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">linear1</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;relu0&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;linear1&quot;</span><span class="p">])</span>
+<span class="n">relu1</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="torch.nn.ReLU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span></a><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;linear1&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;relu1&quot;</span><span class="p">])</span>
+<span class="n">linear2</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;relu1&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;linear2&quot;</span><span class="p">])</span>
+<span class="n">block1</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><span class="n">linear1</span><span class="p">,</span> <span class="n">relu1</span><span class="p">,</span> <span class="n">linear2</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="multiple-input-keys">
+<h3>Multiple input keys<a class="headerlink" href="#multiple-input-keys" title="Permalink to this heading">¶</a></h3>
+<p>The last step of the residual network is to add the input to the output of the last linear layer.
+No need to write a special <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> subclass for this! <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>
+can be used to wrap simple functions too:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">residual</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
+    <span class="k">lambda</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">+</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;linear2&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>And we can now put together <code class="docutils literal notranslate"><span class="pre">block0</span></code>, <code class="docutils literal notranslate"><span class="pre">block1</span></code> and <code class="docutils literal notranslate"><span class="pre">residual</span></code> for a fully fleshed residual block:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">block</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><span class="n">block0</span><span class="p">,</span> <span class="n">block1</span><span class="p">,</span> <span class="n">residual</span><span class="p">)</span>
+<span class="n">block</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+<span class="k">assert</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+</pre></div>
+</div>
+<p>A genuine concern may be the accumulation of entries in the tensordict used as input: in some cases (e.g., when
+gradients are required) intermediate values may be cached anyway, but this isn’t always the case and it can be useful
+to let the garbage collector know that some entries can be discarded. <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code></a> and
+its subclasses (including <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a>)
+have the option of seeing their output keys filtered after execution. To do this, just call the
+<a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase.select_out_keys" title="tensordict.nn.TensorDictModuleBase.select_out_keys"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase.select_out_keys</span></code></a> method. This will update the module in-place and all the
+unwanted entries will be discarded:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">block</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)</span>
+
+<span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">block</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+<span class="k">assert</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+
+<span class="k">assert</span> <span class="s2">&quot;linear1&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span>
+</pre></div>
+</div>
+<p>However, the input keys are preserved:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">assert</span> <span class="s2">&quot;x&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span>
+</pre></div>
+</div>
+<p>As a side note, <code class="docutils literal notranslate"><span class="pre">selected_out_keys</span></code> may also be passed to <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> to avoid
+calling this method separately.</p>
+</section>
+</section>
+<section id="using-tensordictmodule-without-tensordict">
+<h2>Using <cite>TensorDictModule</cite> without tensordict<a class="headerlink" href="#using-tensordictmodule-without-tensordict" title="Permalink to this heading">¶</a></h2>
+<p>The opportunity offered by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> to build complex architectures on-the-go
+does not mean that one necessarily has to switch to tensordict to represent the data. Thanks to
+<a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a>, modules from <cite>tensordict.nn</cite> support arguments and keyword arguments that match the
+entry names too:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <span class="n">block</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span>
+</pre></div>
+</div>
+<p>Under the hood, <a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a> rebuilds a tensordict, runs the module and then deconstructs it.
+This may cause some overhead but, as we will see just after, there is a solution to get rid of this.</p>
+</section>
+<section id="runtime">
+<h2>Runtime<a class="headerlink" href="#runtime" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> do incur some overhead when
+executed, as they need to read and write from a tensordict. However, we can greatly reduce this overhead by using
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>. For this, let us compare the three versions of this code with and without compile:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ResidualBlock</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear0</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">relu0</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="torch.nn.ReLU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span></a><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear1</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">relu1</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="torch.nn.ReLU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span></a><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear2</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">):</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear0</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relu0</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">)</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear1</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">)</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relu1</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear2</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a><span class="p">)</span> <span class="o">+</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Without compile&quot;</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">block_notd</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ResidualBlock</span></a><span class="p">()</span>
+<span class="n">block_tdm</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><span class="n">block_notd</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">])</span>
+<span class="n">block_tds</span> <span class="o">=</span> <span class="n">block</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.benchmark</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a>
+
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Regular: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_notd(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;TDM: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_tdm(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Sequential: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_tds(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Compiled versions&quot;</span><span class="p">)</span>
+<span class="n">block_notd_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_notd</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;reduce-overhead&quot;</span><span class="p">)</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+    <span class="n">block_notd_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Compiled regular: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_notd_c(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+<span class="n">block_tdm_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_tdm</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;reduce-overhead&quot;</span><span class="p">)</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+    <span class="n">block_tdm_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Compiled TDM: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_tdm_c(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+<span class="n">block_tds_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_tds</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;reduce-overhead&quot;</span><span class="p">)</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+    <span class="n">block_tds_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Compiled sequential: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">&#39;block_tds_c(x=x)&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
+Regular:  217.3414 us
+TDM:  281.4903 us
+Sequential:  503.5873 us
+Compiled versions
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 201, in forward
+    y = self.relu0(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 203, in forward
+    y = self.relu1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+Compiled regular:  338.3470 us
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 201, in forward
+    y = self.relu0(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 203, in forward
+    y = self.relu1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 203, in forward
+    y = self.relu1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 201, in forward
+    y = self.relu0(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+Compiled TDM:  369.7280 us
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 633, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/sequence.py&quot;, line 579, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/env/lib/python3.10/site-packages/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 131, in &lt;lambda&gt;
+    lambda x, y: x + y, in_keys=[&quot;x&quot;, &quot;linear2&quot;], out_keys=[&quot;y&quot;]
+
+Compiled sequential:  382.0630 us
+</pre></div>
+</div>
+<p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
+</section>
+<section id="do-s-and-don-t-with-tensordictmodule">
+<h2>Do’s and don’t with TensorDictModule<a class="headerlink" href="#do-s-and-don-t-with-tensordictmodule" title="Permalink to this heading">¶</a></h2>
+<ul>
+<li><p>Don’t use <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequence</span></code> around modules from <code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code>. It would break the input/output
+key structure.
+Always try to rely on <code class="xref py py-class docutils literal notranslate"><span class="pre">nn:TensorDictSequential</span></code> instead.</p></li>
+<li><p>Don’t assign the output tensordict to a new variable, as the output tensordict is just the input modified in-place.
+Assigning a new variable name isn’t strictly prohibited, but it means that you may wish for both of them to disappear
+when one is deleted, when in fact the garbage collector will still see the tensors in the workspace and the no memory
+will be freed:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>  <span class="c1"># ok!</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>  <span class="c1"># don&#39;t!</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="working-with-distributions-probabilistictensordictmodule">
+<h2>Working with distributions: <a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a><a class="headerlink" href="#working-with-distributions-probabilistictensordictmodule" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> is a non-parametric module representing a
+probability distribution. Distribution parameters are read from tensordict
+input, and the output is written to an output tensordict. The output is
+sampled given some rule, specified by the input <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>
+argument and the <code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code> global function. If they conflict,
+the context manager precedes.</p>
+<p>It can be wired together with a <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> that returns
+a tensordict updated with the distribution parameters using
+<a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a>. This is a special case of
+<a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> whose last layer is a
+<a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> instance.</p>
+<p><a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> is responsible for constructing the
+distribution (through the <a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code></a> method) and/or
+sampling from this distribution (through a regular <cite>forward</cite> call to the module). The same
+<a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code></a> method is exposed within
+<a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential" title="tensordict.nn.ProbabilisticTensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictSequential</span></code></a>.</p>
+<p>One can find the parameters in the output tensordict as well as the log
+probability if needed.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticTensorDictModule</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticTensorDictSequential</span></a><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.distributions</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">NormalParamExtractor</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dist</span>
+
+<span class="n">td</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;input&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">&quot;hidden&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">net</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRUCell.html#torch.nn.GRUCell" title="torch.nn.GRUCell" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">GRUCell</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">net</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">])</span>
+<span class="n">extractor</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">NormalParamExtractor</span></a><span class="p">()</span>
+<span class="n">extractor</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><span class="n">extractor</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+<span class="n">td_module</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticTensorDictSequential</span></a><span class="p">(</span>
+    <span class="n">net</span><span class="p">,</span>
+    <span class="n">extractor</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticTensorDictModule</span></a><span class="p">(</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+        <span class="n">distribution_class</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.normal.Normal" title="torch.distributions.normal.Normal" class="sphx-glr-backref-module-torch-distributions-normal sphx-glr-backref-type-py-class"><span class="n">dist</span><span class="o">.</span><span class="n">Normal</span></a><span class="p">,</span>
+        <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;TensorDict before going through module: </span><span class="si">{</span><span class="n">td</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">td_module</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;TensorDict after going through module now as keys action, loc and scale: </span><span class="si">{</span><span class="n">td</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict before going through module: TensorDict(
+    fields={
+        hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+        input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([3]),
+    device=None,
+    is_shared=False)
+TensorDict after going through module now as keys action, loc and scale: TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+        action_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+        hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+        input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+        loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+        scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([3]),
+    device=None,
+    is_shared=False)
+</pre></div>
+</div>
+</section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Permalink to this heading">¶</a></h2>
+<p>We have seen how <cite>tensordict.nn</cite> can be used to dynamically build complex neural architectures on-the-fly.
+This opens the possibility of building pipelines that are oblivious to the model signature, i.e., write generic codes
+that use networks with an arbitrary number of inputs or outputs in a flexible manner.</p>
+<p>We have also seen how <a class="reference internal" href="../reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch" title="tensordict.nn.dispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code></a> enables to use <cite>tensordict.nn</cite> to build such networks and use
+them without recurring to <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> directly. Thanks to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>, the overhead
+introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
+tensordict-free version of their module.</p>
+<p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.911 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/3e61c81f224cb8cecc06413ef124320a/tensordict_module.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">tensordict_module.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/0935354946f64f2fcf766478aa4572c3/tensordict_module.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">tensordict_module.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="export.html" class="btn btn-neutral float-right" title="Exporting tensordict modules" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="streamed_tensordict.html" class="btn btn-neutral" title="Building tensordicts from streams" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">TensorDictModule</a><ul>
+<li><a class="reference internal" href="#simple-example-coding-a-recurrent-layer">Simple example: coding a recurrent layer</a><ul>
+<li><a class="reference internal" href="#support-for-callables">Support for Callables</a></li>
+<li><a class="reference internal" href="#stacking-modules">Stacking modules</a></li>
+<li><a class="reference internal" href="#multiple-input-keys">Multiple input keys</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#using-tensordictmodule-without-tensordict">Using <cite>TensorDictModule</cite> without tensordict</a></li>
+<li><a class="reference internal" href="#runtime">Runtime</a></li>
+<li><a class="reference internal" href="#do-s-and-don-t-with-tensordictmodule">Do’s and don’t with TensorDictModule</a></li>
+<li><a class="reference internal" href="#working-with-distributions-probabilistictensordictmodule">Working with distributions: <code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a></li>
+<li><a class="reference internal" href="#conclusion">Conclusion</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title" class="active">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>
