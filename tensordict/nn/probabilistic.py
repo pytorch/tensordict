@@ -18,7 +18,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-from tensordict.nn.distributions import distributions_maps
+
 from tensordict.nn.distributions.composite import _add_suffix, CompositeDistribution
 from tensordict.nn.distributions.continuous import Delta
 from tensordict.nn.distributions.discrete import OneHotCategorical
@@ -430,6 +430,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.default_interaction_type = InteractionType(default_interaction_type)
 
         if isinstance(distribution_class, str):
+            from tensordict.nn.distributions import distributions_maps
+
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = distribution_kwargs

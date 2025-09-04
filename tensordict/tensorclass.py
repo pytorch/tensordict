@@ -700,7 +700,8 @@ def from_dataclass(
             device=None,
             is_shared=False)
 
-    .. notes:: If a dataclass type is provided, a new class is returned with the specified configurations.
+    .. note::
+        If a dataclass type is provided, a new class is returned with the specified configurations.
         If a dataclass instance is provided, a new instance of the tensor-compatible class is returned.
         The `auto_batch_size`, `frozen`, `autocast`, and `nocast` options allow for flexible configuration of the resulting class or instance.
 

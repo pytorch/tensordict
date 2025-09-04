@@ -13,6 +13,8 @@ from tensordict.nn.distributions.continuous import (
 )
 from tensordict.nn.distributions.discrete import OneHotCategorical, rand_one_hot
 from tensordict.nn.distributions.truncated_normal import TruncatedNormal
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.nn.utils import add_custom_mapping, mappings
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)
@@ -28,9 +30,14 @@ __all__ = [
     "OneHotCategorical",
     "rand_one_hot",
     "TruncatedNormal",
+    # Interaction types
+    "InteractionType",
+    "set_interaction_type",
     # Submodules
     "continuous",
     "discrete",
     # Utilities
     "distributions_maps",
+    "add_custom_mapping",
+    "mappings",
 ]

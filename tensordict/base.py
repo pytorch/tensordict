@@ -2720,7 +2720,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             filename (str): The path to the h5 file.
 
-        Keword Arguments:
+        Keyword Arguments:
             mode (str, optional): Reading mode. Defaults to ``"r"``.
             auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
                 Defaults to ``False``.
@@ -4153,7 +4153,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             keys (sequence of NestedKey): entries to concatenate.
 
-        Keyword Argument:
+        Keyword Arguments:
             out_key (NestedKey): new key name for the concatenated inputs.
             keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
                 Defaults to ``False``.
@@ -4187,7 +4187,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             keys (sequence of NestedKey): entries to stack.
 
-        Keyword Argument:
+        Keyword Arguments:
             out_key (NestedKey): new key name for the stacked inputs.
             keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
                 Defaults to ``False``.
@@ -13045,8 +13045,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         .. warning:: This method is distinct from the free function `from_dataclass` and serves a different purpose.
             While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
 
-        .. notes::
-
+        .. note::
             - This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
             - Each key in the resulting TensorDict is initialized using the `cls.from_any` method.
             - The `auto_batch_size` option allows for automatic batch size determination and application to the
