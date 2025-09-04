@@ -1,6 +1,31 @@
 @echo off
-set TENSORDICT_BUILD_VERSION=0.10.0
-set SETUPTOOLS_SCM_PRETEND_VERSION=0.10.0
+
+REM Only set static version for release branches and release candidate tags
+if "%GITHUB_REF_TYPE%"=="branch" (
+    echo %GITHUB_REF_NAME% | findstr /R "^release/" >nul
+    if not errorlevel 1 (
+        echo Setting static version for release branch: %GITHUB_REF_NAME%
+        set TENSORDICT_BUILD_VERSION=0.10.0
+        set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
+        goto setup_build
+    )
+)
+
+if "%GITHUB_REF_TYPE%"=="tag" (
+    echo %GITHUB_REF_NAME% | findstr /R "^v[0-9]*\.[0-9]*\.[0-9]*-rc[0-9]*$" >nul
+    if not errorlevel 1 (
+        echo Setting static version for release candidate tag: %GITHUB_REF_NAME%
+        set TENSORDICT_BUILD_VERSION=0.10.0
+        set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
+        goto setup_build
+    )
+)
+
+echo Using dynamic versioning for development build: %GITHUB_REF_NAME%
+REM Ensure the variable is unset for dynamic versioning
+set SETUPTOOLS_SCM_PRETEND_VERSION=
+
+:setup_build
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
 
 if "%CONDA_RUN%"=="" (
