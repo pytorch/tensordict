@@ -422,6 +422,12 @@ Use with caution, as this may cause unintended consequences. Defaults to False.<
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If a dataclass type is provided, a new class is returned with the specified configurations.
+If a dataclass instance is provided, a new instance of the tensor-compatible class is returned.
+The <cite>auto_batch_size</cite>, <cite>frozen</cite>, <cite>autocast</cite>, and <cite>nocast</cite> options allow for flexible configuration of the resulting class or instance.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Whereas <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.from_dataclass" title="tensordict.TensorDict.from_dataclass"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> will return a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance

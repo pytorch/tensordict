@@ -911,17 +911,14 @@ be checked against the list of leaf names in the tensordict.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>keys</strong> (<em>sequence of NestedKey</em>) – entries to concatenate.</p>
 </dd>
-</dl>
-<dl>
-<dt>Keyword Argument:</dt><dd><p>out_key (NestedKey): new key name for the concatenated inputs.
-keep_entries (bool, optional): if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.</p>
-<blockquote>
-<div><p>Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>dim (int, optional): the dimension along which the concatenation must occur.</dt><dd><p>Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
-</dd>
-</dl>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out_key</strong> (<em>NestedKey</em>) – new key name for the concatenated inputs.</p></li>
+<li><p><strong>keep_entries</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.bool" title="tensordict.PersistentTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>dim</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.int" title="tensordict.PersistentTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which the concatenation must occur.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Returns: self</p>
@@ -2128,6 +2125,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <p class="admonition-title">Warning</p>
 <p>This method is distinct from the free function <cite>from_dataclass</cite> and serves a different purpose.
 While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.</p></li>
+<li><p>Each key in the resulting TensorDict is initialized using the <cite>cls.from_any</cite> method.</p></li>
+<li><p>The <cite>auto_batch_size</cite> option allows for automatic batch size determination and application to the
+resulting TensorDict.</p></li>
+</ul>
 </div>
 </dd></dl>
 
@@ -6452,17 +6458,14 @@ be checked against the list of leaf names in the tensordict.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>keys</strong> (<em>sequence of NestedKey</em>) – entries to stack.</p>
 </dd>
-</dl>
-<dl>
-<dt>Keyword Argument:</dt><dd><p>out_key (NestedKey): new key name for the stacked inputs.
-keep_entries (bool, optional): if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.</p>
-<blockquote>
-<div><p>Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>dim (int, optional): the dimension along which the stack must occur.</dt><dd><p>Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
-</dd>
-</dl>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out_key</strong> (<em>NestedKey</em>) – new key name for the stacked inputs.</p></li>
+<li><p><strong>keep_entries</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.bool" title="tensordict.PersistentTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>dim</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.int" title="tensordict.PersistentTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which the stack must occur.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Returns: self</p>

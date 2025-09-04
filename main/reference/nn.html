@@ -552,6 +552,12 @@ to build distributions from network outputs and get summary statistics or sample
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.WrapModule.html#tensordict.nn.WrapModule" title="tensordict.nn.WrapModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrapModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A wrapper around any callable that processes TensorDict instances.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InteractionType</span></code></a>(value)</p></td>
+<td><p>A list of possible interaction types with a distribution.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>([type])</p></td>
+<td><p>Sets all ProbabilisticTDModules sampling to the desired type.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>([mode])</p></td>
 <td><p>Controls whether <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p></td>
 </tr>
@@ -647,6 +653,12 @@ a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.h
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_existing</span></code></a>()</p></td>
 <td><p>Returns whether or not existing entries in a tensordict should be re-computed by a module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping" title="tensordict.nn.add_custom_mapping"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_custom_mapping</span></code></a>(name, mapping)</p></td>
+<td><p>Adds a custom mapping to be used in mapping classes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mappings</span></code></a>(key)</p></td>
+<td><p>Given an input string, returns a surjective function f(x): R -&gt; R^+.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.rand_one_hot.html#tensordict.nn.rand_one_hot" title="tensordict.nn.rand_one_hot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rand_one_hot</span></code></a>(values[, do_softmax])</p></td>
 <td><p></p></td>

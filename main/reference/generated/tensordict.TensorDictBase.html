@@ -880,17 +880,14 @@ be checked against the list of leaf names in the tensordict.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>keys</strong> (<em>sequence of NestedKey</em>) – entries to concatenate.</p>
 </dd>
-</dl>
-<dl>
-<dt>Keyword Argument:</dt><dd><p>out_key (NestedKey): new key name for the concatenated inputs.
-keep_entries (bool, optional): if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.</p>
-<blockquote>
-<div><p>Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>dim (int, optional): the dimension along which the concatenation must occur.</dt><dd><p>Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
-</dd>
-</dl>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out_key</strong> (<em>NestedKey</em>) – new key name for the concatenated inputs.</p></li>
+<li><p><strong>keep_entries</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>dim</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which the concatenation must occur.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Returns: self</p>
@@ -2098,6 +2095,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <p>This method is distinct from the free function <cite>from_dataclass</cite> and serves a different purpose.
 While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.</p>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.</p></li>
+<li><p>Each key in the resulting TensorDict is initialized using the <cite>cls.from_any</cite> method.</p></li>
+<li><p>The <cite>auto_batch_size</cite> option allows for automatic batch size determination and application to the
+resulting TensorDict.</p></li>
+</ul>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -2227,21 +2233,16 @@ any existing leaf).</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – The path to the h5 file.</p>
 </dd>
-</dl>
-<dl>
-<dt>Keword Arguments:</dt><dd><p>mode (str, optional): Reading mode. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code>.
-auto_batch_size (bool, optional): If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size will be computed automatically.</p>
-<blockquote>
-<div><p>Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>batch_dims (int, optional): If auto_batch_size is <code class="docutils literal notranslate"><span class="pre">True</span></code>, defines how many dimensions the output</dt><dd><p>tensordict should have. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (full batch-size at each level).</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Reading mode. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code>.</p></li>
+<li><p><strong>auto_batch_size</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size will be computed automatically.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>batch_dims</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em>, </em><em>optional</em>) – If auto_batch_size is <code class="docutils literal notranslate"><span class="pre">True</span></code>, defines how many dimensions the output
+tensordict should have. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (full batch-size at each level).</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – The batch size of the TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
 </dd>
-</dl>
-<p>batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
-</dd>
-</dl>
-<dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>A PersistentTensorDict representation of the input h5 file.</p>
 </dd>
@@ -6488,17 +6489,14 @@ be checked against the list of leaf names in the tensordict.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>keys</strong> (<em>sequence of NestedKey</em>) – entries to stack.</p>
 </dd>
-</dl>
-<dl>
-<dt>Keyword Argument:</dt><dd><p>out_key (NestedKey): new key name for the stacked inputs.
-keep_entries (bool, optional): if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.</p>
-<blockquote>
-<div><p>Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>dim (int, optional): the dimension along which the stack must occur.</dt><dd><p>Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
-</dd>
-</dl>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out_key</strong> (<em>NestedKey</em>) – new key name for the stacked inputs.</p></li>
+<li><p><strong>keep_entries</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>dim</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which the stack must occur.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Returns: self</p>

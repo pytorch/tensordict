@@ -199,6 +199,8 @@ to build distributions from network outputs and get summary statistics or sample
     TensorDictModuleWrapper
     CudaGraphModule
     WrapModule
+    InteractionType
+    set_interaction_type
     set_composite_lp_aggregate
     composite_lp_aggregate
     as_tensordict_module
@@ -259,10 +261,6 @@ Distributions
     NormalParamExtractor
     OneHotCategorical
     TruncatedNormal
-    InteractionType
-    set_interaction_type
-    add_custom_mapping
-    mappings
 
 
 Utils
@@ -280,4 +278,6 @@ Utils
     biased_softplus
     set_skip_existing
     skip_existing
+    add_custom_mapping
+    mappings
     rand_one_hot
