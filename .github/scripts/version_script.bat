@@ -1,8 +1,7 @@
 @echo off
 
-REM Read base version from version.txt
-set /p BASE_VERSION=<version.txt
-echo Base version from version.txt: %BASE_VERSION%
+set BASE_VERSION=0.10.0
+echo Base version: %BASE_VERSION%
 
 REM Only set static version for release branches and release candidate tags
 if "%GITHUB_REF_TYPE%"=="branch" (
@@ -26,16 +25,39 @@ if "%GITHUB_REF_TYPE%"=="tag" (
 )
 
 echo Setting development version for build: %GITHUB_REF_NAME%
-REM Get git info for development version
-for /f %%i in ('git rev-parse --short HEAD') do set GIT_COMMIT=%%i
-for /f %%i in ('git rev-list --count HEAD') do set GIT_COMMIT_COUNT=%%i
-for /f "tokens=1-3 delims=/ " %%a in ('date /t') do set DATE_STR=%%c%%a%%b
-set DATE_STR=%DATE_STR: =%
+
+REM Debug: Print available environment variables
+echo Debug environment variables:
+echo   GITHUB_SHA: %GITHUB_SHA%
+echo   GITHUB_REF_TYPE: %GITHUB_REF_TYPE%
+echo   GITHUB_REF_NAME: %GITHUB_REF_NAME%
+echo   GITHUB_RUN_NUMBER: %GITHUB_RUN_NUMBER%
+echo   GITHUB_RUN_ATTEMPT: %GITHUB_RUN_ATTEMPT%
+
+REM Use environment variables instead of git commands
+REM Get first 9 characters of commit hash
+set GIT_COMMIT=%GITHUB_SHA:~0,9%
+if "%GIT_COMMIT%"=="" set GIT_COMMIT=unknown
+
+REM Use GitHub run number as substitute for commit count
+set GIT_COMMIT_COUNT=%GITHUB_RUN_NUMBER%
+if "%GIT_COMMIT_COUNT%"=="" set GIT_COMMIT_COUNT=0
+
+REM Get current date in YYYYMMDD format
+for /f "tokens=2 delims==" %%i in ('wmic os get localdatetime /value') do (
+    set datetime=%%i
+    goto :break
+)
+:break
+set DATE_STR=%datetime:~0,8%
+echo Debug: Raw datetime: %datetime%
+echo Debug: Parsed date: %DATE_STR%
 
 REM Format: <base_version>.dev<commits>+g<hash>.d<date>
 set DEV_VERSION=%BASE_VERSION%.dev%GIT_COMMIT_COUNT%+g%GIT_COMMIT%.d%DATE_STR%
 echo Using development version: %DEV_VERSION%
 set SETUPTOOLS_SCM_PRETEND_VERSION=%DEV_VERSION%
+set TENSORDICT_BUILD_VERSION=%DEV_VERSION%
 
 :setup_build
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%

@@ -169,7 +169,7 @@ setup_base_build_version() {
   SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
   # version.txt for some reason has `a` character after major.minor.rev
   # command below yields 0.10.0 from version.txt containing 0.10.0a0
-  BUILD_VERSION=$( cut -f 1 -d a "$SCRIPT_DIR/../version.txt" )
+  BUILD_VERSION=$( cut -f 1 -d a "$SCRIPT_DIR/../.github/scripts/version.txt" )
   export BUILD_VERSION
 }
 
