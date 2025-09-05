@@ -220,6 +220,48 @@ If ``default=None`` (the default), the two Tensordicts must have exactly matchin
 If ``default="intersection"``, only the intersecting key sets will be considered, and other keys will be ignored.
 In all other cases, ``default`` will be used for all missing entries on both sides of the operation.
 
+Gradient computation with ``torch.autograd.grad``
+-------------------------------------------------
+
+Tensordict extends :pyfunc:`torch.autograd.grad` so that gradients can be
+computed directly on (nested) ``TensorDict`` structures.  All tensors are
+extracted into tuples, the underlying PyTorch op is executed and the
+result is packed back into a new ``TensorDict`` with the same key structure.
+This makes differentiating through complex pipelines that manipulate multiple
+tensors at once straightforward.
+
+Simple example
+~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    >>> from tensordict import TensorDict
+    >>> import torch
+    >>> # Build input TensorDict with requires_grad
+    >>> inputs = TensorDict(a=torch.randn(2, 3, requires_grad=True))
+    >>> outputs = inputs + 1.0
+    >>> grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
+    >>> print(grads)
+    TensorDict(
+        fields={'a': tensor([[1., 1., 1.],
+                            [1., 1., 1.]])},
+        batch_size=torch.Size([2]))
+
+End-to-end modules
+~~~~~~~~~~~~~~~~~~
+
+The feature shines when dealing with functional modules that take a tensordict
+and return another one (for instance via :func:`tensordict.nn.TensorDictModule`):
+
+.. code-block:: python
+
+    >>> td_in = TensorDict(a=torch.randn(2, 3, requires_grad=True))
+    >>> td_out = td_module(td_in)
+    >>> td_out = td_out.select(*td_module.out_keys)  # keep only out keys
+    >>> grads = torch.autograd.grad(td_out, td_in,
+    ...                             torch.ones_like(td_out))
+
+
 Utils
 -----
 
