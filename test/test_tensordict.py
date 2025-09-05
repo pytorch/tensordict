@@ -10608,6 +10608,13 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    def test_autograd_grad_mixed_types(self):
+        inputs = TensorDict(a=torch.randn(2, 3, requires_grad=True))
+        outputs = inputs + 1
+        grad_outputs = LazyStackedTensorDict(TensorDict(a=torch.ones(3)), TensorDict(a=torch.ones(3)), stack_dim=0)
+        grads = torch.autograd.grad(outputs, inputs, grad_outputs)
+        assert (grads == 1).all()
+
 
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
