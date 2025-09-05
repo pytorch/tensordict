@@ -889,6 +889,8 @@ def _grad(
     grad_outputs: TensorDictBase | Tuple[TensorDictBase, ...] | None = None,
     **kwargs: Any,
 ) -> TensorDict:
+    from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
     if isinstance(outputs, tuple) and len(outputs) > 1:
         raise ValueError(
             "torch.autograd.grad for TensorDict only supports a single output"
@@ -927,54 +929,29 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        output_keys = set(outputs.keys(True, True))
-        grad_outputs_keys = set(grad_outputs.keys(True, True))
-        if output_keys != grad_outputs_keys:
-            raise ValueError(
-                f"outputs and grad_outputs must have the same keys, got {output_keys} and {grad_outputs_keys}"
-            )
-        tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
+        tup_grad_outputs = tuple(
+            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        )
     else:
         tup_grad_outputs = None
 
-    tup_outputs = tuple(outputs[k] for k in inputs.keys(True, True))
+    tup_outputs = tuple(
+        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    )
 
-    all_inputs = []
-    for key in inputs.keys(True, True):
-        value = inputs.get(key, as_list=True)
-        if isinstance(value, list):
-            all_inputs.extend(value)
-        else:
-            all_inputs.append(value)
+    keys, all_inputs = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
 
     all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)
 
-    if isinstance(inputs, TensorDict):
-        grads = TensorDict(batch_size=inputs.batch_size)
-    elif isinstance(inputs, LazyStackedTensorDict):
-        stack_len = inputs.batch_size[inputs.stack_dim]
-        pre_stack_size = (
-            inputs.batch_size[: inputs.stack_dim]
-            + inputs.batch_size[inputs.stack_dim + 1 :]
-        )
-        grads = LazyStackedTensorDict(
-            *(TensorDict(batch_size=pre_stack_size) for _ in range(stack_len)),
-            stack_dim=inputs.stack_dim,
-        )
-    else:
-        raise ValueError(f"Invalid input type: {type(inputs)}")
+    pairs = dict(_zip_strict(keys, all_grads))
 
-    offset = 0
-    for key in inputs.keys(True, True):
-        value = inputs.get(key, as_list=True)
-        if isinstance(value, list):
-            grad_tensors = torch.stack(
-                all_grads[offset : offset + len(value)], dim=inputs.stack_dim
-            )
-            offset += len(value)
-        else:
-            grad_tensors = all_grads[offset]
-            offset += 1
-        grads[key] = grad_tensors
+    def pop(name, val):
+        return pairs.pop(name, None)
 
-    return grads
+    # rebuild the tensordict
+    return inputs._fast_apply(
+        pop,
+        named=True,
+        nested_keys=True,
+        propagate_lock=True,
+    )
