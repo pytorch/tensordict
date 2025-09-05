@@ -243,9 +243,11 @@ Simple example
     >>> grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
     >>> print(grads)
     TensorDict(
-        fields={'a': tensor([[1., 1., 1.],
-                            [1., 1., 1.]])},
-        batch_size=torch.Size([2]))
+        fields={
+            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
 
 End-to-end modules
 ~~~~~~~~~~~~~~~~~~
