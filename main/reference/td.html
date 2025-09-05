@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3280+g835381120.d20250904)
+                  main (0.10.0.dev3302+g2c0794c9c.d20250905)
                 </div>
               
             
@@ -610,6 +610,45 @@ If <code class="docutils literal notranslate"><span class="pre">default=&quot;in
 In all other cases, <code class="docutils literal notranslate"><span class="pre">default</span></code> will be used for all missing entries on both sides of the operation.</p>
 </section>
 </section>
+<section id="gradient-computation-with-torch-autograd-grad">
+<h2>Gradient computation with <code class="docutils literal notranslate"><span class="pre">torch.autograd.grad</span></code><a class="headerlink" href="#gradient-computation-with-torch-autograd-grad" title="Permalink to this heading">¶</a></h2>
+<p>Tensordict extends <a href="#id1"><span class="problematic" id="id2">:pyfunc:`torch.autograd.grad`</span></a> so that gradients can be
+computed directly on (nested) <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> structures.  All tensors are
+extracted into tuples, the underlying PyTorch op is executed and the
+result is packed back into a new <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> with the same key structure.
+This makes differentiating through complex pipelines that manipulate multiple
+tensors at once straightforward.</p>
+<section id="simple-example">
+<h3>Simple example<a class="headerlink" href="#simple-example" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Build input TensorDict with requires_grad</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">inputs</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outputs</span> <span class="o">=</span> <span class="n">inputs</span> <span class="o">+</span> <span class="mf">1.0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">outputs</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+</section>
+<section id="end-to-end-modules">
+<h3>End-to-end modules<a class="headerlink" href="#end-to-end-modules" title="Permalink to this heading">¶</a></h3>
+<p>The feature shines when dealing with functional modules that take a tensordict
+and return another one (for instance via <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule()</span></code></a>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_in</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_out</span> <span class="o">=</span> <span class="n">td_module</span><span class="p">(</span><span class="n">td_in</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_out</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">td_module</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>  <span class="c1"># keep only out keys</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">td_out</span><span class="p">,</span> <span class="n">td_in</span><span class="p">,</span>
+<span class="gp">... </span>                            <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">td_out</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+</section>
 <section id="utils">
 <h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
@@ -731,6 +770,11 @@ In all other cases, <code class="docutils literal notranslate"><span class="pre"
 <li><a class="reference internal" href="#broadcasting-rules">Broadcasting Rules</a></li>
 <li><a class="reference internal" href="#efficiency-of-pointwise-operations">Efficiency of pointwise operations</a></li>
 <li><a class="reference internal" href="#handling-missing-entries">Handling Missing Entries</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gradient-computation-with-torch-autograd-grad">Gradient computation with <code class="docutils literal notranslate"><span class="pre">torch.autograd.grad</span></code></a><ul>
+<li><a class="reference internal" href="#simple-example">Simple example</a></li>
+<li><a class="reference internal" href="#end-to-end-modules">End-to-end modules</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
