@@ -929,15 +929,11 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        tup_grad_outputs = tuple(
-            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        )
+        tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
     else:
         tup_grad_outputs = None
 
-    tup_outputs = tuple(
-        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-    )
+    tup_outputs = tuple(outputs[k] for k in outputs.keys(True, True))
 
     keys, all_inputs = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
 
