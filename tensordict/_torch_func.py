@@ -9,7 +9,7 @@ import contextlib
 import functools
 from functools import partial
 
-from typing import Any, Callable, Sequence, TypeVar
+from typing import Any, Callable, Sequence, Tuple, TypeVar
 
 import torch
 from tensordict._lazy import LazyStackedTensorDict
@@ -879,4 +879,79 @@ def _smooth_l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
         *args,
         **kwargs,
         batch_size=batch_size,
+    )
+
+
+@implements_for_td(torch.autograd.grad)
+def _grad(
+    outputs: TensorDictBase | Tuple[TensorDictBase, ...],
+    inputs: TensorDictBase | Tuple[TensorDictBase, ...],
+    grad_outputs: TensorDictBase | Tuple[TensorDictBase, ...] | None = None,
+    **kwargs: Any,
+) -> TensorDict:
+    from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
+    if isinstance(outputs, tuple) and len(outputs) > 1:
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports a single output"
+        )
+    elif isinstance(outputs, tuple):
+        outputs = outputs[0]
+    if not isinstance(outputs, TensorDictBase):
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as output"
+        )
+
+    if isinstance(inputs, tuple) and len(inputs) > 1:
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports a single input"
+        )
+    elif isinstance(inputs, tuple):
+        inputs = inputs[0]
+    if not isinstance(inputs, TensorDictBase):
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as input"
+        )
+
+    if (
+        grad_outputs is not None
+        and isinstance(grad_outputs, tuple)
+        and len(grad_outputs) > 1
+    ):
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports a single grad_output"
+        )
+    elif isinstance(grad_outputs, tuple):
+        grad_outputs = grad_outputs[0]
+    if grad_outputs is not None and not isinstance(grad_outputs, TensorDictBase):
+        raise ValueError(
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
+        )
+
+    if grad_outputs is not None:
+        tup_grad_outputs = tuple(
+            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        )
+    else:
+        tup_grad_outputs = None
+
+    tup_outputs = tuple(
+        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    )
+
+    keys, all_inputs = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+
+    all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)
+
+    pairs = dict(_zip_strict(keys, all_grads))
+
+    def pop(name, val):
+        return pairs.pop(name, None)
+
+    # rebuild the tensordict
+    return inputs._fast_apply(
+        pop,
+        named=True,
+        nested_keys=True,
+        propagate_lock=True,
     )

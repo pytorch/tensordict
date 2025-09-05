@@ -2478,6 +2478,24 @@ class TestTensorClass:
             y = torch.stack([y0, y1])
         assert y.z.shape == torch.Size(())
 
+    def test_autograd_grad(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: str
+            z: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.randn(3, requires_grad=True),
+            y="a string!",
+            z=torch.randn(2),
+        )
+        b = a + 1
+        inputs = a.select("x")
+        outputs = b.select("x")
+        grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
+        assert (grads == 1).all()
+
 
 class TestMemmap:
     def test_from_memmap(self, tmpdir):

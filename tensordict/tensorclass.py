@@ -163,6 +163,7 @@ _TD_PASS_THROUGH = {
     torch.unflatten: True,
     torch.unsqueeze: True,
     torch.zeros_like: True,
+    torch.autograd.grad: True,
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
