@@ -884,9 +884,9 @@ def _smooth_l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
 
 @implements_for_td(torch.autograd.grad)
 def _grad(
-    outputs: TensorDict | Tuple[TensorDict, ...],
-    inputs: TensorDict | Tuple[TensorDict, ...],
-    grad_outputs: TensorDict | Tuple[TensorDict, ...] | None = None,
+    outputs: TensorDictBase | Tuple[TensorDictBase, ...],
+    inputs: TensorDictBase | Tuple[TensorDictBase, ...],
+    grad_outputs: TensorDictBase | Tuple[TensorDictBase, ...] | None = None,
     **kwargs: Any,
 ) -> TensorDict:
     if isinstance(outputs, tuple) and len(outputs) > 1:
@@ -895,12 +895,10 @@ def _grad(
         )
     elif isinstance(outputs, tuple):
         outputs = outputs[0]
-    if not isinstance(outputs, TensorDict):
+    if not isinstance(outputs, TensorDictBase):
         raise ValueError(
-            "torch.autograd.grad for TensorDict only supports TensorDict as output"
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as output"
         )
-    else:
-        outputs = outputs.flatten_keys()
 
     if isinstance(inputs, tuple) and len(inputs) > 1:
         raise ValueError(
@@ -908,12 +906,10 @@ def _grad(
         )
     elif isinstance(inputs, tuple):
         inputs = inputs[0]
-    if not isinstance(inputs, TensorDict):
+    if not isinstance(inputs, TensorDictBase):
         raise ValueError(
-            "torch.autograd.grad for TensorDict only supports TensorDict as input"
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as input"
         )
-    else:
-        inputs = inputs.flatten_keys()
 
     if (
         grad_outputs is not None
@@ -925,32 +921,24 @@ def _grad(
         )
     elif isinstance(grad_outputs, tuple):
         grad_outputs = grad_outputs[0]
-    if not isinstance(grad_outputs, TensorDict):
+    if grad_outputs is not None and not isinstance(grad_outputs, TensorDictBase):
         raise ValueError(
-            "torch.autograd.grad for TensorDict only supports TensorDict as grad_output"
+            "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
         )
-    else:
-        grad_outputs = grad_outputs.flatten_keys()
 
     if grad_outputs is not None:
-        if outputs.shape != grad_outputs.shape:
+        if set(outputs.keys(True, True)) != set(grad_outputs.keys(True, True)):
             raise ValueError(
-                f"outputs and grad_outputs must have the same shape, got {outputs.shape} and {grad_outputs.shape}"
+                f"outputs and grad_outputs must have the same keys, got {outputs.keys(True, True)} and {grad_outputs.keys(True, True)}"
             )
-        if outputs.keys() != grad_outputs.keys():
-            raise ValueError(
-                f"outputs and grad_outputs must have the same keys, got {outputs.keys()} and {grad_outputs.keys()}"
-            )
-        grad_outputs = tuple(grad_outputs[k] for k in outputs.flatten_keys().keys())
+        tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
+    else:
+        tup_grad_outputs = None
 
-    parsed_args = []
-    for data in [outputs, inputs, grad_outputs]:
-        if isinstance(data, TensorDict):
-            data.flatten_keys()
-            data = tuple(data[k] for k in data.keys())
-        parsed_args.append(data)
+    tup_inputs = tuple(inputs[k] for k in inputs.keys(True, True))
+    tup_outputs = tuple(outputs[k] for k in outputs.keys(True, True))
 
-    tup_grads = torch.autograd.grad(*parsed_args, **kwargs)
+    tup_grads = torch.autograd.grad(tup_outputs, tup_inputs, tup_grad_outputs, **kwargs)
     return TensorDict(
-        dict(zip(inputs.keys(), tup_grads)), batch_size=inputs.batch_size or None
-    ).unflatten_keys()
+        dict(zip(inputs.keys(True, True), tup_grads)), batch_size=inputs.batch_size
+    )

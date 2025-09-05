@@ -8362,6 +8362,13 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert (tdr.grad == 0).all()
 
+    def test_autograd_grad(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        inputs = td.float().requires_grad_()
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
+        assert (grads == 1).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
