@@ -927,18 +927,54 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        if set(outputs.keys(True, True)) != set(grad_outputs.keys(True, True)):
+        output_keys = set(outputs.keys(True, True))
+        grad_outputs_keys = set(grad_outputs.keys(True, True))
+        if output_keys != grad_outputs_keys:
             raise ValueError(
-                f"outputs and grad_outputs must have the same keys, got {outputs.keys(True, True)} and {grad_outputs.keys(True, True)}"
+                f"outputs and grad_outputs must have the same keys, got {output_keys} and {grad_outputs_keys}"
             )
         tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
     else:
         tup_grad_outputs = None
 
-    tup_inputs = tuple(inputs[k] for k in inputs.keys(True, True))
-    tup_outputs = tuple(outputs[k] for k in outputs.keys(True, True))
+    tup_outputs = tuple(outputs[k] for k in inputs.keys(True, True))
 
-    tup_grads = torch.autograd.grad(tup_outputs, tup_inputs, tup_grad_outputs, **kwargs)
-    return TensorDict(
-        dict(zip(inputs.keys(True, True), tup_grads)), batch_size=inputs.batch_size
-    )
+    all_inputs = []
+    for key in inputs.keys(True, True):
+        value = inputs.get(key, as_list=True)
+        if isinstance(value, list):
+            all_inputs.extend(value)
+        else:
+            all_inputs.append(value)
+
+    all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)
+
+    if isinstance(inputs, TensorDict):
+        grads = TensorDict(batch_size=inputs.batch_size)
+    elif isinstance(inputs, LazyStackedTensorDict):
+        stack_len = inputs.batch_size[inputs.stack_dim]
+        pre_stack_size = (
+            inputs.batch_size[: inputs.stack_dim]
+            + inputs.batch_size[inputs.stack_dim + 1 :]
+        )
+        grads = LazyStackedTensorDict(
+            *(TensorDict(batch_size=pre_stack_size) for _ in range(stack_len)),
+            stack_dim=inputs.stack_dim,
+        )
+    else:
+        raise ValueError(f"Invalid input type: {type(inputs)}")
+
+    offset = 0
+    for key in inputs.keys(True, True):
+        value = inputs.get(key, as_list=True)
+        if isinstance(value, list):
+            grad_tensors = torch.stack(
+                all_grads[offset : offset + len(value)], dim=inputs.stack_dim
+            )
+            offset += len(value)
+        else:
+            grad_tensors = all_grads[offset]
+            offset += 1
+        grads[key] = grad_tensors
+
+    return grads
