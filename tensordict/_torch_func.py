@@ -928,12 +928,27 @@ def _grad(
             "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
         )
 
-    if grad_outputs is not None:
-        tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
-    else:
-        tup_grad_outputs = None
+    using_unstacked_outputs = (
+        isinstance(outputs, LazyStackedTensorDict) and outputs._has_exclusive_keys
+    )
+    try:
+        if not using_unstacked_outputs:
+            tup_outputs = tuple(outputs[k] for k in outputs.keys(True, True))
+    except RuntimeError:
+        # Cannot stack outputs
+        using_unstacked_outputs = True
 
-    tup_outputs = tuple(outputs[k] for k in outputs.keys(True, True))
+    if using_unstacked_outputs:
+        tup_outputs = outputs.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+
+    if grad_outputs is None:
+        tup_grad_outputs = None
+    elif using_unstacked_outputs:
+        tup_grad_outputs = grad_outputs.values(
+            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        )
+    else:
+        tup_grad_outputs = tuple(grad_outputs[k] for k in outputs.keys(True, True))
 
     keys, all_inputs = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
 
