@@ -9,7 +9,7 @@ if "%GITHUB_REF_TYPE%"=="branch" (
     if not errorlevel 1 (
         echo Setting static version for release branch: %GITHUB_REF_NAME%
         set TENSORDICT_BUILD_VERSION=%BASE_VERSION%
-        set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
+        set SETUPTOOLS_SCM_PRETEND_VERSION=%BASE_VERSION%
         goto setup_build
     )
 )
@@ -19,7 +19,7 @@ if "%GITHUB_REF_TYPE%"=="tag" (
     if not errorlevel 1 (
         echo Setting static version for release candidate tag: %GITHUB_REF_NAME%
         set TENSORDICT_BUILD_VERSION=%BASE_VERSION%
-        set SETUPTOOLS_SCM_PRETEND_VERSION=%TENSORDICT_BUILD_VERSION%
+        set SETUPTOOLS_SCM_PRETEND_VERSION=%BASE_VERSION%
         goto setup_build
     )
 )
@@ -61,6 +61,11 @@ set TENSORDICT_BUILD_VERSION=%DEV_VERSION%
 
 :setup_build
 echo TENSORDICT_BUILD_VERSION is set to %TENSORDICT_BUILD_VERSION%
+echo SETUPTOOLS_SCM_PRETEND_VERSION is set to %SETUPTOOLS_SCM_PRETEND_VERSION%
+echo DEBUG: About to run build command with version environment
+echo DEBUG: BASE_VERSION = %BASE_VERSION%
+echo DEBUG: Environment variable check...
+set | findstr SETUPTOOLS_SCM
 
 if "%CONDA_RUN%"=="" (
     echo CONDA_RUN is not set. Please activate your conda environment or set CONDA_RUN.
@@ -101,6 +106,7 @@ if "%CU_VERSION%" == "xpu" call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat
 
 set DISTUTILS_USE_SDK=1
 
+REM Capture all arguments passed to this script
 set args=%1
 shift
 :start
@@ -110,9 +116,6 @@ shift
 goto start
 
 :done
-if "%args%" == "" (
-    echo Usage: vc_env_helper.bat [command] [args]
-    echo e.g. vc_env_helper.bat cl /c test.cpp
-)
-
+REM Execute the build command with environment variables set
+echo Executing build command: %args%
 %args% || exit /b 1
