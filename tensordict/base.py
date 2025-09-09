@@ -19,6 +19,7 @@ import json
 import math
 import os.path
 import queue
+import sys
 import uuid
 import warnings
 import weakref
@@ -177,8 +178,13 @@ class _BEST_ATTEMPT_INPLACE:
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
-# distributed frameworks
-CompatibleType = Tensor | TensorCollection
+# distributed frameworks -- make a python<3.10 specific version
+if sys.version_info < (3, 10):
+    from typing import Union
+
+    CompatibleType = Union[Tensor, TensorCollection]
+else:
+    CompatibleType = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -14217,9 +14223,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     ) -> Self: ...
 
     @overload
-    def to(
-        self: T, dtype: torch.device | str, non_blocking: bool = ...
-    ) -> Self: ...
+    def to(self: T, dtype: torch.device | str, non_blocking: bool = ...) -> Self: ...
 
     @overload
     def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
