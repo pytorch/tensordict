@@ -31,6 +31,7 @@ from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import Thread
+from types import ModuleType
 from typing import (
     Any,
     Callable,
@@ -40,7 +41,6 @@ from typing import (
     List,
     Literal,
     Mapping,
-    Optional,
     OrderedDict,
     overload,
     Sequence,
@@ -48,7 +48,6 @@ from typing import (
     Type,
     TYPE_CHECKING,
     TypeVar,
-    Union,
 )
 
 import numpy as np
@@ -117,7 +116,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import multiprocessing as mp, nn, Tensor
-from torch._utils import _get_available_device_type, _get_device_module
+
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -137,6 +136,19 @@ except ImportError:
     from tensordict.utils import Buffer
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
+
+try:
+    from torch._utils import _get_available_device_type, _get_device_module
+except ImportError:
+    from torch._utils import _get_available_device_type
+
+    def _get_device_module(device_type: str) -> ModuleType | None:
+        device_module = getattr(torch, device_type, None)
+        if device_module is None:
+            raise RuntimeError(
+                f"Device '{device_type}' does not have a corresponding module registered as 'torch.{device_type}'."
+            )
+        return device_module
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -166,7 +178,7 @@ BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
-CompatibleType = Union[Tensor, TensorCollection]
+CompatibleType = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -3900,7 +3912,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
 
         Args:
-            dim (Optional[int]): dimension along which to squeeze. If dim is
+            dim (int | None): dimension along which to squeeze. If dim is
                 ``None``, all singleton dimensions will be squeezed.
                 Defaults to ``None``.
 
@@ -8892,7 +8904,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     ) -> Self | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
-        The callable signature must be ``Callable[Tuple[Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
+        The callable signature must be ``Callable[Tuple[Tensor, ...], Tensor | TensorDictBase | None]``.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
@@ -9047,7 +9059,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     ) -> Self | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
 
-        The callable signature must be ``Callable[Tuple[str, Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
+        The callable signature must be ``Callable[Tuple[str, Tensor, ...], Tensor | TensorDictBase | None]``.
 
         Args:
             fn (Callable): function to be applied to the (name, tensor) pairs in the
@@ -9439,7 +9451,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers.
 
-        The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
+        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
         The output must support the :func:`torch.cat` operation. The function
         must be serializable.
 
@@ -9453,7 +9465,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
+                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -9621,7 +9633,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         it in tensordicts of equal size and dispatching the operations over the
         desired number of workers. It will yield the results one at a time.
 
-        The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
+        The function signature should be ``Callabe[[TensorDict], TensorDict | Tensor]``.
         The function must be serializable.
 
         .. note::
@@ -9638,7 +9650,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Args:
             fn (callable): function to apply to the tensordict.
-                Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
+                Signatures similar to ``Callabe[[TensorDict], TensorDict | Tensor]``
                 are supported.
             dim (int, optional): the dim along which the tensordict will be chunked.
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
@@ -14198,15 +14210,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @overload
     def to(
         self: T,
-        device: Optional[Union[int, device]] = ...,
-        dtype: Optional[Union[torch.device, str]] = ...,
+        device: int | device | None = ...,
+        dtype: torch.device | str | None = ...,
         non_blocking: bool = ...,
         inplace: bool = False,
     ) -> Self: ...
 
     @overload
     def to(
-        self: T, dtype: Union[torch.device, str], non_blocking: bool = ...
+        self: T, dtype: torch.device | str, non_blocking: bool = ...
     ) -> Self: ...
 
     @overload
