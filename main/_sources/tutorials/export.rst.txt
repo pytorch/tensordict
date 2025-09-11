@@ -141,7 +141,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0., 0., 0., 0.]], grad_fn=<ReluBackward0>), tensor([[ 0.0403,  0.3356, -0.2489, -0.2840]], grad_fn=<AddmmBackward0>), tensor([[0.0403, 0.3356]], grad_fn=<SplitBackward0>), tensor([[0.8510, 0.8311]], grad_fn=<ClampMinBackward0>), tensor([[0.0403, 0.3356]], grad_fn=<SplitBackward0>))
+    (tensor([[0.0000, 0.0000, 0.0134, 0.0907]], grad_fn=<ReluBackward0>), tensor([[-0.4407, -0.1125,  0.4209,  0.1458]], grad_fn=<AddmmBackward0>), tensor([[-0.4407, -0.1125]], grad_fn=<SplitBackward0>), tensor([[1.2843, 1.0941]], grad_fn=<ClampMinBackward0>), tensor([[-0.4407, -0.1125]], grad_fn=<SplitBackward0>))
 
 
 
@@ -208,6 +208,7 @@ Let us look at the module:
           (module): Module()
         )
       )
+      (_guards_fn): GuardsFn()
     )
 
 
@@ -218,6 +219,7 @@ Let us look at the module:
         module_0_module_bias = getattr(self.module, "0").module.bias
         module_2_module_weight = getattr(self.module, "2").module.weight
         module_2_module_bias = getattr(self.module, "2").module.bias
+        _guards_fn = self._guards_fn(x);  _guards_fn = None
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  module_2_module_weight = module_2_module_bias = None
@@ -266,8 +268,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  569.11 micro-seconds
-    Time for exported module:  683.78 micro-seconds
+    Time for TDModule:  580.07 micro-seconds
+    Time for exported module:  361.92 micro-seconds
 
 
 
@@ -379,12 +381,15 @@ following example shows.
 
  .. code-block:: none
 
-    exported module with nested input: GraphModule()
+    exported module with nested input: GraphModule(
+      (_guards_fn): GuardsFn()
+    )
 
 
 
     def forward(self, some_key):
         some_key, = fx_pytree.tree_flatten_spec(([], {'some_key':some_key}), self._in_spec)
+        _guards_fn = self._guards_fn(some_key);  _guards_fn = None
         add = torch.ops.aten.add.Tensor(some_key, 1);  some_key = None
         sub = torch.ops.aten.sub.Tensor(add, 1);  add = None
         return pytree.tree_unflatten((sub,), self._out_spec)
@@ -450,7 +455,7 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[0.0403, 0.3356]], grad_fn=<SplitBackward0>)
+    tensor([[-0.4407, -0.1125]], grad_fn=<SplitBackward0>)
 
 
 
@@ -485,6 +490,7 @@ We can create a new exported graph from this. Its computational graph should be 
           (module): Module()
         )
       )
+      (_guards_fn): GuardsFn()
     )
 
 
@@ -495,6 +501,7 @@ We can create a new exported graph from this. Its computational graph should be 
         module_0_module_bias = getattr(self.module, "0").module.bias
         module_2_module_weight = getattr(self.module, "2").module.weight
         module_2_module_bias = getattr(self.module, "2").module.bias
+        _guards_fn = self._guards_fn(x);  _guards_fn = None
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
@@ -570,6 +577,7 @@ a random sample, the output is different than if we ask for the mean:
           (module): Module()
         )
       )
+      (_guards_fn): GuardsFn()
     )
 
 
@@ -580,6 +588,7 @@ a random sample, the output is different than if we ask for the mean:
         module_0_module_bias = getattr(self.module, "0").module.bias
         module_2_module_weight = getattr(self.module, "2").module.weight
         module_2_module_bias = getattr(self.module, "2").module.bias
+        _guards_fn = self._guards_fn(x);  _guards_fn = None
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
@@ -609,6 +618,7 @@ a random sample, the output is different than if we ask for the mean:
           (module): Module()
         )
       )
+      (_guards_fn): GuardsFn()
     )
 
 
@@ -619,6 +629,7 @@ a random sample, the output is different than if we ask for the mean:
         module_0_module_bias = getattr(self.module, "0").module.bias
         module_2_module_weight = getattr(self.module, "2").module.weight
         module_2_module_bias = getattr(self.module, "2").module.bias
+        _guards_fn = self._guards_fn(x);  _guards_fn = None
         linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
         relu = torch.ops.aten.relu.default(linear);  linear = None
         linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
@@ -657,7 +668,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.542 seconds)
+   **Total running time of the script:** (0 minutes 4.524 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
