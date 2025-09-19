@@ -2928,7 +2928,7 @@ class TensorDict(TensorDictBase):
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
-                elif metadata_device := entry_metadata.get("device", None) is not None:
+                elif (metadata_device := entry_metadata.get("device", None)) is not None:
                     tensor = tensor.to(metadata_device, non_blocking=True)
             else:
                 tensor = torch.zeros(
