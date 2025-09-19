@@ -2896,8 +2896,12 @@ class TensorDict(TensorDictBase):
                 continue
             dtype = entry_metadata.get("dtype")
             shape = entry_metadata.get("shape")
+            from .utils import _encode_key_for_filesystem
+            
+            # Use encoded filename for file system operations
+            safe_key = _encode_key_for_filesystem(key)
             if (
-                not (prefix / f"{key}.memmap").exists()
+                not (prefix / f"{safe_key}.memmap").exists()
                 or dtype is None
                 or shape is None
             ):
@@ -2915,7 +2919,7 @@ class TensorDict(TensorDictBase):
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it
                     shape = MemoryMappedTensor.from_filename(
-                        (prefix / f"{key}.memmap").with_suffix(".shape.memmap"),
+                        (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
                     )
@@ -2924,7 +2928,7 @@ class TensorDict(TensorDictBase):
                 tensor = MemoryMappedTensor.from_filename(
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
-                    filename=str(prefix / f"{key}.memmap"),
+                    filename=str(prefix / f"{safe_key}.memmap"),
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
@@ -4765,7 +4769,14 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
 
 # user did specify location and memmap is in wrong place, so we copy
 def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    from .utils import _encode_key_for_filesystem
+    
+    if prefix is None:
+        filename = None
+    else:
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if value.is_nested:
         shape = value._nested_tensor_size()
         # Make the shape a memmap tensor too
@@ -4801,7 +4812,14 @@ def _populate_empty(
     dtype,
     prefix,
 ):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    from .utils import _encode_key_for_filesystem
+    
+    if prefix is None:
+        filename = None
+    else:
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if isinstance(shape, torch.Tensor):
         # Make the shape a memmap tensor too
         if prefix is not None:
@@ -4832,7 +4850,14 @@ def _populate_storage(
     prefix,
     storage,
 ):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    from .utils import _encode_key_for_filesystem
+    
+    if prefix is None:
+        filename = None
+    else:
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if isinstance(shape, torch.Tensor):
         # Make the shape a memmap tensor too
         if prefix is not None:

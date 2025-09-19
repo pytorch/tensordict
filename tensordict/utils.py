@@ -2447,6 +2447,88 @@ def unravel_key_list(keys):
     return [unravel_key(key) for key in keys]
 
 
+def _encode_key_for_filesystem(key: str) -> str:
+    """Encode a TensorDict key to be safe for filesystem paths.
+    
+    This function provides a bijective mapping from TensorDict keys to
+    filesystem-safe filenames by percent-encoding problematic characters.
+    
+    Args:
+        key (str): The original TensorDict key
+        
+    Returns:
+        str: A filesystem-safe encoded key
+        
+    Examples:
+        >>> _encode_key_for_filesystem("a/b/c")
+        "a%2Fb%2Fc"
+        >>> _encode_key_for_filesystem("key with spaces")
+        "key%20with%20spaces"
+        >>> _encode_key_for_filesystem("normal_key")
+        "normal_key"
+    """
+    # Characters that are problematic across filesystems:
+    # - Unix/Linux: / (path separator), null
+    # - Windows: < > : " | ? * \ / (path separator), null, control chars
+    # - macOS: : (path separator in HFS), null
+    # - General: space, percent (for our encoding)
+    unsafe_chars = set('/<>:"|?*\\ \0%')
+    
+    # Also encode control characters (0-31) and DEL (127)
+    unsafe_chars.update(chr(i) for i in range(32))
+    unsafe_chars.add(chr(127))
+    
+    encoded_parts = []
+    for char in key:
+        if char in unsafe_chars:
+            # Percent-encode using uppercase hex for consistency
+            encoded_parts.append(f"%{ord(char):02X}")
+        else:
+            encoded_parts.append(char)
+    
+    return "".join(encoded_parts)
+
+
+def _decode_key_from_filesystem(encoded_key: str) -> str:
+    """Decode a filesystem-safe key back to the original TensorDict key.
+    
+    This is the reverse of _encode_key_for_filesystem.
+    
+    Args:
+        encoded_key (str): A filesystem-safe encoded key
+        
+    Returns:
+        str: The original TensorDict key
+        
+    Examples:
+        >>> _decode_key_from_filesystem("a%2Fb%2Fc")
+        "a/b/c"
+        >>> _decode_key_from_filesystem("key%20with%20spaces")
+        "key with spaces"
+        >>> _decode_key_from_filesystem("normal_key")
+        "normal_key"
+    """
+    decoded_parts = []
+    i = 0
+    while i < len(encoded_key):
+        if encoded_key[i] == '%' and i + 2 < len(encoded_key):
+            try:
+                # Decode the hex value
+                hex_str = encoded_key[i+1:i+3]
+                char_code = int(hex_str, 16)
+                decoded_parts.append(chr(char_code))
+                i += 3
+            except ValueError:
+                # Invalid hex sequence, treat as literal %
+                decoded_parts.append(encoded_key[i])
+                i += 1
+        else:
+            decoded_parts.append(encoded_key[i])
+            i += 1
+    
+    return "".join(decoded_parts)
+
+
 def _slice_indices(index: slice, len: int):
     """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
     step = index.step
