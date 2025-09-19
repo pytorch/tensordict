@@ -13183,6 +13183,150 @@ class TestLikeConstructors:
             assert tdnew.device is None
 
 
+class TestMemmap:
+    @pytest.mark.parametrize("robust_key", [False, True])
+    def test_memmap_robust_key_normal(self, robust_key, tmpdir):
+        """Test robust_key parameter with normal keys."""
+        td = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        # Save with robust_key setting
+        td_mmap = td.memmap(tmpdir, robust_key=robust_key)
+        assert td_mmap.is_memmap()
+
+        # Load with same robust_key setting
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=robust_key)
+        assert "normal_key" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+        # Check that file exists
+        files = [f for f in os.listdir(tmpdir) if f.endswith(".memmap")]
+        assert len(files) == 1
+        assert files[0] == "normal_key.memmap"  # Normal keys unchanged
+
+    def test_memmap_robust_key_pathlike(self, tmpdir):
+        """Test robust_key=True solves path-like key issue."""
+        td = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        # This should work with robust_key=True
+        td_mmap = td.memmap(tmpdir, robust_key=True)
+        assert td_mmap.is_memmap()
+
+        # Load it back
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=True)
+        assert "a/b/c" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+        # Check that encoded file was created
+        files = [f for f in os.listdir(tmpdir) if f.endswith(".memmap")]
+        assert len(files) == 1
+        assert files[0] == "a%2Fb%2Fc.memmap"  # Encoded filename
+
+    def test_memmap_robust_key_pathlike_legacy_fails(self, tmpdir):
+        """Test that path-like keys still fail with robust_key=False."""
+        td = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        # This should still fail with robust_key=False (legacy behavior)
+        with pytest.raises(RuntimeError, match="No such file or directory"):
+            td.memmap(tmpdir, robust_key=False)
+
+    def test_memmap_robust_key_backward_compatibility(self, tmpdir):
+        """Test backward compatibility: load legacy saves with robust_key=True."""
+        td = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        # Save with legacy behavior
+        td.memmap(tmpdir, robust_key=False)
+
+        # Load with robust_key=True should work (fallback)
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=True)
+        assert "normal_key" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+    def test_memmap_robust_key_deprecation_warning_smart(self, tmpdir):
+        """Test that robust_key=None only warns for problematic keys."""
+        import warnings
+
+        # Normal key should NOT warn
+        td_normal = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # Turn warnings into errors
+            # This should NOT raise any warning
+            td_normal.memmap(tmpdir / "normal", robust_key=None)
+            TensorDict.load_memmap(tmpdir / "normal", robust_key=None)
+
+        # Path-like key SHOULD warn
+        td_pathlike = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        with pytest.warns(
+            FutureWarning, match="contains characters that will be handled differently"
+        ):
+            # This should fail because legacy behavior can't handle path-like keys
+            # but the warning should be emitted first
+            try:
+                td_pathlike.memmap(tmpdir / "pathlike", robust_key=None)
+            except RuntimeError:
+                pass  # Expected to fail with legacy behavior
+
+    def test_memmap_robust_key_warning_only_when_different(self, tmpdir):
+        """Test warning is only emitted when robust encoding differs from legacy."""
+        import warnings
+
+        # Test keys that should NOT warn (no encoding difference)
+        normal_keys = ["normal_key", "key123", "another_normal_key", "CamelCase"]
+
+        for key in normal_keys:
+            td = TensorDict({key: torch.randn(2, 3)})
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")  # Convert warnings to errors
+                # Should not raise any warning/error
+                td.memmap(tmpdir / f"normal_{key}", robust_key=None)
+
+        # Test keys that SHOULD warn (encoding difference)
+        problematic_keys = ["a/b/c", "key with spaces", "key:colon", "key*star"]
+
+        for key in problematic_keys:
+            td = TensorDict({key: torch.randn(2, 3)})
+            with pytest.warns(
+                FutureWarning,
+                match="contains characters that will be handled differently",
+            ):
+                try:
+                    td.memmap(
+                        tmpdir
+                        / f"problematic_{key.replace('/', '_').replace(' ', '_').replace(':', '_').replace('*', '_')}",
+                        robust_key=None,
+                    )
+                except RuntimeError:
+                    pass  # Expected to fail with legacy behavior for path-like keys
+
+    def test_memmap_robust_key_encoding_bijective(self):
+        """Test that key encoding is bijective."""
+        from tensordict.utils import (
+            _decode_key_from_filesystem,
+            _encode_key_for_filesystem,
+        )
+
+        test_keys = [
+            "a/b/c",
+            "path\\with\\backslashes",
+            "key with spaces",
+            "key:with:colons",
+            "key*with*stars",
+            "normal_key",
+            "key%with%percent",
+            "",
+        ]
+
+        for key in test_keys:
+            encoded = _encode_key_for_filesystem(key, robust=True)
+            decoded = _decode_key_from_filesystem(encoded)
+            assert decoded == key, f"Failed: {key!r} -> {encoded!r} -> {decoded!r}"
+
+            # Legacy encoding should return key unchanged
+            legacy = _encode_key_for_filesystem(key, robust=False)
+            assert legacy == key
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

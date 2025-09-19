@@ -704,6 +704,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -717,6 +718,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -724,7 +726,12 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -752,6 +759,7 @@ class PersistentTensorDict(TensorDictBase):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
@@ -808,6 +816,7 @@ class PersistentTensorDict(TensorDictBase):
                         inplace=inplace,
                         share_non_tensor=share_non_tensor,
                         existsok=existsok,
+                        robust_key=robust_key,
                     ),
                     inplace=False,
                     validated=True,

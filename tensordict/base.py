@@ -5415,6 +5415,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> Self:
         raise NotImplementedError
 
@@ -6029,6 +6030,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key: bool | None = None,
     ) -> Self:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -6055,6 +6057,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 errors. Defaults to ``False``.
             existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
                 exists in the same path. Defaults to ``True``.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -6088,6 +6095,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     like=False,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -6103,6 +6111,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             like=False,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         ).lock_()
 
     @abc.abstractmethod
@@ -6112,6 +6121,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a shape and possibly a dtype.
 
@@ -6128,6 +6138,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Keyword arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         Returns:
             A new memory mapped tensor.
@@ -6143,6 +6158,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a storage, a shape and possibly a dtype.
 
@@ -6164,6 +6180,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Keyword arguments:
             dtype (torch.dtype, optional): the dtype of the new tensor.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         Returns:
             A new memory mapped tensor with the given storage.
@@ -6173,7 +6194,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     @abc.abstractmethod
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         """Creates an empty memory-mapped tensor given a tensor.
 
@@ -6191,6 +6217,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Keyword arguments:
             copy_data (bool, optionaL): if ``False``, the new tensor will share the metadata of the input such as
                 shape and dtype, but the content will be empty. Defaults to ``True``.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         Returns:
             A new memory mapped tensor with the given storage.
@@ -6206,6 +6237,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        robust_key: bool | None = None,
     ) -> Self:
         """Saves the tensordict to disk.
 
@@ -6217,6 +6249,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             num_threads=num_threads,
             return_early=return_early,
             share_non_tensor=share_non_tensor,
+            robust_key=robust_key,
         )
 
     dumps = save
@@ -6230,6 +6263,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key: bool | None = None,
     ) -> Self:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -6250,11 +6284,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
             share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
                 shared between the processes and writing operation (such as inplace update
                 or set) on any of the workers within a single node will update the value
-                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                on all other workers. If the number of non_tensor leaves is high (e.g.,
                 sharing large stacks of non-tensor data) this may result in OOM or similar
                 errors. Defaults to ``False``.
             existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
                 exists in the same path. Defaults to ``True``.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -6290,6 +6329,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     like=False,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -6306,6 +6346,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             futures=None,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         ).lock_()
 
     def memmap_like(
@@ -6317,6 +6358,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        robust_key: bool | None = None,
     ) -> Self:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
@@ -6342,6 +6384,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 errors. Defaults to ``False``.
             existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
                 exists in the same path. Defaults to ``True``.
+            robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+                handles keys with path separators and special characters. If ``False``,
+                uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+                deprecation warning and falls back to legacy behavior. Will default to
+                ``True`` in v0.12.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -6395,6 +6442,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     like=True,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -6415,6 +6463,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             futures=None,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         ).lock_()
 
     @classmethod
@@ -6440,6 +6489,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         non_blocking: bool = False,
         *,
         out: TensorDictBase | None = None,
+        robust_key: bool | None = None,
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
@@ -6456,6 +6506,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 called after loading tensors on device. Defaults to ``False``.
             out (TensorDictBase, optional): optional tensordict where the data
                 should be written.
+            robust_key (bool, optional): if ``True``, expects robust key encoding was used
+                when saving and decodes filenames accordingly. If ``False``, uses legacy
+                behavior. If ``None`` (default), emits a deprecation warning and falls
+                back to legacy behavior. Will default to ``True`` in v0.12.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -6519,7 +6573,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             for other_cls in tensordict.base._ACCEPTED_CLASSES:
                 if str(other_cls) == type_name:
-                    return other_cls._load_memmap(prefix, metadata)
+                    return other_cls._load_memmap(
+                        prefix, metadata, robust_key=robust_key
+                    )
             else:
                 raise RuntimeError(
                     f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
@@ -6527,7 +6583,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 )
         if device is not None:
             device = torch.device(device)
-        out = cls._load_memmap(prefix, metadata, device=device, out=out)
+        out = cls._load_memmap(
+            prefix, metadata, device=device, out=out, robust_key=robust_key
+        )
         if (
             not non_blocking
             and device is not None
@@ -6539,6 +6597,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def load_memmap_(
         self,
         prefix: str | Path,
+        robust_key: bool | None = None,
     ):
         """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
 
@@ -6546,7 +6605,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         is_memmap = self.is_memmap()
         with self.unlock_() if is_memmap else contextlib.nullcontext():
-            self.load_memmap(prefix=prefix, device=self.device, out=self)
+            self.load_memmap(
+                prefix=prefix, device=self.device, out=self, robust_key=robust_key
+            )
         if is_memmap:
             self.memmap_()
         return self
@@ -6571,6 +6632,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         metadata: dict,
         device: torch.device | None = None,
         *,
+        robust_key,
         out=None,
     ):
         raise NotImplementedError
