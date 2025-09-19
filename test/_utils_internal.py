@@ -34,11 +34,11 @@ def get_available_devices():
             devices += [torch.device(f"cuda:{i}")]
             if i == 1:
                 break
-    # if torch.backends.mps.is_available():
-    #     for i in range(torch.mps.device_count()):
-    #         devices += [torch.device(f"mps:{i}")]
-    #         if i == 1:
-    #             break
+    if torch.backends.mps.is_available():
+        for i in range(torch.mps.device_count()):
+            devices += [torch.device(f"mps:{i}")]
+            if i == 1:
+                break
     return devices
 
 
