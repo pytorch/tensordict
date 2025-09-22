@@ -55,7 +55,7 @@ from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_s
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack, tensorclass
+from tensordict.tensorclass import MetaData, NonTensorData, NonTensorDataBase, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -6823,6 +6823,30 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         if td.is_locked:
             assert td_reshape.is_locked
+
+    def test_save_load_memmap(self, td_name, device, tmpdir):
+        if td_name in ("sub_td2",):
+            pytest.skip("sub_td2 is not supported")
+        td = getattr(self, td_name)(device)
+        td.save(tmpdir, copy_existing=True)
+        td_load = TensorDict.load_memmap(tmpdir)
+        # check the shape of the leaves
+        def check_shape(v0, v1):
+            assert v0.shape == v1.shape
+        td.apply(check_shape, td_load)
+        check_shape(td, td_load)
+        assert (td == td_load).all()
+        # get a list of all the metadata and non-tensor data
+        if "non_tensor" in td_name or "metadata" in td_name:
+            td_non_tensor = [v for v in td.values(True) if isinstance(v, NonTensorDataBase)]
+            assert len(td_non_tensor) > 0
+            td_load_non_tensor = [v for v in td_load.values(True) if isinstance(v, NonTensorDataBase)]
+            assert len(td_load_non_tensor) > 0
+            for v0, v1 in zip(td_non_tensor, td_load_non_tensor):
+                assert v0.data == v1.data
+                assert v0.batch_size == v1.batch_size
+                assert v0.device == v1.device
+                assert v0.shape == v1.shape
 
     @pytest.mark.parametrize("strict", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
