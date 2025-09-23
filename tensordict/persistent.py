@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
-
 import torch
 
 from tensordict._td import (
@@ -31,6 +30,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
+    _register_tensor_class,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -822,6 +822,10 @@ class PersistentTensorDict(TensorDictBase):
                     validated=True,
                     non_blocking=False,
                 )
+                if prefix is not None:
+                    metadata[key] = {
+                        "type": type(value).__name__,
+                    }
                 continue
             else:
                 value = self._get_str(key, default=NO_DEFAULT)
@@ -1477,6 +1481,9 @@ class PersistentTensorDict(TensorDictBase):
     repeat_interleave = TensorDict.repeat_interleave
     reshape = TensorDict.reshape
     split = TensorDict.split
+
+
+_register_tensor_class(PersistentTensorDict)
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

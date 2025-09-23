@@ -2767,6 +2767,9 @@ def _eq(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the eq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2828,6 +2831,9 @@ def _ne(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the neq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2856,6 +2862,9 @@ def _or(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the or value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2884,6 +2893,9 @@ def _xor(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the xor value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -3271,6 +3283,19 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     eqval = self.data == other
+                #     if isinstance(eqval, torch.Tensor):
+                #         return eqval
+                #     if isinstance(eqval, np.ndarray):
+                #         return torch.as_tensor(eqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(eqval),
+                #         device=self.device,
+                #     )
                 return old_eq(self, other)
 
             type(self).__eq__ = __eq__
@@ -3290,6 +3315,19 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     neqval = self.data != other
+                #     if isinstance(neqval, torch.Tensor):
+                #         return neqval
+                #     if isinstance(neqval, np.ndarray):
+                #         return torch.as_tensor(neqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(neqval),
+                #         device=self.device,
+                #     )
                 return _ne(self, other)
 
             type(self).__ne__ = __ne__
@@ -3714,6 +3752,8 @@ class NonTensorDataBase(TensorClass):
             return False
         return _metadata.get("memmaped", False)
 
+    _load_memmap = classmethod(_load_memmap)
+
 
 class NonTensorData(NonTensorDataBase):
     """A carrier for non-tensordict data.
@@ -4040,6 +4080,15 @@ class NonTensorData(NonTensorDataBase):
         return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
 
+def _reconstruct_typed_metadata(item, data, state):
+    """Reconstruct a typed MetaData instance during unpickling."""
+    from tensordict.tensorclass import MetaData
+
+    instance = MetaData[item](data)
+    instance.__dict__.update(state)
+    return instance
+
+
 class _MetaDataMeta(_TensorClassMeta):
     def __new__(
         mcs,
@@ -4074,6 +4123,11 @@ class _MetaDataMeta(_TensorClassMeta):
 
         class TypedMetaData(cls):
             _expected_type = item
+            # Define all the classes defined by MetaData
+            _load_memmap = classmethod(_load_memmap)
+            _from_dict = classmethod(_from_dict)
+            _from_tensordict = classmethod(_from_tensordict)
+            __repr__ = NonTensorDataBase.__repr__
 
             def __post_init__(self):
                 super().__post_init__()
@@ -4087,6 +4141,13 @@ class _MetaDataMeta(_TensorClassMeta):
 
         TypedMetaData.__name__ = class_name
         TypedMetaData.__qualname__ = class_name
+
+        # Add pickle support for the dynamically created class
+        def __reduce__(self):
+            # Return a callable that can reconstruct the object
+            return (_reconstruct_typed_metadata, (item, self.data, self.__dict__))
+
+        TypedMetaData.__reduce__ = __reduce__
 
         # Cache the class
         cls._typed_class_cache[item] = TypedMetaData  # type: ignore
