@@ -1626,7 +1626,6 @@ def _share_memory_(self):
 
 def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
     non_tensordict = copy(metadata)
-    print("non_tensordict", non_tensordict)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
@@ -2767,7 +2766,7 @@ def _eq(self, other: object) -> bool:
             else other
         )
     if isinstance(self, NonTensorDataBase):
-        # Return a plain tensordict containing the eq value
+        # Return a plain tensordict containing the eq value
         return tensor
     return _from_tensordict_with_none(self, tensor)
 
@@ -2831,7 +2830,7 @@ def _ne(self, other: object) -> bool:
             else other
         )
     if isinstance(self, NonTensorDataBase):
-        # Return a plain tensordict containing the neq value
+        # Return a plain tensordict containing the neq value
         return tensor
     return _from_tensordict_with_none(self, tensor)
 
@@ -2862,7 +2861,7 @@ def _or(self, other: object) -> bool:
             else other
         )
     if isinstance(self, NonTensorDataBase):
-        # Return a plain tensordict containing the or value
+        # Return a plain tensordict containing the or value
         return tensor
     return _from_tensordict_with_none(self, tensor)
 
@@ -2893,7 +2892,7 @@ def _xor(self, other: object) -> bool:
             else other
         )
     if isinstance(self, NonTensorDataBase):
-        # Return a plain tensordict containing the xor value
+        # Return a plain tensordict containing the xor value
         return tensor
     return _from_tensordict_with_none(self, tensor)
 
@@ -4110,7 +4109,7 @@ class _MetaDataMeta(_TensorClassMeta):
 
         class TypedMetaData(cls):
             _expected_type = item
-            # Define all the classes defined by MetaData
+            # Define all the classes defined by MetaData
             _load_memmap = classmethod(_load_memmap)
             _from_dict = classmethod(_from_dict)
             _from_tensordict = classmethod(_from_tensordict)
