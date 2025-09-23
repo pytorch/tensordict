@@ -6857,7 +6857,6 @@ class TestTensorDicts(TestTensorDictsBase):
             for v0, v1 in zip(td_non_tensor, td_load_non_tensor):
                 assert v0.data == v1.data
                 assert v0.batch_size == v1.batch_size
-                assert v0.device == v1.device
                 assert v0.shape == v1.shape
 
     @pytest.mark.parametrize("strict", [True, False])

@@ -6519,8 +6519,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             for other_cls in tensordict.base._ACCEPTED_CLASSES:
                 if str(other_cls) == type_name:
-                    print("loading with other_cls", other_cls)
-                    print("metadata", metadata)
                     return other_cls._load_memmap(prefix, metadata)
             else:
                 raise RuntimeError(
@@ -6529,8 +6527,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 )
         if device is not None:
             device = torch.device(device)
-        print("loading with cls", cls)
-        print(prefix, metadata)
         out = cls._load_memmap(prefix, metadata, device=device, out=out)
         if (
             not non_blocking

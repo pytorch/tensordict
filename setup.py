@@ -91,11 +91,12 @@ def get_extensions():
     extensions_dir = os.path.join(ROOT_DIR, "tensordict", "csrc")
     return [CMakeExtension("tensordict._C", sourcedir=extensions_dir)]
 
+
 @contextlib.contextmanager
 def set_version():
 
     if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
-        # grab version from local version.py
+        # grab version from local version.py
         sys.path.append(Path(__file__).parent)
         with open("version.txt", "r") as f:
             version_str = f.read()
@@ -104,6 +105,7 @@ def set_version():
         del os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"]
         return
     yield
+
 
 with set_version():
     setup(
