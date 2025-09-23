@@ -4075,6 +4075,15 @@ class NonTensorData(NonTensorDataBase):
         return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
 
+def _reconstruct_typed_metadata(item, data, state):
+    """Reconstruct a typed MetaData instance during unpickling."""
+    from tensordict.tensorclass import MetaData
+
+    instance = MetaData[item](data)
+    instance.__dict__.update(state)
+    return instance
+
+
 class _MetaDataMeta(_TensorClassMeta):
     def __new__(
         mcs,
@@ -4127,6 +4136,13 @@ class _MetaDataMeta(_TensorClassMeta):
 
         TypedMetaData.__name__ = class_name
         TypedMetaData.__qualname__ = class_name
+
+        # Add pickle support for the dynamically created class
+        def __reduce__(self):
+            # Return a callable that can reconstruct the object
+            return (_reconstruct_typed_metadata, (item, self.data, self.__dict__))
+
+        TypedMetaData.__reduce__ = __reduce__
 
         # Cache the class
         cls._typed_class_cache[item] = TypedMetaData  # type: ignore

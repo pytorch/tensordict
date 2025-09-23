@@ -24,7 +24,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from tensordict.utils import print_directory_tree
+
 import numpy as np
 import pytest
 
@@ -55,7 +55,13 @@ from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_s
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import MetaData, NonTensorData, NonTensorDataBase, NonTensorStack, tensorclass
+from tensordict.tensorclass import (
+    MetaData,
+    NonTensorData,
+    NonTensorDataBase,
+    NonTensorStack,
+    tensorclass,
+)
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -6830,17 +6836,23 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td.save(tmpdir, copy_existing=True)
         td_load = TensorDict.load_memmap(tmpdir)
-        # check the shape of the leaves
+
+        # check the shape of the leaves
         def check_shape(v0, v1):
             assert v0.shape == v1.shape
+
         td.apply(check_shape, td_load)
         check_shape(td, td_load)
-        assert (td == td_load).all()
-        # get a list of all the metadata and non-tensor data
+        assert (td.cpu() == td_load.cpu()).all()
+        # get a list of all the metadata and non-tensor data
         if "non_tensor" in td_name or "metadata" in td_name:
-            td_non_tensor = [v for v in td.values(True) if isinstance(v, NonTensorDataBase)]
+            td_non_tensor = [
+                v for v in td.values(True) if isinstance(v, NonTensorDataBase)
+            ]
             assert len(td_non_tensor) > 0
-            td_load_non_tensor = [v for v in td_load.values(True) if isinstance(v, NonTensorDataBase)]
+            td_load_non_tensor = [
+                v for v in td_load.values(True) if isinstance(v, NonTensorDataBase)
+            ]
             assert len(td_load_non_tensor) > 0
             for v0, v1 in zip(td_non_tensor, td_load_non_tensor):
                 assert v0.data == v1.data
