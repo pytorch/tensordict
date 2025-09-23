@@ -1546,6 +1546,7 @@ def _memmap_(
     memmaped: bool = False,
     share_non_tensor: bool = False,
     existsok: bool = True,
+    robust_key,
 ):
     _non_tensordict = dict(self._non_tensordict)
     cls = type(self)
@@ -1598,6 +1599,7 @@ def _memmap_(
             copy_existing=copy_existing,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         if new_futures:
             futures += new_futures
@@ -1624,7 +1626,7 @@ def _share_memory_(self):
     return self
 
 
-def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
+def _load_memmap(cls, prefix: Path, metadata: dict, *, robust_key, **kwargs):
     non_tensordict = copy(metadata)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
@@ -1632,7 +1634,7 @@ def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
             non_tensordict.update(pickle.load(pickle_file))
     if os.path.exists(prefix / "_tensordict"):
         td = TensorDict.load_memmap(
-            prefix / "_tensordict", **kwargs, non_blocking=False
+            prefix / "_tensordict", **kwargs, non_blocking=False, robust_key=robust_key
         )
     else:
         if not issubclass(cls, NonTensorDataBase):
@@ -3411,6 +3413,7 @@ class NonTensorDataBase(TensorClass):
                         inplace=True,
                         like=False,
                         share_non_tensor=share_non_tensor,
+                        robust_key=True,
                     )
                 return self
             elif not inplace and self.is_locked:
@@ -3667,6 +3670,7 @@ class NonTensorDataBase(TensorClass):
         memmaped: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key,
     ):
         # For efficiency, we can avoid doing this saving
         #  if the data is already there.
@@ -3694,6 +3698,7 @@ class NonTensorDataBase(TensorClass):
             memmaped=memmaped,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -4326,6 +4331,7 @@ class NonTensorStack(LazyStackedTensorDict):
         memmaped: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key,
     ) -> T:
 
         memmaped_leaves = memmaped
@@ -4380,6 +4386,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     memmaped=memmaped_leaves,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
             )
         if not inplace:
@@ -4392,7 +4399,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, *, out=None, **kwargs
+        cls, prefix: str, metadata: dict, *, out=None, robust_key, **kwargs
     ) -> LazyStackedTensorDict:
         data = metadata.get("data")
         if data is not None:
@@ -4403,7 +4410,9 @@ class NonTensorStack(LazyStackedTensorDict):
             if device is not None:
                 device = torch.device(device)
             return cls._from_list(data, device=device)
-        return super()._load_memmap(prefix=prefix, metadata=metadata, **kwargs)
+        return super()._load_memmap(
+            prefix=prefix, metadata=metadata, robust_key=robust_key, **kwargs
+        )
 
     @classmethod
     def _from_list(cls, datalist: List, device: torch.device, ndim: int | None = None):
@@ -4533,7 +4542,9 @@ class NonTensorStack(LazyStackedTensorDict):
                     ignore_lock=ignore_lock,
                 )
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         else:
             raise NotImplementedError(
                 f"The data type {type(input_dict_or_td)} is not supported within {type(self).__name__}.update"
@@ -4554,7 +4565,9 @@ class NonTensorStack(LazyStackedTensorDict):
                     value = NonTensorData(value)
             super().__setitem__(index, value)
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         finally:
             _BREAK_ON_MEMMAP = True
 
@@ -4576,7 +4589,9 @@ class NonTensorStack(LazyStackedTensorDict):
                 input_dict_or_td, index, clone=clone, non_blocking=non_blocking
             )
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         finally:
             _BREAK_ON_MEMMAP = True
         return self
