@@ -2870,11 +2870,11 @@ class TensorDict(TensorDictBase):
         device: torch.device | None = None,
         out=None,
     ) -> Self:
-        if metadata["device"] == "None":
+        if metadata.get("device", "None") == "None":
             metadata["device"] = None
         else:
             metadata["device"] = torch.device(metadata["device"])
-        metadata["shape"] = torch.Size(metadata["shape"])
+        metadata["shape"] = torch.Size(metadata.get("shape", ()))
 
         if out is None:
             result = cls(

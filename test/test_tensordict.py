@@ -24,7 +24,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
+from tensordict.utils import print_directory_tree
 import numpy as np
 import pytest
 

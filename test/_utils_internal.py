@@ -346,8 +346,8 @@ class TestTensorDictsBase:
     @classmethod
     def td_with_non_tensor_and_metadata(cls, device):
         td = cls.td(device)
-        td.set_non_tensor(("data", "non_tensor"), NonTensorData("a string!"))
-        td.set_non_tensor(("data", "metadata"), MetaData("a metadata!"))
+        td.set(("data", "non_tensor"), NonTensorData("a string!"))
+        td.set(("data", "metadata"), MetaData[str]("a metadata!"))
         return td
    
     for device in get_available_devices():

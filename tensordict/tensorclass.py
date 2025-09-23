@@ -1626,6 +1626,7 @@ def _share_memory_(self):
 
 def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
     non_tensordict = copy(metadata)
+    print("non_tensordict", non_tensordict)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
@@ -3709,6 +3710,8 @@ class NonTensorDataBase(TensorClass):
             return False
         return _metadata.get("memmaped", False)
 
+    _load_memmap = classmethod(_load_memmap)
+
 
 class NonTensorData(NonTensorDataBase):
     """A carrier for non-tensordict data.
@@ -4069,6 +4072,11 @@ class _MetaDataMeta(_TensorClassMeta):
 
         class TypedMetaData(cls):
             _expected_type = item
+            # Define all the classes defined by MetaData
+            _load_memmap = classmethod(_load_memmap)
+            _from_dict = classmethod(_from_dict)
+            _from_tensordict = classmethod(_from_tensordict)
+            __repr__ = NonTensorDataBase.__repr__
 
             def __post_init__(self):
                 super().__post_init__()

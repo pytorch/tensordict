@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
-
+from tensordict.base import _register_tensor_class
 import torch
 
 from tensordict._td import (
@@ -1469,6 +1469,7 @@ class PersistentTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
 
+_register_tensor_class(PersistentTensorDict)
 
 def _set_max_batch_size(source: PersistentTensorDict):
     """Updates a tensordict with its maximium batch size."""
