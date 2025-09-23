@@ -813,6 +813,10 @@ class PersistentTensorDict(TensorDictBase):
                     validated=True,
                     non_blocking=False,
                 )
+                if prefix is not None:
+                    metadata[key] = {
+                        "type": type(value).__name__,
+                    }
                 continue
             else:
                 value = self._get_str(key, default=NO_DEFAULT)

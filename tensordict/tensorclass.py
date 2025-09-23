@@ -2766,6 +2766,9 @@ def _eq(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the eq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2827,6 +2830,9 @@ def _ne(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the neq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2855,6 +2861,9 @@ def _or(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the or value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2883,6 +2892,9 @@ def _xor(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the xor value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -3270,6 +3282,19 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     eqval = self.data == other
+                #     if isinstance(eqval, torch.Tensor):
+                #         return eqval
+                #     if isinstance(eqval, np.ndarray):
+                #         return torch.as_tensor(eqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(eqval),
+                #         device=self.device,
+                #     )
                 return old_eq(self, other)
 
             type(self).__eq__ = __eq__
@@ -3289,6 +3314,19 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     neqval = self.data != other
+                #     if isinstance(neqval, torch.Tensor):
+                #         return neqval
+                #     if isinstance(neqval, np.ndarray):
+                #         return torch.as_tensor(neqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(neqval),
+                #         device=self.device,
+                #     )
                 return _ne(self, other)
 
             type(self).__ne__ = __ne__
