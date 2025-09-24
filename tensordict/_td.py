@@ -3192,7 +3192,9 @@ class TensorDict(TensorDictBase):
                 if tensor is None:
                     if pad is not None:
                         tensor = _other
-                        _other = torch.tensor(pad, dtype=_other.dtype)
+                        _other = torch.tensor(
+                            pad, dtype=_other.dtype, device=_other.device
+                        )
                     else:
                         raise KeyError(
                             f"Key {key} not found and no pad value provided."
@@ -3200,7 +3202,9 @@ class TensorDict(TensorDictBase):
                     cond = expand_as_right(~condition, tensor)
                 elif _other is None:
                     if pad is not None:
-                        _other = torch.tensor(pad, dtype=tensor.dtype)
+                        _other = torch.tensor(
+                            pad, dtype=tensor.dtype, device=tensor.device
+                        )
                     else:
                         raise KeyError(
                             f"Key {key} not found and no pad value provided."

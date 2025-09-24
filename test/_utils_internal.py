@@ -40,6 +40,9 @@ def get_available_devices():
             devices += [torch.device(f"cuda:{i}")]
             if i == 1:
                 break
+    # TODO: MPS and NPU would be worth considering but it's a lot of work
+    # for example, many ops are tested with various dtypes but MPS struggles with
+    # float64. Shared mem can also cause trouble.
     # if torch.backends.mps.is_available():
     #     for i in range(torch.mps.device_count()):
     #         devices += [torch.device(f"mps:{i}")]

@@ -5964,7 +5964,7 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert metadata["shape"] == list(td.batch_size)
 
-        td2 = td.load_memmap(tmp_path / "tensordict")
+        td2 = td.load_memmap(tmp_path / "tensordict", device=device)
         assert (td.cpu() == td2.cpu()).all()
 
     @pytest.mark.parametrize("use_dir", [True, False])
