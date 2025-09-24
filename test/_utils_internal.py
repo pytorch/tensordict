@@ -10,7 +10,13 @@ import tempfile
 import numpy as np
 import torch
 
-from tensordict import NonTensorData, PersistentTensorDict, tensorclass, TensorDict
+from tensordict import (
+    MetaData,
+    NonTensorData,
+    PersistentTensorDict,
+    tensorclass,
+    TensorDict,
+)
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
@@ -345,6 +351,17 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["td_with_non_tensor", device]]
         TYPES_DEVICES_NOLAZY += [["td_with_non_tensor", device]]
+
+    @classmethod
+    def td_with_non_tensor_and_metadata(cls, device):
+        td = cls.td(device)
+        td.set(("data", "non_tensor"), NonTensorData("a string!"))
+        td.set(("data", "metadata"), MetaData[str]("a metadata!"))
+        return td
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_with_non_tensor_and_metadata", device]]
+        TYPES_DEVICES_NOLAZY += [["td_with_non_tensor_and_metadata", device]]
 
 
 def expand_list(list_of_tensors, *dims):

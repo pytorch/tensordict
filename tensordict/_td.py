@@ -2778,6 +2778,7 @@ class TensorDict(TensorDictBase):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> Self:
         if prefix is not None:
             prefix = Path(prefix)
@@ -2788,6 +2789,7 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
+
         dest = self if inplace else self.empty(device=torch.device("cpu"))
 
         # We must set these attributes before memmapping because we need the metadata
@@ -2814,6 +2816,7 @@ class TensorDict(TensorDictBase):
                     like=like,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
                 if prefix is not None:
                     _update_metadata(
@@ -2830,6 +2833,7 @@ class TensorDict(TensorDictBase):
                         prefix=prefix,
                         like=like,
                         existsok=existsok,
+                        robust_key=robust_key,
                     )
                 else:
                     futures.append(
@@ -2842,6 +2846,7 @@ class TensorDict(TensorDictBase):
                             prefix=prefix,
                             like=like,
                             existsok=existsok,
+                            robust_key=robust_key,
                         )
                     )
                 if prefix is not None:
@@ -2869,12 +2874,14 @@ class TensorDict(TensorDictBase):
         metadata: dict,
         device: torch.device | None = None,
         out=None,
+        *,
+        robust_key,
     ) -> Self:
-        if metadata["device"] == "None":
+        if metadata.get("device", "None") == "None":
             metadata["device"] = None
         else:
             metadata["device"] = torch.device(metadata["device"])
-        metadata["shape"] = torch.Size(metadata["shape"])
+        metadata["shape"] = torch.Size(metadata.get("shape", ()))
 
         if out is None:
             result = cls(
@@ -2896,11 +2903,28 @@ class TensorDict(TensorDictBase):
                 continue
             dtype = entry_metadata.get("dtype")
             shape = entry_metadata.get("shape")
-            if (
-                not (prefix / f"{key}.memmap").exists()
-                or dtype is None
-                or shape is None
-            ):
+            from .utils import (
+                _encode_key_for_filesystem,
+                _get_robust_key_setting_with_warning,
+            )
+
+            # Use smart warning for loading that only warns when encoding would differ
+            effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+
+            # Use encoded filename for file system operations
+            safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+            memmap_file = prefix / f"{safe_key}.memmap"
+
+            # If robust encoding is requested but file doesn't exist, try legacy filename
+            if not memmap_file.exists() and effective_robust_key:
+                legacy_key = _encode_key_for_filesystem(key, robust=False)
+                legacy_file = prefix / f"{legacy_key}.memmap"
+                if legacy_file.exists():
+                    # Use legacy filename for backward compatibility
+                    safe_key = legacy_key
+                    memmap_file = legacy_file
+
+            if not memmap_file.exists() or dtype is None or shape is None:
                 # invalid dict means
                 continue
             try:
@@ -2915,7 +2939,7 @@ class TensorDict(TensorDictBase):
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it
                     shape = MemoryMappedTensor.from_filename(
-                        (prefix / f"{key}.memmap").with_suffix(".shape.memmap"),
+                        (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
                     )
@@ -2924,7 +2948,7 @@ class TensorDict(TensorDictBase):
                 tensor = MemoryMappedTensor.from_filename(
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
-                    filename=str(prefix / f"{key}.memmap"),
+                    filename=str(prefix / f"{safe_key}.memmap"),
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
@@ -2987,6 +3011,7 @@ class TensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -3015,6 +3040,7 @@ class TensorDict(TensorDictBase):
                 prefix=last_node._memmap_prefix,
                 shape=shape,
                 dtype=dtype,
+                robust_key=robust_key,
             )
             _update_metadata(
                 metadata=metadata,
@@ -3041,6 +3067,7 @@ class TensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -3071,6 +3098,7 @@ class TensorDict(TensorDictBase):
                 storage=storage,
                 shape=shape,
                 dtype=dtype,
+                robust_key=robust_key,
             )
             _update_metadata(
                 metadata=metadata,
@@ -3099,6 +3127,7 @@ class TensorDict(TensorDictBase):
         *,
         copy_data: bool = True,
         existsok: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -3128,6 +3157,7 @@ class TensorDict(TensorDictBase):
                 prefix=last_node._memmap_prefix,
                 like=not copy_data,
                 existsok=existsok,
+                robust_key=robust_key,
             )
             _update_metadata(
                 metadata=metadata,
@@ -4229,6 +4259,7 @@ class _SubTensorDict(TensorDictBase):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> Self:
         if prefix is not None:
 
@@ -4263,6 +4294,7 @@ class _SubTensorDict(TensorDictBase):
             like=like,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         if not inplace:
             result = _SubTensorDict(_source, idx=self.idx)
@@ -4272,11 +4304,18 @@ class _SubTensorDict(TensorDictBase):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: Path, metadata: dict, device: torch.device | None = None
+        cls,
+        prefix: Path,
+        metadata: dict,
+        device: torch.device | None = None,
+        *,
+        robust_key,
     ):
         index = metadata["index"]
         return _SubTensorDict(
-            TensorDict.load_memmap(prefix / "_source", device=device),
+            TensorDict.load_memmap(
+                prefix / "_source", device=device, robust_key=robust_key
+            ),
             _str_to_index(index),
         )
 
@@ -4286,6 +4325,7 @@ class _SubTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
@@ -4768,8 +4808,19 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
 
 
 # user did specify location and memmap is in wrong place, so we copy
-def _populate_memmap(*, dest, value, key, copy_existing, prefix, like, existsok):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+def _populate_memmap(
+    *, dest, value, key, copy_existing, prefix, like, existsok, robust_key
+):
+    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
+
+    if prefix is None:
+        filename = None
+    else:
+        # Use smart warning that only warns when encoding would differ
+        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if value.is_nested:
         shape = value._nested_tensor_size()
         # Make the shape a memmap tensor too
@@ -4804,8 +4855,18 @@ def _populate_empty(
     shape,
     dtype,
     prefix,
+    robust_key,
 ):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
+
+    if prefix is None:
+        filename = None
+    else:
+        # Use smart warning that only warns when encoding would differ
+        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if isinstance(shape, torch.Tensor):
         # Make the shape a memmap tensor too
         if prefix is not None:
@@ -4835,8 +4896,18 @@ def _populate_storage(
     dtype,
     prefix,
     storage,
+    robust_key,
 ):
-    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
+
+    if prefix is None:
+        filename = None
+    else:
+        # Use smart warning that only warns when encoding would differ
+        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+        # Encode the key to make it filesystem-safe
+        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+        filename = str(prefix / f"{safe_key}.memmap")
     if isinstance(shape, torch.Tensor):
         # Make the shape a memmap tensor too
         if prefix is not None:
@@ -5156,13 +5227,18 @@ def load(
     non_blocking: bool = False,
     *,
     out: TensorCollection | None = None,
+    robust_key: bool | None = None,
 ) -> Self:
     """Loads a tensordict from disk.
 
     This class method is a proxy to :meth:`~.load_memmap`.
     """
     return load_memmap(
-        prefix=prefix, device=device, non_blocking=is_non_tensor, out=out
+        prefix=prefix,
+        device=device,
+        non_blocking=non_blocking,
+        out=out,
+        robust_key=robust_key,
     )
 
 
@@ -5172,6 +5248,7 @@ def load_memmap(
     non_blocking: bool = False,
     *,
     out: TensorCollection | None = None,
+    robust_key: bool | None = None,
 ) -> Self:
     """Loads a memory-mapped tensordict from disk.
 
@@ -5188,6 +5265,10 @@ def load_memmap(
             called after loading tensors on device. Defaults to ``False``.
         out (TensorDictBase, optional): optional tensordict where the data
             should be written.
+        robust_key (bool, optional): if ``True``, expects robust key encoding was used
+            when saving and decodes filenames accordingly. If ``False``, uses legacy
+            behavior. If ``None`` (default), emits a deprecation warning and falls
+            back to legacy behavior. Will default to ``True`` in v0.12.
 
     Examples:
         >>> from tensordict import TensorDict, load_memmap
@@ -5243,7 +5324,11 @@ def load_memmap(
 
     """
     return TensorDict.load_memmap(
-        prefix=prefix, device=device, non_blocking=is_non_tensor, out=out
+        prefix=prefix,
+        device=device,
+        non_blocking=non_blocking,
+        out=out,
+        robust_key=robust_key,
     )
 
 
@@ -5255,6 +5340,7 @@ def save(
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
+    robust_key: bool | None = None,
 ) -> None:
     """Saves the tensordict to disk.
 
@@ -5266,6 +5352,7 @@ def save(
         num_threads=num_threads,
         return_early=return_early,
         share_non_tensor=share_non_tensor,
+        robust_key=robust_key,
     )
 
 
@@ -5277,6 +5364,7 @@ def memmap(
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
+    robust_key: bool | None = None,
 ) -> Self:
     """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -5301,6 +5389,11 @@ def memmap(
             on all other workers. If the number of non-tensor leaves is high (e.g.,
             sharing large stacks of non-tensor data) this may result in OOM or similar
             errors. Defaults to ``False``.
+        robust_key (bool, optional): if ``True``, uses robust key encoding that safely
+            handles keys with path separators and special characters. If ``False``,
+            uses legacy behavior (keys used as-is). If ``None`` (default), emits a
+            deprecation warning and falls back to legacy behavior. Will default to
+            ``True`` in v0.12.
 
     The TensorDict is then locked, meaning that any writing operations that
     isn't in-place will throw an exception (eg, rename, set or remove an
@@ -5322,4 +5415,5 @@ def memmap(
         num_threads=num_threads,
         return_early=return_early,
         share_non_tensor=share_non_tensor,
+        robust_key=robust_key,
     )
