@@ -35,7 +35,7 @@ jobs:
           submodules: recursive
       
       - name: Set up Python ${{ matrix.python_version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       
@@ -59,15 +59,15 @@ jobs:
       - name: Install PyTorch
         run: |
           if [[ "$CU_VERSION" == "cpu" ]]; then
-            uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+            uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
           else
-            uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+            uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
           fi
       
       - name: Install tensordict dependencies
         run: |
-          uv pip install -e .[tests]
-          uv pip install protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
       
       - name: Run tests
         run: |
@@ -86,7 +86,7 @@ jobs:
           submodules: recursive
       
       - name: Set up Python ${{ matrix.python_version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       
@@ -108,12 +108,12 @@ jobs:
       
       - name: Install PyTorch
         run: |
-          uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+          uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
       
       - name: Install tensordict dependencies
         run: |
-          uv pip install -e .[tests]
-          uv pip install protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
       
       - name: Run tests
         run: |
@@ -133,7 +133,7 @@ jobs:
           submodules: recursive
       
       - name: Set up Python ${{ matrix.python_version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       
@@ -157,15 +157,15 @@ jobs:
       - name: Install PyTorch
         run: |
           if [[ "$CU_VERSION" == "cpu" ]]; then
-            uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+            uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/cpu
           else
-            uv pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+            uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
           fi
       
       - name: Install tensordict dependencies
         run: |
-          uv pip install -e .[tests]
-          uv pip install protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
       
       - name: Run tests
         run: |
@@ -184,7 +184,7 @@ jobs:
           submodules: recursive
       
       - name: Set up Python ${{ matrix.python_version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python_version }}
       
@@ -206,12 +206,12 @@ jobs:
       
       - name: Install PyTorch
         run: |
-          uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/cpu
       
       - name: Install tensordict dependencies
         run: |
-          uv pip install -e .[tests]
-          uv pip install protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
       
       - name: Run tests
         run: |
