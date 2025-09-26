@@ -16,7 +16,6 @@ import pathlib
 import platform
 import re
 import sys
-import uuid
 import warnings
 import weakref
 from collections import UserDict
