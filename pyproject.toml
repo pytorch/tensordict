@@ -55,7 +55,6 @@ tests = [
     "pytest-rerunfailures",
     "pytest-benchmark"
 ]
-checkpointing = ["torchsnapshot-nightly"]
 h5 = ["h5py>=3.8"]
 dev = ["pybind11", "ninja"]
 typecheck = ["mypy>=1.0.0"]

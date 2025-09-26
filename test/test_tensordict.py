@@ -16,7 +16,6 @@ import pathlib
 import platform
 import re
 import sys
-import uuid
 import warnings
 import weakref
 from collections import UserDict
@@ -108,15 +107,6 @@ except ImportError:
     _has_funcdim = False
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
-
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
 
 try:
     import h5py  # noqa
@@ -3347,6 +3337,43 @@ class TestGeneric:
             inplace=False,
         )
         assert td["key1"].shape == td._tensordict["key1"].shape
+
+    def test_to_memory_leak(self):
+        """Test that the original tensordict is properly garbage collected when using to() method."""
+        import gc
+
+        # Create a tensordict
+        td_make = lambda: TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.randn(3, 4)}, batch_size=[3]
+        )
+
+        # Create a weak reference to track the original tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+
+        # Verify the tensordict exists
+        assert td_ref() is not None
+
+        # Use the to method to create a new tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+        td_new = td.to("cpu")
+
+        # The original tensordict should still exist (we have a reference to it)
+        assert td_ref() is not None
+
+        # Delete the original reference
+        del td
+
+        # Force garbage collection
+        gc.collect()
+
+        # The original tensordict should now be garbage collected
+        assert td_ref() is None, "Original tensordict was not garbage collected"
+
+        # Verify the new tensordict still works
+        assert td_new["a"].device.type == "cpu"
+        assert td_new["b"].device.type == "cpu"
 
     # Not working on python 3.9 and below
     @pytest.mark.skipif(
@@ -10642,67 +10669,6 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == td2.batch_size
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
-
-
-@pytest.mark.skipif(
-    not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
-)
-class TestSnapshot:
-    @pytest.mark.parametrize("save_name", ["doc", "data"])
-    def test_inplace(self, save_name):
-        td = TensorDict(
-            {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
-            [3],
-        )
-        td.memmap_()
-        assert isinstance(td["b", "c"], MemoryMappedTensor)
-
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                **{save_name: td.state_dict(keep_vars=True)}
-            )
-        }
-        path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
-
-        td_plain = td.to_tensordict(retain_none=True)
-        # we want to delete refs to MemoryMappedTensors
-        assert not isinstance(td_plain["a"], MemoryMappedTensor)
-        del td
-
-        snapshot = torchsnapshot.Snapshot(path=path)
-        td_dest = TensorDict(
-            {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
-            [3],
-        )
-        td_dest.memmap_()
-        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                **{save_name: td_dest.state_dict(keep_vars=True)}
-            )
-        }
-        snapshot.restore(app_state=app_state)
-
-        assert (td_dest == td_plain).all()
-        assert td_dest["b"].batch_size == td_plain["b"].batch_size
-        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
-
-    def test_update(self):
-        tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-        state = {"state": tensordict}
-        tensordict.memmap_()
-        path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
-        td_plain = tensordict.to_tensordict(retain_none=True)
-        assert not isinstance(td_plain["a"], MemoryMappedTensor)
-        del tensordict
-
-        snapshot = torchsnapshot.Snapshot(path=path)
-        tensordict2 = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-        target_state = {"state": tensordict2}
-        snapshot.restore(app_state=target_state)
-        assert (td_plain == tensordict2).all()
 
 
 class TestErrorMessage:

@@ -26,7 +26,6 @@ import numpy as np
 
 import torch
 from _typeshed import Incomplete
-from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey as NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor

@@ -104,6 +104,18 @@ You can then assert that the device of the tensordict is `"cuda:0"`:
 
     >>> assert tensordict.device == torch.device("cuda:0")
 
+The :meth:`~tensordict.TensorDict.to` method can also be used as a context manager for temporary device changes:
+
+    >>> def op(td):
+    ...     return td + 1
+    >>> tensordict = TensorDict({"x": torch.zeros(3)}, batch_size=[3], device="cpu")
+    >>> with tensordict.to("cuda:0") as td_gpu:
+    ...     # Process data on GPU and update in-place -- anything that affects td_gpu in place will also affect tensordict during __exit__
+    ...     td_gpu.update(some_gpu_operation(td_gpu))
+    >>> # Data is automatically restored to original device
+    >>> assert tensordict.device == torch.device("cpu")
+    >>> assert (tensordict == 1).all()
+
 To reshape the batch dimensions one can do
 
     >>> tensordict = tensordict.reshape(6)
