@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3335+gc1db2b323.d20250924)
+                  main (0.10.0.dev3341+gc4e161c82.d20250929)
                 </div>
               
             
@@ -446,6 +446,18 @@ For example, to place all of the contents onto a particular device one can simpl
 </div>
 <p>You can then assert that the device of the tensordict is <cite>“cuda:0”</cite>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to" title="tensordict.TensorDict.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a> method can also be used as a context manager for temporary device changes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">op</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">td</span> <span class="o">+</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">td_gpu</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="c1"># Process data on GPU and update in-place -- anything that affects td_gpu in place will also affect tensordict during __exit__</span>
+<span class="gp">... </span>    <span class="n">td_gpu</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">some_gpu_operation</span><span class="p">(</span><span class="n">td_gpu</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Data is automatically restored to original device</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>To reshape the batch dimensions one can do</p>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3335+gc1db2b323.d20250924)
+                  main (0.10.0.dev3341+gc4e161c82.d20250929)
                 </div>
               
             
@@ -7893,6 +7893,11 @@ device and/or if the dtype is passed. The same tensordict otherwise.
 <p>If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
 Each new tensor will be a view on the consolidated storage cast to the desired device.</p>
 </div>
+<p>This operation can be used as a context manager too. When used as a context manager,
+the tensordict is temporarily moved to the target device/dtype, and upon exiting
+the context, it is automatically restored to its original device/dtype. This is
+particularly useful when working with neural network modules that expect data
+on a specific device.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="p">[],</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_cuda</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>  <span class="c1"># casts to cuda</span>
@@ -7902,6 +7907,21 @@ Each new tensor will be a view on the consolidated storage cast to the desired d
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_cuda</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">other</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">({},</span> <span class="p">[],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">))</span>  <span class="c1"># using a tensordict example</span>
 </pre></div>
 </div>
+<p>Using as a context manager for temporary device changes:
+&gt;&gt;&gt; from tensordict.nn import TensorDictModule
+&gt;&gt;&gt; import torch
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Create a module and data
+&gt;&gt;&gt; mod = TensorDictModule(lambda x: x + 1, in_keys=[“x”], out_keys=[“y”])
+&gt;&gt;&gt; td = TensorDict(x=torch.zeros(3), batch_size=[3], device=”cpu”)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Use context manager to temporarily move to GPU
+&gt;&gt;&gt; with td.to(“cuda”) as td_gpu:
+…     td_gpu.update(mod(td_gpu))  # Process on GPU and update in-place
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Data is automatically restored to original device
+&gt;&gt;&gt; assert td[“x”].device.type == “cpu”
+&gt;&gt;&gt; assert td[“y”].device.type == “cpu”  # Output also restored to original device</p>
 </dd></dl>
 
 <dl class="py method">
