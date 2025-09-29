@@ -3338,6 +3338,43 @@ class TestGeneric:
         )
         assert td["key1"].shape == td._tensordict["key1"].shape
 
+    def test_to_memory_leak(self):
+        """Test that the original tensordict is properly garbage collected when using to() method."""
+        import gc
+
+        # Create a tensordict
+        td_make = lambda: TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.randn(3, 4)}, batch_size=[3]
+        )
+
+        # Create a weak reference to track the original tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+
+        # Verify the tensordict exists
+        assert td_ref() is not None
+
+        # Use the to method to create a new tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+        td_new = td.to("cpu")
+
+        # The original tensordict should still exist (we have a reference to it)
+        assert td_ref() is not None
+
+        # Delete the original reference
+        del td
+
+        # Force garbage collection
+        gc.collect()
+
+        # The original tensordict should now be garbage collected
+        assert td_ref() is None, "Original tensordict was not garbage collected"
+
+        # Verify the new tensordict still works
+        assert td_new["a"].device.type == "cpu"
+        assert td_new["b"].device.type == "cpu"
+
     # Not working on python 3.9 and below
     @pytest.mark.skipif(
         sys.version_info < (3, 10), reason="Not working on python 3.9 and below"

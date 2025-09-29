@@ -14347,6 +14347,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         return result
 
+    @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -14408,6 +14409,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
             Each new tensor will be a view on the consolidated storage cast to the desired device.
 
+        This operation can be used as a context manager too. When used as a context manager,
+        the tensordict is temporarily moved to the target device/dtype, and upon exiting
+        the context, it is automatically restored to its original device/dtype. This is
+        particularly useful when working with neural network modules that expect data
+        on a specific device.
+
         Examples:
             >>> data = TensorDict({"a": 1.0}, [], device=None)
             >>> data_cuda = data.to("cuda:0")  # casts to cuda
@@ -14415,6 +14422,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> data_cuda_int = data.to("cuda:0", torch.int)  # multiple casting
             >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
             >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
+
+            Using as a context manager for temporary device changes:
+            >>> from tensordict.nn import TensorDictModule
+            >>> import torch
+            >>>
+            >>> # Create a module and data
+            >>> mod = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+            >>> td = TensorDict(x=torch.zeros(3), batch_size=[3], device="cpu")
+            >>>
+            >>> # Use context manager to temporarily move to GPU
+            >>> with td.to("cuda") as td_gpu:
+            ...     td_gpu.update(mod(td_gpu))  # Process on GPU and update in-place
+            >>>
+            >>> # Data is automatically restored to original device
+            >>> assert td["x"].device.type == "cpu"
+            >>> assert td["y"].device.type == "cpu"  # Output also restored to original device
         """
         non_blocking = kwargs.pop("non_blocking", None)
 
