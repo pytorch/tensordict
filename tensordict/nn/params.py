@@ -1035,7 +1035,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     lock_ = TensorDict.lock_
 
     @property
-    def data(self):
+    def data(self) -> Self:
         return self._param_td._data()
 
     @property
