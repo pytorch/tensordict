@@ -3376,12 +3376,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.batch_size[dim]
 
     @property
-    def data(self):
+    def data(self) -> Self:
         """Returns a tensordict containing the .data attributes of the leaf tensors."""
         return self._data()
 
     @property
-    def grad(self):
+    def grad(self) -> Self:
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
 

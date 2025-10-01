@@ -4659,7 +4659,7 @@ class NonTensorStack(LazyStackedTensorDict):
         return self
 
     @property
-    def data(self):
+    def data(self) -> Self:
         """Attempts to return the unique value in the stack.
 
         Raises a ValueError if there is more than one unique value.
