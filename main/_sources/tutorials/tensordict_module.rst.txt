@@ -408,9 +408,9 @@ executed, as they need to read and write from a tensordict. However, we can grea
  .. code-block:: none
 
     Without compile
-    Regular:  215.1339 us
-    TDM:  282.9736 us
-    Sequential:  504.3731 us
+    Regular:  219.1477 us
+    TDM:  286.3440 us
+    Sequential:  491.9109 us
     Compiled versions
     cudagraph partition due to non gpu ops. Found from : 
        File "/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py", line 200, in forward
@@ -436,7 +436,7 @@ executed, as they need to read and write from a tensordict. However, we can grea
        File "/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py", line 204, in forward
         return self.linear2(y) + x
 
-    Compiled regular:  330.7610 us
+    Compiled regular:  292.5860 us
     cudagraph partition due to non gpu ops. Found from : 
        File "/pytorch/tensordict/tensordict/nn/common.py", line 319, in wrapper
         out = func(_self, tensordict, *args, **kwargs)
@@ -629,7 +629,7 @@ executed, as they need to read and write from a tensordict. However, we can grea
       File "/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py", line 200, in forward
         y = self.linear0(x)
 
-    Compiled TDM:  325.0060 us
+    Compiled TDM:  323.7820 us
     cudagraph partition due to non gpu ops. Found from : 
        File "/pytorch/tensordict/tensordict/nn/common.py", line 319, in wrapper
         out = func(_self, tensordict, *args, **kwargs)
@@ -780,7 +780,7 @@ executed, as they need to read and write from a tensordict. However, we can grea
       File "/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py", line 131, in <lambda>
         lambda x, y: x + y, in_keys=["x", "linear2"], out_keys=["y"]
 
-    Compiled sequential:  337.2060 us
+    Compiled sequential:  337.3770 us
 
 
 
@@ -912,7 +912,7 @@ In the next tutorial, we will be seeing how ``torch.export`` can be used to isol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 13.920 seconds)
+   **Total running time of the script:** (0 minutes 13.859 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:
