@@ -26,7 +26,6 @@ import numpy as np
 
 import torch
 from _typeshed import Incomplete
-from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey as NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor
@@ -250,6 +249,7 @@ class TensorCollection:
         dtype: torch.dtype | None = None,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
+    @overload
     def mean(
         self,
         dim: int | tuple[int] = ...,
@@ -257,6 +257,16 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def nanmean(
@@ -325,6 +335,7 @@ class TensorCollection:
         dtype: torch.dtype | None = None,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
+    @overload
     def sum(
         self,
         dim: int | tuple[int] = ...,
@@ -332,6 +343,16 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def nansum(
@@ -375,6 +396,7 @@ class TensorCollection:
         correction: int = 1,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
+    @overload
     def std(
         self,
         dim: int | tuple[int] = ...,
@@ -382,6 +404,16 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def var(
@@ -400,6 +432,7 @@ class TensorCollection:
         correction: int = 1,
         reduce: bool,
     ) -> Self | torch.Tensor: ...
+    @overload
     def var(
         self,
         dim: int | tuple[int] = ...,
@@ -407,6 +440,16 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor: ...
     @overload
     def quantile(
@@ -934,6 +977,9 @@ class TensorCollection:
     def sorted_keys(self) -> list[NestedKey]: ...
     def flatten(self, start_dim: int = 0, end_dim: int = -1): ...
     def unflatten(self, dim, unflattened_size): ...
+    def _transform_keys(
+        self, key_transform: Callable[[NestedKey], NestedKey]
+    ) -> Self: ...
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self: ...
@@ -1361,6 +1407,7 @@ class TensorCollection:
         *,
         out=None,
         dtype: torch.dtype | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ): ...
     def softmax(self, dim: int, dtype: torch.dtype | None = None): ...
     @property

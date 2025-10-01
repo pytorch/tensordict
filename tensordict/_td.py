@@ -2390,6 +2390,7 @@ class TensorDict(TensorDictBase):
         """Device of the tensordict.
 
         Returns `None` if device hasn't been provided in the constructor or set via `tensordict.to(device)`.
+        The `to()` method can also be used as a context manager for temporary device changes.
 
         """
         return self._device
@@ -2400,7 +2401,8 @@ class TensorDict(TensorDictBase):
             "device cannot be set using tensordict.device = device, "
             "because device cannot be updated in-place. To update device, use "
             "tensordict.to(new_device), which will return a new tensordict "
-            "on the new device."
+            "on the new device. You can also use tensordict.to(new_device) as a "
+            "context manager for temporary device changes."
         )
 
     @property
@@ -3898,6 +3900,7 @@ class _SubTensorDict(TensorDictBase):
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
+    @_as_context_manager()
     def to(self, *args, **kwargs: Any) -> Self:
         (
             device,

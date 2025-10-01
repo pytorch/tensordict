@@ -1902,6 +1902,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
+    @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
         if kwargs.get("batch_size") is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
@@ -4154,6 +4155,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
+    @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
         non_blocking = kwargs.pop("non_blocking", None)
         (

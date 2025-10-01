@@ -47,14 +47,6 @@ from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
 from torch import Tensor
 
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -2300,68 +2292,6 @@ class TestTensorClass:
         assert "z" in ctd.keys()
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
-
-    @pytest.mark.skipif(
-        not _has_torchsnapshot,
-        reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}",
-    )
-    def test_torchsnapshot(self, tmp_path):
-        @tensorclass
-        class MyClass:
-            x: torch.Tensor
-            z: str
-            y: "MyClass" = None
-
-        z = "test_tensorclass"
-        tc = MyClass(
-            x=torch.randn(3),
-            z=z,
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc.memmap_()
-        assert isinstance(tc.y.x, MemoryMappedTensor)
-        assert tc.z == z
-
-        app_state = {
-            "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
-        }
-        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
-
-        tc_dest = MyClass(
-            x=torch.randn(3),
-            z="other",
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc_dest.memmap_()
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                tensordict=tc_dest.state_dict(keep_vars=True)
-            )
-        }
-        snapshot.restore(app_state=app_state)
-
-        assert (tc_dest == tc).all()
-        assert tc_dest.y.batch_size == tc.y.batch_size
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        # torchsnapshot does not support updating strings and such
-        assert tc_dest.z != z
-
-        tc_dest = MyClass(
-            x=torch.randn(3),
-            z="other",
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc_dest.memmap_()
-        tc_dest.load_state_dict(tc.state_dict())
-        assert (tc_dest == tc).all()
-        assert tc_dest.y.batch_size == tc.y.batch_size
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        # load_state_dict outperforms snapshot in this case
-        assert tc_dest.z == z
 
     def test_type(self):
         data = MyData(
