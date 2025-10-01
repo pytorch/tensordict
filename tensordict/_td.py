@@ -1017,9 +1017,13 @@ class TensorDict(TensorDictBase):
                 if reduction_name == "quantile":
                     q = kwargs.pop("q")
                     kwargs_copy.update(kwargs)
-                    return getattr(torch, reduction_name)(agglomerate, q, dim=dim, **kwargs_copy)
+                    return getattr(torch, reduction_name)(
+                        agglomerate, q, dim=dim, **kwargs_copy
+                    )
                 kwargs_copy.update(kwargs)
-                return getattr(torch, reduction_name)(agglomerate, dim=dim, **kwargs_copy)
+                return getattr(torch, reduction_name)(
+                    agglomerate, dim=dim, **kwargs_copy
+                )
 
         # IMPORTANT: do not directly access batch_dims (or any other property)
         # via self.batch_dims otherwise a reference cycle is introduced

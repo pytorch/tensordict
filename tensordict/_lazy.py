@@ -2700,8 +2700,12 @@ class LazyStackedTensorDict(TensorDictBase):
             agglomerate = torch.cat(agglomerate, dim=cat_dim)
             if reduction_name == "quantile":
                 q = kwargs.pop("q")
-                return getattr(torch, reduction_name)(agglomerate, q, dim=dim, keepdim=keepdim, **kwargs)
-            return getattr(torch, reduction_name)(agglomerate, dim=dim, keepdim=keepdim, **kwargs)
+                return getattr(torch, reduction_name)(
+                    agglomerate, q, dim=dim, keepdim=keepdim, **kwargs
+                )
+            return getattr(torch, reduction_name)(
+                agglomerate, dim=dim, keepdim=keepdim, **kwargs
+            )
 
         try:
             td: TensorDict = self.to_tensordict()

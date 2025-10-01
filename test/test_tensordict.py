@@ -3079,7 +3079,10 @@ class TestGeneric:
             batch_size=(3, 4),
         )
         if reduction == "quantile":
-            assert getattr(td, reduction)(0.5, reduce=True, dim="feature").shape == (3, 4)
+            assert getattr(td, reduction)(0.5, reduce=True, dim="feature").shape == (
+                3,
+                4,
+            )
             assert getattr(td, reduction)(0.5, reduce=True, dim=1).shape == (3, 5)
         else:
             assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
@@ -3096,34 +3099,34 @@ class TestGeneric:
             ),
             batch_size=(3, 4),
         )
-        
+
         # Test median (0.5 quantile)
         median_td = td.quantile(0.5)
         assert median_td.batch_size == torch.Size([])
         assert isinstance(median_td["a"], torch.Tensor)
         assert median_td["a"].shape == torch.Size([])
-        
+
         # Test median with reduce=True
         median_reduced = td.quantile(0.5, reduce=True)
         assert isinstance(median_reduced, torch.Tensor)
         assert median_reduced.shape == torch.Size([])
-        
+
         # Test quantile along dimension
         quantile_dim = td.quantile(0.5, dim=0)
         assert quantile_dim.batch_size == torch.Size([4])
         assert quantile_dim["a"].shape == torch.Size([4, 5])
-        
+
         # Test multiple quantiles
         quantiles = torch.tensor([0.25, 0.5, 0.75])
         multi_quantile = td.quantile(quantiles, dim=0)
         assert multi_quantile.batch_size == torch.Size([4])
         assert multi_quantile["a"].shape == torch.Size([3, 4, 5])
-        
+
         # Test feature dimension
         quantile_feature = td.quantile(0.5, dim="feature")
         assert quantile_feature.batch_size == torch.Size([3, 4])
         assert quantile_feature["a"].shape == torch.Size([3, 4])
-        
+
         # Test with keepdim
         quantile_keepdim = td.quantile(0.5, dim=0, keepdim=True)
         assert quantile_keepdim.batch_size == torch.Size([1, 4])

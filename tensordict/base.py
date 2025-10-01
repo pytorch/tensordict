@@ -2433,6 +2433,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         reduce: bool,
     ) -> Self | torch.Tensor: ...
 
+    @overload
     def quantile(
         self,
         q: float | torch.Tensor,
@@ -2441,6 +2442,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         interpolation: str = "linear",
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the q-th quantile of all elements in the input tensordict.
 
@@ -2464,6 +2477,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Only applied when ``reduce=False``. Default: ``None``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -2538,7 +2555,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 is_shared=False)
 
         """
-        return self._cast_reduction(
+        result = self._cast_reduction(
             reduction_name="quantile",
             dim=dim,
             keepdim=keepdim,
@@ -2546,6 +2563,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             interpolation=interpolation,
             further_reduce=reduce,
         )
+        if key_transform is not None and not reduce:
+            result = result._transform_keys(key_transform)
+        return result
 
     @abc.abstractmethod
     def _cast_reduction(
