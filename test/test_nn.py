@@ -9,6 +9,7 @@ import copy
 import functools
 import os
 import pickle
+import sys
 import unittest
 import weakref
 from collections import OrderedDict
@@ -2182,6 +2183,9 @@ def test_module_buffer():
     ],
 )
 @pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+)
 def test_to_context(original_device, new_device, tc):
     if tc:
 
