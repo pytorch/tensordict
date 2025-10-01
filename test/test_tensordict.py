@@ -3014,7 +3014,7 @@ class TestGeneric:
             td.record_stream(s0)
 
     @pytest.mark.parametrize(
-        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
     def test_reduction_feature(self, reduction):
         td = TensorDict(
@@ -3030,7 +3030,10 @@ class TestGeneric:
             none=None,
             batch_size=(3, 4),
         )
-        tdr = getattr(td, reduction)(dim="feature")
+        if reduction == "quantile":
+            tdr = getattr(td, reduction)(0.5, dim="feature")
+        else:
+            tdr = getattr(td, reduction)(dim="feature")
         for k, v in td.items(True):
             other = tdr[k]
             if isinstance(v, TensorDict):
@@ -3044,7 +3047,7 @@ class TestGeneric:
                 assert other.shape == td[k[:-1]].shape
 
     @pytest.mark.parametrize(
-        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
     def test_reduction_feature_full(self, reduction):
         td = TensorDict(
@@ -3060,7 +3063,10 @@ class TestGeneric:
             none=None,
             batch_size=(3, 4),
         )
-        reduced = getattr(td, reduction)(dim="feature", reduce=True)
+        if reduction == "quantile":
+            reduced = getattr(td, reduction)(0.5, dim="feature", reduce=True)
+        else:
+            reduced = getattr(td, reduction)(dim="feature", reduce=True)
         assert reduced.shape == (3, 4)
 
         td = TensorDict(
@@ -3072,8 +3078,59 @@ class TestGeneric:
             ),
             batch_size=(3, 4),
         )
-        assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
-        assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
+        if reduction == "quantile":
+            assert getattr(td, reduction)(0.5, reduce=True, dim="feature").shape == (
+                3,
+                4,
+            )
+            assert getattr(td, reduction)(0.5, reduce=True, dim=1).shape == (3, 5)
+        else:
+            assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
+            assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
+
+    def test_quantile(self):
+        """Test quantile reduction functionality."""
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(
+                c=torch.randn(3, 4, 5, 6),
+                d=torch.randn(3, 4, 5),
+                batch_size=(3, 4, 5),
+            ),
+            batch_size=(3, 4),
+        )
+
+        # Test median (0.5 quantile)
+        median_td = td.quantile(0.5)
+        assert median_td.batch_size == torch.Size([])
+        assert isinstance(median_td["a"], torch.Tensor)
+        assert median_td["a"].shape == torch.Size([])
+
+        # Test median with reduce=True
+        median_reduced = td.quantile(0.5, reduce=True)
+        assert isinstance(median_reduced, torch.Tensor)
+        assert median_reduced.shape == torch.Size([])
+
+        # Test quantile along dimension
+        quantile_dim = td.quantile(0.5, dim=0)
+        assert quantile_dim.batch_size == torch.Size([4])
+        assert quantile_dim["a"].shape == torch.Size([4, 5])
+
+        # Test multiple quantiles
+        quantiles = torch.tensor([0.25, 0.5, 0.75])
+        multi_quantile = td.quantile(quantiles, dim=0)
+        assert multi_quantile.batch_size == torch.Size([4])
+        assert multi_quantile["a"].shape == torch.Size([3, 4, 5])
+
+        # Test feature dimension
+        quantile_feature = td.quantile(0.5, dim="feature")
+        assert quantile_feature.batch_size == torch.Size([3, 4])
+        assert quantile_feature["a"].shape == torch.Size([3, 4])
+
+        # Test with keepdim
+        quantile_keepdim = td.quantile(0.5, dim=0, keepdim=True)
+        assert quantile_keepdim.batch_size == torch.Size([1, 4])
+        assert quantile_keepdim["a"].shape == torch.Size([1, 4, 5])
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...
@@ -6636,22 +6693,32 @@ class TestTensorDicts(TestTensorDictsBase):
                 key, val = td.popitem()
 
     @pytest.mark.parametrize(
-        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")
     )
     def test_reduction(self, td_name, device, red, tmpdir):
         td = getattr(self, td_name)(device)
         td = _to_float(td, td_name, tmpdir)
-        assert getattr(td, red)().batch_size == torch.Size(())
-        assert getattr(td, red)(1).shape == torch.Size(
-            [s for i, s in enumerate(td.shape) if i != 1]
-        )
-        assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
-            [s if i != 2 else 1 for i, s in enumerate(td.shape)]
-        )
-        assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
+        if red == "quantile":
+            assert getattr(td, red)(0.5).batch_size == torch.Size(())
+            assert getattr(td, red)(0.5, 1).shape == torch.Size(
+                [s for i, s in enumerate(td.shape) if i != 1]
+            )
+            assert getattr(td, red)(0.5, 2, keepdim=True).shape == torch.Size(
+                [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+            )
+            assert isinstance(getattr(td, red)(0.5, reduce=True), torch.Tensor)
+        else:
+            assert getattr(td, red)().batch_size == torch.Size(())
+            assert getattr(td, red)(1).shape == torch.Size(
+                [s for i, s in enumerate(td.shape) if i != 1]
+            )
+            assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
+                [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+            )
+            assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
 
     @pytest.mark.parametrize(
-        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")
     )
     def test_reduction_feature(self, td_name, device, red, tmpdir):
         td = getattr(self, td_name)(device)
@@ -6666,10 +6733,16 @@ class TestTensorDicts(TestTensorDictsBase):
                     -1,
                 )
             )
-        tdr = getattr(td, red)(dim="feature")
-        assert tdr.batch_size == td.batch_size
-        assert is_tensor_collection(tdr)
-        tensor = getattr(td, red)(dim="feature", reduce=True)
+        if red == "quantile":
+            tdr = getattr(td, red)(0.5, dim="feature")
+            assert tdr.batch_size == td.batch_size
+            assert is_tensor_collection(tdr)
+            tensor = getattr(td, red)(0.5, dim="feature", reduce=True)
+        else:
+            tdr = getattr(td, red)(dim="feature")
+            assert tdr.batch_size == td.batch_size
+            assert is_tensor_collection(tdr)
+            tensor = getattr(td, red)(dim="feature", reduce=True)
         assert tensor.shape == td.batch_size
         assert isinstance(tensor, torch.Tensor)
 

@@ -451,6 +451,46 @@ class TensorCollection:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+    ) -> Self: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
     def auto_batch_size_(self, batch_dims: int | None = None) -> Self: ...
     def auto_device_(self) -> Self: ...
     @classmethod

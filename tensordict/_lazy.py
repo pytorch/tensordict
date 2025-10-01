@@ -2667,7 +2667,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                 ]
                 agglomerate = torch.cat(agglomerate, dim=-1)
-                return getattr(torch, reduction_name)(agglomerate)
+                if reduction_name == "quantile":
+                    q = kwargs.pop("q")
+                    return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
+                return getattr(torch, reduction_name)(agglomerate, **kwargs)
             elif dim == "feature":
 
                 def proc_val(val):
@@ -2695,7 +2698,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 ]
                 cat_dim = self.stack_dim
             agglomerate = torch.cat(agglomerate, dim=cat_dim)
-            return getattr(torch, reduction_name)(agglomerate, dim=dim, keepdim=keepdim)
+            if reduction_name == "quantile":
+                q = kwargs.pop("q")
+                return getattr(torch, reduction_name)(
+                    agglomerate, q, dim=dim, keepdim=keepdim, **kwargs
+                )
+            return getattr(torch, reduction_name)(
+                agglomerate, dim=dim, keepdim=keepdim, **kwargs
+            )
 
         try:
             td: TensorDict = self.to_tensordict()
