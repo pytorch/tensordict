@@ -472,6 +472,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "prod",
     "qint32",
     "qint8",
+    "quantile",
     "quint4x2",
     "quint8",
     "reciprocal",

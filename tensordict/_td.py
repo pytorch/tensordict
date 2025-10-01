@@ -986,7 +986,10 @@ class TensorDict(TensorDictBase):
                     )
                 ]
                 agglomerate = torch.cat(agglomerate, dim=0)
-                return getattr(torch, reduction_name)(agglomerate)
+                if reduction_name == "quantile":
+                    q = kwargs.pop("q")
+                    return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
+                return getattr(torch, reduction_name)(agglomerate, **kwargs)
             else:
                 agglomerate = list(
                     self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
@@ -1008,10 +1011,15 @@ class TensorDict(TensorDictBase):
                 else:
                     cat_dim = dim
                 agglomerate = torch.cat(agglomerate, dim=cat_dim)
-                kwargs = {}
+                kwargs_copy = {}
                 if keepdim is not NO_DEFAULT:
-                    kwargs["keepdim"] = keepdim
-                return getattr(torch, reduction_name)(agglomerate, dim=dim, **kwargs)
+                    kwargs_copy["keepdim"] = keepdim
+                if reduction_name == "quantile":
+                    q = kwargs.pop("q")
+                    kwargs_copy.update(kwargs)
+                    return getattr(torch, reduction_name)(agglomerate, q, dim=dim, **kwargs_copy)
+                kwargs_copy.update(kwargs)
+                return getattr(torch, reduction_name)(agglomerate, dim=dim, **kwargs_copy)
 
         # IMPORTANT: do not directly access batch_dims (or any other property)
         # via self.batch_dims otherwise a reference cycle is introduced
@@ -1048,10 +1056,13 @@ class TensorDict(TensorDictBase):
                     else:
                         val = val.unsqueeze(-1)
                     local_dim = -1
-                result = getattr(val, reduction_name)(
-                    dim=local_dim,
-                    **kwargs,
-                )
+                if reduction_name == "quantile":
+                    # Make a copy of kwargs to avoid consuming q multiple times
+                    kwargs_copy = kwargs.copy()
+                    q = kwargs_copy.pop("q")
+                    result = getattr(val, reduction_name)(q, local_dim, **kwargs_copy)
+                else:
+                    result = getattr(val, reduction_name)(dim=local_dim, **kwargs)
                 if isinstance(result, tuple):
                     if values_only:
                         result = result.values
@@ -1088,9 +1099,23 @@ class TensorDict(TensorDictBase):
                 kwargs["keepdim"] = keepdim
 
             def reduction(val):
-                result = getattr(val, reduction_name)(
-                    **kwargs,
-                )
+                if reduction_name == "quantile":
+                    # Make a copy of kwargs to avoid consuming q multiple times
+                    kwargs_copy = kwargs.copy()
+                    q = kwargs_copy.pop("q")
+                    # Handle dim parameter properly for quantile
+                    if "dim" in kwargs_copy:
+                        dim_val = kwargs_copy.pop("dim")
+                        # torch.quantile doesn't support tuple dimensions, so we need to handle this
+                        if isinstance(dim_val, tuple):
+                            # For tuple dimensions, we'll use the first dimension
+                            # This is a limitation of torch.quantile compared to other reductions
+                            dim_val = dim_val[0]
+                        result = getattr(val, reduction_name)(q, dim_val, **kwargs_copy)
+                    else:
+                        result = getattr(val, reduction_name)(q, **kwargs_copy)
+                else:
+                    result = getattr(val, reduction_name)(**kwargs)
                 if isinstance(result, tuple):
                     if values_only:
                         result = result.values
@@ -1133,6 +1158,11 @@ class TensorDict(TensorDictBase):
             )
 
         def reduction(val):
+            if reduction_name == "quantile":
+                # Make a copy of kwargs to avoid consuming q multiple times
+                kwargs_copy = kwargs.copy()
+                q = kwargs_copy.pop("q")
+                return getattr(val, reduction_name)(q, **kwargs_copy)
             return getattr(val, reduction_name)(**kwargs)
 
         return self._fast_apply(

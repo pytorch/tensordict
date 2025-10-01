@@ -2329,6 +2329,141 @@ class TensorDictBase(MutableMapping, TensorCollection):
             further_reduce=reduce,
         )
 
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        interpolation: str = "linear",
+    ) -> Self: ...
+
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        interpolation: str = "linear",
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+    ) -> Self | torch.Tensor:  # noqa: D417
+        """Returns the q-th quantile of all elements in the input tensordict.
+
+        Args:
+            q (float or torch.Tensor): quantile to compute, must be between 0 and 1.
+            dim (int, tuple of int, str, optional): if ``None``, returns a dimensionless
+                tensordict containing the quantile value of all leaves (if this can be computed).
+                If integer or tuple of integers, `quantile` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
+                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
+                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
+                with the same structure as ``self`` with reduced feature dimensions will be returned.
+            keepdim (bool): whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            interpolation (str): interpolation method to use when the desired quantile lies
+                between two data points. Options are 'linear', 'lower', 'higher', 'midpoint', and 'nearest'.
+                Defaults to 'linear'.
+            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
+                and a single reduced tensor will be returned.
+                Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict(
+            ...     a=torch.randn(3, 4, 5),
+            ...     b=TensorDict(
+            ...         c=torch.randn(3, 4, 5, 6),
+            ...         d=torch.randn(3, 4, 5),
+            ...         batch_size=(3, 4, 5),
+            ...     ),
+            ...     batch_size=(3, 4)
+            ... )
+            >>> td.quantile(0.5, dim=0)  # median along dim 0
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([4]),
+                device=None,
+                is_shared=False)
+            >>> td.quantile(0.5)  # median of all elements
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.quantile(0.5, reduce=True)  # single median value
+            tensor(0.1234)
+            >>> td.quantile(0.5, dim="feature")  # median along feature dimensions
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+            >>> # Multiple quantiles
+            >>> td.quantile(torch.tensor([0.25, 0.5, 0.75]), dim=0)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 4]),
+                device=None,
+                is_shared=False)
+
+        """
+        return self._cast_reduction(
+            reduction_name="quantile",
+            dim=dim,
+            keepdim=keepdim,
+            q=q,
+            interpolation=interpolation,
+            further_reduce=reduce,
+        )
+
     @abc.abstractmethod
     def _cast_reduction(
         self,
