@@ -1406,6 +1406,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         reduce: bool,
     ) -> Self | torch.Tensor: ...
 
+    @overload
     def mean(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1413,6 +1414,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+
+    def mean(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the mean value of all elements in the input tensordict.
 
@@ -1435,6 +1447,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Only applied when ``reduce=False``. Default: ``None``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1510,19 +1526,37 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     [1., 1., 1., 1., 1.],
                     [1., 1., 1., 1., 1.],
                     [1., 1., 1., 1., 1.]])
+            >>> # Using key_transform to add prefix to keys
+            >>> td.mean(key_transform=lambda key: f"avg_{key}")
+            TensorDict(
+                fields={
+                    avg_a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    avg_b: TensorDict(
+                        fields={
+                            avg_c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            avg_d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
 
 
         """
         # if dim is NO_DEFAULT and not keepdim:
         #     dim = None
         #     keepdim = False
-        return self._cast_reduction(
+        result = self._cast_reduction(
             reduction_name="mean",
             dim=dim,
             keepdim=keepdim,
             dtype=dtype,
             further_reduce=reduce,
         )
+        if key_transform is not None and not reduce:
+            result = result._transform_keys(key_transform)
+        return result
 
     @overload
     def nanmean(
@@ -1818,6 +1852,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         reduce: bool,
     ) -> Self | torch.Tensor: ...
 
+    @overload
     def sum(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -1825,6 +1860,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+
+    def sum(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the sum value of all elements in the input tensordict.
 
@@ -1847,6 +1893,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
                 and a single reduced tensor will be returned.
                 Defaults to ``False``.
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Only applied when ``reduce=False``. Default: ``None``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1924,13 +1974,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     [9., 9., 9., 9., 9.]])
 
         """
-        return self._cast_reduction(
+        result = self._cast_reduction(
             reduction_name="sum",
             dim=dim,
             keepdim=keepdim,
             dtype=dtype,
             further_reduce=reduce,
         )
+        if key_transform is not None and not reduce:
+            result = result._transform_keys(key_transform)
+        return result
 
     @overload
     def nansum(
@@ -2084,6 +2137,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         reduce: bool,
     ) -> Self | torch.Tensor: ...
 
+    @overload
     def std(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -2091,6 +2145,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         correction: int = 1,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+
+    def std(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the standard deviation value of all elements in the input tensordict.
 
@@ -2189,13 +2254,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     [0., 0., 0., 0., 0.]])
 
         """
-        return self._cast_reduction(
+        result = self._cast_reduction(
             reduction_name="std",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
             further_reduce=reduce,
         )
+        if key_transform is not None and not reduce:
+            result = result._transform_keys(key_transform)
+        return result
 
     @overload
     def var(
@@ -2216,6 +2284,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         reduce: bool,
     ) -> Self | torch.Tensor: ...
 
+    @overload
     def var(
         self,
         dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
@@ -2223,6 +2292,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         correction: int = 1,
         reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+
+    def var(
+        self,
+        dim: int | Tuple[int] | Literal["feature"] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
         """Returns the variance value of all elements in the input tensordict.
 
@@ -2321,13 +2401,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     [0., 0., 0., 0., 0.]])
 
         """
-        return self._cast_reduction(
+        result = self._cast_reduction(
             reduction_name="var",
             dim=dim,
             keepdim=keepdim,
             correction=correction,
             further_reduce=reduce,
         )
+        if key_transform is not None and not reduce:
+            result = result._transform_keys(key_transform)
+        return result
 
     @abc.abstractmethod
     def _cast_reduction(
@@ -8198,6 +8281,37 @@ class TensorDictBase(MutableMapping, TensorCollection):
             out.names = names
         return out
 
+    def _transform_keys(self, key_transform: Callable[[NestedKey], NestedKey]) -> Self:
+        """Transform all keys using the provided function.
+
+        Args:
+            key_transform (Callable): A function that takes a NestedKey and returns a new NestedKey.
+                For string keys, it receives a string. For tuple keys, it receives a tuple.
+
+        Returns:
+            A new TensorDict with transformed keys.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3), "b": torch.randn(3)}, [3])
+            >>> td_transformed = td._transform_keys(lambda key: f"avg_{key}")
+            >>> print(td_transformed.keys())
+            ["avg_a", "avg_b"]
+
+            >>> td_nested = TensorDict({("a", "b"): torch.randn(3)}, [3])
+            >>> td_transformed = td_nested._transform_keys(lambda key: tuple(f"avg_{k}" for k in key))
+            >>> print(td_transformed.keys())
+            [("avg_a", "avg_b")]
+
+        """
+        new_td = self.empty()
+        for key, value in self.items():
+            new_key = key_transform(key)
+            # If the value is a TensorDict, recursively transform its keys
+            if hasattr(value, "_transform_keys"):
+                value = value._transform_keys(key_transform)
+            new_td[new_key] = value
+        return new_td
+
     @abc.abstractmethod
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
@@ -10316,12 +10430,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out=None,
         dtype: torch.dtype | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self:
         """Computes the norm of each tensor in the tensordict.
 
         Keyword Args:
             out (TensorDict, optional): the output tensordict.
             dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Default: ``None``.
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
@@ -10333,7 +10452,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         def get(name, val):
             return items.get(name, val)
 
-        return self._fast_apply(
+        result = self._fast_apply(
             get,
             named=True,
             nested_keys=True,
@@ -10341,6 +10460,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
             out=out,
         )
+        if key_transform is not None:
+            result = result._transform_keys(key_transform)
+        return result
 
     @implement_for("torch", "2.4")
     def norm(  # noqa: F811
@@ -10348,12 +10470,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out=None,
         dtype: torch.dtype | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self:
         """Computes the norm of each tensor in the tensordict.
 
         Keyword Args:
             out (TensorDict, optional): the output tensordict.
             dtype (torch.dtype, optional): the output dtype (torch>=2.4).
+            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
+                If provided, all keys in the result will be transformed using this function.
+                For string keys, the function receives a string. For tuple keys, it receives a tuple.
+                Default: ``None``.
 
         """
         keys, vals = self._items_list(True, True, collapse=True)
@@ -10363,7 +10490,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         def get(name, val):
             return items.get(name, val)
 
-        return self._fast_apply(
+        result = self._fast_apply(
             get,
             named=True,
             nested_keys=True,
@@ -10371,6 +10498,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
             out=out,
         )
+        if key_transform is not None:
+            result = result._transform_keys(key_transform)
+        return result
 
     def lgamma(self) -> Self:
         """Computes the :meth:`~torch.lgamma` value of each element of the TensorDict."""
