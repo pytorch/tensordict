@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3351+g8a0d6e417.d20251001)
+                  main (0.10.0.dev3353+gc94af2e51.d20251005)
                 </div>
               
             
@@ -560,9 +560,9 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  219.9947 us
-TDM:  283.1311 us
-Sequential:  502.7863 us
+Regular:  221.2395 us
+TDM:  286.2083 us
+Sequential:  506.8703 us
 Compiled versions
 cudagraph partition due to non gpu ops. Found from :
    File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
@@ -588,7 +588,7 @@ cudagraph partition due to non gpu ops. Found from :
    File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
     return self.linear2(y) + x
 
-Compiled regular:  295.8860 us
+Compiled regular:  292.3860 us
 cudagraph partition due to non gpu ops. Found from :
    File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
     out = func(_self, tensordict, *args, **kwargs)
@@ -781,7 +781,7 @@ cudagraph partition due to non gpu ops. Found from :
   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
     y = self.linear0(x)
 
-Compiled TDM:  328.9470 us
+Compiled TDM:  358.4770 us
 cudagraph partition due to non gpu ops. Found from :
    File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
     out = func(_self, tensordict, *args, **kwargs)
@@ -932,7 +932,7 @@ cudagraph partition due to non gpu ops. Found from :
   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 131, in &lt;lambda&gt;
     lambda x, y: x + y, in_keys=[&quot;x&quot;, &quot;linear2&quot;], out_keys=[&quot;y&quot;]
 
-Compiled sequential:  383.7280 us
+Compiled sequential:  375.4125 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -1032,7 +1032,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.907 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.885 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>

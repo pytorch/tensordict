@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3351+g8a0d6e417.d20251001)
+                  main (0.10.0.dev3353+gc94af2e51.d20251005)
                 </div>
               
             
@@ -368,12 +368,12 @@ others.</p>
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>autocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the types indicated will be enforced when an argument is set.
-Thie argument is exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> (both cannot be true at the same time). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+This argument is exclusive with <code class="docutils literal notranslate"><span class="pre">nocast</span></code> (both cannot be true at the same time). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>frozen</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensorclass cannot be modified. This argument is
 provided to dataclass-compatibility, a similar behavior can be obtained through the <cite>lock</cite> argument in
 the class constructor. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>nocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, Tensor-compatible types such as <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code> and the like
-will not be cast to a tensor type. Thie argument is exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> (both cannot be true
+will not be cast to a tensor type. This argument is exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> (both cannot be true
 at the same time). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved attributes.
 Use with caution, as this may cause unintended consequences. Defaults to False.</p></li>
