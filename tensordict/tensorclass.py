@@ -784,12 +784,12 @@ def tensorclass(
 
     Keyword Args:
         autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
-            Thie argument is exclusive with ``autocast`` (both cannot be true at the same time). Defaults to ``False``.
+            This argument is exclusive with ``nocast`` (both cannot be true at the same time). Defaults to ``False``.
         frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
             provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
             the class constructor. Defaults to ``False``.
         nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
-            will not be cast to a tensor type. Thie argument is exclusive with ``autocast`` (both cannot be true
+            will not be cast to a tensor type. This argument is exclusive with ``autocast`` (both cannot be true
             at the same time). Defaults to ``False``.
         shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
             Use with caution, as this may cause unintended consequences. Defaults to False.
