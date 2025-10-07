@@ -5215,7 +5215,7 @@ def stack(input: Sequence[T], dim: int = 0, *, out=None) -> T:
     This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
 
     """
-    return TensorDict.stack(input, dim=dim, out=out)
+    return torch.stack(input, dim=dim, out=out)
 
 
 def lazy_stack(input: Sequence[T], dim: int = 0, *, out=None) -> T:
@@ -5232,7 +5232,7 @@ def cat(input: Sequence[T], dim: int = 0, *, out=None) -> T:
     This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
 
     """
-    return TensorDict.cat(input, dim=dim, out=out)
+    return torch.cat(input, dim=dim, out=out)
 
 
 def maybe_dense_stack(input: Sequence[T], dim: int = 0, *, out=None, **kwargs) -> T:

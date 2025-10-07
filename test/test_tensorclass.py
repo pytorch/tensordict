@@ -532,6 +532,9 @@ class TestTensorClass:
 
         tc_cat = torch.cat([data1, data2], 0)
         assert type(tc_cat) is type(data1)
+
+        tc_cat = tensordict.cat([data1, data2], 0)
+        assert type(tc_cat) is type(data1)
         assert isinstance(tc_cat.y, type(data1.y))
         assert tc_cat.X.shape == torch.Size([6, 4, 5])
         assert tc_cat.y.X.shape == torch.Size([6, 4, 5])
