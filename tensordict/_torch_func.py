@@ -384,7 +384,7 @@ def _cat(
             names = list_of_tensordicts[0].names
         # if we have a TD subclass, use _new_unsafe bc we know it exists. Otherwise, use
         #  TensorDict's one
-        if issubclass(tdtype, TensorDict):
+        if issubclass(tdtype, TensorDict) or _is_tensorclass(tdtype):
             clz = tdtype
         else:
             clz = TensorDict
