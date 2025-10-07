@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3360+gf66a47e05.d20251007)
+                  main (0.10.0.dev3363+g38f119961.d20251007)
                 </div>
               
             
@@ -364,9 +364,9 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>nn.Module</em>) – The nn.module to duplicate and wrap.</p></li>
-<li><p><strong>num_copies</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>) – The number of copies of module to make.</p></li>
+<li><p><strong>num_copies</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of copies of module to make.</p></li>
 <li><p><strong>parameter_init_function</strong> (<em>Callable</em>) – A function that takes a module copy and initializes its parameters.</p></li>
-<li><p><strong>expand_input</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to expand the input TensorDict to match the number of copies. This should be
+<li><p><strong>expand_input</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to expand the input TensorDict to match the number of copies. This should be
 True unless you are chaining ensemble modules together, e.g. EnsembleModule(cnn) -&gt; EnsembleModule(mlp).
 If False, EnsembleModule(mlp) will expected the previous module(s) to have already expanded the input.</p></li>
 </ul>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3360+gf66a47e05.d20251007)
+                  main (0.10.0.dev3363+g38f119961.d20251007)
                 </div>
               
             
@@ -358,7 +358,7 @@
 <h1>set_composite_lp_aggregate<a class="headerlink" href="#set-composite-lp-aggregate" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.nn.set_composite_lp_aggregate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_composite_lp_aggregate" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_composite_lp_aggregate" title="Permalink to this definition">¶</a></dt>
 <dd><p>Controls whether <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> log-probabilities and entropies will be aggregated in a single tensor.</p>
 <p>When <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probs / entropies of <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code>
 will be summed into a single tensor with the shape of the root tensordict. This behaviour is being deprecated in favor of

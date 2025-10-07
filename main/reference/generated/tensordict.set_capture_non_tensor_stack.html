@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3360+gf66a47e05.d20251007)
+                  main (0.10.0.dev3363+g38f119961.d20251007)
                 </div>
               
             
@@ -358,11 +358,11 @@
 <h1>set_capture_non_tensor_stack<a class="headerlink" href="#set-capture-non-tensor-stack" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_capture_non_tensor_stack">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_capture_non_tensor_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_capture_non_tensor_stack" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_capture_non_tensor_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_capture_non_tensor_stack" title="Permalink to this definition">¶</a></dt>
 <dd><p>A context manager or decorator to control whether identical non-tensor data should be stacked into a single NonTensorData object or a NonTensorStack.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to capture non-tensor stacks. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, identical
+<dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to capture non-tensor stacks. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, identical
 non-tensor data will be stacked into a <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>. If <code class="docutils literal notranslate"><span class="pre">True</span></code>,
 a single <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> object will contain the unique value, but with the desired batch-size.
 Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
