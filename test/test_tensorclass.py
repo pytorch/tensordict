@@ -8,6 +8,7 @@ import argparse
 import ast
 import contextlib
 import dataclasses
+import importlib.util
 import inspect
 import os
 import pathlib
@@ -46,14 +47,7 @@ from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
 from torch import Tensor
 
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
+_has_streaming = importlib.util.find_spec("streaming", None) is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -2104,6 +2098,21 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData)
         assert stacked_tc.custom_data == "abc"
 
+    def test_stack_metadata_typed(self):
+        class MyTensorClass(TensorClass):
+            custom_data: MetaData[str]
+
+        my_tc = MyTensorClass(custom_data=MetaData[str]("abc"))
+        assert isinstance(my_tc._tensordict._tensordict.get("custom_data"), MetaData)
+        stacked_tc = torch.stack([my_tc, my_tc], dim=0)
+        assert isinstance(
+            stacked_tc._tensordict._tensordict.get("custom_data"), MetaData[str]
+        )
+        assert stacked_tc.custom_data == "abc"
+        stacked_tc = lazy_stack([my_tc, my_tc], dim=0)
+        assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData[str])
+        assert stacked_tc.custom_data == "abc"
+
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
             foo: Tensor
@@ -2115,6 +2124,44 @@ class TestTensorClass:
         tc2 = tc.to_lazystack(1)
         assert isinstance(tc2, MyTensorClass)
         assert isinstance(tc2._tensordict, LazyStackedTensorDict)
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = LazyStackedTensorDict(
+            TensorDict(a=0, b=1, c=torch.randn(2), d="a string"),
+            TensorDict(a=1, b=1, c=torch.randn(3), d="another string"),
+            TensorDict(a=2, b=1, c=torch.randn(3), d="yet another string"),
+        )
+
+        class MC(TensorClass):
+            a: Any
+            b: Any
+            c: Any
+            d: Any
+
+        td = MC.from_tensordict(td)
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=MC.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = TensorDict.lazy_stack(batches)
+        assert isinstance(test_td, MC)
+        assert isinstance(test_td._tensordict, LazyStackedTensorDict)
+        assert_allclose_td(td, test_td)
 
     def test_stack_names(self):
         class MyTensorClass(TensorClass):
@@ -2246,68 +2293,6 @@ class TestTensorClass:
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
 
-    @pytest.mark.skipif(
-        not _has_torchsnapshot,
-        reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}",
-    )
-    def test_torchsnapshot(self, tmp_path):
-        @tensorclass
-        class MyClass:
-            x: torch.Tensor
-            z: str
-            y: "MyClass" = None
-
-        z = "test_tensorclass"
-        tc = MyClass(
-            x=torch.randn(3),
-            z=z,
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc.memmap_()
-        assert isinstance(tc.y.x, MemoryMappedTensor)
-        assert tc.z == z
-
-        app_state = {
-            "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
-        }
-        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
-
-        tc_dest = MyClass(
-            x=torch.randn(3),
-            z="other",
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc_dest.memmap_()
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                tensordict=tc_dest.state_dict(keep_vars=True)
-            )
-        }
-        snapshot.restore(app_state=app_state)
-
-        assert (tc_dest == tc).all()
-        assert tc_dest.y.batch_size == tc.y.batch_size
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        # torchsnapshot does not support updating strings and such
-        assert tc_dest.z != z
-
-        tc_dest = MyClass(
-            x=torch.randn(3),
-            z="other",
-            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
-            batch_size=[],
-        )
-        tc_dest.memmap_()
-        tc_dest.load_state_dict(tc.state_dict())
-        assert (tc_dest == tc).all()
-        assert tc_dest.y.batch_size == tc.y.batch_size
-        assert isinstance(tc_dest.y.x, MemoryMappedTensor)
-        # load_state_dict outperforms snapshot in this case
-        assert tc_dest.z == z
-
     def test_type(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
@@ -2422,6 +2407,24 @@ class TestTensorClass:
         with set_capture_non_tensor_stack(True):
             y = torch.stack([y0, y1])
         assert y.z.shape == torch.Size(())
+
+    def test_autograd_grad(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: str
+            z: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.randn(3, requires_grad=True),
+            y="a string!",
+            z=torch.randn(2),
+        )
+        b = a + 1
+        inputs = a.select("x")
+        outputs = b.select("x")
+        grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
+        assert (grads == 1).all()
 
 
 class TestMemmap:

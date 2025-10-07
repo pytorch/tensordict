@@ -9,6 +9,7 @@ import copy
 import functools
 import os
 import pickle
+import sys
 import unittest
 import weakref
 from collections import OrderedDict
@@ -55,6 +56,7 @@ from tensordict.nn.utils import (
     set_skip_existing,
     skip_existing,
 )
+from tensordict.tensorclass import TensorClass
 
 from torch import distributions, nn
 from torch.distributions import Categorical, Normal
@@ -2147,6 +2149,71 @@ def test_module_buffer():
     if torch.cuda.device_count():
         module.cuda()
         assert module.td.device.type == "cuda"
+
+
+@pytest.mark.parametrize(
+    "original_device",
+    [
+        None,
+        torch.device("cpu"),
+        (
+            torch.device("cuda:0")
+            if torch.cuda.is_available()
+            else (
+                torch.device("mps:0")
+                if torch.mps.is_available()
+                else torch.device("cpu")
+            )
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "new_device",
+    [
+        torch.device("cpu"),
+        (
+            torch.device("cuda:0")
+            if torch.cuda.is_available()
+            else (
+                torch.device("mps:0")
+                if torch.mps.is_available()
+                else torch.device("cpu")
+            )
+        ),
+    ],
+)
+@pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+)
+def test_to_context(original_device, new_device, tc):
+    if tc:
+
+        class MyTC(TensorClass):
+            x: torch.Tensor
+            y: torch.Tensor | None = None
+
+    mod = TensorDictModule(
+        lambda x: x + 1,
+        in_keys=["x"],
+        out_keys=["y"],
+    )
+    td = TensorDict(x=torch.zeros(3), batch_size=[3], device=original_device)
+    if tc:
+        td = MyTC.from_tensordict(td)
+    with td.to(new_device) as td_new:
+        td_new = mod(td_new)
+    if original_device is not None:
+        y = td["y"] if not tc else td.y
+        x = td["x"] if not tc else td.x
+        assert y.device == x.device
+    else:
+        y = td["y"] if not tc else td.y
+        assert y.device == new_device
+
+    if original_device is not None:
+        x = td["x"] if not tc else td.x
+        assert x.device == original_device
 
 
 class TestProbabilisticTensorDictModule:

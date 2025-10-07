@@ -14,6 +14,7 @@ from typing import (
     dataclass_transform,
     Generator,
     Iterator,
+    Literal,
     OrderedDict,
     overload,
     Sequence,
@@ -25,7 +26,6 @@ import numpy as np
 
 import torch
 from _typeshed import Incomplete
-from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
 from tensordict._nestedkey import NestedKey as NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor
@@ -122,13 +122,44 @@ class TensorCollection:
     def isneginf(self) -> Self: ...
     def isposinf(self) -> Self: ...
     def isreal(self) -> Self: ...
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+    ) -> Self: ...
+    @overload
+    def amin(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def amin(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+    @overload
+    def min(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
     def min(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -136,14 +167,45 @@ class TensorCollection:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+    ) -> Self: ...
+    @overload
+    def amax(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def amax(
         self,
         dim: int | NO_DEFAULT = ...,
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        return_indices: bool = True,
+    ) -> Self: ...
+    @overload
+    def max(
+        self,
+        dim: int | NO_DEFAULT = ...,
+        keepdim: bool = False,
+        *,
+        reduce: bool,
+        return_indices: bool = True,
+    ) -> Self | torch.Tensor: ...
     def max(
         self,
         dim: int | NO_DEFAULT = ...,
@@ -151,13 +213,43 @@ class TensorCollection:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def cummin(self, dim: int, *, return_indices: bool = True) -> Self: ...
+    @overload
+    def cummin(
+        self, dim: int, *, reduce: bool, return_indices: bool = True
+    ) -> Self | torch.Tensor: ...
     def cummin(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def cummax(self, dim: int, *, return_indices: bool = True) -> Self: ...
+    @overload
+    def cummax(
+        self, dim: int, *, reduce: bool, return_indices: bool = True
+    ) -> Self | torch.Tensor: ...
     def cummax(
         self, dim: int, *, reduce: bool | None = None, return_indices: bool = True
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
     def mean(
         self,
         dim: int | tuple[int] = ...,
@@ -165,7 +257,34 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def mean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def nanmean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def nanmean(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def nanmean(
         self,
         dim: int | tuple[int] = ...,
@@ -173,7 +292,24 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def prod(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def prod(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def prod(
         self,
         dim: int | tuple[int] = ...,
@@ -181,7 +317,25 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
     def sum(
         self,
         dim: int | tuple[int] = ...,
@@ -189,7 +343,34 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def sum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def nansum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @overload
+    def nansum(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        dtype: torch.dtype | None = None,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
     def nansum(
         self,
         dim: int | tuple[int] = ...,
@@ -197,7 +378,25 @@ class TensorCollection:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+    @overload
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
     def std(
         self,
         dim: int | tuple[int] = ...,
@@ -205,7 +404,35 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def std(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+    ) -> Self: ...
+    @overload
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
     def var(
         self,
         dim: int | tuple[int] = ...,
@@ -213,7 +440,57 @@ class TensorCollection:
         *,
         correction: int = 1,
         reduce: bool | None = None,
-    ) -> TensorCollection | torch.Tensor: ...
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def var(
+        self,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        correction: int = 1,
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+    ) -> Self: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool,
+    ) -> Self | torch.Tensor: ...
+    @overload
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
+    def quantile(
+        self,
+        q: float | torch.Tensor,
+        dim: int | tuple[int] = ...,
+        keepdim: bool = ...,
+        *,
+        interpolation: str = "linear",
+        reduce: bool | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
+    ) -> Self | torch.Tensor: ...
     def auto_batch_size_(self, batch_dims: int | None = None) -> Self: ...
     def auto_device_(self) -> Self: ...
     @classmethod
@@ -289,9 +566,9 @@ class TensorCollection:
     def batch_size(self) -> torch.Size: ...
     def size(self, dim: int | None = None) -> torch.Size | int: ...
     @property
-    def data(self): ...
+    def data(self) -> Self: ...
     @property
-    def grad(self): ...
+    def grad(self) -> Self: ...
     def data_ptr(self, *, storage: bool = False): ...
     @grad.setter
     def grad(self, grad) -> None: ...
@@ -311,7 +588,7 @@ class TensorCollection:
     def expand(self, *shape: int) -> Self: ...
     @overload
     def expand(self, shape: torch.Size) -> Self: ...
-    def expand_as(self, other: TensorCollection | torch.Tensor) -> TensorCollection: ...
+    def expand_as(self, other: TensorCollection | torch.Tensor) -> Self: ...
     def new_zeros(
         self,
         *size: torch.Size,
@@ -365,22 +642,21 @@ class TensorCollection:
     ): ...
     def unbind(self, dim: int) -> tuple[T, ...]: ...
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]: ...
-    @overload
     def unsqueeze(self, dim: int) -> Self: ...
-    @overload
     def squeeze(self, dim: int | None = None) -> Self: ...
     @overload
-    def reshape(self, *shape: int): ...
+    def reshape(self, *shape: int) -> Self: ...
     @overload
-    def reshape(self, shape: list | tuple): ...
+    def reshape(self, shape: list | tuple) -> Self: ...
+    def reshape(self, *args, **kwargs) -> Self: ...
     def repeat_interleave(
         self,
         repeats: torch.Tensor | int,
         dim: int | None = None,
         *,
         output_size: int | None = None,
-    ) -> TensorCollection: ...
-    def repeat(self, *repeats: int) -> TensorCollection: ...
+    ) -> Self: ...
+    def repeat(self, *repeats: int) -> Self: ...
     def cat_tensors(
         self,
         *keys: NestedKey,
@@ -515,6 +791,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key: bool | None = None,
     ) -> Self: ...
     def make_memmap(
         self,
@@ -522,6 +799,7 @@ class TensorCollection:
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor: ...
     def make_memmap_from_storage(
         self,
@@ -530,9 +808,15 @@ class TensorCollection:
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor: ...
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor: ...
     def save(
         self,
@@ -542,6 +826,7 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        robust_key: bool | None = None,
     ) -> Self: ...
     def dumps(
         self,
@@ -551,6 +836,7 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        robust_key: bool | None = None,
     ) -> Self: ...
     def memmap(
         self,
@@ -561,6 +847,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key: bool | None = None,
     ) -> Self: ...
     def memmap_like(
         self,
@@ -571,10 +858,15 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
+        robust_key: bool | None = None,
     ) -> Self: ...
     @classmethod
-    def load(cls, prefix: str | Path, *args, **kwargs) -> Self: ...
-    def load_(self, prefix: str | Path, *args, **kwargs): ...
+    def load(
+        cls, prefix: str | Path, *args, robust_key: bool | None = None, **kwargs
+    ) -> Self: ...
+    def load_(
+        self, prefix: str | Path, *args, robust_key: bool | None = None, **kwargs
+    ): ...
     @classmethod
     def load_memmap(
         cls,
@@ -583,8 +875,9 @@ class TensorCollection:
         non_blocking: bool = False,
         *,
         out: TensorCollection | None = None,
+        robust_key: bool | None = None,
     ) -> Self: ...
-    def load_memmap_(self, prefix: str | Path): ...
+    def load_memmap_(self, prefix: str | Path, robust_key: bool | None = None): ...
     def memmap_refresh_(self): ...
     def entry_class(self, key: NestedKey) -> type: ...
     def set(
@@ -696,6 +989,9 @@ class TensorCollection:
     def sorted_keys(self) -> list[NestedKey]: ...
     def flatten(self, start_dim: int = 0, end_dim: int = -1): ...
     def unflatten(self, dim, unflattened_size): ...
+    def _transform_keys(
+        self, key_transform: Callable[[NestedKey], NestedKey]
+    ) -> Self: ...
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> Self: ...
@@ -897,7 +1193,7 @@ class TensorCollection:
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection: ...
+    ) -> Self: ...
     def add_(self, other: TensorCollection | float, *, alpha: float | None = None): ...
     def lerp(
         self,
@@ -1008,18 +1304,37 @@ class TensorCollection:
     ) -> Self: ...
     def as_tensor(self) -> Self: ...
     def to_lazystack(self, dim: int = 0) -> Self: ...
+    def to_mds(
+        self,
+        *,
+        out: str | tuple[str, str],
+        columns: dict[str, str] | None = None,
+        writer: "MDSWriter" | None = None,
+    ) -> None: ...
     def to_dict(
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
+    @classmethod
+    def from_list(
+        cls,
+        input,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: list[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self: ...
     def tolist(
         self,
         *,
         convert_nodes: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> list[Any]: ...
@@ -1041,13 +1356,13 @@ class TensorCollection:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection: ...
+    ) -> Self: ...
     def bitwise_and(
         self,
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> TensorCollection: ...
+    ) -> Self: ...
     @classmethod
     def from_struct_array(
         cls, struct_array: np.ndarray, device: torch.device | None = None
@@ -1104,6 +1419,7 @@ class TensorCollection:
         *,
         out=None,
         dtype: torch.dtype | None = None,
+        key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ): ...
     def softmax(self, dim: int, dtype: torch.dtype | None = None): ...
     @property

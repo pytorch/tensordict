@@ -10,7 +10,13 @@ import tempfile
 import numpy as np
 import torch
 
-from tensordict import NonTensorData, PersistentTensorDict, tensorclass, TensorDict
+from tensordict import (
+    MetaData,
+    NonTensorData,
+    PersistentTensorDict,
+    tensorclass,
+    TensorDict,
+)
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
@@ -34,6 +40,9 @@ def get_available_devices():
             devices += [torch.device(f"cuda:{i}")]
             if i == 1:
                 break
+    # TODO: MPS and NPU would be worth considering but it's a lot of work
+    # for example, many ops are tested with various dtypes but MPS struggles with
+    # float64. Shared mem can also cause trouble.
     # if torch.backends.mps.is_available():
     #     for i in range(torch.mps.device_count()):
     #         devices += [torch.device(f"mps:{i}")]
@@ -342,6 +351,17 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["td_with_non_tensor", device]]
         TYPES_DEVICES_NOLAZY += [["td_with_non_tensor", device]]
+
+    @classmethod
+    def td_with_non_tensor_and_metadata(cls, device):
+        td = cls.td(device)
+        td.set(("data", "non_tensor"), NonTensorData("a string!"))
+        td.set(("data", "metadata"), MetaData[str]("a metadata!"))
+        return td
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_with_non_tensor_and_metadata", device]]
+        TYPES_DEVICES_NOLAZY += [["td_with_non_tensor_and_metadata", device]]
 
 
 def expand_list(list_of_tensors, *dims):

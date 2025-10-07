@@ -344,3 +344,20 @@ def _reverse_to_module(self, args, kwargs, out):
 
 
 LAST_OP_MAPS["to_module"] = _reverse_to_module
+
+
+def _reverse_to(self, args, kwargs, out):
+    """Reverse the to() operation by restoring the original device.
+
+    Uses the input tensordict (self) to determine the original device of each tensor
+    and restores the output tensordict (out) to those original devices.
+    """
+    if out is None:
+        return self
+    # Restore each tensor to its original device/dtype from the input tensordict
+    return self.apply(
+        lambda x, y: x.to(y.device) if y is not None else x, out, default=None, out=out
+    )
+
+
+LAST_OP_MAPS["to"] = _reverse_to

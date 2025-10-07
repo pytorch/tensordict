@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Type, TYPE_CHECKING
 
 import numpy as np
-
 import torch
 
 from tensordict._td import (
@@ -31,6 +30,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
+    _register_tensor_class,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -704,6 +704,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -717,6 +718,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -724,7 +726,12 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -752,6 +759,7 @@ class PersistentTensorDict(TensorDictBase):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
@@ -808,11 +816,16 @@ class PersistentTensorDict(TensorDictBase):
                         inplace=inplace,
                         share_non_tensor=share_non_tensor,
                         existsok=existsok,
+                        robust_key=robust_key,
                     ),
                     inplace=False,
                     validated=True,
                     non_blocking=False,
                 )
+                if prefix is not None:
+                    metadata[key] = {
+                        "type": type(value).__name__,
+                    }
                 continue
             else:
                 value = self._get_str(key, default=NO_DEFAULT)
@@ -1468,6 +1481,9 @@ class PersistentTensorDict(TensorDictBase):
     repeat_interleave = TensorDict.repeat_interleave
     reshape = TensorDict.reshape
     split = TensorDict.split
+
+
+_register_tensor_class(PersistentTensorDict)
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

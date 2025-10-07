@@ -44,6 +44,7 @@ jobs:
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -64,17 +65,16 @@ jobs:
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake
+            brew install cmake || true
           else
             sudo apt-get update
             sudo apt-get install -y cmake
           fi
-          python3 -mpip install "pybind11[global]" poetry
+          python3 -mpip install "pybind11[global]" uv
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
           DATE_VERSION=$(date +%Y.%m.%d)
-          sed -i.bak '/^version = /s/version = .*/version = "'"$DATE_VERSION"'"/' pyproject.toml
-          # poetry build
-          python -m build --wheel
+          export SETUPTOOLS_SCM_PRETEND_VERSION=$DATE_VERSION
+          uv build --wheel
           rm pyproject.toml.bak
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -101,6 +101,7 @@ jobs:
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -166,6 +167,7 @@ jobs:
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -208,6 +210,7 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Setup Python
@@ -220,25 +223,24 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: 'latest'
       - name: Build tensordict Nightly
         shell: bash
         run: |
           # Remove the dist directory if it exists
           rm -r dist || true
-          if ! choco -v &> /dev/null; then
-            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
-          fi
-          # Install cmake using Chocolatey
-          choco install cmake -y
           # Install necessary Python packages
           python -m pip install --upgrade pip
-          python -m pip install "pybind11[global]" poetry
+          python -m pip install "pybind11[global]" build
           # Modify pyproject.toml to change the package name
           sed -i.bak 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
           DATE_VERSION=$(date +%Y.%m.%d)
-          sed -i.bak '/^version = /s/version = .*/version = "'"$DATE_VERSION"'"/' pyproject.toml
-          # Build the package with Poetry
-          poetry build
+          export SETUPTOOLS_SCM_PRETEND_VERSION=$DATE_VERSION
+          # Build the package with python -m build (more reliable than uv on Windows)
+          python -m build --wheel
           # Clean up the backup file created by sed
           rm pyproject.toml.bak
           # Rename the wheel files to match the manylinux1 convention
@@ -262,6 +264,7 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Setup Python
@@ -323,6 +326,7 @@ jobs:
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Checkout tensordict

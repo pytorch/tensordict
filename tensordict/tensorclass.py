@@ -33,6 +33,7 @@ from typing import (
     get_origin,
     get_type_hints,
     List,
+    Literal,
     Sequence,
     Type,
     TYPE_CHECKING,
@@ -162,6 +163,7 @@ _TD_PASS_THROUGH = {
     torch.unflatten: True,
     torch.unsqueeze: True,
     torch.zeros_like: True,
+    torch.autograd.grad: True,
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
@@ -243,6 +245,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "shape",
     "size",
     "sorted_keys",
+    "to_mds",
     "to_struct_array",
     "tolist",
     "values",
@@ -395,6 +398,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "from_consolidated",
     "from_dataclass",
     "from_h5",
+    "from_list",
     "from_modules",
     "from_namedtuple",
     "from_pytree",
@@ -468,6 +472,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "prod",
     "qint32",
     "qint8",
+    "quantile",
     "quint4x2",
     "quint8",
     "reciprocal",
@@ -697,7 +702,8 @@ def from_dataclass(
             device=None,
             is_shared=False)
 
-    .. notes:: If a dataclass type is provided, a new class is returned with the specified configurations.
+    .. note::
+        If a dataclass type is provided, a new class is returned with the specified configurations.
         If a dataclass instance is provided, a new instance of the tensor-compatible class is returned.
         The `auto_batch_size`, `frozen`, `autocast`, and `nocast` options allow for flexible configuration of the resulting class or instance.
 
@@ -778,12 +784,12 @@ def tensorclass(
 
     Keyword Args:
         autocast (bool, optional): if ``True``, the types indicated will be enforced when an argument is set.
-            Thie argument is exclusive with ``autocast`` (both cannot be true at the same time). Defaults to ``False``.
+            This argument is exclusive with ``nocast`` (both cannot be true at the same time). Defaults to ``False``.
         frozen (bool, optional): if ``True``, the content of the tensorclass cannot be modified. This argument is
             provided to dataclass-compatibility, a similar behavior can be obtained through the `lock` argument in
             the class constructor. Defaults to ``False``.
         nocast (bool, optional): if ``True``, Tensor-compatible types such as ``int``, ``np.ndarray`` and the like
-            will not be cast to a tensor type. Thie argument is exclusive with ``autocast`` (both cannot be true
+            will not be cast to a tensor type. This argument is exclusive with ``autocast`` (both cannot be true
             at the same time). Defaults to ``False``.
         shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
             Use with caution, as this may cause unintended consequences. Defaults to False.
@@ -1072,7 +1078,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     ):
         cls.from_dict_instance = _from_dict_instance
 
-    for attr in TensorDict.__dict__.keys():
+    for attr in set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys()):
+        if attr in ("__torch_function__",):
+            continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
             tdcls = func.__self__
@@ -1539,6 +1547,7 @@ def _memmap_(
     memmaped: bool = False,
     share_non_tensor: bool = False,
     existsok: bool = True,
+    robust_key,
 ):
     _non_tensordict = dict(self._non_tensordict)
     cls = type(self)
@@ -1591,6 +1600,7 @@ def _memmap_(
             copy_existing=copy_existing,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         if new_futures:
             futures += new_futures
@@ -1617,7 +1627,7 @@ def _share_memory_(self):
     return self
 
 
-def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
+def _load_memmap(cls, prefix: Path, metadata: dict, *, robust_key, **kwargs):
     non_tensordict = copy(metadata)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
@@ -1625,7 +1635,7 @@ def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
             non_tensordict.update(pickle.load(pickle_file))
     if os.path.exists(prefix / "_tensordict"):
         td = TensorDict.load_memmap(
-            prefix / "_tensordict", **kwargs, non_blocking=False
+            prefix / "_tensordict", **kwargs, non_blocking=False, robust_key=robust_key
         )
     else:
         if not issubclass(cls, NonTensorDataBase):
@@ -2758,6 +2768,9 @@ def _eq(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the eq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2819,6 +2832,9 @@ def _ne(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the neq value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2847,6 +2863,9 @@ def _or(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the or value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2875,6 +2894,9 @@ def _xor(self, other: object) -> bool:
             if _is_tensor_collection(type(other))
             else other
         )
+    if isinstance(self, NonTensorDataBase):
+        # Return a plain tensordict containing the xor value
+        return tensor
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -3262,6 +3284,19 @@ class NonTensorDataBase(TensorClass):
                         bool(eqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     eqval = self.data == other
+                #     if isinstance(eqval, torch.Tensor):
+                #         return eqval
+                #     if isinstance(eqval, np.ndarray):
+                #         return torch.as_tensor(eqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(eqval),
+                #         device=self.device,
+                #     )
                 return old_eq(self, other)
 
             type(self).__eq__ = __eq__
@@ -3281,6 +3316,19 @@ class NonTensorDataBase(TensorClass):
                         bool(neqval),
                         device=self.device,
                     )
+                # # Handle comparison with scalar values (like 0, 1, etc.)
+                # # For non-tensor data, we should return a boolean tensor
+                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
+                #     neqval = self.data != other
+                #     if isinstance(neqval, torch.Tensor):
+                #         return neqval
+                #     if isinstance(neqval, np.ndarray):
+                #         return torch.as_tensor(neqval, device=self.device)
+                #     return torch.full(
+                #         self.batch_size,
+                #         bool(neqval),
+                #         device=self.device,
+                #     )
                 return _ne(self, other)
 
             type(self).__ne__ = __ne__
@@ -3404,6 +3452,7 @@ class NonTensorDataBase(TensorClass):
                         inplace=True,
                         like=False,
                         share_non_tensor=share_non_tensor,
+                        robust_key=True,
                     )
                 return self
             elif not inplace and self.is_locked:
@@ -3519,7 +3568,7 @@ class NonTensorDataBase(TensorClass):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]:
         # override to_dict to return just the data
@@ -3587,7 +3636,7 @@ class NonTensorDataBase(TensorClass):
     def tolist(
         self,
         *,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ):
@@ -3596,7 +3645,8 @@ class NonTensorDataBase(TensorClass):
         If the batch-size is empty, returns the data.
 
         Keyword Args:
-            convert_tensors (bool, optional): if ``True``, tensors will be converted to lists.
+            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
+                If "numpy", tensors will be converted to numpy arrays.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
                 it has batch dimensions. Default: ``False``.
@@ -3659,6 +3709,7 @@ class NonTensorDataBase(TensorClass):
         memmaped: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key,
     ):
         # For efficiency, we can avoid doing this saving
         #  if the data is already there.
@@ -3686,6 +3737,7 @@ class NonTensorDataBase(TensorClass):
             memmaped=memmaped,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
@@ -3700,6 +3752,8 @@ class NonTensorDataBase(TensorClass):
         if _metadata is None:
             return False
         return _metadata.get("memmaped", False)
+
+    _load_memmap = classmethod(_load_memmap)
 
 
 class NonTensorData(NonTensorDataBase):
@@ -4027,7 +4081,82 @@ class NonTensorData(NonTensorDataBase):
         return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
 
-class MetaData(NonTensorDataBase):
+def _reconstruct_typed_metadata(item, data, state):
+    """Reconstruct a typed MetaData instance during unpickling."""
+    from tensordict.tensorclass import MetaData
+
+    instance = MetaData[item](data)
+    instance.__dict__.update(state)
+    return instance
+
+
+class _MetaDataMeta(_TensorClassMeta):
+    def __new__(
+        mcs,
+        name,
+        bases,
+        namespace,
+        datatype=None,
+        **kwargs,
+    ):
+        # Create the class using the parent's __new__ method
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        if datatype is not None:
+            cls._datatype = datatype
+        # Initialize cache for typed classes
+        if not hasattr(cls, "_typed_class_cache"):
+            cls._typed_class_cache = {}
+        return cls
+
+    def __getitem__(cls, item):
+        """Create a typed version of MetaData that validates the data type."""
+        if cls.__name__ != "MetaData":
+            # Only allow type specification on the base MetaData class
+            raise TypeError(f"Cannot specify type for {cls.__name__}")
+
+        # Check cache first
+        if item in cls._typed_class_cache:  # type: ignore
+            return cls._typed_class_cache[item]  # type: ignore
+
+        # Create a new class that validates the data type
+        type_name = getattr(item, "__name__", str(item))
+        class_name = f"MetaData[{type_name}]"
+
+        class TypedMetaData(cls):
+            _expected_type = item
+            # Define all the classes defined by MetaData
+            _load_memmap = classmethod(_load_memmap)
+            _from_dict = classmethod(_from_dict)
+            _from_tensordict = classmethod(_from_tensordict)
+            __repr__ = NonTensorDataBase.__repr__
+
+            def __post_init__(self):
+                super().__post_init__()
+                # Validate the data type
+                if not isinstance(self.data, item):
+                    expected_name = getattr(item, "__name__", str(item))
+                    actual_name = type(self.data).__name__
+                    raise TypeError(
+                        f"Expected data of type {expected_name}, got {actual_name}"
+                    )
+
+        TypedMetaData.__name__ = class_name
+        TypedMetaData.__qualname__ = class_name
+
+        # Add pickle support for the dynamically created class
+        def __reduce__(self):
+            # Return a callable that can reconstruct the object
+            return (_reconstruct_typed_metadata, (item, self.data, self.__dict__))
+
+        TypedMetaData.__reduce__ = __reduce__
+
+        # Cache the class
+        cls._typed_class_cache[item] = TypedMetaData  # type: ignore
+
+        return TypedMetaData
+
+
+class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
     """A non-tensor, metadata carrier class for `TensorDict`.
 
     This class mainly behaves as :class:`~tensordict.NonTensorData`, except for indexing,
@@ -4042,6 +4171,8 @@ class MetaData(NonTensorDataBase):
     :class:`~tensordict.NonTensorData`).
 
     """
+
+    # Remove the __class_getitem__ method since the metaclass handles it
 
     _load_memmap = classmethod(_load_memmap)
     _from_dict = classmethod(_from_dict)
@@ -4081,7 +4212,7 @@ class MetaData(NonTensorDataBase):
         if not return_stack:
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
-            return MetaData(
+            return cls(
                 data=first.data,
                 batch_size=batch_size,
                 names=first._maybe_names(),
@@ -4130,7 +4261,7 @@ class NonTensorStack(LazyStackedTensorDict):
     def tolist(
         self,
         *,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ):
@@ -4237,7 +4368,7 @@ class NonTensorStack(LazyStackedTensorDict):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> dict[str, Any]:
@@ -4262,6 +4393,7 @@ class NonTensorStack(LazyStackedTensorDict):
         memmaped: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
+        robust_key,
     ) -> T:
 
         memmaped_leaves = memmaped
@@ -4316,6 +4448,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     memmaped=memmaped_leaves,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
             )
         if not inplace:
@@ -4328,7 +4461,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, *, out=None, **kwargs
+        cls, prefix: str, metadata: dict, *, out=None, robust_key, **kwargs
     ) -> LazyStackedTensorDict:
         data = metadata.get("data")
         if data is not None:
@@ -4339,7 +4472,9 @@ class NonTensorStack(LazyStackedTensorDict):
             if device is not None:
                 device = torch.device(device)
             return cls._from_list(data, device=device)
-        return super()._load_memmap(prefix=prefix, metadata=metadata, **kwargs)
+        return super()._load_memmap(
+            prefix=prefix, metadata=metadata, robust_key=robust_key, **kwargs
+        )
 
     @classmethod
     def _from_list(cls, datalist: List, device: torch.device, ndim: int | None = None):
@@ -4469,7 +4604,9 @@ class NonTensorStack(LazyStackedTensorDict):
                     ignore_lock=ignore_lock,
                 )
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         else:
             raise NotImplementedError(
                 f"The data type {type(input_dict_or_td)} is not supported within {type(self).__name__}.update"
@@ -4490,7 +4627,9 @@ class NonTensorStack(LazyStackedTensorDict):
                     value = NonTensorData(value)
             super().__setitem__(index, value)
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         finally:
             _BREAK_ON_MEMMAP = True
 
@@ -4512,13 +4651,15 @@ class NonTensorStack(LazyStackedTensorDict):
                 input_dict_or_td, index, clone=clone, non_blocking=non_blocking
             )
             if memmap:
-                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+                self._memmap_(
+                    prefix=self._path_to_memmap, inplace=True, robust_key=True
+                )
         finally:
             _BREAK_ON_MEMMAP = True
         return self
 
     @property
-    def data(self):
+    def data(self) -> Self:
         """Attempts to return the unique value in the stack.
 
         Raises a ValueError if there is more than one unique value.

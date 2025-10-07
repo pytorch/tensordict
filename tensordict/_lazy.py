@@ -23,6 +23,8 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
+    Mapping,
     OrderedDict,
     Sequence,
     Tuple,
@@ -462,7 +464,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         *,
         retain_none: bool = True,
-        convert_tensors: bool = False,
+        convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
 
@@ -476,7 +478,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @classmethod
     def from_dict(
         cls,
-        input_dict: List[Dict[NestedKey, Any]],
+        input_dict: Dict[str, Dict[NestedKey, Any]] | List[Dict[NestedKey, Any]],
         *other,
         auto_batch_size: bool = False,
         batch_size=None,
@@ -484,21 +486,53 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_dims=None,
         stack_dim_name=None,
         stack_dim=0,
+        names: list[str] | None = None,
     ):
+        if names is not None:
+            if stack_dim_name is not None:
+                raise ValueError("names and stack_dim_name are exclusive.")
+            stack_dim_name = list(names).pop(stack_dim)
+
         return cls._new_lazy_unsafe(
             *(
                 TensorDict.from_dict(
-                    input_dict[str(i)],
+                    (
+                        input_dict[str(i)]
+                        if isinstance(input_dict, Mapping)
+                        else input_dict[i]
+                    ),
                     *other,
                     auto_batch_size=auto_batch_size,
                     device=device,
                     batch_dims=batch_dims,
                     batch_size=batch_size,
+                    names=names,
                 )
                 for i in range(len(input_dict))
             ),
             stack_dim=stack_dim,
             stack_dim_name=stack_dim_name,
+        )
+
+    @classmethod
+    def from_list(
+        cls,
+        input: list[Mapping],
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: list[str] | None = None,
+        lazy: bool | None = None,
+    ) -> Self:
+        return cls.from_dict(
+            input,
+            auto_batch_size=auto_batch_size,
+            batch_dims=batch_dims,
+            batch_size=batch_size,
+            device=device,
+            names=names,
         )
 
     @_fails_exclusive_keys
@@ -1868,6 +1902,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
+    @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
         if kwargs.get("batch_size") is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
@@ -2632,7 +2667,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                 ]
                 agglomerate = torch.cat(agglomerate, dim=-1)
-                return getattr(torch, reduction_name)(agglomerate)
+                if reduction_name == "quantile":
+                    q = kwargs.pop("q")
+                    return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
+                return getattr(torch, reduction_name)(agglomerate, **kwargs)
             elif dim == "feature":
 
                 def proc_val(val):
@@ -2660,7 +2698,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 ]
                 cat_dim = self.stack_dim
             agglomerate = torch.cat(agglomerate, dim=cat_dim)
-            return getattr(torch, reduction_name)(agglomerate, dim=dim, keepdim=keepdim)
+            if reduction_name == "quantile":
+                q = kwargs.pop("q")
+                return getattr(torch, reduction_name)(
+                    agglomerate, q, dim=dim, keepdim=keepdim, **kwargs
+                )
+            return getattr(torch, reduction_name)(
+                agglomerate, dim=dim, keepdim=keepdim, **kwargs
+            )
 
         try:
             td: TensorDict = self.to_tensordict()
@@ -2866,6 +2911,7 @@ class LazyStackedTensorDict(TensorDictBase):
         like=False,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> Self:
         if prefix is not None:
             prefix = Path(prefix)
@@ -2903,6 +2949,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     like=like,
                     share_non_tensor=share_non_tensor,
                     existsok=existsok,
+                    robust_key=robust_key,
                 )
             )
         if not inplace:
@@ -2920,6 +2967,7 @@ class LazyStackedTensorDict(TensorDictBase):
         device: torch.device | None = None,
         *,
         out=None,
+        robust_key,
         **kwargs,
     ) -> LazyStackedTensorDict:
         tensordicts = []
@@ -2935,6 +2983,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     **kwargs,
                     non_blocking=True,
                     out=out[i] if out is not None else None,
+                    robust_key=robust_key,
                 )
             )
             i += 1
@@ -2946,6 +2995,7 @@ class LazyStackedTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
@@ -2960,6 +3010,7 @@ class LazyStackedTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
@@ -2968,7 +3019,12 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
@@ -4103,6 +4159,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
+    @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
         non_blocking = kwargs.pop("non_blocking", None)
         (
@@ -4199,6 +4256,7 @@ class _CustomOpTensorDict(TensorDictBase):
         like,
         share_non_tensor,
         existsok,
+        robust_key,
     ) -> Self:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -4239,6 +4297,7 @@ class _CustomOpTensorDict(TensorDictBase):
             like=like,
             share_non_tensor=share_non_tensor,
             existsok=existsok,
+            robust_key=robust_key,
         )
         if not inplace:
             dest = type(self)(
@@ -4266,13 +4325,17 @@ class _CustomOpTensorDict(TensorDictBase):
         return dest
 
     @classmethod
-    def _load_memmap(cls, prefix: str, metadata: dict, **kwargs) -> _CustomOpTensorDict:
+    def _load_memmap(
+        cls, prefix: str, metadata: dict, robust_key, **kwargs
+    ) -> _CustomOpTensorDict:
         custom_op = metadata.pop("custom_op")
         inv_op = metadata.pop("inv_op")
         custom_op_kwargs = metadata.pop("custom_op_kwargs")
         inv_op_kwargs = metadata.pop("inv_op_kwargs")
 
-        source = TensorDict.load_memmap(prefix / "_source", **kwargs, non_blocking=True)
+        source = TensorDict.load_memmap(
+            prefix / "_source", **kwargs, non_blocking=True, robust_key=robust_key
+        )
 
         return cls(
             source,
@@ -4288,6 +4351,7 @@ class _CustomOpTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."
@@ -4301,6 +4365,7 @@ class _CustomOpTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."
@@ -4308,7 +4373,12 @@ class _CustomOpTensorDict(TensorDictBase):
         )
 
     def make_memmap_from_tensor(
-        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+        self,
+        key: NestedKey,
+        tensor: torch.Tensor,
+        *,
+        copy_data: bool = True,
+        robust_key: bool | None = None,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."

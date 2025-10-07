@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import contextlib
 import distutils.command.clean
 import logging
 import os
@@ -91,21 +92,31 @@ def get_extensions():
     return [CMakeExtension("tensordict._C", sourcedir=extensions_dir)]
 
 
-def version():
-    return {
-        "write_to": "tensordict/_version.py",  # Specify the path where the version file should be written
-    }
+@contextlib.contextmanager
+def set_version():
+
+    if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
+        # grab version from local version.py
+        sys.path.append(Path(__file__).parent)
+        with open("version.txt", "r") as f:
+            version_str = f.read()
+            os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = version_str
+        yield
+        del os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"]
+        return
+    yield
 
 
-setup(
-    ext_modules=get_extensions(),
-    cmdclass={
-        "build_ext": CMakeBuild,
-        "clean": clean,
-    },
-    packages=find_packages(
-        exclude=("test", "tutorials", "packaging", "gallery", "docs")
-    ),
-    setup_requires=["setuptools_scm"],
-    use_scm_version=version(),
-)
+with set_version():
+    setup(
+        ext_modules=get_extensions(),
+        cmdclass={
+            "build_ext": CMakeBuild,
+            "clean": clean,
+        },
+        packages=find_packages(
+            exclude=("test", "tutorials", "packaging", "gallery", "docs")
+        ),
+        setup_requires=["setuptools_scm"],
+        use_scm_version=True,
+    )

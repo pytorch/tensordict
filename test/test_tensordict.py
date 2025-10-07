@@ -16,7 +16,6 @@ import pathlib
 import platform
 import re
 import sys
-import uuid
 import warnings
 import weakref
 from collections import UserDict
@@ -55,7 +54,13 @@ from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_s
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack, tensorclass
+from tensordict.tensorclass import (
+    MetaData,
+    NonTensorData,
+    NonTensorDataBase,
+    NonTensorStack,
+    tensorclass,
+)
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -101,14 +106,7 @@ except ImportError:
 
     _has_funcdim = False
 
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
+_has_streaming = importlib.util.find_spec("streaming", None) is not None
 
 try:
     import h5py  # noqa
@@ -3016,7 +3014,7 @@ class TestGeneric:
             td.record_stream(s0)
 
     @pytest.mark.parametrize(
-        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
     def test_reduction_feature(self, reduction):
         td = TensorDict(
@@ -3032,7 +3030,10 @@ class TestGeneric:
             none=None,
             batch_size=(3, 4),
         )
-        tdr = getattr(td, reduction)(dim="feature")
+        if reduction == "quantile":
+            tdr = getattr(td, reduction)(0.5, dim="feature")
+        else:
+            tdr = getattr(td, reduction)(dim="feature")
         for k, v in td.items(True):
             other = tdr[k]
             if isinstance(v, TensorDict):
@@ -3046,7 +3047,7 @@ class TestGeneric:
                 assert other.shape == td[k[:-1]].shape
 
     @pytest.mark.parametrize(
-        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var"]
+        "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
     def test_reduction_feature_full(self, reduction):
         td = TensorDict(
@@ -3062,7 +3063,10 @@ class TestGeneric:
             none=None,
             batch_size=(3, 4),
         )
-        reduced = getattr(td, reduction)(dim="feature", reduce=True)
+        if reduction == "quantile":
+            reduced = getattr(td, reduction)(0.5, dim="feature", reduce=True)
+        else:
+            reduced = getattr(td, reduction)(dim="feature", reduce=True)
         assert reduced.shape == (3, 4)
 
         td = TensorDict(
@@ -3074,8 +3078,59 @@ class TestGeneric:
             ),
             batch_size=(3, 4),
         )
-        assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
-        assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
+        if reduction == "quantile":
+            assert getattr(td, reduction)(0.5, reduce=True, dim="feature").shape == (
+                3,
+                4,
+            )
+            assert getattr(td, reduction)(0.5, reduce=True, dim=1).shape == (3, 5)
+        else:
+            assert getattr(td, reduction)(reduce=True, dim="feature").shape == (3, 4)
+            assert getattr(td, reduction)(reduce=True, dim=1).shape == (3, 5)
+
+    def test_quantile(self):
+        """Test quantile reduction functionality."""
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(
+                c=torch.randn(3, 4, 5, 6),
+                d=torch.randn(3, 4, 5),
+                batch_size=(3, 4, 5),
+            ),
+            batch_size=(3, 4),
+        )
+
+        # Test median (0.5 quantile)
+        median_td = td.quantile(0.5)
+        assert median_td.batch_size == torch.Size([])
+        assert isinstance(median_td["a"], torch.Tensor)
+        assert median_td["a"].shape == torch.Size([])
+
+        # Test median with reduce=True
+        median_reduced = td.quantile(0.5, reduce=True)
+        assert isinstance(median_reduced, torch.Tensor)
+        assert median_reduced.shape == torch.Size([])
+
+        # Test quantile along dimension
+        quantile_dim = td.quantile(0.5, dim=0)
+        assert quantile_dim.batch_size == torch.Size([4])
+        assert quantile_dim["a"].shape == torch.Size([4, 5])
+
+        # Test multiple quantiles
+        quantiles = torch.tensor([0.25, 0.5, 0.75])
+        multi_quantile = td.quantile(quantiles, dim=0)
+        assert multi_quantile.batch_size == torch.Size([4])
+        assert multi_quantile["a"].shape == torch.Size([3, 4, 5])
+
+        # Test feature dimension
+        quantile_feature = td.quantile(0.5, dim="feature")
+        assert quantile_feature.batch_size == torch.Size([3, 4])
+        assert quantile_feature["a"].shape == torch.Size([3, 4])
+
+        # Test with keepdim
+        quantile_keepdim = td.quantile(0.5, dim=0, keepdim=True)
+        assert quantile_keepdim.batch_size == torch.Size([1, 4])
+        assert quantile_keepdim["a"].shape == torch.Size([1, 4, 5])
 
     def test_subclassing(self):
         class SubTD(TensorDict): ...
@@ -3339,6 +3394,73 @@ class TestGeneric:
             inplace=False,
         )
         assert td["key1"].shape == td._tensordict["key1"].shape
+
+    def test_to_memory_leak(self):
+        """Test that the original tensordict is properly garbage collected when using to() method."""
+        import gc
+
+        # Create a tensordict
+        td_make = lambda: TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.randn(3, 4)}, batch_size=[3]
+        )
+
+        # Create a weak reference to track the original tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+
+        # Verify the tensordict exists
+        assert td_ref() is not None
+
+        # Use the to method to create a new tensordict
+        td = td_make()
+        td_ref = weakref.ref(td)
+        td_new = td.to("cpu")
+
+        # The original tensordict should still exist (we have a reference to it)
+        assert td_ref() is not None
+
+        # Delete the original reference
+        del td
+
+        # Force garbage collection
+        gc.collect()
+
+        # The original tensordict should now be garbage collected
+        assert td_ref() is None, "Original tensordict was not garbage collected"
+
+        # Verify the new tensordict still works
+        assert td_new["a"].device.type == "cpu"
+        assert td_new["b"].device.type == "cpu"
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = TensorDict(
+            a=[0, 1, 2],
+            b=[0, 1, 0],
+            c=torch.tensor([[4, 5], [6, 7], [8, 9]]),
+            d=["a string!", "another string!", "again!"],
+            batch_size=[3],
+        )
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=TensorDict.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = torch.stack(batches)
+        assert_allclose_td(td, test_td)
 
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
@@ -5926,7 +6048,7 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert metadata["shape"] == list(td.batch_size)
 
-        td2 = td.load_memmap(tmp_path / "tensordict")
+        td2 = td.load_memmap(tmp_path / "tensordict", device=device)
         assert (td.cpu() == td2.cpu()).all()
 
     @pytest.mark.parametrize("use_dir", [True, False])
@@ -6571,22 +6693,32 @@ class TestTensorDicts(TestTensorDictsBase):
                 key, val = td.popitem()
 
     @pytest.mark.parametrize(
-        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")
     )
     def test_reduction(self, td_name, device, red, tmpdir):
         td = getattr(self, td_name)(device)
         td = _to_float(td, td_name, tmpdir)
-        assert getattr(td, red)().batch_size == torch.Size(())
-        assert getattr(td, red)(1).shape == torch.Size(
-            [s for i, s in enumerate(td.shape) if i != 1]
-        )
-        assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
-            [s if i != 2 else 1 for i, s in enumerate(td.shape)]
-        )
-        assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
+        if red == "quantile":
+            assert getattr(td, red)(0.5).batch_size == torch.Size(())
+            assert getattr(td, red)(0.5, 1).shape == torch.Size(
+                [s for i, s in enumerate(td.shape) if i != 1]
+            )
+            assert getattr(td, red)(0.5, 2, keepdim=True).shape == torch.Size(
+                [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+            )
+            assert isinstance(getattr(td, red)(0.5, reduce=True), torch.Tensor)
+        else:
+            assert getattr(td, red)().batch_size == torch.Size(())
+            assert getattr(td, red)(1).shape == torch.Size(
+                [s for i, s in enumerate(td.shape) if i != 1]
+            )
+            assert getattr(td, red)(2, keepdim=True).shape == torch.Size(
+                [s if i != 2 else 1 for i, s in enumerate(td.shape)]
+            )
+            assert isinstance(getattr(td, red)(reduce=True), torch.Tensor)
 
     @pytest.mark.parametrize(
-        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var")
+        "red", ("mean", "nanmean", "sum", "nansum", "prod", "std", "var", "quantile")
     )
     def test_reduction_feature(self, td_name, device, red, tmpdir):
         td = getattr(self, td_name)(device)
@@ -6601,10 +6733,16 @@ class TestTensorDicts(TestTensorDictsBase):
                     -1,
                 )
             )
-        tdr = getattr(td, red)(dim="feature")
-        assert tdr.batch_size == td.batch_size
-        assert is_tensor_collection(tdr)
-        tensor = getattr(td, red)(dim="feature", reduce=True)
+        if red == "quantile":
+            tdr = getattr(td, red)(0.5, dim="feature")
+            assert tdr.batch_size == td.batch_size
+            assert is_tensor_collection(tdr)
+            tensor = getattr(td, red)(0.5, dim="feature", reduce=True)
+        else:
+            tdr = getattr(td, red)(dim="feature")
+            assert tdr.batch_size == td.batch_size
+            assert is_tensor_collection(tdr)
+            tensor = getattr(td, red)(dim="feature", reduce=True)
         assert tensor.shape == td.batch_size
         assert isinstance(tensor, torch.Tensor)
 
@@ -6791,6 +6929,35 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_reshape.shape == torch.Size([td.shape.numel()])
         if td.is_locked:
             assert td_reshape.is_locked
+
+    def test_save_load_memmap(self, td_name, device, tmpdir):
+        if td_name in ("sub_td2",):
+            pytest.skip("sub_td2 is not supported")
+        td = getattr(self, td_name)(device)
+        td.save(tmpdir, copy_existing=True)
+        td_load = TensorDict.load_memmap(tmpdir)
+
+        # check the shape of the leaves
+        def check_shape(v0, v1):
+            assert v0.shape == v1.shape
+
+        td.apply(check_shape, td_load)
+        check_shape(td, td_load)
+        assert (td.cpu() == td_load.cpu()).all()
+        # get a list of all the metadata and non-tensor data
+        if "non_tensor" in td_name or "metadata" in td_name:
+            td_non_tensor = [
+                v for v in td.values(True) if isinstance(v, NonTensorDataBase)
+            ]
+            assert len(td_non_tensor) > 0
+            td_load_non_tensor = [
+                v for v in td_load.values(True) if isinstance(v, NonTensorDataBase)
+            ]
+            assert len(td_load_non_tensor) > 0
+            for v0, v1 in zip(td_non_tensor, td_load_non_tensor):
+                assert v0.data == v1.data
+                assert v0.batch_size == v1.batch_size
+                assert v0.shape == v1.shape
 
     @pytest.mark.parametrize("strict", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -8330,6 +8497,13 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert (tdr.grad == 0).all()
 
+    def test_autograd_grad(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        inputs = td.float().requires_grad_()
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
+        assert (grads == 1).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -9309,6 +9483,34 @@ class TestLazyStackedTensorDict:
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
+
+    # Not working on python 3.9 and below
+    @pytest.mark.skipif(
+        sys.version_info < (3, 10), reason="Not working on python 3.9 and below"
+    )
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds(self, tmpdir):
+        td = LazyStackedTensorDict(
+            TensorDict(a=0, b=1, c=torch.randn(2), d="a string"),
+            TensorDict(a=0, b=1, c=torch.randn(3), d="another string"),
+            TensorDict(a=0, b=1, c=torch.randn(3), d="yet another string"),
+        )
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        # Create a dataloader
+        from streaming import StreamingDataset
+
+        # Load the dataset
+        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dl = torch.utils.data.DataLoader(  # noqa: TOR401
+            dataset=dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list
+        )
+        batches = list(dl)
+        batches = [_batch for batch in batches for _batch in batch.unbind(0)]
+        test_td = LazyStackedTensorDict(*batches)
+        assert_allclose_td(td, test_td)
 
     def test_all_keys(self):
         td = TensorDict({"a": torch.zeros(1)}, [])
@@ -10540,67 +10742,6 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == td2.batch_size
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
-
-
-@pytest.mark.skipif(
-    not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
-)
-class TestSnapshot:
-    @pytest.mark.parametrize("save_name", ["doc", "data"])
-    def test_inplace(self, save_name):
-        td = TensorDict(
-            {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
-            [3],
-        )
-        td.memmap_()
-        assert isinstance(td["b", "c"], MemoryMappedTensor)
-
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                **{save_name: td.state_dict(keep_vars=True)}
-            )
-        }
-        path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
-
-        td_plain = td.to_tensordict(retain_none=True)
-        # we want to delete refs to MemoryMappedTensors
-        assert not isinstance(td_plain["a"], MemoryMappedTensor)
-        del td
-
-        snapshot = torchsnapshot.Snapshot(path=path)
-        td_dest = TensorDict(
-            {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
-            [3],
-        )
-        td_dest.memmap_()
-        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
-        app_state = {
-            "state": torchsnapshot.StateDict(
-                **{save_name: td_dest.state_dict(keep_vars=True)}
-            )
-        }
-        snapshot.restore(app_state=app_state)
-
-        assert (td_dest == td_plain).all()
-        assert td_dest["b"].batch_size == td_plain["b"].batch_size
-        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
-
-    def test_update(self):
-        tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-        state = {"state": tensordict}
-        tensordict.memmap_()
-        path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
-        td_plain = tensordict.to_tensordict(retain_none=True)
-        assert not isinstance(td_plain["a"], MemoryMappedTensor)
-        del tensordict
-
-        snapshot = torchsnapshot.Snapshot(path=path)
-        tensordict2 = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-        target_state = {"state": tensordict2}
-        snapshot.restore(app_state=target_state)
-        assert (td_plain == tensordict2).all()
 
 
 class TestErrorMessage:
@@ -12793,6 +12934,18 @@ class TestNonTensorData:
 
 
 class TestMetaData:
+    def test_typed_metadata(self):
+        d = MetaData[int](0, batch_size=(3,))
+        assert d.data == 0
+        assert isinstance(d, MetaData[int])
+        with pytest.raises(TypeError, match="Expected data of type int, got str"):
+            MetaData[int]("a string")
+        cls = MetaData[int]
+        assert issubclass(cls, MetaData)
+        d = cls(0, batch_size=(3,))
+        assert isinstance(d, MetaData)
+        # Test caching
+        assert isinstance(d, MetaData[int])
 
     def test_expand(self):
         d = MetaData(0, batch_size=(3,))
@@ -13102,6 +13255,150 @@ class TestLikeConstructors:
             assert tdnew.device == torch.device(device)
         else:
             assert tdnew.device is None
+
+
+class TestMemmap:
+    @pytest.mark.parametrize("robust_key", [False, True])
+    def test_memmap_robust_key_normal(self, robust_key, tmpdir):
+        """Test robust_key parameter with normal keys."""
+        td = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        # Save with robust_key setting
+        td_mmap = td.memmap(tmpdir, robust_key=robust_key)
+        assert td_mmap.is_memmap()
+
+        # Load with same robust_key setting
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=robust_key)
+        assert "normal_key" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+        # Check that file exists
+        files = [f for f in os.listdir(tmpdir) if f.endswith(".memmap")]
+        assert len(files) == 1
+        assert files[0] == "normal_key.memmap"  # Normal keys unchanged
+
+    def test_memmap_robust_key_pathlike(self, tmpdir):
+        """Test robust_key=True solves path-like key issue."""
+        td = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        # This should work with robust_key=True
+        td_mmap = td.memmap(tmpdir, robust_key=True)
+        assert td_mmap.is_memmap()
+
+        # Load it back
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=True)
+        assert "a/b/c" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+        # Check that encoded file was created
+        files = [f for f in os.listdir(tmpdir) if f.endswith(".memmap")]
+        assert len(files) == 1
+        assert files[0] == "a%2Fb%2Fc.memmap"  # Encoded filename
+
+    def test_memmap_robust_key_pathlike_legacy_fails(self, tmpdir):
+        """Test that path-like keys still fail with robust_key=False."""
+        td = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        # This should still fail with robust_key=False (legacy behavior)
+        with pytest.raises(RuntimeError, match="No such file or directory"):
+            td.memmap(tmpdir, robust_key=False)
+
+    def test_memmap_robust_key_backward_compatibility(self, tmpdir):
+        """Test backward compatibility: load legacy saves with robust_key=True."""
+        td = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        # Save with legacy behavior
+        td.memmap(tmpdir, robust_key=False)
+
+        # Load with robust_key=True should work (fallback)
+        td_loaded = TensorDict.load_memmap(tmpdir, robust_key=True)
+        assert "normal_key" in td_loaded
+        assert_allclose_td(td, td_loaded)
+
+    def test_memmap_robust_key_deprecation_warning_smart(self, tmpdir):
+        """Test that robust_key=None only warns for problematic keys."""
+        import warnings
+
+        # Normal key should NOT warn
+        td_normal = TensorDict({"normal_key": torch.randn(3, 4)})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # Turn warnings into errors
+            # This should NOT raise any warning
+            td_normal.memmap(tmpdir / "normal", robust_key=None)
+            TensorDict.load_memmap(tmpdir / "normal", robust_key=None)
+
+        # Path-like key SHOULD warn
+        td_pathlike = TensorDict({"a/b/c": torch.randn(3, 4)})
+
+        with pytest.warns(
+            FutureWarning, match="contains characters that will be handled differently"
+        ):
+            # This should fail because legacy behavior can't handle path-like keys
+            # but the warning should be emitted first
+            try:
+                td_pathlike.memmap(tmpdir / "pathlike", robust_key=None)
+            except RuntimeError:
+                pass  # Expected to fail with legacy behavior
+
+    def test_memmap_robust_key_warning_only_when_different(self, tmpdir):
+        """Test warning is only emitted when robust encoding differs from legacy."""
+        import warnings
+
+        # Test keys that should NOT warn (no encoding difference)
+        normal_keys = ["normal_key", "key123", "another_normal_key", "CamelCase"]
+
+        for key in normal_keys:
+            td = TensorDict({key: torch.randn(2, 3)})
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")  # Convert warnings to errors
+                # Should not raise any warning/error
+                td.memmap(tmpdir / f"normal_{key}", robust_key=None)
+
+        # Test keys that SHOULD warn (encoding difference)
+        problematic_keys = ["a/b/c", "key with spaces", "key:colon", "key*star"]
+
+        for key in problematic_keys:
+            td = TensorDict({key: torch.randn(2, 3)})
+            with pytest.warns(
+                FutureWarning,
+                match="contains characters that will be handled differently",
+            ):
+                try:
+                    td.memmap(
+                        tmpdir
+                        / f"problematic_{key.replace('/', '_').replace(' ', '_').replace(':', '_').replace('*', '_')}",
+                        robust_key=None,
+                    )
+                except RuntimeError:
+                    pass  # Expected to fail with legacy behavior for path-like keys
+
+    def test_memmap_robust_key_encoding_bijective(self):
+        """Test that key encoding is bijective."""
+        from tensordict.utils import (
+            _decode_key_from_filesystem,
+            _encode_key_for_filesystem,
+        )
+
+        test_keys = [
+            "a/b/c",
+            "path\\with\\backslashes",
+            "key with spaces",
+            "key:with:colons",
+            "key*with*stars",
+            "normal_key",
+            "key%with%percent",
+            "",
+        ]
+
+        for key in test_keys:
+            encoded = _encode_key_for_filesystem(key, robust=True)
+            decoded = _decode_key_from_filesystem(encoded)
+            assert decoded == key, f"Failed: {key!r} -> {encoded!r} -> {decoded!r}"
+
+            # Legacy encoding should return key unchanged
+            legacy = _encode_key_for_filesystem(key, robust=False)
+            assert legacy == key
 
 
 if __name__ == "__main__":
