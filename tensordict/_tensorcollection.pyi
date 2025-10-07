@@ -1432,12 +1432,12 @@ class TensorCollection:
     def to(
         self,
         device: int | device | None = ...,
-        dtype: torch.device | str | None = ...,
+        dtype: torch.dtype | None = ...,
         non_blocking: bool = ...,
         inplace: bool = False,
     ) -> Self: ...
     @overload
-    def to(self, dtype: torch.device | str, non_blocking: bool = ...) -> Self: ...
+    def to(self, dtype: torch.dtype, non_blocking: bool = ...) -> Self: ...
     @overload
     def to(self, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
     @overload

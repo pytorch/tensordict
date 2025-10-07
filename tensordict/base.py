@@ -14564,13 +14564,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def to(
         self: T,
         device: int | device | None = ...,
-        dtype: torch.device | str | None = ...,
+        dtype: torch.dtype | None = ...,
         non_blocking: bool = ...,
         inplace: bool = False,
     ) -> Self: ...
 
     @overload
-    def to(self: T, dtype: torch.device | str, non_blocking: bool = ...) -> Self: ...
+    def to(self: T, dtype: torch.dtype, non_blocking: bool = ...) -> Self: ...
 
     @overload
     def to(self: T, tensor: Tensor, non_blocking: bool = ...) -> Self: ...
