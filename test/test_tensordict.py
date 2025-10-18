@@ -4883,6 +4883,9 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_batchsize.batch_size == torch.Size([])
             del td_batchsize
 
+    @pytest.mark.skipif(
+        is_npu_available, reason="torch.double is not adapted on NPU currently"
+    )
     def test_casts(self, td_name, device):
         td = getattr(self, td_name)(device)
         # exclude non-tensor data
@@ -6659,7 +6662,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="Cannot pin memory"):
                 td.pin_memory()
             return
-        if device.type == "cuda":
+        if device.type == "cuda" or device.type == "npu":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 td.pin_memory()
             return
