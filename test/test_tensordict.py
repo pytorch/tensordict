@@ -86,6 +86,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_available_devices,
         prod,
         TestTensorDictsBase,
+        is_npu_available
     )
 else:
     IS_FB = False
@@ -95,6 +96,7 @@ else:
         get_available_devices,
         prod,
         TestTensorDictsBase,
+        is_npu_available
     )
 
 try:
@@ -160,10 +162,12 @@ pytestmark = [
 
 mp_ctx = "spawn"
 cur_device = "cpu"
+npu_device_count = 0
 if torch.cuda.is_available():
     cur_device = "cuda"
-elif torch.npu.is_available():
+elif is_npu_available():
     cur_device = "npu"
+    npu_device_count = torch.npu.device_count()
 
 
 @pytest.fixture
@@ -171,7 +175,7 @@ def device_fixture():
     device = torch.get_default_device()
     if torch.cuda.is_available():
         torch.set_default_device(torch.device("cuda:0"))
-    elif torch.npu.is_available():
+    elif is_npu_available():
         torch.set_default_device(torch.device("npu:0"))
     # elif torch.backends.mps.is_available():
     #     torch.set_default_device(torch.device("mps:0"))
@@ -535,7 +539,7 @@ class TestGeneric:
                 )
             ), td_c.to_dict()
 
-    @pytest.mark.skipif(not torch.cuda.is_available() and not torch.npu.is_available(),
+    @pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(),
                         reason="no cuda or npu device detected")
     def test_consolidate_to_device(self):
         td = TensorDict(
@@ -762,7 +766,7 @@ class TestGeneric:
 
         assert convert_ellipsis_to_idx(ellipsis_index, batch_size) == expected_index
 
-    @pytest.mark.skipif(not torch.cuda.device_count() and not torch.npu.device_count(), reason="no cuda or npu")
+    @pytest.mark.skipif(not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu")
     def test_create_on_device(self):
         device = torch.device(0)
 
@@ -1726,7 +1730,7 @@ class TestGeneric:
 
         if torch.cuda.is_available():
             device = "cuda:0"
-        elif torch.npu.is_available() :
+        elif is_npu_available() :
             device = "npu:0"
         # elif torch.backends.mps.is_available():
         #     device = "mps:0"
@@ -2000,7 +2004,7 @@ class TestGeneric:
             device = "cuda"
         # elif torch.backends.mps.is_available():
         #     device = "mps"
-        elif torch.npu.is_available():
+        elif is_npu_available():
             device = "npu"
         else:
             pytest.skip("No device found")
@@ -2079,7 +2083,7 @@ class TestGeneric:
         #     device = "mps"
         if torch.cuda.is_available():
             device = "cuda"
-        elif torch.npu.is_available():
+        elif is_npu_available():
             device = "npu"
         else:
             device = None
@@ -3009,7 +3013,7 @@ class TestGeneric:
         td2 = torch.stack([td, td_copy], dim=0)
         assert td2.names == [None, None, None]
 
-    @pytest.mark.skipif(not torch.cuda.is_available() and not torch.npu.is_available(),
+    @pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(),
                         reason="CUDA or npu not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
@@ -3268,7 +3272,7 @@ class TestGeneric:
         assert tensordict_cpu["b"].device == torch.device("cpu")
 
     @pytest.mark.skipif(
-        torch.cuda.device_count() == 0 and torch.npu.device_count() == 0, reason="no cuda or npu device detected"
+        torch.cuda.device_count() == 0 and npu_device_count == 0, reason="no cuda or npu device detected"
     )
     @pytest.mark.parametrize("device", get_available_devices()[1:])
     def test_tensordict_error_messages(self, device):
@@ -4743,11 +4747,11 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert td._cache is None
 
     @pytest.mark.skipif(
-        torch.cuda.device_count() == 0 and torch.npu.device_count() == 0, reason="no cuda or npu device detected"
+        torch.cuda.device_count() == 0 and npu_device_count == 0, reason="no cuda or npu device detected"
     )
     @pytest.mark.parametrize("device_cast", get_available_devices())
     @pytest.mark.parametrize(
-        "non_blocking_pin", [False] if not torch.cuda.is_available() and not torch.npu.is_available() else [False, True]
+        "non_blocking_pin", [False] if not torch.cuda.is_available() and not is_npu_available() else [False, True]
     )
     @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
     def test_cast_device(
@@ -4995,14 +4999,14 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.clone(recurse=False).get("a") is td.get("a")
 
     @pytest.mark.skipif(
-        torch.cuda.device_count() == 0 and torch.npu.device_count() == 0, reason="no cuda or npu device detected"
+        torch.cuda.device_count() == 0 and npu_device_count == 0, reason="no cuda or npu device detected"
     )
     def test_cpu_cuda(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if torch.cuda.is_available():
             td_device = td.cuda()
-        elif torch.npu.is_available():
+        elif is_npu_available():
             td_device = td.npu()
         td_back = td_device.cpu()
         assert td_device.device == torch.device(f"{cur_device}:0")
@@ -6643,7 +6647,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td == 1).all()
 
     @pytest.mark.skipif(
-        torch.cuda.device_count() == 0 and torch.npu.device_count() == 0, reason="no cuda or npu device detected"
+        torch.cuda.device_count() == 0 and npu_device_count == 0, reason="no cuda or npu device detected"
     )
     @pytest.mark.parametrize("device_cast", [0, f"{cur_device}:0", torch.device(f"{cur_device}:0")])
     @pytest.mark.parametrize("inplace", [False, True])
@@ -7864,7 +7868,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if torch.cuda.is_available():
             dest = torch.device("cuda:0")
-        elif torch.npu.is_available() and torch.npu.device_count():
+        elif is_npu_available() and npu_device_count:
             dest = torch.device("npu:0")
         # elif torch.mps.is_available():
         #     dest = torch.device("mps:0")
@@ -8539,7 +8543,7 @@ class TestTensorDictRepr:
             device_not_none = device
         elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
-        elif torch.npu.is_available() and torch.npu.device_count():
+        elif is_npu_available() and npu_device_count:
             device_not_none = torch.device("npu:0")
         else:
             device_not_none = torch.device("cpu")
@@ -8565,7 +8569,7 @@ class TestTensorDictRepr:
             device_not_none = device
         elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
-        elif torch.npu.is_available() and torch.npu.device_count():
+        elif is_npu_available() and npu_device_count:
             device_not_none = torch.device("npu:0")
         else:
             device_not_none = torch.device("cpu")
@@ -8597,7 +8601,7 @@ class TestTensorDictRepr:
             device_not_none = device
         elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
-        elif torch.npu.is_available() and torch.npu.device_count():
+        elif is_npu_available() and npu_device_count:
             device_not_none = torch.device("npu:0")
         else:
             device_not_none = torch.device("cpu")
@@ -8625,7 +8629,7 @@ class TestTensorDictRepr:
             device_not_none = device
         elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
-        elif torch.npu.is_available() and torch.npu.device_count():
+        elif is_npu_available() and npu_device_count:
             device_not_none = torch.device("npu:0")
         else:
             device_not_none = torch.device("cpu")
@@ -8638,7 +8642,7 @@ class TestTensorDictRepr:
             device=device,
         )
 
-    @pytest.mark.skipif(not torch.cuda.device_count() and not torch.npu.device_count(), reason="no cuda or npu")
+    @pytest.mark.skipif(not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu")
     def test_repr_batch_size_update(self, device, dtype):
         td = self.td(device, dtype)
         td.batch_size = torch.Size([4, 3, 2])
@@ -8659,7 +8663,7 @@ class TestTensorDictRepr:
     is_shared={is_shared})"""
         assert repr(td) == expected
 
-    @pytest.mark.skipif(not torch.cuda.device_count() and not torch.npu.device_count(), reason="no cuda or npu")
+    @pytest.mark.skipif(not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu")
     @pytest.mark.parametrize("device_cast", get_available_devices())
     def test_repr_device_to_device(self, device, dtype, device_cast):
         td = self.td(device, dtype)
@@ -9765,7 +9769,7 @@ class TestLazyStackedTensorDict:
         assert tdload.is_consolidated()
         assert tdload["njt_lengths"]._lengths is not None
 
-    @pytest.mark.skipif(not torch.cuda.is_available() and not torch.npu.is_available(),
+    @pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(),
                         reason="no cuda or npu device detected")
     def test_consolidate_to_device(self):
         td = TensorDict(
@@ -9792,7 +9796,7 @@ class TestLazyStackedTensorDict:
         assert td_c_device["d"] == [["a string!"] * 3]
         assert len(dataptrs) == 1
 
-    @pytest.mark.skipif(not torch.cuda.is_available() and not torch.npu.is_available(),
+    @pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(),
                         reason="no cuda or npu device detected")
     def test_consolidate_to_device_njt(self):
         td = TensorDict(
@@ -11377,7 +11381,7 @@ class TestNamedDims(TestTensorDictsBase):
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize(
-        "non_blocking_pin", [False] if not torch.cuda.is_available() and not torch.npu.is_available() else [False, True]
+        "non_blocking_pin", [False] if not torch.cuda.is_available() and not is_npu_available() else [False, True]
     )
     @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -11440,14 +11444,14 @@ class TestLock:
         assert count == expected, {id(ref()) for ref in weakref_list}
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not torch.npu.is_available(),
+        not torch.cuda.is_available() and not is_npu_available(),
         # and not torch.backends.mps.is_available(),
         reason="a device is required.",
     )
     def test_cached_data_lock_device(self):
         if torch.cuda.is_available():
             device = "cuda:0"
-        elif torch.npu.is_available():
+        elif is_npu_available():
             device = "npu:0"
         else:
             device = "mps:0"
@@ -13172,7 +13176,7 @@ class TestUnbatchedTensor:
         )
         if torch.cuda.is_available():
             device = "cuda:0"
-        elif torch.npu.is_available():
+        elif is_npu_available():
             device = "npu:0"
         else:
             device = "cpu"

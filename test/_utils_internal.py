@@ -31,6 +31,8 @@ def prod(sequence):
     else:
         return int(np.prod(sequence))
 
+def is_npu_available():
+    return hasattr(torch,"npu") and torch.npu.is_available()
 
 def get_available_devices():
     devices = [torch.device("cpu")]
@@ -40,12 +42,13 @@ def get_available_devices():
             devices += [torch.device(f"cuda:{i}")]
             if i == 1:
                 break
-    n_npu=torch.npu.device_count()
-    if n_npu>0:
-        for i in range(n_npu):
-            devices += [torch.device(f"npu:{i}")]
-            if i == 1:
-                break
+    if is_npu_available():
+        n_npu = torch.npu.device_count()
+        if n_npu > 0:
+            for i in range(n_npu):
+                devices += [torch.device(f"npu:{i}")]
+                if i == 1:
+                    break
     # TODO: MPS and NPU would be worth considering but it's a lot of work
     # for example, many ops are tested with various dtypes but MPS struggles with
     # float64. Shared mem can also cause trouble.
