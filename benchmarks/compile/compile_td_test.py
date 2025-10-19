@@ -309,7 +309,10 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 def test_compile_indexing(mode, dict_type, index_type, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = TensorDict(
-        {"a": torch.arange(100), "b": {"c": torch.arange(100)}},
+        {
+            "a": torch.arange(100, device=device),
+            "b": {"c": torch.arange(100, device=device)},
+        },
         batch_size=[100],
         device=device,
     )
@@ -329,7 +332,7 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
     else:
         idx = slice(None, None, 2)
     if index_type == "tensor":
-        idx = torch.tensor(range(*idx.indices(10)))
+        idx = torch.tensor(range(*idx.indices(10)), device=device)
 
     func(td, idx)
     func(td, idx)
