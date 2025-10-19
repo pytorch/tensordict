@@ -6706,7 +6706,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert getattr(td, red)(0.5, 2, keepdim=True).shape == torch.Size(
                 [s if i != 2 else 1 for i, s in enumerate(td.shape)]
             )
-            assert isinstance(getattr(td, red)(0.5, reduce=True), torch.Tensor)
+            assert isinstance(td.quantile(0.5, reduce=True), torch.Tensor)
         else:
             assert getattr(td, red)().batch_size == torch.Size(())
             assert getattr(td, red)(1).shape == torch.Size(
@@ -9865,6 +9865,18 @@ class TestLazyStackedTensorDict:
         )
         assert isinstance(x, torch.Tensor)
         assert x[0, 0] == 100
+
+    def test_lazy_stack_nested_get(self):
+        td0 = TensorDict(a=torch.randn(3))
+        td1 = TensorDict(a=torch.randn(4))
+
+        td = lazy_stack([td0, td1])
+        td = lazy_stack([td, td.copy()])
+        td = lazy_stack([td, td.copy()])
+
+        assert isinstance(td.get("a", as_list=True), list)
+
+        assert isinstance(td.get("a", as_padded_tensor=True), torch.Tensor)
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))

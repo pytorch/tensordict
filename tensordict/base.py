@@ -7324,27 +7324,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Find what the default is
         if args:
             default = args[0]
-            if len(args) > 1 or kwargs:
+            if len(args) > 1:
                 raise TypeError("only one (keyword) argument is allowed.")
-        elif kwargs:
+        elif "default" in kwargs:
             default = kwargs.pop("default")
-            if args or kwargs:
-                raise TypeError("only one (keyword) argument is allowed.")
         elif _GET_DEFAULTS_TO_NONE:
             default = None
         else:
             default = NO_DEFAULT
 
-        return self._get_at_tuple(key, index, default)
+        return self._get_at_tuple(key, index, default, **kwargs)
 
-    def _get_at_str(self, key, idx, default):
-        out = self._get_str(key, default)
+    def _get_at_str(self, key, idx, default, **kwargs):
+        out = self._get_str(key, default, **kwargs)
         if out is default:
             return out
         return out[idx]
 
-    def _get_at_tuple(self, key, idx, default):
-        out = self._get_tuple(key, default)
+    def _get_at_tuple(self, key, idx, default, **kwargs):
+        out = self._get_tuple(key, default, **kwargs)
         if out is default:
             return out
         return out[idx]
