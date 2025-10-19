@@ -9878,6 +9878,31 @@ class TestLazyStackedTensorDict:
 
         assert isinstance(td.get("a", as_padded_tensor=True), torch.Tensor)
 
+    def test_lazy_stack_nested_tensordict_as_list(self):
+        """Regression test: as_list should return list for leaf tensors,
+        but properly stack nested TensorDicts"""
+        # Create nested structure with TensorDicts
+        inner_td0 = TensorDict({"full": torch.randn(3)})
+        inner_td1 = TensorDict({"full": torch.randn(4)})
+
+        td0 = TensorDict({"log_probs": inner_td0})
+        td1 = TensorDict({"log_probs": inner_td1})
+
+        stacked = lazy_stack([td0, td1])
+
+        # This should return a list of tensors (the leaf values), not a list of TensorDicts
+        result = stacked.get(("log_probs", "full"), as_list=True)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert isinstance(result[0], torch.Tensor)
+        assert isinstance(result[1], torch.Tensor)
+        assert result[0].shape == torch.Size([3])
+        assert result[1].shape == torch.Size([4])
+
+        # Verify intermediate TensorDict is properly stacked
+        log_probs = stacked.get("log_probs")
+        assert isinstance(log_probs, LazyStackedTensorDict)
+
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
     @pytest.mark.parametrize("pos3", range(8))
