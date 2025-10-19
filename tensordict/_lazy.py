@@ -1340,8 +1340,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # Only return as list if all items are plain tensors or non-tensor values
             # If they are TensorDicts/tensor collections, we need to stack them properly
             if all(
-                isinstance(item, torch.Tensor)
-                or not is_tensor_collection(item)
+                isinstance(item, torch.Tensor) or not is_tensor_collection(item)
                 for item in tensors
             ):
                 return tensors
