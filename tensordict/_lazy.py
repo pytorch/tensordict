@@ -96,24 +96,20 @@ except ImportError:
 
     _has_funcdim = False
 
-_has_functorch = False
 try:
-    try:
-        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
-            _add_batch_dim,
-            _remove_batch_dim,
-            is_batchedtensor,
-        )
-    except ImportError:
-        from functorch._C import is_batchedtensor  # @manual=fbcode//caffe2/functorch:_C
+    from tensordict.utils import _import_and_wrap_functorch
 
-    _has_functorch = True
+    _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
+        "_add_batch_dim",
+        "_remove_batch_dim",
+    )
 except ImportError:
-    _has_functorch = False
 
-    def is_batchedtensor(tensor: Tensor) -> bool:
-        """Placeholder for the functorch function."""
-        return False
+    def _add_batch_dim(*args, **kwargs) -> Tensor:
+        raise NotImplementedError
+
+    def _remove_batch_dim(*args, **kwargs) -> Tensor:
+        raise NotImplementedError
 
 
 if TYPE_CHECKING:
