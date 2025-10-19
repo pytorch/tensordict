@@ -16,7 +16,7 @@ if errorlevel 1 (
     echo Successfully installed pybind11.
 )
 
-:: Install setuptools_scm which is required for building
+:: Install setuptools_scm which is required for building with --no-isolation
 %CONDA_RUN% pip install setuptools_scm
 
 :: Check if the installation was successful
