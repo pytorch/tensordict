@@ -9,7 +9,7 @@ import functools
 
 import mmap
 import os
-
+import re
 import sys
 import tempfile
 from multiprocessing import reduction, util
@@ -884,7 +884,16 @@ class MemoryMappedTensor(torch.Tensor):
                     "isn't supported at the moment."
                 ) from err
             raise
-        if out.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
+        try:
+            out_storage = out.untyped_storage()
+        except NotImplementedError as err:
+            if re.search("Cannot access storage of BatchedTensorImpl", str(err)):
+                raise ValueError(
+                    "Using first class dimension indices with MemoryMappedTensor "
+                    "isn't supported at the moment."
+                ) from err
+            raise
+        if out_storage.data_ptr() == self.untyped_storage().data_ptr():
             out = self._index_wrap(out, item)
         return out
 
@@ -899,6 +908,19 @@ class MemoryMappedTensor(torch.Tensor):
                     "isn't supported at the moment."
                 ) from err
             raise
+        # Check if result is a batched tensor (from functorch/ftdim operations)
+        # In PyTorch nightlies, ftdim indexing no longer raises ValueError but creates
+        # BatchedTensorImpl which cannot have its storage accessed
+        try:
+            from torch._C._functorch import is_batchedtensor
+
+            if is_batchedtensor(out):
+                raise ValueError(
+                    "Using first class dimension indices with MemoryMappedTensor "
+                    "isn't supported at the moment."
+                )
+        except ImportError:
+            pass
         if out.storage().data_ptr() == self.storage().data_ptr():
             out = self._index_wrap(out, item)
         return out
