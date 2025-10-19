@@ -447,12 +447,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     def __repr__(self):
         return (
             f"{type(self).__name__}("
-            f"\n{indent(f'in_keys={self.in_keys}', 4*' ')},"
-            f"\n{indent(f'out_keys={self.out_keys}', 4*' ')},"
-            f"\n{indent(f'distribution_class={self.distribution_class}', 4*' ')}, "
-            f"\n{indent(f'distribution_kwargs={self.distribution_kwargs})', 4*' ')},"
-            f"\n{indent(f'default_interaction_type={self.default_interaction_type})', 4*' ')},"
-            f"\n{indent(f'num_samples={self.num_samples})', 4*' ')})"
+            f"\n{indent(f'in_keys={self.in_keys}', 4 * ' ')},"
+            f"\n{indent(f'out_keys={self.out_keys}', 4 * ' ')},"
+            f"\n{indent(f'distribution_class={self.distribution_class}', 4 * ' ')}, "
+            f"\n{indent(f'distribution_kwargs={self.distribution_kwargs})', 4 * ' ')},"
+            f"\n{indent(f'default_interaction_type={self.default_interaction_type})', 4 * ' ')},"
+            f"\n{indent(f'num_samples={self.num_samples})', 4 * ' ')})"
         )
 
     @property
