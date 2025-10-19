@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3363+g38f119961.d20251007)
+                  main (0.10.0.dev3368+g5ec5da590.d20251019)
                 </div>
               
             
@@ -397,28 +397,27 @@ the image (e.g. “Bag”, “Sneaker” etc.).</p>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0.00/26.4M [00:00&lt;?, ?B/s]
-  0%|          | 65.5k/26.4M [00:00&lt;01:13, 359kB/s]
-  1%|          | 229k/26.4M [00:00&lt;00:38, 678kB/s]
-  3%|▎         | 852k/26.4M [00:00&lt;00:13, 1.93MB/s]
- 13%|█▎        | 3.47M/26.4M [00:00&lt;00:03, 6.85MB/s]
- 36%|███▌      | 9.40M/26.4M [00:00&lt;00:00, 17.9MB/s]
- 48%|████▊     | 12.6M/26.4M [00:01&lt;00:00, 19.3MB/s]
- 69%|██████▉   | 18.4M/26.4M [00:01&lt;00:00, 26.4MB/s]
- 83%|████████▎ | 21.8M/26.4M [00:01&lt;00:00, 25.9MB/s]
-100%|██████████| 26.4M/26.4M [00:01&lt;00:00, 19.2MB/s]
+  0%|          | 65.5k/26.4M [00:00&lt;01:12, 364kB/s]
+  1%|          | 197k/26.4M [00:00&lt;00:45, 578kB/s]
+  3%|▎         | 819k/26.4M [00:00&lt;00:13, 1.89MB/s]
+ 13%|█▎        | 3.31M/26.4M [00:00&lt;00:03, 6.60MB/s]
+ 35%|███▍      | 9.21M/26.4M [00:00&lt;00:01, 16.0MB/s]
+ 57%|█████▋    | 15.0M/26.4M [00:01&lt;00:00, 21.6MB/s]
+ 79%|███████▉  | 21.0M/26.4M [00:01&lt;00:00, 25.3MB/s]
+100%|██████████| 26.4M/26.4M [00:01&lt;00:00, 19.5MB/s]
 
   0%|          | 0.00/29.5k [00:00&lt;?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00&lt;00:00, 327kB/s]
+100%|██████████| 29.5k/29.5k [00:00&lt;00:00, 326kB/s]
 
   0%|          | 0.00/4.42M [00:00&lt;?, ?B/s]
-  1%|▏         | 65.5k/4.42M [00:00&lt;00:12, 361kB/s]
-  5%|▌         | 229k/4.42M [00:00&lt;00:06, 678kB/s]
- 21%|██        | 918k/4.42M [00:00&lt;00:01, 2.09MB/s]
- 83%|████████▎ | 3.67M/4.42M [00:00&lt;00:00, 7.24MB/s]
-100%|██████████| 4.42M/4.42M [00:00&lt;00:00, 6.06MB/s]
+  1%|▏         | 65.5k/4.42M [00:00&lt;00:12, 362kB/s]
+  4%|▍         | 197k/4.42M [00:00&lt;00:07, 575kB/s]
+ 19%|█▉        | 852k/4.42M [00:00&lt;00:01, 1.96MB/s]
+ 77%|███████▋  | 3.41M/4.42M [00:00&lt;00:00, 6.76MB/s]
+100%|██████████| 4.42M/4.42M [00:00&lt;00:00, 6.09MB/s]
 
   0%|          | 0.00/5.15k [00:00&lt;?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00&lt;00:00, 57.6MB/s]
+100%|██████████| 5.15k/5.15k [00:00&lt;00:00, 59.2MB/s]
 </pre></div>
 </div>
 <p>Tensorclasses are dataclasses that expose dedicated tensor methods over
@@ -488,7 +487,7 @@ pass the identity function as <code class="docutils literal notranslate"><span c
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Net</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flatten</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Flatten.html#torch.nn.Flatten" title="torch.nn.Flatten" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span></a><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flatten</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.flatten.Flatten.html#torch.nn.modules.flatten.Flatten" title="torch.nn.modules.flatten.Flatten" class="sphx-glr-backref-module-torch-nn-modules-flatten sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span></a><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linear_relu_stack</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
             <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">28</span> <span class="o">*</span> <span class="mi">28</span><span class="p">,</span> <span class="mi">512</span><span class="p">),</span>
             <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="torch.nn.ReLU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span></a><span class="p">(),</span>
@@ -656,159 +655,159 @@ tensor.</p>
     is_shared=False)
 Epoch 1
 -------------------------
-loss: 2.299625 [    0/60000]
-loss: 2.289362 [ 6400/60000]
-loss: 2.269472 [12800/60000]
-loss: 2.258330 [19200/60000]
-loss: 2.244018 [25600/60000]
-loss: 2.216789 [32000/60000]
-loss: 2.221699 [38400/60000]
-loss: 2.189178 [44800/60000]
-loss: 2.187942 [51200/60000]
-loss: 2.146862 [57600/60000]
+loss: 2.308079 [    0/60000]
+loss: 2.300381 [ 6400/60000]
+loss: 2.281062 [12800/60000]
+loss: 2.276302 [19200/60000]
+loss: 2.250981 [25600/60000]
+loss: 2.231718 [32000/60000]
+loss: 2.233978 [38400/60000]
+loss: 2.208860 [44800/60000]
+loss: 2.200637 [51200/60000]
+loss: 2.168878 [57600/60000]
 Test Error:
- Accuracy: 50.0%, Avg loss: 2.143170
+ Accuracy: 33.8%, Avg loss: 2.165249
 
 Epoch 2
 -------------------------
-loss: 2.152321 [    0/60000]
-loss: 2.141731 [ 6400/60000]
-loss: 2.079694 [12800/60000]
-loss: 2.095267 [19200/60000]
-loss: 2.035690 [25600/60000]
-loss: 1.979738 [32000/60000]
-loss: 2.002561 [38400/60000]
-loss: 1.921186 [44800/60000]
-loss: 1.927254 [51200/60000]
-loss: 1.848246 [57600/60000]
+loss: 2.181023 [    0/60000]
+loss: 2.173026 [ 6400/60000]
+loss: 2.121372 [12800/60000]
+loss: 2.138759 [19200/60000]
+loss: 2.086601 [25600/60000]
+loss: 2.037028 [32000/60000]
+loss: 2.066072 [38400/60000]
+loss: 1.994340 [44800/60000]
+loss: 1.991835 [51200/60000]
+loss: 1.939500 [57600/60000]
 Test Error:
- Accuracy: 58.0%, Avg loss: 1.848527
+ Accuracy: 54.9%, Avg loss: 1.927838
 
 Epoch 3
 -------------------------
-loss: 1.874591 [    0/60000]
-loss: 1.848164 [ 6400/60000]
-loss: 1.730754 [12800/60000]
-loss: 1.776431 [19200/60000]
-loss: 1.655076 [25600/60000]
-loss: 1.616784 [32000/60000]
-loss: 1.633678 [38400/60000]
-loss: 1.539564 [44800/60000]
-loss: 1.566576 [51200/60000]
-loss: 1.462408 [57600/60000]
+loss: 1.960415 [    0/60000]
+loss: 1.935253 [ 6400/60000]
+loss: 1.824242 [12800/60000]
+loss: 1.871438 [19200/60000]
+loss: 1.764042 [25600/60000]
+loss: 1.716707 [32000/60000]
+loss: 1.741762 [38400/60000]
+loss: 1.634803 [44800/60000]
+loss: 1.646676 [51200/60000]
+loss: 1.568014 [57600/60000]
 Test Error:
- Accuracy: 61.4%, Avg loss: 1.485242
+ Accuracy: 61.7%, Avg loss: 1.567080
 
 Epoch 4
 -------------------------
-loss: 1.543416 [    0/60000]
-loss: 1.518283 [ 6400/60000]
-loss: 1.374491 [12800/60000]
-loss: 1.451707 [19200/60000]
-loss: 1.326642 [25600/60000]
-loss: 1.332937 [32000/60000]
-loss: 1.341265 [38400/60000]
-loss: 1.271078 [44800/60000]
-loss: 1.308508 [51200/60000]
-loss: 1.212067 [57600/60000]
+loss: 1.631226 [    0/60000]
+loss: 1.595944 [ 6400/60000]
+loss: 1.438825 [12800/60000]
+loss: 1.525818 [19200/60000]
+loss: 1.399410 [25600/60000]
+loss: 1.391785 [32000/60000]
+loss: 1.408448 [38400/60000]
+loss: 1.319015 [44800/60000]
+loss: 1.347089 [51200/60000]
+loss: 1.264147 [57600/60000]
 Test Error:
- Accuracy: 62.9%, Avg loss: 1.239923
+ Accuracy: 63.4%, Avg loss: 1.282648
 
 Epoch 5
 -------------------------
-loss: 1.309037 [    0/60000]
-loss: 1.297341 [ 6400/60000]
-loss: 1.139543 [12800/60000]
-loss: 1.248394 [19200/60000]
-loss: 1.118463 [25600/60000]
-loss: 1.150951 [32000/60000]
-loss: 1.165723 [38400/60000]
-loss: 1.105137 [44800/60000]
-loss: 1.148365 [51200/60000]
-loss: 1.065051 [57600/60000]
+loss: 1.362728 [    0/60000]
+loss: 1.344171 [ 6400/60000]
+loss: 1.167710 [12800/60000]
+loss: 1.288060 [19200/60000]
+loss: 1.159479 [25600/60000]
+loss: 1.182086 [32000/60000]
+loss: 1.202716 [38400/60000]
+loss: 1.127501 [44800/60000]
+loss: 1.161390 [51200/60000]
+loss: 1.090064 [57600/60000]
 Test Error:
- Accuracy: 64.4%, Avg loss: 1.086755
+ Accuracy: 64.8%, Avg loss: 1.108182
 
-Tensorclass training done! time:  8.8208 s
+Tensorclass training done! time:  8.6326 s
 Epoch 1
 -------------------------
-loss: 2.305953 [    0/60000]
-loss: 2.296794 [ 6400/60000]
-loss: 2.279781 [12800/60000]
-loss: 2.269735 [19200/60000]
-loss: 2.258579 [25600/60000]
-loss: 2.221605 [32000/60000]
-loss: 2.233629 [38400/60000]
-loss: 2.202667 [44800/60000]
-loss: 2.200715 [51200/60000]
-loss: 2.157194 [57600/60000]
+loss: 2.307559 [    0/60000]
+loss: 2.295649 [ 6400/60000]
+loss: 2.279541 [12800/60000]
+loss: 2.265841 [19200/60000]
+loss: 2.254285 [25600/60000]
+loss: 2.226492 [32000/60000]
+loss: 2.227867 [38400/60000]
+loss: 2.198201 [44800/60000]
+loss: 2.199260 [51200/60000]
+loss: 2.152575 [57600/60000]
 Test Error:
- Accuracy: 35.0%, Avg loss: 2.163155
+ Accuracy: 55.8%, Avg loss: 2.157059
 
 Epoch 2
 -------------------------
-loss: 2.177127 [    0/60000]
-loss: 2.167583 [ 6400/60000]
-loss: 2.117132 [12800/60000]
-loss: 2.125975 [19200/60000]
-loss: 2.082425 [25600/60000]
-loss: 2.020254 [32000/60000]
-loss: 2.041153 [38400/60000]
-loss: 1.971931 [44800/60000]
-loss: 1.979724 [51200/60000]
-loss: 1.889069 [57600/60000]
+loss: 2.172246 [    0/60000]
+loss: 2.154285 [ 6400/60000]
+loss: 2.101944 [12800/60000]
+loss: 2.106327 [19200/60000]
+loss: 2.064993 [25600/60000]
+loss: 2.013031 [32000/60000]
+loss: 2.024381 [38400/60000]
+loss: 1.952090 [44800/60000]
+loss: 1.958296 [51200/60000]
+loss: 1.864060 [57600/60000]
 Test Error:
- Accuracy: 60.1%, Avg loss: 1.902063
+ Accuracy: 57.4%, Avg loss: 1.875934
 
 Epoch 3
 -------------------------
-loss: 1.938294 [    0/60000]
-loss: 1.907885 [ 6400/60000]
-loss: 1.797796 [12800/60000]
-loss: 1.827926 [19200/60000]
-loss: 1.726171 [25600/60000]
-loss: 1.672064 [32000/60000]
-loss: 1.679338 [38400/60000]
-loss: 1.590278 [44800/60000]
-loss: 1.622616 [51200/60000]
-loss: 1.496089 [57600/60000]
+loss: 1.915892 [    0/60000]
+loss: 1.875644 [ 6400/60000]
+loss: 1.767047 [12800/60000]
+loss: 1.791542 [19200/60000]
+loss: 1.695043 [25600/60000]
+loss: 1.652411 [32000/60000]
+loss: 1.657690 [38400/60000]
+loss: 1.566402 [44800/60000]
+loss: 1.592173 [51200/60000]
+loss: 1.469864 [57600/60000]
 Test Error:
- Accuracy: 60.6%, Avg loss: 1.527132
+ Accuracy: 60.5%, Avg loss: 1.501259
 
 Epoch 4
 -------------------------
-loss: 1.596622 [    0/60000]
-loss: 1.561333 [ 6400/60000]
-loss: 1.412863 [12800/60000]
-loss: 1.478502 [19200/60000]
-loss: 1.359062 [25600/60000]
-loss: 1.355906 [32000/60000]
-loss: 1.357433 [38400/60000]
-loss: 1.287567 [44800/60000]
-loss: 1.334096 [51200/60000]
-loss: 1.221298 [57600/60000]
+loss: 1.575290 [    0/60000]
+loss: 1.530784 [ 6400/60000]
+loss: 1.393877 [12800/60000]
+loss: 1.453275 [19200/60000]
+loss: 1.347252 [25600/60000]
+loss: 1.344296 [32000/60000]
+loss: 1.352352 [38400/60000]
+loss: 1.279448 [44800/60000]
+loss: 1.316062 [51200/60000]
+loss: 1.210483 [57600/60000]
 Test Error:
- Accuracy: 61.9%, Avg loss: 1.253909
+ Accuracy: 63.4%, Avg loss: 1.241849
 
 Epoch 5
 -------------------------
-loss: 1.330287 [    0/60000]
-loss: 1.318273 [ 6400/60000]
-loss: 1.147784 [12800/60000]
-loss: 1.255615 [19200/60000]
-loss: 1.121864 [25600/60000]
-loss: 1.153005 [32000/60000]
-loss: 1.166396 [38400/60000]
-loss: 1.104884 [44800/60000]
-loss: 1.157283 [51200/60000]
-loss: 1.065749 [57600/60000]
+loss: 1.324778 [    0/60000]
+loss: 1.295637 [ 6400/60000]
+loss: 1.142997 [12800/60000]
+loss: 1.238695 [19200/60000]
+loss: 1.123514 [25600/60000]
+loss: 1.146336 [32000/60000]
+loss: 1.169754 [38400/60000]
+loss: 1.103315 [44800/60000]
+loss: 1.145421 [51200/60000]
+loss: 1.060900 [57600/60000]
 Test Error:
- Accuracy: 63.9%, Avg loss: 1.090211
+ Accuracy: 64.9%, Avg loss: 1.082136
 
-Training done! time:  35.9005 s
+Training done! time:  35.5518 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (1 minutes 3.561 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (1 minutes 2.637 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-fashion-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_fashion.ipynb</span></code></a></p>
