@@ -1337,7 +1337,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 # then we consider this default as non-stackable and return prematurly
                 return default
         if as_list:
-            return tensors
+            # Only return as list if all items are plain tensors or non-tensor values
+            # If they are TensorDicts/tensor collections, we need to stack them properly
+            if all(
+                isinstance(item, torch.Tensor)
+                or not is_tensor_collection(item)
+                for item in tensors
+            ):
+                return tensors
+            # Otherwise, pass to lazy_stack to handle nested structures
         if as_nested_tensor:
             # If all collected items are plain tensors, convert directly to nested tensor
             if all(isinstance(item, torch.Tensor) for item in tensors):
