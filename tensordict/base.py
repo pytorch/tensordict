@@ -10286,6 +10286,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def __mul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul(other)
 
+    def __mod__(self, other: TensorCollection | torch.Tensor) -> Self:
+        return self.mod(other)
+
     def __rmul__(self, other: TensorCollection | torch.Tensor) -> Self:
         return self.mul(other)
 
@@ -11636,6 +11639,41 @@ class TensorDictBase(MutableMapping, TensorCollection):
             vals = torch._foreach_neg(torch._foreach_sub(vals, other_val, alpha=alpha))
         else:
             vals = torch._foreach_neg(torch._foreach_sub(vals, other_val))
+        items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
+        result = self._fast_apply(
+            pop,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            filter_empty=True,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
+
+    @_maybe_broadcast_other("mod")
+    def mod(self, other: TensorCollection | torch.Tensor) -> Self:
+        """Computes the element-wise modulo of ``self`` and :attr:`other`.
+
+        Args:
+            other (TensorDict or Tensor): the other input tensordict or tensor.
+
+        """
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
+        else:
+            other_val = other
+        if isinstance(other_val, list):
+            vals = [val % other_val for val, other_val in zip(vals, other_val)]
+        else:
+            vals = [val % other_val for val in vals]
         items = dict(zip(keys, vals))
 
         def pop(name, val):
