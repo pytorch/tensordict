@@ -52,6 +52,10 @@ if [[ -z "${CONDA_RUN:-}" ]]; then
 
     pip install "pybind11[global]"
 
+    # Install setuptools_scm which is required for building with --no-isolation
+    # This is done here (not in pre-script) to avoid cache issues
+    pip install setuptools_scm
+
 else
 
     ${CONDA_RUN} pip install --upgrade pip
@@ -60,4 +64,8 @@ else
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
 
     ${CONDA_RUN} conda install -c conda-forge pybind11 -y
+
+    # Install setuptools_scm which is required for building with --no-isolation
+    # This is done here (not in pre-script) to avoid cache issues
+    ${CONDA_RUN} pip install setuptools_scm
 fi
