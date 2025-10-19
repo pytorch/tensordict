@@ -106,6 +106,10 @@ if "%CU_VERSION%" == "xpu" call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat
 
 set DISTUTILS_USE_SDK=1
 
+REM Install setuptools_scm which is required for building with --no-isolation
+REM This is done here (not in pre-script) to avoid cache issues
+%CONDA_RUN% pip install setuptools_scm || exit /b 1
+
 REM Capture all arguments passed to this script
 set args=%1
 shift
