@@ -32,7 +32,7 @@ def prod(sequence):
         return int(np.prod(sequence))
 
 def is_npu_available():
-    return hasattr(torch,"npu") and torch.npu.is_available()
+    return hasattr(torch, "npu") and torch.npu.is_available()
 
 def get_available_devices():
     devices = [torch.device("cpu")]

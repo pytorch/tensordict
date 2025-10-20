@@ -405,6 +405,9 @@ class TestGeneric:
         td = TensorDict(device="cpu", batch_size=[2])
         assert td.clone(recurse=recurse) is not None
 
+    @pytest.mark.skipif(
+        is_npu_available(), reason="torch.nested_tensor is not adapted on NPU currently"
+    )
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("num_threads", [0, 1, 2])
@@ -4895,7 +4898,7 @@ class TestTensorDicts(TestTensorDictsBase):
             del td_batchsize
 
     @pytest.mark.skipif(
-        is_npu_available, reason="torch.double is not adapted on NPU currently"
+        is_npu_available(), reason="torch.double is not adapted on NPU currently"
     )
     def test_casts(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -5021,7 +5024,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if torch.cuda.is_available():
             td_device = td.cuda()
         elif is_npu_available():
-            td_device = td.to("npu")
+            td_device = td.to("npu:0")
         td_back = td_device.cpu()
         assert td_device.device == torch.device(f"{cur_device}:0")
         assert td_back.device == torch.device("cpu")
@@ -5422,6 +5425,9 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.device == new_td.device
         assert td.shape == new_td.shape
 
+    @pytest.mark.skipif(
+        is_npu_available(), reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     @pytest.mark.parametrize("dim", [0, 1, 2, 3, -1, -2, -3])
     def test_gather(self, td_name, device, dim):
         torch.manual_seed(1)
@@ -5830,7 +5836,9 @@ class TestTensorDicts(TestTensorDictsBase):
                 td.float(), -td.float(), reduction=reduction
             )
         )
-
+    @pytest.mark.skipif(
+        is_npu_available(), reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -6324,7 +6332,7 @@ class TestTensorDicts(TestTensorDictsBase):
             ).all()
 
     @pytest.mark.skipif(
-        is_npu_available, reason="torch.nested_tensor is not adapted on NPU currently"
+        is_npu_available(), reason="torch.nested_tensor is not adapted on NPU currently"
     )
     @pytest.mark.parametrize("dim", [0, 1, -1, -5])
     @pytest.mark.parametrize(
@@ -7327,6 +7335,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td[" a ", (("little", "story")), "about", ("myself",)] = torch.zeros(td.shape)
         assert (td[" a ", "little", "story", "about", "myself"] == 0).all()
 
+    @pytest.mark.skipif(
+        is_npu_available(), reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     def test_setitem_slice(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_params":
