@@ -4781,6 +4781,17 @@ class TestTensorDicts(TestTensorDictsBase):
                     num_threads=num_threads,
                 )
             return
+
+        if device.type == "npu" and device_cast != td.device and non_blocking_pin:
+            with pytest.raises(
+                RuntimeError, match="cannot pin"
+            ):
+                _ = td.to(
+                    device_cast,
+                    non_blocking_pin=non_blocking_pin,
+                    num_threads=num_threads,
+                )
+            return
         td_device = td.to(
             device_cast, non_blocking_pin=non_blocking_pin, num_threads=num_threads
         )
@@ -5010,7 +5021,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if torch.cuda.is_available():
             td_device = td.cuda()
         elif is_npu_available():
-            td_device = td.npu()
+            td_device = td.to("npu")
         td_back = td_device.cpu()
         assert td_device.device == torch.device(f"{cur_device}:0")
         assert td_back.device == torch.device("cpu")
@@ -6312,6 +6323,9 @@ class TestTensorDicts(TestTensorDictsBase):
                 td["sub_td"]["sub_sub_td"]["b"] == td["sub_td", "sub_sub_td", "b"]
             ).all()
 
+    @pytest.mark.skipif(
+        is_npu_available, reason="torch.nested_tensor is not adapted on NPU currently"
+    )
     @pytest.mark.parametrize("dim", [0, 1, -1, -5])
     @pytest.mark.parametrize(
         "key", ["heterogeneous-entry", ("sub", "heterogeneous-entry")]
