@@ -3016,8 +3016,7 @@ class TestGeneric:
         td2 = torch.stack([td, td_copy], dim=0)
         assert td2.names == [None, None, None]
 
-    @pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(),
-                        reason="CUDA or npu not available")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
         s0 = torch.cuda.Stream(0)
         s1 = torch.cuda.Stream(0)
@@ -5189,6 +5188,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.to_tensordict(retain_none=True).zero_()
         assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
 
+    @pytest.mark.skipif(
+        is_npu_available, reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     def test_exclude(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -7285,6 +7287,9 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             td[idx] = td_clone
 
+    @pytest.mark.skipif(
+        is_npu_available, reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     @pytest.mark.parametrize("actual_index", [..., (..., 0), (0, ...), (0, ..., 0)])
     def test_setitem_ellipsis(self, td_name, device, actual_index):
         torch.manual_seed(1)
@@ -8283,6 +8288,9 @@ class TestTensorDicts(TestTensorDictsBase):
             td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
             assert isinstance(td["newnested"], torch.Tensor)
 
+    @pytest.mark.skipif(
+        is_npu_available, reason="ForeachAddScalar is not fully adapted on NPU currently"
+    )
     def test_update_at_(self, td_name, device):
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()
@@ -8943,6 +8951,8 @@ class TestTensorDictRepr:
         tensor_device = device if device else tensordict["a"].device
         if tensor_device.type == "cuda":
             is_shared_tensor = True
+        elif tensordict["a"].device is not None and tensordict["a"].device.type == "npu":
+            is_shared_tensor = False
         else:
             is_shared_tensor = is_shared
         expected = f"""TensorDict(
@@ -9813,7 +9823,7 @@ class TestLazyStackedTensorDict:
         td_c = td.consolidate()
         assert td_c.device == torch.device("cpu")
 
-        td_c_device = td_c.to(cur_device)
+        td_c_device = td_c.to(f"{cur_device}:0")
         assert td_c_device.device == torch.device(f"{cur_device}:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()
@@ -11478,11 +11488,11 @@ class TestLock:
     )
     def test_cached_data_lock_device(self):
         if torch.cuda.is_available():
-            device = "cuda:0"
+            device = torch.device("cuda:0")
         elif is_npu_available():
-            device = "npu:0"
+            device = torch.device("npu:0")
         else:
-            device = "mps:0"
+            device = torch.device("mps:0")
         td = TensorDictParams(
             TensorDict(a=nn.Parameter(torch.ones(1)), device="cpu"), no_convert=True
         )
@@ -13203,11 +13213,11 @@ class TestUnbatchedTensor:
             batch_size=(3,),
         )
         if torch.cuda.is_available():
-            device = "cuda:0"
+            device = torch.device("cuda:0")
         elif is_npu_available():
-            device = "npu:0"
+            device = torch.device("npu:0")
         else:
-            device = "cpu"
+            device = torch.device("cpu")
         assert td.copy()["a"] is td["a"]
         assert td.int()["a"].dtype == torch.int
         assert td.to(device)["a"].device == device
