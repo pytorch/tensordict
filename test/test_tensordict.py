@@ -556,7 +556,7 @@ class TestGeneric:
         )
         td_c = td.consolidate()
         assert td_c.device == torch.device("cpu")
-        td_c_device = td_c.to(cur_device)
+        td_c_device = td_c.to(f"{cur_device}:0")
         assert td_c_device.device == torch.device(f"{cur_device}:0")
         assert td_c_device.is_consolidated()
         dataptrs = set()

@@ -6,6 +6,7 @@ import math
 import pathlib
 import shutil
 import tempfile
+import warnings
 
 import numpy as np
 import torch
@@ -43,6 +44,9 @@ def get_available_devices():
             if i == 1:
                 break
     if is_npu_available():
+        warnings.warn(
+            "torch_npu is an experimental and untested feature currently."
+        )
         n_npu = torch.npu.device_count()
         if n_npu > 0:
             for i in range(n_npu):
