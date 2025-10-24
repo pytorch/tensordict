@@ -59,7 +59,6 @@ from tensordict.nn.utils import (
 from tensordict.tensorclass import TensorClass
 from _utils_internal import is_npu_available
 
-
 from torch import distributions, nn
 from torch.distributions import Categorical, Normal
 from torch.utils._pytree import tree_map
@@ -82,7 +81,6 @@ try:
     from torch.nn.parameter import Buffer
 except ImportError:
     from tensordict.utils import Buffer
-
 
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -113,6 +111,7 @@ if PYTORCH_TEST_FBCODE:
         pytest.mark.filterwarnings("ignore:inplace"),
     )
 
+
 def get_device():
     device = torch.device("cpu")
     if torch.cuda.is_available():
@@ -122,6 +121,7 @@ def get_device():
     elif torch.mps.is_available():
         device = torch.device("mps:0")
     return device
+
 
 class TestInteractionType:
     def test_base(self):
@@ -2161,7 +2161,7 @@ def test_module_buffer():
         module.cuda()
         assert module.td.device.type == "cuda"
     elif is_npu_available():
-        module.npu()
+        module = module.to("npu:0")
         assert module.td.device.type == "npu"
 
 
@@ -2186,7 +2186,6 @@ def test_module_buffer():
 )
 def test_to_context(original_device, new_device, tc):
     if tc:
-
         class MyTC(TensorClass):
             x: torch.Tensor
             y: torch.Tensor | None = None

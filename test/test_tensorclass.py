@@ -739,7 +739,6 @@ class TestTensorClass:
             AttributeError,
             match="Attribute name reshape can't be used with @tensorclass",
         ):
-
             @tensorclass
             class MyInvalidClass:
                 x: torch.Tensor
@@ -1101,7 +1100,6 @@ class TestTensorClass:
     @pytest.mark.parametrize("list_to_stack", [True, False])
     def test_indexing(self, list_to_stack):
         with set_list_to_stack(list_to_stack):
-
             @tensorclass
             class MyDataNested:
                 X: torch.Tensor
@@ -1438,8 +1436,8 @@ class TestTensorClass:
         assert (
             repeated.X
             == X.repeat_interleave(
-                torch.tensor([2, 3, 4, 5], device=data.device), dim=1
-            )
+            torch.tensor([2, 3, 4, 5], device=data.device), dim=1
+        )
         ).all()
 
     def test_reshape(self):
@@ -2890,7 +2888,6 @@ class TestAutoCasting:
 class TestShadow:
     def test_no_shadow(self):
         with pytest.raises(AttributeError):
-
             @tensorclass
             class MyClass:
                 x: str
@@ -2898,7 +2895,6 @@ class TestShadow:
                 batch_size: Any
 
         with pytest.raises(AttributeError):
-
             @tensorclass
             class MyClass:  # noqa: F811
                 x: str
@@ -2906,7 +2902,6 @@ class TestShadow:
                 names: Any
 
         with pytest.raises(AttributeError):
-
             @tensorclass
             class MyClass:  # noqa: F811
                 x: str
@@ -3104,7 +3099,7 @@ class TestPointWise:
         _ = c / 1
         _ = 1 / c
 
-        _ = c**1
+        _ = c ** 1
         # not implemented
         # 1 ** c
 
@@ -3304,7 +3299,6 @@ class TestTensorOnly:
             c: torch.Tensor | None = None
 
         with pytest.raises(TypeError, match="tensor_only"):
-
             @tensorclass(tensor_only=True, nocast=True)
             class TensorOnlyNocast:
                 a: torch.Tensor
@@ -3312,7 +3306,6 @@ class TestTensorOnly:
                 c: torch.Tensor | None = None
 
         with pytest.raises(TypeError, match="tensor_only"):
-
             @tensorclass(tensor_only=True, autocast=True)
             class TensorOnlyAutocast:
                 a: torch.Tensor
@@ -3337,7 +3330,6 @@ class TestTensorOnly:
             TypeError,
             match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
         ):
-
             class TensorOnlyAny(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: Any
@@ -3347,7 +3339,6 @@ class TestTensorOnly:
             TypeError,
             match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
         ):
-
             class TensorOnlyStr(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: torch.Tensor | str
@@ -3357,7 +3348,6 @@ class TestTensorOnly:
             TypeError,
             match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
         ):
-
             class TensorOnlyStrUnion(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: torch.Tensor
