@@ -6,7 +6,6 @@
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
-    TensorDict,
     cat,
     from_consolidated,
     from_module,
@@ -21,10 +20,10 @@ from tensordict._td import (
     memmap,
     save,
     stack,
+    TensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.base import (
-    TensorDictBase,
     _default_is_leaf as default_is_leaf,
     _is_leaf_nontensor as is_leaf_nontensor,
     from_any,
@@ -35,6 +34,7 @@ from tensordict.base import (
     from_tuple,
     get_defaults_to_none,
     set_get_defaults_to_none,
+    TensorDictBase,
 )
 from tensordict.functional import (
     dense_stack_tds,
@@ -44,14 +44,15 @@ from tensordict.functional import (
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.nn import as_tensordict_module, TensorDictParams
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import (
+    from_dataclass,
     MetaData,
     NonTensorData,
     NonTensorDataBase,
     NonTensorStack,
     TensorClass,
-    from_dataclass,
     tensorclass,
 )
 from tensordict.utils import (
@@ -69,10 +70,6 @@ from tensordict.utils import (
     set_list_to_stack,
     unravel_key,
     unravel_key_list,
-)
-from tensordict.nn import (
-    as_tensordict_module,
-    TensorDictParams,
 )
 
 __version__: str | None
@@ -148,4 +145,3 @@ __all__ = [
     "as_tensordict_module",
     "TensorDictParams",
 ]
-
