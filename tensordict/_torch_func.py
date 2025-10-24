@@ -534,7 +534,7 @@ def _stack(
                 if not maybe_dense_stack:
                     raise RuntimeError(
                         "stacking tensordicts requires them to have congruent batch sizes, "
-                        f"got td[{i+1}].batch_size={td.batch_size} and td[0].batch_size="
+                        f"got td[{i + 1}].batch_size={td.batch_size} and td[0].batch_size="
                         f"{list_of_tensordicts[0].batch_size}"
                     )
                 elif td.batch_dims == list_of_tensordicts[0].batch_dims:
@@ -548,7 +548,7 @@ def _stack(
                 else:
                     raise RuntimeError(
                         "Lazy stacking of tensordicts requires them to have congruent batch dimensions, "
-                        f"got td[{i+1}].batch_dims={td.batch_dims} and td[0].batch_dims="
+                        f"got td[{i + 1}].batch_dims={td.batch_dims} and td[0].batch_dims="
                         f"{list_of_tensordicts[0].batch_dims}"
                     )
 
