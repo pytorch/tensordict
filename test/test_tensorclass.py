@@ -45,6 +45,8 @@ from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
 from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
+from _utils_internal import is_npu_available
+
 from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -2566,6 +2568,8 @@ class TestNesting:
         td = self.get_nested()
         if torch.cuda.is_available():
             device = torch.device("cuda:0")
+        elif is_npu_available():
+            device = torch.device("npu:0")
         else:
             device = torch.device("cpu:1")
         td_device = td.to(device)
