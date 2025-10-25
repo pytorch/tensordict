@@ -1,0 +1,218 @@
+name: Unit-tests on Linux (with uv)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  test-gpu:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Set up Python ${{ matrix.python_version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python_version }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y git wget gcc cmake
+      
+      - name: Set environment variables
+        run: |
+          echo "CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}" >> $GITHUB_ENV
+          echo "CU_VERSION=cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}" >> $GITHUB_ENV
+          echo "TORCH_VERSION=nightly" >> $GITHUB_ENV
+          echo "ARCH=x86_64" >> $GITHUB_ENV
+      
+      - name: Install PyTorch
+        run: |
+          if [[ "$CU_VERSION" == "cpu" ]]; then
+            uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+          else
+            uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+          fi
+      
+      - name: Install tensordict dependencies
+        run: |
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+      
+      - name: Run tests
+        run: |
+          python -m pytest test/ -v --tb=short
+
+  test-cpu:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Set up Python ${{ matrix.python_version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python_version }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y git wget gcc cmake
+      
+      - name: Set environment variables
+        run: |
+          echo "CU_VERSION=cpu" >> $GITHUB_ENV
+          echo "TORCH_VERSION=nightly" >> $GITHUB_ENV
+          echo "ARCH=x86_64" >> $GITHUB_ENV
+      
+      - name: Install PyTorch
+        run: |
+          uv pip install --system --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+      
+      - name: Install tensordict dependencies
+        run: |
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+      
+      - name: Run tests
+        run: |
+          python -m pytest test/ -v --tb=short
+
+  test-stable-gpu:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.6"]
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Set up Python ${{ matrix.python_version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python_version }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y git wget gcc cmake
+      
+      - name: Set environment variables
+        run: |
+          echo "CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}" >> $GITHUB_ENV
+          echo "CU_VERSION=cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}" >> $GITHUB_ENV
+          echo "TORCH_VERSION=stable" >> $GITHUB_ENV
+          echo "ARCH=x86_64" >> $GITHUB_ENV
+      
+      - name: Install PyTorch
+        run: |
+          if [[ "$CU_VERSION" == "cpu" ]]; then
+            uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          else
+            uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+          fi
+      
+      - name: Install tensordict dependencies
+        run: |
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+      
+      - name: Run tests
+        run: |
+          python -m pytest test/ -v --tb=short
+
+  test-stable-cpu:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.13"]
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Set up Python ${{ matrix.python_version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python_version }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y git wget gcc cmake
+      
+      - name: Set environment variables
+        run: |
+          echo "CU_VERSION=cpu" >> $GITHUB_ENV
+          echo "TORCH_VERSION=stable" >> $GITHUB_ENV
+          echo "ARCH=x86_64" >> $GITHUB_ENV
+      
+      - name: Install PyTorch
+        run: |
+          uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      
+      - name: Install tensordict dependencies
+        run: |
+          uv pip install --system -e .[tests]
+          uv pip install --system protobuf hypothesis future cloudpickle pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout expecttest coverage h5py orjson ninja "numpy<2.0.0" mosaicml-streaming
+      
+      - name: Run tests
+        run: |
+          python -m pytest test/ -v --tb=short
