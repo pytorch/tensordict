@@ -57,6 +57,7 @@ from tensordict.nn.utils import (
     skip_existing,
 )
 from tensordict.tensorclass import TensorClass
+from _utils_internal import is_npu_available
 
 from torch import distributions, nn
 from torch.distributions import Categorical, Normal
@@ -80,7 +81,6 @@ try:
     from torch.nn.parameter import Buffer
 except ImportError:
     from tensordict.utils import Buffer
-
 
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -110,6 +110,17 @@ if PYTORCH_TEST_FBCODE:
     pytestmark.append(
         pytest.mark.filterwarnings("ignore:inplace"),
     )
+
+
+def get_device():
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    elif is_npu_available():
+        device = torch.device("npu:0")
+    elif torch.mps.is_available():
+        device = torch.device("mps:0")
+    return device
 
 
 class TestInteractionType:
@@ -2149,6 +2160,9 @@ def test_module_buffer():
     if torch.cuda.device_count():
         module.cuda()
         assert module.td.device.type == "cuda"
+    elif is_npu_available():
+        module = module.to("npu:0")
+        assert module.td.device.type == "npu"
 
 
 @pytest.mark.parametrize(
@@ -2156,30 +2170,14 @@ def test_module_buffer():
     [
         None,
         torch.device("cpu"),
-        (
-            torch.device("cuda:0")
-            if torch.cuda.is_available()
-            else (
-                torch.device("mps:0")
-                if torch.mps.is_available()
-                else torch.device("cpu")
-            )
-        ),
+        get_device(),
     ],
 )
 @pytest.mark.parametrize(
     "new_device",
     [
         torch.device("cpu"),
-        (
-            torch.device("cuda:0")
-            if torch.cuda.is_available()
-            else (
-                torch.device("mps:0")
-                if torch.mps.is_available()
-                else torch.device("cpu")
-            )
-        ),
+        get_device(),
     ],
 )
 @pytest.mark.parametrize("tc", [True, False], ids=["tc", "td"])
@@ -2188,7 +2186,6 @@ def test_module_buffer():
 )
 def test_to_context(original_device, new_device, tc):
     if tc:
-
         class MyTC(TensorClass):
             x: torch.Tensor
             y: torch.Tensor | None = None
