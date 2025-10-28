@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import inspect
 import platform
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -60,6 +61,9 @@ elif is_npu_available():
     npu_device_count = torch.npu.device_count()
 
 
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
+)
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
     def func(x, y):
@@ -75,6 +79,9 @@ def test_vmap_compile():
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
@@ -271,7 +278,7 @@ class TestTD:
         make_td_with_names_c(data_dict)
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not is_npu_available(), reason="cuda or npu required to test device casting"
+        not torch.cuda.is_available(), reason="cuda required to test device casting"
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_to(self, has_device, mode):
@@ -292,6 +299,9 @@ class TestTD:
         assert td_device_c.batch_size == td.batch_size
         assert td_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(), reason="torch.device in torch.compile is not supported on NPU currently."
+    )
     def test_lock(self, mode):
         def locked_op(td):
             # Adding stuff uses cache, check that this doesn't break
@@ -365,6 +375,9 @@ class MyClass:
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
@@ -558,7 +571,7 @@ class TestTC:
             assert clone_c(data).a.b is data.a.b
 
     @pytest.mark.skipif(
-        not torch.cuda.is_available() and not is_npu_available(), reason="cuda or npu required to test device casting"
+        not torch.cuda.is_available(), reason="cuda required to test device casting"
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_tc_to(self, has_device, mode):
@@ -579,6 +592,9 @@ class TestTC:
         assert tc_device_c.batch_size == data.batch_size
         assert tc_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(), reason="torch.device in torch.compile is not supported on NPU currently."
+    )
     def test_tc_lock(self, mode):
         def locked_op(tc):
             # Adding stuff uses cache, check that this doesn't break
@@ -629,6 +645,9 @@ class TestTC:
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
@@ -733,6 +752,9 @@ class TestNN:
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
@@ -1024,6 +1046,9 @@ class TestONNXExport:
     (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
     reason="requires torch>=2.7 ons OSX",
 )
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
+)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -1243,7 +1268,7 @@ class TestCudaGraphs:
         torch.testing.assert_close(y1, y2)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available() and not is_npu_available(), reason="cuda or npu is not available")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda is not available")
 class TestCompileNontensor:
     # Same issue with the decorator @tensorclass version
     @pytest.fixture(scope="class")
