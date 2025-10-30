@@ -11,6 +11,10 @@ from tensordict.nn.common import (
     TensorDictModuleWrapper,
     WrapModule,
 )
+from tensordict.nn.tensorclass_module import (
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+)
 from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
     CompositeDistribution,
@@ -57,6 +61,8 @@ __all__ = [
     "TensorDictSequential",
     "EnsembleModule",
     "CudaGraphModule",
+    "TensorClassModuleBase",
+    "TensorClassModuleWrapper",
     # Probabilistic modules
     "ProbabilisticTensorDictModule",
     "ProbabilisticTensorDictSequential",

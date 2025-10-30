@@ -58,6 +58,7 @@ tests = [
 h5 = ["h5py>=3.8"]
 dev = ["pybind11", "ninja"]
 typecheck = ["mypy>=1.0.0"]
+onnx = ["onnx", "onnxscript", "onnxruntime"]
 
 [tool.setuptools]
 include-package-data = false
