@@ -73,7 +73,12 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from tensordict._pytree import *
-from tensordict.nn import as_tensordict_module, TensorDictParams
+from tensordict.nn import (
+    as_tensordict_module,
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+    TensorDictParams,
+)
 
 try:
     from tensordict._version import __version__  # @manual=//pytorch/tensordict:version
@@ -149,6 +154,8 @@ __all__ = [
     "NonTensorStack",
     # NN imports
     "as_tensordict_module",
+    "TensorClassModuleBase",
+    "TensorClassModuleWrapper",
     "TensorDictParams",
     # Version
     "__version__",
