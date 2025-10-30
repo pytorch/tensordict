@@ -11,10 +11,6 @@ from tensordict.nn.common import (
     TensorDictModuleWrapper,
     WrapModule,
 )
-from tensordict.nn.tensorclass_module import (
-    TensorClassModuleBase,
-    TensorClassModuleWrapper,
-)
 from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
     CompositeDistribution,
@@ -38,6 +34,10 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.sequence import TensorDictSequential
+from tensordict.nn.tensorclass_module import (
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+)
 from tensordict.nn.utils import (
     add_custom_mapping,
     biased_softplus,
