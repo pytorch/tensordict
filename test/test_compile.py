@@ -950,7 +950,9 @@ class TestONNXExport:
         x = torch.randn(3)
         y = torch.randn(3)
         torch_input = {"x": x, "y": y}
-        onnx_program = torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
+
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
@@ -967,7 +969,9 @@ class TestONNXExport:
                 else tensor.cpu().numpy()
             )
 
-        onnxruntime_input = {k: to_numpy(v) for k, v in torch_input.items()}
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
 
         onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
         torch.testing.assert_close(
@@ -982,8 +986,10 @@ class TestONNXExport:
         x = torch.randn(3)
         y = torch.randn(3)
         torch_input = {"x": x, "y": y}
-        torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
-        onnx_program = torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
+        torch.onnx.dynamo_export(tdm, x=x, y=y)
+        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
+
+        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
@@ -1000,7 +1006,9 @@ class TestONNXExport:
                 else tensor.cpu().numpy()
             )
 
-        onnxruntime_input = {k: to_numpy(v) for k, v in torch_input.items()}
+        onnxruntime_input = {
+            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
+        }
 
         onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
         torch.testing.assert_close(
