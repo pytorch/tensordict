@@ -97,11 +97,7 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
 
         """
         return self.tc_module(
-            self.tc_module.input_type.from_dict(
-                input_dict=tensordict.to_dict(),
-                batch_size=tensordict.batch_size,
-                device=tensordict.device,
-            )
+            self.tc_module.input_type.from_tensordict(tensordict)
         ).to_tensordict()
 
 
