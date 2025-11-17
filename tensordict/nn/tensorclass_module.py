@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import Field
-from typing import Any, cast, Generic, get_args, get_origin, List, Tuple, TypeVar, Union
+from typing import Any, cast, Generic, get_args, get_origin, TypeVar
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -13,7 +13,7 @@ from torch import nn, Tensor
 __all__ = ["TensorClassModuleBase", "TensorClassModuleWrapper"]
 
 
-def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> List[Tuple[str, ...]]:
+def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> list[tuple[str, ...]]:
     """Extract all keys from a TensorClass type, including nested keys.
 
     Args:
@@ -24,7 +24,7 @@ def _tensor_class_keys(tensorclass_type: type[TensorClass]) -> List[Tuple[str, .
 
     """
     fields = cast("Iterable[Field[Any]]", tensorclass_type.fields())
-    keys: List[Tuple[str, ...]] = []
+    keys: list[tuple[str, ...]] = []
     for field in fields:
         key = field.name
         if issubclass(field.type, TensorClass):
@@ -105,8 +105,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         ).to_tensordict()
 
 
-InputClass = TypeVar("InputClass", bound=Union[TensorClass, Tensor])
-OutputClass = TypeVar("OutputClass", bound=Union[TensorClass, Tensor])
+InputClass = TypeVar("InputClass", bound=(TensorClass | Tensor))
+OutputClass = TypeVar("OutputClass", bound=(TensorClass | Tensor))
 
 
 class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
