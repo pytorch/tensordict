@@ -193,6 +193,8 @@ to build distributions from network outputs and get summary statistics or sample
 
     TensorDictModuleBase
     TensorDictModule
+    TensorClassModuleBase
+    TensorClassModuleWrapper
     ProbabilisticTensorDictModule
     ProbabilisticTensorDictSequential
     TensorDictSequential
