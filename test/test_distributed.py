@@ -11,13 +11,13 @@ import sys
 import pytest
 import torch
 from _pytest.fixtures import fixture
+from _utils_internal import is_npu_available
 from packaging import version
 
 from packaging.version import parse
 
 from tensordict import LazyStackedTensorDict, MemoryMappedTensor, TensorDict
 from tensordict.utils import logger as tdlogger
-from _utils_internal import is_npu_available
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed._tensor import (
     DeviceMesh,
@@ -109,7 +109,8 @@ class TestFSDP:
 
 
 @pytest.mark.skipif(
-    not is_npu_available() or not torch.npu.device_count() > 2, reason="not enough npu devices"
+    not is_npu_available() or not torch.npu.device_count() > 2,
+    reason="not enough npu devices",
 )
 class TestNPUFSDP:
     class MyDModule(nn.Module):
@@ -127,9 +128,7 @@ class TestNPUFSDP:
     @classmethod
     def make_module(cls, device=None):
         with (
-            torch.device(f"npu:{device}")
-            if device is not None
-            else torch.device("npu")
+            torch.device(f"npu:{device}") if device is not None else torch.device("npu")
         ):
             my_module = cls.MyDModule()
             my_sharded_module = FSDP(my_module, device_id=device)
@@ -307,8 +306,8 @@ class TestGather:
                 },
                 [2],
             )
-                .expand(1, 2)
-                .contiguous()
+            .expand(1, 2)
+            .contiguous()
         )
         td.gather_and_stack(0)
         assert (td != 0).all()
@@ -380,8 +379,8 @@ class TestReduce:
                 },
                 [2],
             )
-                .expand(1, 2)
-                .contiguous()
+            .expand(1, 2)
+            .contiguous()
         )
         out = td.reduce(0, op=op, async_op=async_op, return_premature=return_premature)
         if not async_op:
@@ -864,8 +863,8 @@ class TestInitRemote:
                 },
                 [2],
             )
-                .expand(1, 2)
-                .contiguous()
+            .expand(1, 2)
+            .contiguous()
         )
         td.init_remote(dst=1)
 

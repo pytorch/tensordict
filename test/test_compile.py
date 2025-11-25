@@ -14,6 +14,8 @@ from typing import Any, Callable
 import pytest
 
 import torch
+
+from _utils_internal import is_npu_available
 from packaging import version
 
 from tensordict import (
@@ -38,8 +40,6 @@ from tensordict.nn import (
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from tensordict.tensorclass import TensorClass
-
-from _utils_internal import is_npu_available
 
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
@@ -300,7 +300,8 @@ class TestTD:
         assert td_device_c.device == torch.device(device)
 
     @pytest.mark.skipif(
-        is_npu_available(), reason="torch.device in torch.compile is not supported on NPU currently."
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
     )
     def test_lock(self, mode):
         def locked_op(td):
@@ -593,7 +594,8 @@ class TestTC:
         assert tc_device_c.device == torch.device(device)
 
     @pytest.mark.skipif(
-        is_npu_available(), reason="torch.device in torch.compile is not supported on NPU currently."
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
     )
     def test_tc_lock(self, mode):
         def locked_op(tc):
