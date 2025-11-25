@@ -58,7 +58,7 @@ jobs:
   test-cpu:
     strategy:
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     permissions:
