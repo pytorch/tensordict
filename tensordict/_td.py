@@ -1798,6 +1798,8 @@ class TensorDict(TensorDictBase):
         dim = _maybe_correct_neg_dim(dim, batch_size)
         max_size = batch_size[dim]
         if isinstance(split_size, int):
+            if split_size == 0:
+                raise ValueError('TensorDict.split: split_size cannot be 0.')
             segments = _create_segments_from_int(split_size, max_size)
             splits = [end - start for start, end in segments]
             splits = {k: v.split(splits, dim) for k, v in self.items()}
