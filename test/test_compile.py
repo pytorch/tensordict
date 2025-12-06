@@ -7,12 +7,15 @@ import contextlib
 import importlib.util
 import inspect
 import platform
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
 import pytest
 
 import torch
+
+from _utils_internal import is_npu_available
 from packaging import version
 
 from tensordict import (
@@ -50,7 +53,17 @@ _v2_7 = TORCH_VERSION >= version.parse("2.7.0")
 
 _IS_OSX = platform.system() == "Darwin"
 
+npu_device_count = 0
+if torch.cuda.is_available():
+    cur_device = "cuda"
+elif is_npu_available():
+    cur_device = "npu"
+    npu_device_count = torch.npu.device_count()
 
+
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
+)
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
     def func(x, y):
@@ -66,6 +79,9 @@ def test_vmap_compile():
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
@@ -266,7 +282,7 @@ class TestTD:
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_to(self, has_device, mode):
-        device = "cuda:0"
+        device = f"{cur_device}:0"
 
         def test_to_device(td):
             return td.to(device)
@@ -283,6 +299,10 @@ class TestTD:
         assert td_device_c.batch_size == td.batch_size
         assert td_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
+    )
     def test_lock(self, mode):
         def locked_op(td):
             # Adding stuff uses cache, check that this doesn't break
@@ -356,6 +376,9 @@ class MyClass:
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
@@ -553,7 +576,7 @@ class TestTC:
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_tc_to(self, has_device, mode):
-        device = "cuda:0"
+        device = f"{cur_device}:0"
 
         def test_to_device(tc):
             return tc.to(device)
@@ -570,6 +593,10 @@ class TestTC:
         assert tc_device_c.batch_size == data.batch_size
         assert tc_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
+    )
     def test_tc_lock(self, mode):
         def locked_op(tc):
             # Adding stuff uses cache, check that this doesn't break
@@ -620,6 +647,9 @@ class TestTC:
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
@@ -724,6 +754,9 @@ class TestNN:
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
+)
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
@@ -1015,6 +1048,9 @@ class TestONNXExport:
     (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
     reason="requires torch>=2.7 ons OSX",
 )
+@pytest.mark.skipif(
+    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
+)
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
@@ -1239,7 +1275,7 @@ class TestCompileNontensor:
     # Same issue with the decorator @tensorclass version
     @pytest.fixture(scope="class")
     def data(self):
-        return torch.zeros((4, 3), device="cuda")
+        return torch.zeros((4, 3), device=cur_device)
 
     class TensorClassWithNonTensorData(TensorClass["nocast"]):
         tensor: torch.Tensor
@@ -1257,13 +1293,13 @@ class TestCompileNontensor:
 
     def fn_with_device(self, data):
         a = self.TensorClassWithNonTensorData(
-            tensor=data, non_tensor_data=1, batch_size=[4], device="cuda"
+            tensor=data, non_tensor_data=1, batch_size=[4], device=cur_device
         )
         return a.tensor
 
     def fn_with_device_without_batch_size(self, data):
         a = self.TensorClassWithNonTensorData(
-            tensor=data, non_tensor_data=1, device="cuda"
+            tensor=data, non_tensor_data=1, device=cur_device
         )
         return a.tensor
 

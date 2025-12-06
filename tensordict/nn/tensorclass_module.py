@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import Field
-from typing import Any, cast, Generic, get_args, get_origin, TypeVar
+from typing import Any, cast, Generic, get_args, get_origin, TypeVar, Union
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -101,8 +101,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         ).to_tensordict()
 
 
-InputClass = TypeVar("InputClass", bound=(TensorClass | Tensor))
-OutputClass = TypeVar("OutputClass", bound=(TensorClass | Tensor))
+InputClass = TypeVar("InputClass", bound=Union[TensorClass, Tensor])
+OutputClass = TypeVar("OutputClass", bound=Union[TensorClass, Tensor])
 
 
 class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
