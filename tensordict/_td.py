@@ -1802,10 +1802,7 @@ class TensorDict(TensorDictBase):
                 raise ValueError(
                     f"TensorDict.split: split_size must be positive, got {split_size}."
                 )
-            if split_size > max_size:
-                raise ValueError(
-                    f"TensorDict.split: split_size ({split_size}) exceeds dimension size ({max_size})."
-                )
+            split_size = min(split_size, max_size)
             segments = _create_segments_from_int(split_size, max_size)
             splits = [end - start for start, end in segments]
             splits = {k: v.split(splits, dim) for k, v in self.items()}
