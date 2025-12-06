@@ -186,6 +186,76 @@ to build distributions from network outputs and get summary statistics or sample
       device=None,
       is_shared=False)
 
+Type-Safe TensorClass Modules
+------------------------------
+
+The :class:`~.TensorClassModuleBase` provides a type-safe way to define modules that work with
+:class:`~tensordict.tensorclass.TensorClass` inputs and outputs. This offers compile-time type
+checking and improved code clarity compared to working with string-based keys.
+
+A :class:`~.TensorClassModuleBase` subclass specifies its input and output types through generic
+type parameters. The module can be converted to work with :class:`~.TensorDict` objects using the
+:meth:`~.TensorClassModuleBase.as_td_module` method, which returns a :class:`~.TensorClassModuleWrapper`:
+
+.. code-block::
+
+  >>> import torch
+  >>> from tensordict.tensorclass import TensorClass
+  >>> from tensordict.nn import TensorClassModuleBase
+  >>> from tensordict import TensorDict
+  >>>
+  >>> # Define input and output TensorClass types
+  >>> class InputTC(TensorClass):
+  ...     a: torch.Tensor
+  ...     b: torch.Tensor
+  ...
+  >>> class OutputTC(TensorClass):
+  ...     sum: torch.Tensor
+  ...     difference: torch.Tensor
+  ...
+  >>> # Create a type-safe module
+  >>> class MyModule(TensorClassModuleBase[InputTC, OutputTC]):
+  ...     def forward(self, x: InputTC) -> OutputTC:
+  ...         return OutputTC(
+  ...             sum=x.a + x.b,
+  ...             difference=x.a - x.b,
+  ...             batch_size=x.batch_size
+  ...         )
+  ...
+  >>> # Use with TensorClass
+  >>> module = MyModule()
+  >>> input_tc = InputTC(a=torch.tensor([1.0, 2.0]), b=torch.tensor([3.0, 4.0]), batch_size=[2])
+  >>> output = module(input_tc)
+  >>> print(output.sum)
+  tensor([4., 6.])
+  >>> print(output.difference)
+  tensor([-2., -2.])
+  >>>
+  >>> # Convert to TensorDictModule for use in TensorDict workflows
+  >>> td_module = module.as_td_module()
+  >>> td = TensorDict({"a": torch.tensor([1.0, 2.0]), "b": torch.tensor([3.0, 4.0])}, batch_size=[2])
+  >>> result = td_module(td)
+  >>> print(result)
+  TensorDict(
+      fields={
+          a: Tensor(torch.Size([2]), dtype=torch.float32),
+          b: Tensor(torch.Size([2]), dtype=torch.float32),
+          difference: Tensor(torch.Size([2]), dtype=torch.float32),
+          sum: Tensor(torch.Size([2]), dtype=torch.float32)},
+      batch_size=torch.Size([2]),
+      device=None,
+      is_shared=False)
+
+The type-safe approach offers several benefits:
+
+* **Type checking**: IDEs and type checkers can verify correct usage at development time
+* **Self-documenting**: The input and output structure is clear from the type signature
+* **Refactoring**: Renaming fields in TensorClass definitions is caught by type checkers
+* **Nested structures**: Support for nested TensorClass types with automatic key extraction
+
+:class:`~.TensorClassModuleBase` modules can be composed and used in :class:`~.TensorDictSequential`
+after conversion via :meth:`~.TensorClassModuleBase.as_td_module`.
+
 
 .. autosummary::
     :toctree: generated/
@@ -193,6 +263,8 @@ to build distributions from network outputs and get summary statistics or sample
 
     TensorDictModuleBase
     TensorDictModule
+    TensorClassModuleBase
+    TensorClassModuleWrapper
     ProbabilisticTensorDictModule
     ProbabilisticTensorDictSequential
     TensorDictSequential
