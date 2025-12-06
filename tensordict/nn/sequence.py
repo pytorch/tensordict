@@ -211,6 +211,15 @@ class TensorDictSequential(TensorDictModule):
         inplace: bool | str | None = None,
     ) -> None: ...
 
+    @overload
+    def __init__(
+        self,
+        *modules: List[Callable[[TensorDictBase], TensorDictBase]],
+        partial_tolerant: bool = False,
+        selected_out_keys: List[NestedKey] | None = None,
+        inplace: bool | str | None = None,
+    ) -> None: ...
+
     def __init__(
         self,
         *modules: Callable[[TensorDictBase], TensorDictBase],
