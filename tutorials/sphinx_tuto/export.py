@@ -104,10 +104,14 @@ print(model(x=x))
 # and finally a ``module()`` that returns a callable that can be used in-place of the original module.
 #
 # Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
+#
+# .. note::
+#    When exporting models that use ``torch.distributions``, we need to use ``strict=False`` because
+#    some distribution internals (like constraint validation) are not compatible with strict mode export.
 
 from torch.export import export
 
-model_export = export(model, args=(), kwargs={"x": x}, strict=True)
+model_export = export(model, args=(), kwargs={"x": x}, strict=False)
 
 ##################################################
 # Let us look at the module:
@@ -197,7 +201,7 @@ print(model(x=x))
 # We see that the output is now a single tensor, corresponding to the sample of the distribution.
 # We can create a new exported graph from this. Its computational graph should be simplified:
 
-model_export = export(model, args=(), kwargs={"x": x})
+model_export = export(model, args=(), kwargs={"x": x}, strict=False)
 print("module:", model_export.module())
 
 ##################################################
@@ -225,11 +229,11 @@ print("module:", model_export.module())
 #
 
 with set_interaction_type(InteractionType.RANDOM):
-    model_export = export(model, args=(), kwargs={"x": x})
+    model_export = export(model, args=(), kwargs={"x": x}, strict=False)
     print(model_export.module())
 
 with set_interaction_type(InteractionType.MEAN):
-    model_export = export(model, args=(), kwargs={"x": x})
+    model_export = export(model, args=(), kwargs={"x": x}, strict=False)
     print(model_export.module())
 
 ##################################################
