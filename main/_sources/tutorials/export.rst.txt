@@ -43,12 +43,11 @@ Key learnings
 
 - Executing a ``tensordict.nn`` module without :class:`~tensordict.TensorDict` inputs;
 - Selecting the output(s) of a model;
-- Handling stochastic models;
 - Exporting such model using `torch.export`;
 - Saving the model to a file;
 - Isolating the pytorch model;
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-49
+.. GENERATED FROM PYTHON SOURCE LINES 35-45
 
 .. code-block:: Python
 
@@ -56,14 +55,11 @@ Key learnings
 
     import torch
     from tensordict.nn import (
-        InteractionType,
         NormalParamExtractor,
-        ProbabilisticTensorDictModule as Prob,
-        set_interaction_type,
         TensorDictModule as Mod,
         TensorDictSequential as Seq,
     )
-    from torch import distributions as dists, nn
+    from torch import nn
 
 
 
@@ -72,29 +68,22 @@ Key learnings
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 50-69
+.. GENERATED FROM PYTHON SOURCE LINES 46-58
 
 Designing the model
 -------------------
 
-In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
-deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-models will often generate different outputs when the same input is provided, because they sample the output based
-on a distribution which parameters are defined by the input.
+Let us build a simple neural network using ``tensordict.nn``. The network will consist of:
 
-The ``tensordict`` library deals with this through the :class:`~tensordict.nn.ProbabilisticTensorDictModule` class.
-This primitive is built using a distribution class (:class:`~torch.distributions.Normal` in our case) and an indicator
-of the input keys that will be used at execution time to build that distribution.
+- A linear layer mapping input to a hidden representation;
+- A ReLU activation;
+- A final linear layer producing the output.
 
-The network we are building is therefore going to be the combination of three main components:
-
-- A network mapping the input to a latent parameter;
-- A :class:`tensordict.nn.NormalParamExtractor` module splitting the input in a location `"loc"` and `"scale"`
-  parameters to be passed to the ``Normal`` distribution;
-- A distribution constructor module.
+We will also include a :class:`tensordict.nn.NormalParamExtractor` to demonstrate how to extract
+multiple outputs from a single tensor.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 69-84
+.. GENERATED FROM PYTHON SOURCE LINES 58-67
 
 .. code-block:: Python
 
@@ -103,14 +92,8 @@ The network we are building is therefore going to be the combination of three ma
         Mod(nn.Linear(3, 4), in_keys=["x"], out_keys=["hidden"]),
         Mod(nn.ReLU(), in_keys=["hidden"], out_keys=["hidden"]),
         Mod(nn.Linear(4, 4), in_keys=["hidden"], out_keys=["latent"]),
-        # 2. Extracting params
+        # 2. Extracting params (splits into loc and scale)
         Mod(NormalParamExtractor(), in_keys=["latent"], out_keys=["loc", "scale"]),
-        # 3. Probabilistic module
-        Prob(
-            in_keys=["loc", "scale"],
-            out_keys=["sample"],
-            distribution_class=dists.Normal,
-        ),
     )
 
 
@@ -120,12 +103,12 @@ The network we are building is therefore going to be the combination of three ma
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-87
+.. GENERATED FROM PYTHON SOURCE LINES 68-70
 
 Let us run this model and see what the output looks like:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 87-91
+.. GENERATED FROM PYTHON SOURCE LINES 70-74
 
 .. code-block:: Python
 
@@ -141,12 +124,12 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.0000, 0.0000, 0.7839, 0.1705]], grad_fn=<ReluBackward0>), tensor([[ 0.1641, -0.3030,  0.4344, -0.5272]], grad_fn=<AddmmBackward0>), tensor([[ 0.1641, -0.3030]], grad_fn=<SplitBackward0>), tensor([[1.2941, 0.7023]], grad_fn=<ClampMinBackward0>), tensor([[ 0.1641, -0.3030]], grad_fn=<SplitBackward0>))
+    (tensor([[0.2799, 0.0000, 0.0276, 0.0000]], grad_fn=<ReluBackward0>), tensor([[-0.2933,  0.4387, -0.0242, -0.4378]], grad_fn=<AddmmBackward0>), tensor([[-0.2933,  0.4387]], grad_fn=<SplitBackward0>), tensor([[0.9848, 0.7480]], grad_fn=<ClampMinBackward0>))
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 92-107
+.. GENERATED FROM PYTHON SOURCE LINES 75-90
 
 As expected, running the model with a tensor input returns as many tensors as the module's output keys! For large
 models, this can be quite annoying and wasteful. Later, we will see how we can limit the number of outputs of the
@@ -164,14 +147,14 @@ and finally a ``module()`` that returns a callable that can be used in-place of 
 
 Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.
 
-.. GENERATED FROM PYTHON SOURCE LINES 107-112
+.. GENERATED FROM PYTHON SOURCE LINES 90-95
 
 .. code-block:: Python
 
 
     from torch.export import export
 
-    model_export = export(model, args=(), kwargs={"x": x}, strict=True)
+    model_export = export(model, args=(), kwargs={"x": x})
 
 
 
@@ -180,12 +163,12 @@ Although our module accepts both args and kwargs, we will focus on its usage wit
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-115
+.. GENERATED FROM PYTHON SOURCE LINES 96-98
 
 Let us look at the module:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 115-117
+.. GENERATED FROM PYTHON SOURCE LINES 98-100
 
 .. code-block:: Python
 
@@ -230,22 +213,19 @@ Let us look at the module:
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0]
-        getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
-        return pytree.tree_unflatten((relu, linear_1, getitem_2, getitem_3, getitem_2), self._out_spec)
+        return pytree.tree_unflatten((relu, linear_1, getitem, clamp_min), self._out_spec)
     
     # To see more debug info, please use `graph_module.print_readable()`
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-120
+.. GENERATED FROM PYTHON SOURCE LINES 101-103
 
 This module can be run exactly like our original module (with a lower overhead):
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 120-131
+.. GENERATED FROM PYTHON SOURCE LINES 103-114
 
 .. code-block:: Python
 
@@ -268,17 +248,17 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  569.11 micro-seconds
-    Time for exported module:  372.89 micro-seconds
+    Time for TDModule:  471.12 micro-seconds
+    Time for exported module:  355.48 micro-seconds
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 132-133
+.. GENERATED FROM PYTHON SOURCE LINES 115-116
 
 and the FX graph:
 
-.. GENERATED FROM PYTHON SOURCE LINES 133-135
+.. GENERATED FROM PYTHON SOURCE LINES 116-118
 
 .. code-block:: Python
 
@@ -293,62 +273,60 @@ and the FX graph:
  .. code-block:: none
 
     class GraphModule(torch.nn.Module):
-        def forward(self, p_l__args___0_module_0_module_weight: "f32[4, 3]", p_l__args___0_module_0_module_bias: "f32[4]", p_l__args___0_module_2_module_weight: "f32[4, 4]", p_l__args___0_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-             # File: /pytorch/tensordict/tensordict/nn/common.py:1133 in _call_module, code: out = self.module(*tensors, **kwargs)
-            linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
-            relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
-            linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
+        def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+            relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
+        
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
+        
+            # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
-             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+            # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        
-             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:58 in broadcast_all, code: return torch.broadcast_tensors(*values)
-            broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-            getitem_2: "f32[1, 2]" = broadcast_tensors[0]
-            getitem_3: "f32[1, 2]" = broadcast_tensors[1];  broadcast_tensors = None
-            return (relu, linear_1, getitem_2, getitem_3, getitem_2)
+            return (relu, linear_1, getitem, clamp_min)
         
     fx graph: class GraphModule(torch.nn.Module):
-        def forward(self, p_l__args___0_module_0_module_weight: "f32[4, 3]", p_l__args___0_module_0_module_bias: "f32[4]", p_l__args___0_module_2_module_weight: "f32[4, 4]", p_l__args___0_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-             # File: /pytorch/tensordict/tensordict/nn/common.py:1133 in _call_module, code: out = self.module(*tensors, **kwargs)
-            linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
-            relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
-            linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
+        def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+            relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
+        
+            # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+            linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
+        
+            # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
         
-             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+            # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
         
-             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+            # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        
-             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:58 in broadcast_all, code: return torch.broadcast_tensors(*values)
-            broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-            getitem_2: "f32[1, 2]" = broadcast_tensors[0]
-            getitem_3: "f32[1, 2]" = broadcast_tensors[1];  broadcast_tensors = None
-            return (relu, linear_1, getitem_2, getitem_3, getitem_2)
+            return (relu, linear_1, getitem, clamp_min)
         
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-144
+.. GENERATED FROM PYTHON SOURCE LINES 119-127
 
 Working with nested keys
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -359,7 +337,7 @@ Because keyword arguments must be regular strings, it is not possible for :class
 directly with them. Instead, ``dispatch`` will unpack nested keys joined with a regular underscore (`"_"`), as the
 following example shows.
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-154
+.. GENERATED FROM PYTHON SOURCE LINES 127-137
 
 .. code-block:: Python
 
@@ -399,7 +377,7 @@ following example shows.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 155-192
+.. GENERATED FROM PYTHON SOURCE LINES 138-174
 
 Note that the callable returned by `module()` is a pure python callable that can be in turn compiled using
 :func:`~torch.compile`.
@@ -422,7 +400,7 @@ saving the :class:`~torch.distributions.Distribution` object itself). One could 
 impact on memory of registering intermediate values is negligible since they are part of the computational graph
 used by ``torch.autograd`` to compute the parameter gradients.
 
-During inference, though, we most likely are only interested in the final sample of the model.
+During inference, though, we most likely are only interested in specific outputs of the model.
 Because we want to extract the model for usages that are independent of the ``tensordict`` library, it makes sense to
 isolate the only output we desire.
 To do this, we have several options:
@@ -433,18 +411,17 @@ To do this, we have several options:
    attribute in-place (this can be reverted through :meth:`~tensordict.nn.TensorDictModule.reset_out_keys`).
 3. Wrap the existing instance in a :meth:`~tensordict.nn.TensorDictSequential` that will filter out the unwanted keys:
 
-    >>> module_filtered = Seq(module, selected_out_keys=["sample"])
+    >>> module_filtered = Seq(module, selected_out_keys=["loc"])
 
 Let us test the model after selecting its output keys.
-When an `x` input is provided, we expect our model to output a single tensor corresponding to a sample of the
-distribution:
+When an `x` input is provided, we expect our model to output a single tensor corresponding to the `"loc"` output:
 
-.. GENERATED FROM PYTHON SOURCE LINES 192-196
+.. GENERATED FROM PYTHON SOURCE LINES 174-178
 
 .. code-block:: Python
 
 
-    model.select_out_keys("sample")
+    model.select_out_keys("loc")
     print(model(x=x))
 
 
@@ -455,17 +432,17 @@ distribution:
 
  .. code-block:: none
 
-    tensor([[ 0.1641, -0.3030]], grad_fn=<SplitBackward0>)
+    tensor([[-0.2933,  0.4387]], grad_fn=<SplitBackward0>)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 197-199
+.. GENERATED FROM PYTHON SOURCE LINES 179-181
 
-We see that the output is now a single tensor, corresponding to the sample of the distribution.
+We see that the output is now a single tensor.
 We can create a new exported graph from this. Its computational graph should be simplified:
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-203
+.. GENERATED FROM PYTHON SOURCE LINES 181-185
 
 .. code-block:: Python
 
@@ -511,146 +488,15 @@ We can create a new exported graph from this. Its computational graph should be 
         add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus = torch.ops.aten.softplus.default(add);  add = None
         add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-        clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0]
-        getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
-        return pytree.tree_unflatten((getitem_2,), self._out_spec)
+        clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = clamp_min = None
+        return pytree.tree_unflatten((getitem,), self._out_spec)
     
     # To see more debug info, please use `graph_module.print_readable()`
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 204-226
-
-Controlling the Sampling Strategy
----------------------------------
-
-We have not yet discussed how the :class:`~tensordict.nn.ProbabilisticTensorDictModule` samples from the distribution.
-By sampling, we mean obtaining a value within the space defined by the distribution according to a specific strategy.
-For instance, one may desire to get stochastic samples during training but deterministic samples (e.g., the mean or
-the mode) at inference time. To address this, ``tensordict`` utilizes the :class:`~tensordict.nn.set_interaction_type`
-decorator and context manager, which accepts ``InteractionType`` Enum inputs:
-
-  >>> with set_interaction_type(InteractionType.MEAN):
-  ...     output = module(input)  # takes the input of the distribution, if ProbabilisticTensorDictModule is invoked
-
-The default ``InteractionType`` is ``InteractionType.DETERMINISTIC``, which, if not implemented directly, is either
-the mean of distributions with a real domain, or the mode of distributions with a discrete domain. This default value
-can be changed using the ``default_interaction_type`` keyword argument of ``ProbabilisticTensorDictModule``.
-
-Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
-constructor, or override it at runtime through the ``set_interaction_type`` context manager.
-
-As we can see from the following example, ``torch.export`` respond correctly to the usage of the decorator: if we ask for
-a random sample, the output is different than if we ask for the mean:
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 226-235
-
-.. code-block:: Python
-
-
-    with set_interaction_type(InteractionType.RANDOM):
-        model_export = export(model, args=(), kwargs={"x": x})
-        print(model_export.module())
-
-    with set_interaction_type(InteractionType.MEAN):
-        model_export = export(model, args=(), kwargs={"x": x})
-        print(model_export.module())
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    GraphModule(
-      (module): Module(
-        (0): Module(
-          (module): Module()
-        )
-        (2): Module(
-          (module): Module()
-        )
-      )
-      (_guards_fn): GuardsFn()
-    )
-
-
-
-    def forward(self, x):
-        x, = fx_pytree.tree_flatten_spec(([], {'x':x}), self._in_spec)
-        module_0_module_weight = getattr(self.module, "0").module.weight
-        module_0_module_bias = getattr(self.module, "0").module.bias
-        module_2_module_weight = getattr(self.module, "2").module.weight
-        module_2_module_bias = getattr(self.module, "2").module.bias
-        _guards_fn = self._guards_fn(x);  _guards_fn = None
-        linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
-        relu = torch.ops.aten.relu.default(linear);  linear = None
-        linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
-        getitem = chunk[0]
-        getitem_1 = chunk[1];  chunk = None
-        add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
-        softplus = torch.ops.aten.softplus.default(add);  add = None
-        add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-        clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0]
-        getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
-        empty = torch.ops.aten.empty.memory_format([1, 2], dtype = torch.float32, device = device(type='cpu'), pin_memory = False)
-        normal_ = torch.ops.aten.normal_.default(empty);  empty = None
-        mul = torch.ops.aten.mul.Tensor(normal_, getitem_3);  normal_ = getitem_3 = None
-        add_2 = torch.ops.aten.add.Tensor(getitem_2, mul);  getitem_2 = mul = None
-        return pytree.tree_unflatten((add_2,), self._out_spec)
-    
-    # To see more debug info, please use `graph_module.print_readable()`
-    GraphModule(
-      (module): Module(
-        (0): Module(
-          (module): Module()
-        )
-        (2): Module(
-          (module): Module()
-        )
-      )
-      (_guards_fn): GuardsFn()
-    )
-
-
-
-    def forward(self, x):
-        x, = fx_pytree.tree_flatten_spec(([], {'x':x}), self._in_spec)
-        module_0_module_weight = getattr(self.module, "0").module.weight
-        module_0_module_bias = getattr(self.module, "0").module.bias
-        module_2_module_weight = getattr(self.module, "2").module.weight
-        module_2_module_bias = getattr(self.module, "2").module.bias
-        _guards_fn = self._guards_fn(x);  _guards_fn = None
-        linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
-        relu = torch.ops.aten.relu.default(linear);  linear = None
-        linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-        chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
-        getitem = chunk[0]
-        getitem_1 = chunk[1];  chunk = None
-        add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
-        softplus = torch.ops.aten.softplus.default(add);  add = None
-        add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-        clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2 = broadcast_tensors[0]
-        getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
-        return pytree.tree_unflatten((getitem_2,), self._out_spec)
-    
-    # To see more debug info, please use `graph_module.print_readable()`
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 236-248
+.. GENERATED FROM PYTHON SOURCE LINES 186-198
 
 This is all you need to know to use ``torch.export``. Please refer to the
 `official documentation <https://pytorch.org/docs/stable/export>`_ for more info.
@@ -668,7 +514,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.660 seconds)
+   **Total running time of the script:** (0 minutes 0.284 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:

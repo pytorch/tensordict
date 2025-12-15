@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3383+g3e856cbab.d20251020)
+                  main (0.10.0.dev3433+gba0ab1fef.d20251215)
                 </div>
               
             
@@ -374,7 +374,6 @@ compatible with <code class="docutils literal notranslate"><span class="pre">ten
 <ul class="simple">
 <li><p>Executing a <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code> module without <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> inputs;</p></li>
 <li><p>Selecting the output(s) of a model;</p></li>
-<li><p>Handling stochastic models;</p></li>
 <li><p>Exporting such model using <cite>torch.export</cite>;</p></li>
 <li><p>Saving the model to a file;</p></li>
 <li><p>Isolating the pytorch model;</p></li>
@@ -383,45 +382,30 @@ compatible with <code class="docutils literal notranslate"><span class="pre">ten
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">InteractionType</span><span class="p">,</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">NormalParamExtractor</span></a><span class="p">,</span>
-    <span class="n">ProbabilisticTensorDictModule</span> <span class="k">as</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Prob</span></a><span class="p">,</span>
-    <span class="n">set_interaction_type</span><span class="p">,</span>
     <span class="n">TensorDictModule</span> <span class="k">as</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">,</span>
     <span class="n">TensorDictSequential</span> <span class="k">as</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dists</span><span class="p">,</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 </pre></div>
 </div>
 <section id="designing-the-model">
 <h3>Designing the model<a class="headerlink" href="#designing-the-model" title="Permalink to this heading">¶</a></h3>
-<p>In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
-deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-models will often generate different outputs when the same input is provided, because they sample the output based
-on a distribution which parameters are defined by the input.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> library deals with this through the <a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> class.
-This primitive is built using a distribution class (<code class="xref py py-class docutils literal notranslate"><span class="pre">Normal</span></code> in our case) and an indicator
-of the input keys that will be used at execution time to build that distribution.</p>
-<p>The network we are building is therefore going to be the combination of three main components:</p>
+<p>Let us build a simple neural network using <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code>. The network will consist of:</p>
 <ul class="simple">
-<li><p>A network mapping the input to a latent parameter;</p></li>
-<li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.NormalParamExtractor</span></code> module splitting the input in a location <cite>“loc”</cite> and <cite>“scale”</cite>
-parameters to be passed to the <code class="docutils literal notranslate"><span class="pre">Normal</span></code> distribution;</p></li>
-<li><p>A distribution constructor module.</p></li>
+<li><p>A linear layer mapping input to a hidden representation;</p></li>
+<li><p>A ReLU activation;</p></li>
+<li><p>A final linear layer producing the output.</p></li>
 </ul>
+<p>We will also include a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.NormalParamExtractor</span></code> to demonstrate how to extract
+multiple outputs from a single tensor.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span>
     <span class="c1"># 1. A small network for embedding</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">]),</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ReLU.html#torch.nn.ReLU" title="torch.nn.ReLU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span></a><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">]),</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;latent&quot;</span><span class="p">]),</span>
-    <span class="c1"># 2. Extracting params</span>
+    <span class="c1"># 2. Extracting params (splits into loc and scale)</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">NormalParamExtractor</span></a><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;latent&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]),</span>
-    <span class="c1"># 3. Probabilistic module</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Prob</span></a><span class="p">(</span>
-        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
-        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sample&quot;</span><span class="p">],</span>
-        <span class="n">distribution_class</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.normal.Normal" title="torch.distributions.normal.Normal" class="sphx-glr-backref-module-torch-distributions-normal sphx-glr-backref-type-py-class"><span class="n">dists</span><span class="o">.</span><span class="n">Normal</span></a><span class="p">,</span>
-    <span class="p">),</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -430,7 +414,7 @@ parameters to be passed to the <code class="docutils literal notranslate"><span 
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.0000, 0.0000, 0.7839, 0.1705]], grad_fn=&lt;ReluBackward0&gt;), tensor([[ 0.1641, -0.3030,  0.4344, -0.5272]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[ 0.1641, -0.3030]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.2941, 0.7023]], grad_fn=&lt;ClampMinBackward0&gt;), tensor([[ 0.1641, -0.3030]], grad_fn=&lt;SplitBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.2799, 0.0000, 0.0276, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.2933,  0.4387, -0.0242, -0.4378]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.2933,  0.4387]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.9848, 0.7480]], grad_fn=&lt;ClampMinBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -448,7 +432,7 @@ and finally a <code class="docutils literal notranslate"><span class="pre">modul
 <p>Although our module accepts both args and kwargs, we will focus on its usage with kwargs as this is clearer.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.export</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a>
 
-<a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">},</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
 </pre></div>
 </div>
 <p>Let us look at the module:</p>
@@ -486,10 +470,7 @@ def forward(self, x):
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
     clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-    broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0]
-    getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
-    return pytree.tree_unflatten((relu, linear_1, getitem_2, getitem_3, getitem_2), self._out_spec)
+    return pytree.tree_unflatten((relu, linear_1, getitem, clamp_min), self._out_spec)
 
 # To see more debug info, please use `graph_module.print_readable()`
 </pre></div>
@@ -506,8 +487,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  569.11 micro-seconds
-Time for exported module:  372.89 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  471.12 micro-seconds
+Time for exported module:  355.48 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -515,56 +496,54 @@ Time for exported module:  372.89 micro-seconds
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>class GraphModule(torch.nn.Module):
-    def forward(self, p_l__args___0_module_0_module_weight: &quot;f32[4, 3]&quot;, p_l__args___0_module_0_module_bias: &quot;f32[4]&quot;, p_l__args___0_module_2_module_weight: &quot;f32[4, 4]&quot;, p_l__args___0_module_2_module_bias: &quot;f32[4]&quot;, x: &quot;f32[1, 3]&quot;):
-         # File: /pytorch/tensordict/tensordict/nn/common.py:1133 in _call_module, code: out = self.module(*tensors, **kwargs)
-        linear: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
-        relu: &quot;f32[1, 4]&quot; = torch.ops.aten.relu.default(linear);  linear = None
-        linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
+    def forward(self, p_module_0_module_weight: &quot;f32[4, 3]&quot;, p_module_0_module_bias: &quot;f32[4]&quot;, p_module_2_module_weight: &quot;f32[4, 4]&quot;, p_module_2_module_bias: &quot;f32[4]&quot;, x: &quot;f32[1, 3]&quot;):
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        linear: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-         # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+        relu: &quot;f32[1, 4]&quot; = torch.ops.aten.relu.default(linear);  linear = None
+
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
+
+        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
         chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
         getitem: &quot;f32[1, 2]&quot; = chunk[0]
         getitem_1: &quot;f32[1, 2]&quot; = chunk[1];  chunk = None
 
-         # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+        # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus: &quot;f32[1, 2]&quot; = torch.ops.aten.softplus.default(add);  add = None
         add_1: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-         # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
         clamp_min: &quot;f32[1, 2]&quot; = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-
-         # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:58 in broadcast_all, code: return torch.broadcast_tensors(*values)
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2: &quot;f32[1, 2]&quot; = broadcast_tensors[0]
-        getitem_3: &quot;f32[1, 2]&quot; = broadcast_tensors[1];  broadcast_tensors = None
-        return (relu, linear_1, getitem_2, getitem_3, getitem_2)
+        return (relu, linear_1, getitem, clamp_min)
 
 fx graph: class GraphModule(torch.nn.Module):
-    def forward(self, p_l__args___0_module_0_module_weight: &quot;f32[4, 3]&quot;, p_l__args___0_module_0_module_bias: &quot;f32[4]&quot;, p_l__args___0_module_2_module_weight: &quot;f32[4, 4]&quot;, p_l__args___0_module_2_module_bias: &quot;f32[4]&quot;, x: &quot;f32[1, 3]&quot;):
-         # File: /pytorch/tensordict/tensordict/nn/common.py:1133 in _call_module, code: out = self.module(*tensors, **kwargs)
-        linear: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(x, p_l__args___0_module_0_module_weight, p_l__args___0_module_0_module_bias);  x = p_l__args___0_module_0_module_weight = p_l__args___0_module_0_module_bias = None
-        relu: &quot;f32[1, 4]&quot; = torch.ops.aten.relu.default(linear);  linear = None
-        linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_l__args___0_module_2_module_weight, p_l__args___0_module_2_module_bias);  p_l__args___0_module_2_module_weight = p_l__args___0_module_2_module_bias = None
+    def forward(self, p_module_0_module_weight: &quot;f32[4, 3]&quot;, p_module_0_module_bias: &quot;f32[4]&quot;, p_module_2_module_weight: &quot;f32[4, 4]&quot;, p_module_2_module_bias: &quot;f32[4]&quot;, x: &quot;f32[1, 3]&quot;):
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        linear: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-         # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+        relu: &quot;f32[1, 4]&quot; = torch.ops.aten.relu.default(linear);  linear = None
+
+        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        linear_1: &quot;f32[1, 4]&quot; = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
+
+        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
         chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
         getitem: &quot;f32[1, 2]&quot; = chunk[0]
         getitem_1: &quot;f32[1, 2]&quot; = chunk[1];  chunk = None
 
-         # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+        # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus: &quot;f32[1, 2]&quot; = torch.ops.aten.softplus.default(add);  add = None
         add_1: &quot;f32[1, 2]&quot; = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-         # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
         clamp_min: &quot;f32[1, 2]&quot; = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-
-         # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/distributions/utils.py:58 in broadcast_all, code: return torch.broadcast_tensors(*values)
-        broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-        getitem_2: &quot;f32[1, 2]&quot; = broadcast_tensors[0]
-        getitem_3: &quot;f32[1, 2]&quot; = broadcast_tensors[1];  broadcast_tensors = None
-        return (relu, linear_1, getitem_2, getitem_3, getitem_2)
+        return (relu, linear_1, getitem, clamp_min)
 </pre></div>
 </div>
 </section>
@@ -619,7 +598,7 @@ graph, or use them for other purposes (e.g., reconstruct a distribution based on
 saving the <code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code> object itself). One could also argue that, during training, the
 impact on memory of registering intermediate values is negligible since they are part of the computational graph
 used by <code class="docutils literal notranslate"><span class="pre">torch.autograd</span></code> to compute the parameter gradients.</p>
-<p>During inference, though, we most likely are only interested in the final sample of the model.
+<p>During inference, though, we most likely are only interested in specific outputs of the model.
 Because we want to extract the model for usages that are independent of the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> library, it makes sense to
 isolate the only output we desire.
 To do this, we have several options:</p>
@@ -629,22 +608,21 @@ induce the selection of the desired entries during calls to the module;</p></li>
 <li><p>Using the <code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code> method, which will modify the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>
 attribute in-place (this can be reverted through <code class="xref py py-meth docutils literal notranslate"><span class="pre">reset_out_keys()</span></code>).</p></li>
 <li><p>Wrap the existing instance in a <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictSequential()</span></code></a> that will filter out the unwanted keys:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module_filtered</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">selected_out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sample&quot;</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module_filtered</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">selected_out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">])</span>
 </pre></div>
 </div>
 </li>
 </ol>
 <p>Let us test the model after selecting its output keys.
-When an <cite>x</cite> input is provided, we expect our model to output a single tensor corresponding to a sample of the
-distribution:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;sample&quot;</span><span class="p">)</span>
+When an <cite>x</cite> input is provided, we expect our model to output a single tensor corresponding to the <cite>“loc”</cite> output:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;loc&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[ 0.1641, -0.3030]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.2933,  0.4387]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
-<p>We see that the output is now a single tensor, corresponding to the sample of the distribution.
+<p>We see that the output is now a single tensor.
 We can create a new exported graph from this. Its computational graph should be simplified:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;module:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram.module" title="torch.export.ExportedProgram.module" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-method"><span class="n">model_export</span><span class="o">.</span><span class="n">module</span></a><span class="p">())</span>
@@ -680,119 +658,8 @@ def forward(self, x):
     add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
     softplus = torch.ops.aten.softplus.default(add);  add = None
     add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-    clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-    broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0]
-    getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
-    return pytree.tree_unflatten((getitem_2,), self._out_spec)
-
-# To see more debug info, please use `graph_module.print_readable()`
-</pre></div>
-</div>
-</section>
-<section id="controlling-the-sampling-strategy">
-<h3>Controlling the Sampling Strategy<a class="headerlink" href="#controlling-the-sampling-strategy" title="Permalink to this heading">¶</a></h3>
-<p>We have not yet discussed how the <a class="reference internal" href="../reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> samples from the distribution.
-By sampling, we mean obtaining a value within the space defined by the distribution according to a specific strategy.
-For instance, one may desire to get stochastic samples during training but deterministic samples (e.g., the mean or
-the mode) at inference time. To address this, <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> utilizes the <a class="reference internal" href="../reference/generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>
-decorator and context manager, which accepts <code class="docutils literal notranslate"><span class="pre">InteractionType</span></code> Enum inputs:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_interaction_type</span><span class="p">(</span><span class="n">InteractionType</span><span class="o">.</span><span class="n">MEAN</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># takes the input of the distribution, if ProbabilisticTensorDictModule is invoked</span>
-</pre></div>
-</div>
-<p>The default <code class="docutils literal notranslate"><span class="pre">InteractionType</span></code> is <code class="docutils literal notranslate"><span class="pre">InteractionType.DETERMINISTIC</span></code>, which, if not implemented directly, is either
-the mean of distributions with a real domain, or the mode of distributions with a discrete domain. This default value
-can be changed using the <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code> keyword argument of <code class="docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code>.</p>
-<p>Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
-constructor, or override it at runtime through the <code class="docutils literal notranslate"><span class="pre">set_interaction_type</span></code> context manager.</p>
-<p>As we can see from the following example, <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> respond correctly to the usage of the decorator: if we ask for
-a random sample, the output is different than if we ask for the mean:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">set_interaction_type</span><span class="p">(</span><span class="n">InteractionType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">):</span>
-    <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
-    <span class="nb">print</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram.module" title="torch.export.ExportedProgram.module" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-method"><span class="n">model_export</span><span class="o">.</span><span class="n">module</span></a><span class="p">())</span>
-
-<span class="k">with</span> <span class="n">set_interaction_type</span><span class="p">(</span><span class="n">InteractionType</span><span class="o">.</span><span class="n">MEAN</span><span class="p">):</span>
-    <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">model_export</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">export</span></a><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">})</span>
-    <span class="nb">print</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/export/api_reference.html#torch.export.ExportedProgram.module" title="torch.export.ExportedProgram.module" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-method"><span class="n">model_export</span><span class="o">.</span><span class="n">module</span></a><span class="p">())</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>GraphModule(
-  (module): Module(
-    (0): Module(
-      (module): Module()
-    )
-    (2): Module(
-      (module): Module()
-    )
-  )
-  (_guards_fn): GuardsFn()
-)
-
-
-
-def forward(self, x):
-    x, = fx_pytree.tree_flatten_spec(([], {&#39;x&#39;:x}), self._in_spec)
-    module_0_module_weight = getattr(self.module, &quot;0&quot;).module.weight
-    module_0_module_bias = getattr(self.module, &quot;0&quot;).module.bias
-    module_2_module_weight = getattr(self.module, &quot;2&quot;).module.weight
-    module_2_module_bias = getattr(self.module, &quot;2&quot;).module.bias
-    _guards_fn = self._guards_fn(x);  _guards_fn = None
-    linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
-    relu = torch.ops.aten.relu.default(linear);  linear = None
-    linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
-    getitem = chunk[0]
-    getitem_1 = chunk[1];  chunk = None
-    add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
-    softplus = torch.ops.aten.softplus.default(add);  add = None
-    add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-    clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-    broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0]
-    getitem_3 = broadcast_tensors[1];  broadcast_tensors = None
-    empty = torch.ops.aten.empty.memory_format([1, 2], dtype = torch.float32, device = device(type=&#39;cpu&#39;), pin_memory = False)
-    normal_ = torch.ops.aten.normal_.default(empty);  empty = None
-    mul = torch.ops.aten.mul.Tensor(normal_, getitem_3);  normal_ = getitem_3 = None
-    add_2 = torch.ops.aten.add.Tensor(getitem_2, mul);  getitem_2 = mul = None
-    return pytree.tree_unflatten((add_2,), self._out_spec)
-
-# To see more debug info, please use `graph_module.print_readable()`
-GraphModule(
-  (module): Module(
-    (0): Module(
-      (module): Module()
-    )
-    (2): Module(
-      (module): Module()
-    )
-  )
-  (_guards_fn): GuardsFn()
-)
-
-
-
-def forward(self, x):
-    x, = fx_pytree.tree_flatten_spec(([], {&#39;x&#39;:x}), self._in_spec)
-    module_0_module_weight = getattr(self.module, &quot;0&quot;).module.weight
-    module_0_module_bias = getattr(self.module, &quot;0&quot;).module.bias
-    module_2_module_weight = getattr(self.module, &quot;2&quot;).module.weight
-    module_2_module_bias = getattr(self.module, &quot;2&quot;).module.bias
-    _guards_fn = self._guards_fn(x);  _guards_fn = None
-    linear = torch.ops.aten.linear.default(x, module_0_module_weight, module_0_module_bias);  x = module_0_module_weight = module_0_module_bias = None
-    relu = torch.ops.aten.relu.default(linear);  linear = None
-    linear_1 = torch.ops.aten.linear.default(relu, module_2_module_weight, module_2_module_bias);  relu = module_2_module_weight = module_2_module_bias = None
-    chunk = torch.ops.aten.chunk.default(linear_1, 2, -1);  linear_1 = None
-    getitem = chunk[0]
-    getitem_1 = chunk[1];  chunk = None
-    add = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
-    softplus = torch.ops.aten.softplus.default(add);  add = None
-    add_1 = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-    clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
-    broadcast_tensors = torch.ops.aten.broadcast_tensors.default([getitem, clamp_min]);  getitem = clamp_min = None
-    getitem_2 = broadcast_tensors[0]
-    getitem_3 = broadcast_tensors[1];  broadcast_tensors = getitem_3 = None
-    return pytree.tree_unflatten((getitem_2,), self._out_spec)
+    clamp_min = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = clamp_min = None
+    return pytree.tree_unflatten((getitem,), self._out_spec)
 
 # To see more debug info, please use `graph_module.print_readable()`
 </pre></div>
@@ -809,7 +676,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.660 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.284 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
@@ -879,7 +746,6 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><a class="reference internal" href="#working-with-nested-keys">Working with nested keys</a></li>
 <li><a class="reference internal" href="#saving-the-exported-module">Saving the exported module</a><ul>
 <li><a class="reference internal" href="#selecting-the-outputs">Selecting the outputs</a></li>
-<li><a class="reference internal" href="#controlling-the-sampling-strategy">Controlling the Sampling Strategy</a></li>
 <li><a class="reference internal" href="#next-steps-and-further-reading">Next steps and further reading</a></li>
 </ul>
 </li>

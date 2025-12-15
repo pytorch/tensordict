@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3383+g3e856cbab.d20251020)
+                  main (0.10.0.dev3433+gba0ab1fef.d20251215)
                 </div>
               
             
@@ -526,6 +526,71 @@ to build distributions from network outputs and get summary statistics or sample
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
+<section id="type-safe-tensorclass-modules">
+<h2>Type-Safe TensorClass Modules<a class="headerlink" href="#type-safe-tensorclass-modules" title="Permalink to this heading">¶</a></h2>
+<p>The <a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a> provides a type-safe way to define modules that work with
+<a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.tensorclass.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> inputs and outputs. This offers compile-time type
+checking and improved code clarity compared to working with string-based keys.</p>
+<p>A <a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a> subclass specifies its input and output types through generic
+type parameters. The module can be converted to work with <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> objects using the
+<a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase.as_td_module" title="tensordict.nn.TensorClassModuleBase.as_td_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">as_td_module()</span></code></a> method, which returns a <a class="reference internal" href="generated/tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper" title="tensordict.nn.TensorClassModuleWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleWrapper</span></code></a>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClassModuleBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define input and output TensorClass types</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">InputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">OutputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">sum</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">difference</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a type-safe module</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorClassModuleBase</span><span class="p">[</span><span class="n">InputTC</span><span class="p">,</span> <span class="n">OutputTC</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">InputTC</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputTC</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">OutputTC</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="nb">sum</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">a</span> <span class="o">+</span> <span class="n">x</span><span class="o">.</span><span class="n">b</span><span class="p">,</span>
+<span class="gp">... </span>            <span class="n">difference</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">a</span> <span class="o">-</span> <span class="n">x</span><span class="o">.</span><span class="n">b</span><span class="p">,</span>
+<span class="gp">... </span>            <span class="n">batch_size</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use with TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input_tc</span> <span class="o">=</span> <span class="n">InputTC</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">input_tc</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">sum</span><span class="p">)</span>
+<span class="go">tensor([4., 6.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">difference</span><span class="p">)</span>
+<span class="go">tensor([-2., -2.])</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Convert to TensorDictModule for use in TensorDict workflows</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">as_td_module</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">])},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td_module</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        a: Tensor(torch.Size([2]), dtype=torch.float32),</span>
+<span class="go">        b: Tensor(torch.Size([2]), dtype=torch.float32),</span>
+<span class="go">        difference: Tensor(torch.Size([2]), dtype=torch.float32),</span>
+<span class="go">        sum: Tensor(torch.Size([2]), dtype=torch.float32)},</span>
+<span class="go">    batch_size=torch.Size([2]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>The type-safe approach offers several benefits:</p>
+<ul class="simple">
+<li><p><strong>Type checking</strong>: IDEs and type checkers can verify correct usage at development time</p></li>
+<li><p><strong>Self-documenting</strong>: The input and output structure is clear from the type signature</p></li>
+<li><p><strong>Refactoring</strong>: Renaming fields in TensorClass definitions is caught by type checkers</p></li>
+<li><p><strong>Nested structures</strong>: Support for nested TensorClass types with automatic key extraction</p></li>
+</ul>
+<p><a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a> modules can be composed and used in <a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
+after conversion via <a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase.as_td_module" title="tensordict.nn.TensorClassModuleBase.as_td_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">as_td_module()</span></code></a>.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a>(*args, **kwargs)</p></td>
@@ -533,6 +598,12 @@ to build distributions from network outputs and get summary statistics or sample
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A TensorDictModule, is a python wrapper around a <code class="xref py py-obj docutils literal notranslate"><span class="pre">nn.Module</span></code> that reads and writes to a TensorDict.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper" title="tensordict.nn.TensorClassModuleWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorClassModuleWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Wrapper class for TensorClassModuleBase objects.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A probabilistic TD Module.</p></td>
@@ -569,6 +640,7 @@ to build distributions from network outputs and get summary statistics or sample
 </tr>
 </tbody>
 </table>
+</section>
 <section id="ensembles">
 <h2>Ensembles<a class="headerlink" href="#ensembles" title="Permalink to this heading">¶</a></h2>
 <p>The functional approach enables a straightforward ensemble implementation.
@@ -712,6 +784,7 @@ a <a class="reference internal" href="generated/tensordict.nn.TensorDictModule.h
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">tensordict.nn package</a><ul>
+<li><a class="reference internal" href="#type-safe-tensorclass-modules">Type-Safe TensorClass Modules</a></li>
 <li><a class="reference internal" href="#ensembles">Ensembles</a></li>
 <li><a class="reference internal" href="#compiling-tensordictmodules">Compiling TensorDictModules</a></li>
 <li><a class="reference internal" href="#distributions">Distributions</a></li>

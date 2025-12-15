@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Pre-allocating memory with TensorDict &mdash; tensordict main documentation</title>
+  <title>TensorClassModuleWrapper &mdash; tensordict main documentation</title>
   
 
   
@@ -26,18 +26,18 @@
 
   
 
-  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
-  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
-    <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simplifying PyTorch Memory Management with TensorDict" href="tensordict_memory.html" />
-    <link rel="prev" title="Manipulating the keys of a TensorDict" href="tensordict_keys.html" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="ProbabilisticTensorDictModule" href="tensordict.nn.ProbabilisticTensorDictModule.html" />
+    <link rel="prev" title="TensorClassModuleBase" href="tensordict.nn.TensorClassModuleBase.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -53,16 +53,16 @@
   
 
   
-  <script src="../_static/js/modernizr.min.js"></script>
+  <script src="../../_static/js/modernizr.min.js"></script>
 
   <!-- Preload the theme fonts -->
 
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
 
 <!-- Preload the katex fonts -->
 
@@ -239,7 +239,7 @@
 
 
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
     <input type="text" name="q" placeholder="Search Docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -255,29 +255,29 @@
               
             
             
-              <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Pre-allocating memory with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
 </ul>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="data_fashion.html">Using TensorDict for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
 </ul>
 
             
@@ -310,7 +310,7 @@
   <ul class="pytorch-breadcrumbs">
     
       <li>
-        <a href="../index.html">
+        <a href="../../index.html">
           
             Docs
           
@@ -318,13 +318,17 @@
       </li>
 
         
-      <li>Pre-allocating memory with TensorDict</li>
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
+        
+      <li>TensorClassModuleWrapper</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../_sources/tutorials/tensordict_preallocation.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.nn.TensorClassModuleWrapper.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -350,112 +354,67 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <div class="sphx-glr-download-link-note admonition note">
-<p class="admonition-title">Note</p>
-<p><a class="reference internal" href="#sphx-glr-download-tutorials-tensordict-preallocation-py"><span class="std std-ref">Go to the end</span></a>
-to download the full example code.</p>
+  <section id="tensorclassmodulewrapper">
+<h1>TensorClassModuleWrapper<a class="headerlink" href="#tensorclassmodulewrapper" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleWrapper">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">TensorClassModuleWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorClassModuleWrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper class for TensorClassModuleBase objects.</p>
+<p>This wrapper allows TensorClassModuleBase instances to be used in TensorDict-based
+workflows by handling the conversion between TensorDict and TensorClass representations.
+When called with a TensorDict, the wrapper converts it to a TensorClass, passes it through
+the wrapped module, and converts the output back to a TensorDict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>module</strong> (<a class="reference internal" href="tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><em>TensorClassModuleBase</em></a>) – The TensorClassModuleBase instance to wrap.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClassModuleBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">InputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">OutputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorClassModuleBase</span><span class="p">[</span><span class="n">InputTC</span><span class="p">,</span> <span class="n">OutputTC</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">InputTC</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputTC</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">OutputTC</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">as_td_module</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td_module</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">result</span>
+</pre></div>
 </div>
-<section class="sphx-glr-example-title" id="pre-allocating-memory-with-tensordict">
-<span id="sphx-glr-tutorials-tensordict-preallocation-py"></span><h1>Pre-allocating memory with TensorDict<a class="headerlink" href="#pre-allocating-memory-with-tensordict" title="Permalink to this heading">¶</a></h1>
-<p><strong>Author</strong>: <a class="reference external" href="https://github.com/tcbegley">Tom Begley</a></p>
-<p>In this tutorial you will learn how to take advantage of memory pre-allocation in
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
-<p>Suppose that we have a function that returns a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a></p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensordict</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleWrapper.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict._td.TensorDict"><span class="pre">TensorDict</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict._td.TensorDict"><span class="pre">TensorDict</span></a></span></span><a class="headerlink" href="#tensordict.nn.TensorClassModuleWrapper.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward pass converting TensorDict to TensorClass and back.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a>) – Input tensordict.</p></li>
+<li><p><strong>*args</strong> – Additional positional arguments.</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output tensordict.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict">TensorDict</a></p>
+</dd>
+</dl>
+</dd></dl>
 
+</dd></dl>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">():</span>
-    <span class="k">return</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand" title="torch.rand" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">rand</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
-</pre></div>
-</div>
-<p>Perhaps we want to call this function multiple times and use the results to populate
-a single <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">N</span></a> <span class="o">=</span> <span class="mi">10</span>
-<span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">N</span></a><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
-
-<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">i</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">N</span></a><span class="p">):</span>
-    <span class="n">tensordict</span><span class="p">[</span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">i</span></a><span class="p">]</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">()</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict(
-    fields={
-        a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-        b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-    batch_size=torch.Size([10, 3]),
-    device=None,
-    is_shared=False)
-</pre></div>
-</div>
-<p>Because we have specified the <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>, during the first
-iteration of the loop we populate <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> with empty tensors whose first
-dimension is size <code class="docutils literal notranslate"><span class="pre">N</span></code>, and whose remaining dimensions are determined by the return
-value of <code class="docutils literal notranslate"><span class="pre">make_tensordict</span></code>. In the above example, we pre-allocate an array of zeros
-of size <code class="docutils literal notranslate"><span class="pre">torch.Size([10,</span> <span class="pre">3])</span></code> for the key <code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code>, and an array size
-<code class="docutils literal notranslate"><span class="pre">torch.Size([10,</span> <span class="pre">3,</span> <span class="pre">4])</span></code> for the key <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code>. Subsequent iterations of the loop are
-written in place. As a result, if not all values are filled, they get the default
-value of zero.</p>
-<p>Let us demonstrate what is going on by stepping through the above loop. We first
-initialise an empty <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">N</span></a> <span class="o">=</span> <span class="mi">10</span>
-<span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">N</span></a><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict(
-    fields={
-    },
-    batch_size=torch.Size([10, 3]),
-    device=None,
-    is_shared=False)
-</pre></div>
-</div>
-<p>After the first iteration, <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> has been prepopulated with tensors for both
-<code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code>. These tensors contain zeros except for the first row which we
-have assigned random values to.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">random_tensordict</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">()</span>
-<span class="n">tensordict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">random_tensordict</span>
-
-<span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">random_tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict(
-    fields={
-        a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-        b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-    batch_size=torch.Size([10, 3]),
-    device=None,
-    is_shared=False)
-</pre></div>
-</div>
-<p>Subsequent iterations, we update the pre-allocated tensors in-place.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span>
-<span class="n">random_tensordict</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">()</span>
-<span class="n">tensordict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">random_tensordict</span>
-
-<span class="c1"># the same tensor is stored under &quot;a&quot;, but the values have been updated</span>
-<span class="k">assert</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="ow">is</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">a</span></a>
-<span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-</pre></div>
-</div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.003 seconds)</p>
-<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-preallocation-py">
-<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
-<p><a class="reference download internal" download="" href="../_downloads/87e90875c043c2567fac8ec8a049a261/tensordict_preallocation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_preallocation.ipynb</span></code></a></p>
-</div>
-<div class="sphx-glr-download sphx-glr-download-python docutils container">
-<p><a class="reference download internal" download="" href="../_downloads/e0699c896d4545cae2895110e76d207d/tensordict_preallocation.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">tensordict_preallocation.py</span></code></a></p>
-</div>
-<div class="sphx-glr-download sphx-glr-download-zip docutils container">
-<p><a class="reference download internal" download="" href="../_downloads/a3a53a08487286803e7e9713be78fb54/tensordict_preallocation.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">tensordict_preallocation.zip</span></code></a></p>
-</div>
-</div>
-<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
 </section>
 
 
@@ -466,10 +425,10 @@ have assigned random values to.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict_memory.html" class="btn btn-neutral float-right" title="Simplifying PyTorch Memory Management with TensorDict" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.ProbabilisticTensorDictModule.html" class="btn btn-neutral float-right" title="ProbabilisticTensorDictModule" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict_keys.html" class="btn btn-neutral" title="Manipulating the keys of a TensorDict" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.TensorClassModuleBase.html" class="btn btn-neutral" title="TensorClassModuleBase" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -501,7 +460,7 @@ have assigned random values to.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Pre-allocating memory with TensorDict</a></li>
+<li><a class="reference internal" href="#">TensorClassModuleWrapper</a></li>
 </ul>
 
             </div>
@@ -516,20 +475,20 @@ have assigned random values to.</p>
   
 
      
-       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
-         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-         <script src="../_static/jquery.js"></script>
-         <script src="../_static/underscore.js"></script>
-         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-         <script src="../_static/doctools.js"></script>
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
      
 
   
 
-  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
-  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
-  <script type="text/javascript" src="../_static/js/theme.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
 
   <script type="text/javascript">
       jQuery(function () {
@@ -634,7 +593,7 @@ have assigned random values to.</p>
   <div class="cookie-banner-wrapper">
   <div class="container">
     <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../_static/images/pytorch-x.svg">
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
   </div>
 </div>
 
@@ -770,7 +729,7 @@ have assigned random values to.</p>
 
   <!-- End Mobile Menu -->
 
-  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
 
   <script type="text/javascript">
     $(document).ready(function() {

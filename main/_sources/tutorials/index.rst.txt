@@ -20,7 +20,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_memory_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_memory.py`
+  :doc:`/tutorials/tensordict_memory`
 
 .. raw:: html
 
@@ -37,7 +37,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_slicing_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_slicing.py`
+  :doc:`/tutorials/tensordict_slicing`
 
 .. raw:: html
 
@@ -54,7 +54,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_preallocation_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_preallocation.py`
+  :doc:`/tutorials/tensordict_preallocation`
 
 .. raw:: html
 
@@ -71,7 +71,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_export_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_export.py`
+  :doc:`/tutorials/export`
 
 .. raw:: html
 
@@ -88,7 +88,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_keys_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_keys.py`
+  :doc:`/tutorials/tensordict_keys`
 
 .. raw:: html
 
@@ -105,7 +105,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_streamed_tensordict_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_streamed_tensordict.py`
+  :doc:`/tutorials/streamed_tensordict`
 
 .. raw:: html
 
@@ -122,7 +122,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_module_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_module.py`
+  :doc:`/tutorials/tensordict_module`
 
 .. raw:: html
 
@@ -139,7 +139,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensordict_shapes_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensordict_shapes.py`
+  :doc:`/tutorials/tensordict_shapes`
 
 .. raw:: html
 
@@ -156,7 +156,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensorclass_fashion_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensorclass_fashion.py`
+  :doc:`/tutorials/tensorclass_fashion`
 
 .. raw:: html
 
@@ -173,7 +173,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_data_fashion_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_data_fashion.py`
+  :doc:`/tutorials/data_fashion`
 
 .. raw:: html
 
@@ -190,7 +190,7 @@ README Tutos
   .. image:: /tutorials/images/thumb/sphx_glr_tensorclass_imagenet_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_tensorclass_imagenet.py`
+  :doc:`/tutorials/tensorclass_imagenet`
 
 .. raw:: html
 

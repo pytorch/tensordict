@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>tensordict.nn.biased_softplus &mdash; tensordict main documentation</title>
+  <title>TensorClassModuleBase &mdash; tensordict main documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="tensordict.nn.set_skip_existing" href="tensordict.nn.set_skip_existing.html" />
-    <link rel="prev" title="tensordict.nn.inv_softplus" href="tensordict.nn.inv_softplus.html" />
+    <link rel="next" title="TensorClassModuleWrapper" href="tensordict.nn.TensorClassModuleWrapper.html" />
+    <link rel="prev" title="TensorDictModule" href="tensordict.nn.TensorDictModule.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -322,13 +322,13 @@
         
           <li><a href="../nn.html">tensordict.nn package</a> &gt;</li>
         
-      <li>tensordict.nn.biased_softplus</li>
+      <li>TensorClassModuleBase</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/tensordict.nn.biased_softplus.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/tensordict.nn.TensorClassModuleBase.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -354,24 +354,118 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="tensordict-nn-biased-softplus">
-<h1>tensordict.nn.biased_softplus<a class="headerlink" href="#tensordict-nn-biased-softplus" title="Permalink to this heading">¶</a></h1>
+  <section id="tensorclassmodulebase">
+<h1>TensorClassModuleBase<a class="headerlink" href="#tensorclassmodulebase" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="tensordict.nn.biased_softplus">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">biased_softplus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.biased_softplus" title="Permalink to this definition">¶</a></dt>
-<dd><p>A biased softplus module.</p>
-<p>The bias indicates the value that is to be returned when a zero-tensor is
-passed through the transform.</p>
+<dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleBase">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">TensorClassModuleBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.TensorClassModuleBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.</p>
+<p>TensorClassModuleBase subclasses provide a type-safe way to define modules that work with TensorClass
+inputs and outputs. The class automatically extracts input and output type information from the
+generic type parameters.</p>
+<p>The module can be converted to a TensorDictModule using the <a class="reference internal" href="#tensordict.nn.TensorClassModuleBase.as_td_module" title="tensordict.nn.TensorClassModuleBase.as_td_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">as_td_module()</span></code></a>
+method, allowing it to be used in TensorDict-based workflows.</p>
+<dl class="simple">
+<dt>Type Parameters:</dt><dd><p>InputClass: The input type, must be a TensorClass or Tensor.
+OutputClass: The output type, must be a TensorClass or Tensor.</p>
+</dd>
+</dl>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>bias</strong> (<em>scalar</em>) – ‘bias’ of the softplus transform. If bias=1.0, then a _bias shift will be computed such that
-softplus(0.0 + _bias) = bias.</p></li>
-<li><p><strong>min_val</strong> (<em>scalar</em>) – minimum value of the transform.
-default: 0.1</p></li>
+<li><p><strong>input_type</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.14)"><em>type</em></a><em>[</em><em>InputClass</em><em>]</em>) – The input type class.</p></li>
+<li><p><strong>output_type</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.14)"><em>type</em></a><em>[</em><em>OutputClass</em><em>]</em>) – The output type class.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClassModuleBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">InputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">OutputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">result</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">AddModule</span><span class="p">(</span><span class="n">TensorClassModuleBase</span><span class="p">[</span><span class="n">InputTC</span><span class="p">,</span> <span class="n">OutputTC</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">InputTC</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputTC</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">OutputTC</span><span class="p">(</span>
+<span class="gp">... </span>            <span class="n">result</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">a</span> <span class="o">+</span> <span class="n">x</span><span class="o">.</span><span class="n">b</span><span class="p">,</span>
+<span class="gp">... </span>            <span class="n">batch_size</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="gp">... </span>        <span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">AddModule</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input_tc</span> <span class="o">=</span> <span class="n">InputTC</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">2.0</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">input_tc</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">output</span><span class="o">.</span><span class="n">result</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">3.0</span><span class="p">])</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleBase.as_td_module">
+<span class="sig-name descname"><span class="pre">as_td_module</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper" title="tensordict.nn.tensorclass_module.TensorClassModuleWrapper"><span class="pre">TensorClassModuleWrapper</span></a></span></span><a class="headerlink" href="#tensordict.nn.TensorClassModuleBase.as_td_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert this module to a TensorDictModule.</p>
+<p>This method wraps the TensorClassModuleBase in a TensorClassModuleWrapper,
+allowing it to be used with TensorDict inputs and outputs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>A wrapper that converts between TensorDict</dt><dd><p>and TensorClass representations.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper" title="tensordict.nn.TensorClassModuleWrapper">TensorClassModuleWrapper</a></p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If either input_type or output_type is not a TensorClass.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClassModuleBase</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">InputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">OutputTC</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorClassModuleBase</span><span class="p">[</span><span class="n">InputTC</span><span class="p">,</span> <span class="n">OutputTC</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">InputTC</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputTC</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">OutputTC</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">x</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">as_td_module</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">td_module</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.TensorClassModuleBase.forward">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">InputClass</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">OutputClass</span></span></span><a class="headerlink" href="#tensordict.nn.TensorClassModuleBase.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward pass of the module.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>InputClass</em>) – Input instance.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>OutputClass</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -384,10 +478,10 @@ default: 0.1</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.nn.set_skip_existing.html" class="btn btn-neutral float-right" title="tensordict.nn.set_skip_existing" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.nn.TensorClassModuleWrapper.html" class="btn btn-neutral float-right" title="TensorClassModuleWrapper" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.nn.inv_softplus.html" class="btn btn-neutral" title="tensordict.nn.inv_softplus" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.nn.TensorDictModule.html" class="btn btn-neutral" title="TensorDictModule" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -419,7 +513,7 @@ default: 0.1</p></li>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">tensordict.nn.biased_softplus</a></li>
+<li><a class="reference internal" href="#">TensorClassModuleBase</a></li>
 </ul>
 
             </div>
