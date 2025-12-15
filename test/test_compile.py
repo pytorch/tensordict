@@ -60,10 +60,12 @@ elif is_npu_available():
     cur_device = "npu"
     npu_device_count = torch.npu.device_count()
 
-
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
+pytestmark = pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.compile is not supported on python 3.14+ ",
 )
+
+
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
     def func(x, y):
@@ -79,9 +81,6 @@ def test_vmap_compile():
 
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
-)
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
@@ -377,9 +376,6 @@ class MyClass:
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
 )
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
@@ -648,9 +644,6 @@ class TestTC:
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
 )
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
-)
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -754,9 +747,6 @@ class TestNN:
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"
-)
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
@@ -895,6 +885,10 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
+)
 class TestExport:
     def test_export_module(self):
         torch._dynamo.reset_code_caches()
@@ -1047,9 +1041,6 @@ class TestONNXExport:
 @pytest.mark.skipif(
     (TORCH_VERSION <= version.parse("2.7.0")) and _IS_OSX,
     reason="requires torch>=2.7 ons OSX",
-)
-@pytest.mark.skipif(
-    sys.version_info > (3, 14), reason="torch.compile is not supported on python 3.14+ "
 )
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
