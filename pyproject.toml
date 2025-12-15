@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.usort]
 first_party_detection = false
-target-version = ["py39"]
+target-version = ["py310"]
 excludes = [
     "gallery",
     "tutorials",
@@ -12,7 +12,7 @@ excludes = [
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [project]
 name = "tensordict"
@@ -23,9 +23,8 @@ authors = [
 ]
 readme = "README.md"
 license = { text = "BSD" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -77,6 +76,7 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 version_scheme = "post-release"
 local_scheme = "node-and-date"
 version_file = "tensordict/_version.py"
+fallback_version = "0.10.0"
 
 [tool.mypy]
 files = "tensordict"

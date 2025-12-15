@@ -22,7 +22,7 @@ jobs:
   tests-silicon:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.14"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
