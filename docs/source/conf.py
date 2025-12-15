@@ -175,30 +175,11 @@ intersphinx_mapping = {
 
 aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
 
-# Suppress warnings about ambiguous references for built-in types
-# These occur because multiple TensorDict classes have methods like .bool(), .int(), etc.
-# that Sphinx tries to resolve as cross-references
-nitpick_ignore = [
-    ("py:obj", "bool"),
-    ("py:obj", "int"),
-    ("py:obj", "float"),
-    ("py:obj", "str"),
-    ("py:class", "bool"),
-    ("py:class", "int"),
-    ("py:class", "float"),
-    ("py:class", "str"),
-    ("py:meth", "bool"),
-    ("py:meth", "int"),
-    ("py:meth", "float"),
-    ("py:meth", "str"),
-    ("py:meth", "from_dict"),
-    ("py:meth", "get"),
-    ("py:meth", "load_memmap"),
-    ("py:meth", "load_memmap_"),
-    ("py:meth", "memmap"),
-    ("py:meth", "is_shared"),
-    ("py:meth", "is_memmap"),
-]
+# Suppress warnings about ambiguous references
+# These occur because multiple TensorDict classes have methods with the same names
+# (e.g., .bool(), .int(), .float(), .get(), .memmap(), etc.) and Sphinx cannot
+# disambiguate which one is meant when the docstring just says "bool" or "int".
+suppress_warnings = ["ref.python"]
 
 current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
