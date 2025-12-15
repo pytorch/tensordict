@@ -175,6 +175,12 @@ intersphinx_mapping = {
 
 aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
 
+# Suppress warnings about ambiguous references
+# These occur because multiple TensorDict classes have methods with the same names
+# (e.g., .bool(), .int(), .float(), .get(), .memmap(), etc.) and Sphinx cannot
+# disambiguate which one is meant when the docstring just says "bool" or "int".
+suppress_warnings = ["ref.python"]
+
 current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
 from content_generation import generate_tutorial_references
