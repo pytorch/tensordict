@@ -1,5 +1,6 @@
 include README.md
 include LICENSE
+include version.txt
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
