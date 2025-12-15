@@ -895,6 +895,10 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
+)
 class TestExport:
     def test_export_module(self):
         torch._dynamo.reset_code_caches()

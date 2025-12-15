@@ -327,8 +327,9 @@ class TestTensorDictsBase:
         cls,
         device,
     ):
-        file = tempfile.NamedTemporaryFile()
+        file = tempfile.NamedTemporaryFile(delete=False)
         filename = file.name
+        file.close()  # Close file handle before h5py opens it
         nested_td = cls.nested_td(device)
         td_h5 = PersistentTensorDict.from_dict(
             nested_td, filename=filename, device=device
