@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3433+gba0ab1fef.d20251215)
+                  main (0.10.0.dev3438+gd92db4034.d20251217)
                 </div>
               
             
@@ -560,13 +560,259 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  217.3710 us
-TDM:  281.9531 us
-Sequential:  495.8704 us
+Regular:  217.9899 us
+TDM:  285.4937 us
+Sequential:  506.5307 us
 Compiled versions
-Compiled regular:  299.5360 us
-Compiled TDM:  315.6710 us
-Compiled sequential:  370.1470 us
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 201, in forward
+    y = self.relu0(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 203, in forward
+    y = self.relu1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+Compiled regular:  297.8640 us
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 200, in forward
+    y = self.linear0(x)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 201, in forward
+    y = self.relu0(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 202, in forward
+    y = self.linear1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 203, in forward
+    y = self.relu1(y)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 204, in forward
+    return self.linear2(y) + x
+
+Compiled TDM:  313.2890 us
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+
+cudagraph partition due to non gpu ops. Found from :
+   File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 319, in wrapper
+    out = func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 642, in forward
+    tensordict_exec = self._run_module(
+  File &quot;/pytorch/tensordict/tensordict/nn/sequence.py&quot;, line 588, in _run_module
+    tensordict = module(tensordict, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 328, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/utils.py&quot;, line 369, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1174, in forward
+    tensors_out = self._call_module(tensors, **kwargs)
+  File &quot;/pytorch/tensordict/tensordict/nn/common.py&quot;, line 1133, in _call_module
+    out = self.module(*tensors, **kwargs)
+  File &quot;/pytorch/tensordict/docs/source/reference/generated/tutorials/tensordict_module.py&quot;, line 131, in &lt;lambda&gt;
+    lambda x, y: x + y, in_keys=[&quot;x&quot;, &quot;linear2&quot;], out_keys=[&quot;y&quot;]
+
+Compiled sequential:  359.5195 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -666,7 +912,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.923 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 14.126 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>
