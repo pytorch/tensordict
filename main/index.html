@@ -226,7 +226,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3438+gd92db4034.d20251217)
+                  main (0.10.0.dev3440+g861bca00c.d20251218)
                 </div>
               
             
@@ -390,6 +390,12 @@ $ git clone https://github.com/pytorch/tensordict
 $ cd tensordict
 $ pip install -e .
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you’re using <strong>uv</strong> with a <strong>PyTorch nightly</strong> installed from the PyTorch nightly wheel index,
+prefer installing tensordict editable with <code class="docutils literal notranslate"><span class="pre">--no-deps</span></code> (or configure uv to use the nightly wheel index),
+otherwise uv may re-resolve and replace the existing nightly <code class="docutils literal notranslate"><span class="pre">torch</span></code> with a stable build from PyPI.</p>
 </div>
 </section>
 <section id="tutorials">
