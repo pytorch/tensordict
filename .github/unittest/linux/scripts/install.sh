@@ -44,7 +44,11 @@ else
 fi
 
 printf "* Installing tensordict\n"
-pip install -e .
+# Install runtime deps explicitly (except torch/torchvision which are handled above),
+# then install tensordict without resolving dependencies to avoid any solver changing
+# the PyTorch build (stable vs nightly).
+python -m pip install -U packaging pyvers importlib_metadata
+python -m pip install -e . --no-deps
 
 # smoke test
 python -c "import functorch"

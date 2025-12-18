@@ -143,6 +143,31 @@ To enjoy the latest features, one can use
 pip install tensordict-nightly
 ```
 
+**With uv + PyTorch nightlies**:
+
+If you're using a **PyTorch nightly** (e.g. installed from the PyTorch nightly wheel index), then for **editable**
+installs you should install tensordict with **`--no-deps`**.
+
+This avoids uv re-resolving `torch` from its configured indexes (by default: PyPI), which can otherwise replace an
+existing nightly with the latest stable `torch`.
+
+This is an **uv-specific** behavior; plain `pip install -e .` typically won’t replace an already-installed PyTorch
+nightly.
+
+To keep a nightly `torch` with an editable install:
+
+- install without resolving deps (**recommended**):
+
+```bash
+uv pip install -e . --no-deps
+```
+
+- or (less recommended) explicitly point uv at the PyTorch nightly wheel index (CPU shown; use the appropriate backend directory like `cu126/`):
+
+```bash
+uv pip install -e . --prerelease=allow -f "https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html"
+```
+
 **With Conda**:
 
 Install `tensordict` from `conda-forge` channel.
