@@ -12,6 +12,7 @@ endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 2.13 REQUIRED)
+find_package(Torch REQUIRED)
 
 file(GLOB SOURCES "*.cpp")
 
@@ -39,10 +40,10 @@ endif()
 find_package(Python COMPONENTS Development.Static)
 target_link_libraries(_C ${Python_STATIC_LIBRARIES})
 
-target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(_C PRIVATE ${PROJECT_SOURCE_DIR} ${TORCH_INCLUDE_DIRS})
 
 #if(APPLE OR WIN32) # Check if the target OS is OSX/macOS
-target_link_libraries(_C PRIVATE pybind11::module)
+target_link_libraries(_C PRIVATE pybind11::module ${TORCH_LIBRARIES})
 #else()
 #    target_link_libraries(_C PRIVATE Python3::Python pybind11::module)
 #endif()

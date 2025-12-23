@@ -466,3 +466,30 @@ output keys by querying the in_keys and out_keys attributes. It is also possible
 :class:`~tensordict.nn.TensorDictSequential` with only the modules that are indispensable to satisfy those requirements.
 The :class:`~tensordict.nn.TensorDictModule` is also compatible with :func:`~torch.vmap` and other ``torch.func``
 capabilities.
+
+TorchScript fork/wait interop (TorchBind)
+----------------------------------------
+
+TorchScript Futures can only carry JIT-visible types. To enable passing a TensorDict-like payload through
+``torch.jit.fork``/``wait``, a lightweight TorchBind class is provided. Use a scripted factory to return the
+TorchBind class, then wrap back to :class:`~tensordict.TensorDict` in Python:
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+
+    @torch.jit.script
+    def make_td_scripted(x: torch.Tensor) -> torch.classes.tensordict.TensorDict:  # type: ignore[attr-defined]
+        keys = ["x", "y"]
+        vals = [x, x + 1]
+        return torch.classes.tensordict.TensorDict.from_pairs(keys, vals, [], x.device)  # type: ignore[attr-defined]
+
+    f1 = torch.jit.fork(make_td_scripted, torch.tensor(1))
+    f2 = torch.jit.fork(make_td_scripted, torch.tensor(2))
+    obj1 = torch.jit.wait(f1)
+    obj2 = torch.jit.wait(f2)
+    td1 = TensorDict.from_torchbind(obj1)
+    td2 = TensorDict.from_torchbind(obj2)
+
+Limitations in v1: flat structure (no nesting) and single-device TensorDicts (``td.device`` must be set).
