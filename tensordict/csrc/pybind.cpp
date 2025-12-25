@@ -13,7 +13,7 @@
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(_C, m) {
+PYBIND11_MODULE(_C, m, py::mod_gil_not_used()) {
   m.def("unravel_keys", &unravel_key, py::arg("key")); // for bc compat
   m.def("unravel_key", &unravel_key, py::arg("key"));
   m.def("_unravel_key_to_tuple", &_unravel_key_to_tuple, py::arg("key"));
