@@ -57,6 +57,11 @@ jobs:
         # Install PyTorch (CPU version for docs)
         python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
+        # Install tensordict runtime deps explicitly (except torch/torchvision which are handled above),
+        # then install tensordict without resolving dependencies to avoid any solver changing the
+        # PyTorch build (stable vs nightly).
+        python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
+
         # Set up versioning environment (conditional on release branch/tag)
         export GITHUB_REF_TYPE=${{ github.ref_type }}
         export GITHUB_REF_NAME=${{ github.ref_name }}
@@ -64,9 +69,9 @@ jobs:
 
         # Install tensordict -- install as develop if not on a release branch
         if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]] || [[ ${{ github.ref_type }} == tag ]]; then
-          python -m pip install .
+          python -m pip install . --no-deps
         else
-          python -m pip install -e .
+          python -m pip install -e . --no-deps
         fi
 
         # Install docs requirements

@@ -410,7 +410,7 @@ To facilitate the adoption of this class, one can also pass the tensors as kwarg
 
 >>> tensordict = module(input=torch.randn(32, 100))
 
-which will return a :class:`~tensordict.TensorDict` identical to the one in the previous code box. See :ref:`the export tutorial` for
+which will return a :class:`~tensordict.TensorDict` identical to the one in the previous code box. See the :doc:`export tutorial </tutorials/export>` for
 more context on this feature.
 
 A key pain-point of multiple PyTorch users is the inability of nn.Sequential to handle modules with multiple inputs.

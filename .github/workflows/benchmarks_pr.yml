@@ -68,7 +68,7 @@ jobs:
           uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu126
           uv pip install "pybind11[global]" "setuptools" "wheel" "ninja"
           uv pip install pytest pytest-benchmark
-          uv pip install -e .
+          uv pip install -e . --no-deps
           ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'

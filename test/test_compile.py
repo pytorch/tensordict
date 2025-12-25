@@ -7,12 +7,15 @@ import contextlib
 import importlib.util
 import inspect
 import platform
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
 import pytest
 
 import torch
+
+from _utils_internal import is_npu_available
 from packaging import version
 
 from tensordict import (
@@ -49,6 +52,18 @@ _v2_6 = TORCH_VERSION >= version.parse("2.6.0")
 _v2_7 = TORCH_VERSION >= version.parse("2.7.0")
 
 _IS_OSX = platform.system() == "Darwin"
+
+npu_device_count = 0
+if torch.cuda.is_available():
+    cur_device = "cuda"
+elif is_npu_available():
+    cur_device = "npu"
+    npu_device_count = torch.npu.device_count()
+
+pytestmark = pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.compile is not supported on python 3.14+ ",
+)
 
 
 def test_vmap_compile():
@@ -266,7 +281,7 @@ class TestTD:
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_to(self, has_device, mode):
-        device = "cuda:0"
+        device = f"{cur_device}:0"
 
         def test_to_device(td):
             return td.to(device)
@@ -283,6 +298,10 @@ class TestTD:
         assert td_device_c.batch_size == td.batch_size
         assert td_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
+    )
     def test_lock(self, mode):
         def locked_op(td):
             # Adding stuff uses cache, check that this doesn't break
@@ -553,7 +572,7 @@ class TestTC:
     )
     @pytest.mark.parametrize("has_device", [True, False])
     def test_tc_to(self, has_device, mode):
-        device = "cuda:0"
+        device = f"{cur_device}:0"
 
         def test_to_device(tc):
             return tc.to(device)
@@ -570,6 +589,10 @@ class TestTC:
         assert tc_device_c.batch_size == data.batch_size
         assert tc_device_c.device == torch.device(device)
 
+    @pytest.mark.skipif(
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
+    )
     def test_tc_lock(self, mode):
         def locked_op(tc):
             # Adding stuff uses cache, check that this doesn't break
@@ -862,6 +885,10 @@ class TestFunctional:
 
 
 @pytest.mark.skipif(not _v2_5, reason="Requires PT>=2.5")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.export has compatibility issues with Python 3.14 (networkx/dataclasses)",
+)
 class TestExport:
     def test_export_module(self):
         torch._dynamo.reset_code_caches()
@@ -950,9 +977,7 @@ class TestONNXExport:
         x = torch.randn(3)
         y = torch.randn(3)
         torch_input = {"x": x, "y": y}
-        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
-
-        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+        onnx_program = torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
@@ -969,9 +994,7 @@ class TestONNXExport:
                 else tensor.cpu().numpy()
             )
 
-        onnxruntime_input = {
-            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
-        }
+        onnxruntime_input = {k: to_numpy(v) for k, v in torch_input.items()}
 
         onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
         torch.testing.assert_close(
@@ -986,10 +1009,8 @@ class TestONNXExport:
         x = torch.randn(3)
         y = torch.randn(3)
         torch_input = {"x": x, "y": y}
-        torch.onnx.dynamo_export(tdm, x=x, y=y)
-        onnx_program = torch.onnx.dynamo_export(tdm, **torch_input)
-
-        onnx_input = onnx_program.adapt_torch_inputs_to_onnx(**torch_input)
+        torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
+        onnx_program = torch.onnx.export(tdm, kwargs=torch_input, dynamo=True)
 
         path = Path(tmpdir) / "file.onnx"
         onnx_program.save(str(path))
@@ -1006,9 +1027,7 @@ class TestONNXExport:
                 else tensor.cpu().numpy()
             )
 
-        onnxruntime_input = {
-            k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
-        }
+        onnxruntime_input = {k: to_numpy(v) for k, v in torch_input.items()}
 
         onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
         torch.testing.assert_close(
@@ -1247,7 +1266,7 @@ class TestCompileNontensor:
     # Same issue with the decorator @tensorclass version
     @pytest.fixture(scope="class")
     def data(self):
-        return torch.zeros((4, 3), device="cuda")
+        return torch.zeros((4, 3), device=cur_device)
 
     class TensorClassWithNonTensorData(TensorClass["nocast"]):
         tensor: torch.Tensor
@@ -1265,13 +1284,13 @@ class TestCompileNontensor:
 
     def fn_with_device(self, data):
         a = self.TensorClassWithNonTensorData(
-            tensor=data, non_tensor_data=1, batch_size=[4], device="cuda"
+            tensor=data, non_tensor_data=1, batch_size=[4], device=cur_device
         )
         return a.tensor
 
     def fn_with_device_without_batch_size(self, data):
         a = self.TensorClassWithNonTensorData(
-            tensor=data, non_tensor_data=1, device="cuda"
+            tensor=data, non_tensor_data=1, device=cur_device
         )
         return a.tensor
 

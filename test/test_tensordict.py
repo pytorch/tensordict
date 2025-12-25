@@ -2957,13 +2957,9 @@ class TestGeneric:
             td.split(1, 2)
         with pytest.raises(IndexError, match="Incompatible dim"):
             td.split(1, -3)
-        with pytest.raises(
-            RuntimeError, match="split_size must be a positive integer, but got 0."
-        ):
+        with pytest.raises(ValueError, match="split_size must be positive, got 0."):
             td.split(0, -1)
-        with pytest.raises(
-            RuntimeError, match="split_size must be a positive integer, but got -1."
-        ):
+        with pytest.raises(ValueError, match="split_size must be positive, got -1."):
             td.split(-1, -1)
 
     def test_split_with_negative_dim(self):

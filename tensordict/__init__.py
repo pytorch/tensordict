@@ -73,12 +73,28 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from tensordict._pytree import *
-from tensordict.nn import as_tensordict_module, TensorDictParams
+from tensordict.nn import (
+    as_tensordict_module,
+    TensorClassModuleBase,
+    TensorClassModuleWrapper,
+    TensorDictParams,
+)
 
+__version__ = None  # type: ignore
 try:
-    from tensordict._version import __version__  # @manual=//pytorch/tensordict:version
-except ImportError:
-    __version__ = None  # type: ignore
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("tensordict")
+except Exception:
+    try:
+        from tensordict._version import (
+            __version__,
+        )  # @manual=//pytorch/tensordict:version
+    except ImportError:
+        __version__ = None  # type: ignore
 
 __all__ = [
     # Core classes
@@ -149,6 +165,8 @@ __all__ = [
     "NonTensorStack",
     # NN imports
     "as_tensordict_module",
+    "TensorClassModuleBase",
+    "TensorClassModuleWrapper",
     "TensorDictParams",
     # Version
     "__version__",

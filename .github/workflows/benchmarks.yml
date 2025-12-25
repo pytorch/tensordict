@@ -79,7 +79,10 @@ jobs:
           uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu126
           uv pip install "pybind11[global]" "setuptools" "wheel" "ninja"
           uv pip install pytest pytest-benchmark
-          uv pip install -e .
+          # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
+          # that was explicitly installed above, and avoid any solver replacing it.
+          uv pip install -e . --no-deps
+          uv run --active python -c "import torch; print(torch.__version__); assert 'dev' in torch.__version__, 'Expected a PyTorch nightly build'"
           ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'
@@ -162,8 +165,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Use regular comments instead of PR reviews to avoid permission issues
-          comment-style: 'github'
 
       - name: Store GPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
@@ -179,5 +180,3 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Use regular comments instead of PR reviews to avoid permission issues
-          comment-style: 'github'

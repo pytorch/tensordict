@@ -21,6 +21,11 @@ sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+pytestmark = pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.compile is not supported on python 3.14+ ",
+)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def auto_device():

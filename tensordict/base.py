@@ -3379,6 +3379,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Returns a tensordict containing the .data attributes of the leaf tensors."""
         return self._data()
 
+    @data.setter
+    def data(self, value: Self):
+        self._data_setter(value)
+
     @property
     def grad(self) -> Self:
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
@@ -8194,6 +8198,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
             propagate_lock=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
+
+    def _data_setter(self, value: Self):
+        keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        keys_self, vals_self = value._items_list(
+            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+        )
+        self_dict = dict(zip(keys_self, vals_self))
+        for key, val in zip(keys, vals):
+            val_self = self_dict[key]
+            if hasattr(val_self, "data"):
+                val_self.data = val
 
     @abc.abstractmethod
     def keys(

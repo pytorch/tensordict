@@ -1341,8 +1341,9 @@ class PersistentTensorDict(TensorDictBase):
                     "instead. Use `recurse=False` to keep track of the original data "
                     "with a new PersistentTensorDict instance."
                 )
-                tmpfile = tempfile.NamedTemporaryFile()
+                tmpfile = tempfile.NamedTemporaryFile(delete=False)
                 newfile = tmpfile.name
+                tmpfile.close()  # Close file handle before h5py opens it
             f_dest = h5py.File(newfile, "w", locking=self.LOCKING)
             f_src = self.file
             for key in self.keys(include_nested=True, leaves_only=True):

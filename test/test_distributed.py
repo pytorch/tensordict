@@ -11,6 +11,7 @@ import sys
 import pytest
 import torch
 from _pytest.fixtures import fixture
+from _utils_internal import is_npu_available
 from packaging import version
 
 from packaging.version import parse
@@ -81,6 +82,70 @@ class TestFSDP:
             init_method="tcp://localhost:10017",
         )
         torch.cuda.set_device(rank)
+        module = cls.make_module(rank)
+        dist.barrier()
+        # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
+        #     tdlogger.info(module.state_dict())
+
+        # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
+        td = TensorDict.from_module(module, use_state_dict=True)
+        if rank == 0:
+            td.memmap(path)
+        dist.destroy_process_group()
+
+    def test_fsdp_module(self, tmpdir):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            tdlogger.info("start method already set to", mp.get_start_method())
+        proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
+        proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
+        proc0.start()
+        proc1.start()
+        proc0.join(timeout=TIMEOUT)
+        proc1.join(timeout=TIMEOUT)
+        assert (TensorDict.load_memmap(tmpdir) == 1).all()
+
+
+@pytest.mark.skipif(
+    not is_npu_available() or not torch.npu.device_count() > 2,
+    reason="not enough npu devices",
+)
+class TestNPUFSDP:
+    class MyDModule(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(8, 8, bias=False)
+            self.fc2 = nn.Linear(8, 8, bias=False)
+            self.relu = nn.ReLU()
+            for p in self.parameters():
+                p.data.fill_(1.0)
+
+        def forward(self, input):
+            return self.relu(self.fc1(input) + self.fc2(input))
+
+    @classmethod
+    def make_module(cls, device=None):
+        with (
+            torch.device(f"npu:{device}") if device is not None else torch.device("npu")
+        ):
+            my_module = cls.MyDModule()
+            my_sharded_module = FSDP(my_module, device_id=device)
+        return my_sharded_module
+
+    @classmethod
+    def worker(cls, rank, path):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "10017"
+
+        torch.distributed.init_process_group(
+            "hccl",
+            rank=rank,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        torch.npu.set_device(rank)
         module = cls.make_module(rank)
         dist.barrier()
         # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)

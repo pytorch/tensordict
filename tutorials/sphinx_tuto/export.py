@@ -26,7 +26,6 @@ Key learnings
 
 - Executing a ``tensordict.nn`` module without :class:`~tensordict.TensorDict` inputs;
 - Selecting the output(s) of a model;
-- Handling stochastic models;
 - Exporting such model using `torch.export`;
 - Saving the model to a file;
 - Isolating the pytorch model;
@@ -37,48 +36,32 @@ import time
 
 import torch
 from tensordict.nn import (
-    InteractionType,
     NormalParamExtractor,
-    ProbabilisticTensorDictModule as Prob,
-    set_interaction_type,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from torch import distributions as dists, nn
+from torch import nn
 
 ##################################################
 # Designing the model
 # -------------------
 #
-# In many applications, it is useful to work with stochastic models, i.e., models that output a variable that is not
-# deterministically defined but that is sampled according to a parametric distribution. For instance, generative AI
-# models will often generate different outputs when the same input is provided, because they sample the output based
-# on a distribution which parameters are defined by the input.
+# Let us build a simple neural network using ``tensordict.nn``. The network will consist of:
 #
-# The ``tensordict`` library deals with this through the :class:`~tensordict.nn.ProbabilisticTensorDictModule` class.
-# This primitive is built using a distribution class (:class:`~torch.distributions.Normal` in our case) and an indicator
-# of the input keys that will be used at execution time to build that distribution.
+# - A linear layer mapping input to a hidden representation;
+# - A ReLU activation;
+# - A final linear layer producing the output.
 #
-# The network we are building is therefore going to be the combination of three main components:
-#
-# - A network mapping the input to a latent parameter;
-# - A :class:`tensordict.nn.NormalParamExtractor` module splitting the input in a location `"loc"` and `"scale"`
-#   parameters to be passed to the ``Normal`` distribution;
-# - A distribution constructor module.
+# We will also include a :class:`tensordict.nn.NormalParamExtractor` to demonstrate how to extract
+# multiple outputs from a single tensor.
 #
 model = Seq(
     # 1. A small network for embedding
     Mod(nn.Linear(3, 4), in_keys=["x"], out_keys=["hidden"]),
     Mod(nn.ReLU(), in_keys=["hidden"], out_keys=["hidden"]),
     Mod(nn.Linear(4, 4), in_keys=["hidden"], out_keys=["latent"]),
-    # 2. Extracting params
+    # 2. Extracting params (splits into loc and scale)
     Mod(NormalParamExtractor(), in_keys=["latent"], out_keys=["loc", "scale"]),
-    # 3. Probabilistic module
-    Prob(
-        in_keys=["loc", "scale"],
-        out_keys=["sample"],
-        distribution_class=dists.Normal,
-    ),
 )
 
 ##################################################
@@ -107,7 +90,7 @@ print(model(x=x))
 
 from torch.export import export
 
-model_export = export(model, args=(), kwargs={"x": x}, strict=True)
+model_export = export(model, args=(), kwargs={"x": x})
 
 ##################################################
 # Let us look at the module:
@@ -173,7 +156,7 @@ print("exported module with nested input:", model_nested_export.module())
 # impact on memory of registering intermediate values is negligible since they are part of the computational graph
 # used by ``torch.autograd`` to compute the parameter gradients.
 #
-# During inference, though, we most likely are only interested in the final sample of the model.
+# During inference, though, we most likely are only interested in specific outputs of the model.
 # Because we want to extract the model for usages that are independent of the ``tensordict`` library, it makes sense to
 # isolate the only output we desire.
 # To do this, we have several options:
@@ -184,53 +167,20 @@ print("exported module with nested input:", model_nested_export.module())
 #    attribute in-place (this can be reverted through :meth:`~tensordict.nn.TensorDictModule.reset_out_keys`).
 # 3. Wrap the existing instance in a :meth:`~tensordict.nn.TensorDictSequential` that will filter out the unwanted keys:
 #
-#     >>> module_filtered = Seq(module, selected_out_keys=["sample"])
+#     >>> module_filtered = Seq(module, selected_out_keys=["loc"])
 #
 # Let us test the model after selecting its output keys.
-# When an `x` input is provided, we expect our model to output a single tensor corresponding to a sample of the
-# distribution:
+# When an `x` input is provided, we expect our model to output a single tensor corresponding to the `"loc"` output:
 
-model.select_out_keys("sample")
+model.select_out_keys("loc")
 print(model(x=x))
 
 ##################################################
-# We see that the output is now a single tensor, corresponding to the sample of the distribution.
+# We see that the output is now a single tensor.
 # We can create a new exported graph from this. Its computational graph should be simplified:
 
 model_export = export(model, args=(), kwargs={"x": x})
 print("module:", model_export.module())
-
-##################################################
-# Controlling the Sampling Strategy
-# ---------------------------------
-#
-# We have not yet discussed how the :class:`~tensordict.nn.ProbabilisticTensorDictModule` samples from the distribution.
-# By sampling, we mean obtaining a value within the space defined by the distribution according to a specific strategy.
-# For instance, one may desire to get stochastic samples during training but deterministic samples (e.g., the mean or
-# the mode) at inference time. To address this, ``tensordict`` utilizes the :class:`~tensordict.nn.set_interaction_type`
-# decorator and context manager, which accepts ``InteractionType`` Enum inputs:
-#
-#   >>> with set_interaction_type(InteractionType.MEAN):
-#   ...     output = module(input)  # takes the input of the distribution, if ProbabilisticTensorDictModule is invoked
-#
-# The default ``InteractionType`` is ``InteractionType.DETERMINISTIC``, which, if not implemented directly, is either
-# the mean of distributions with a real domain, or the mode of distributions with a discrete domain. This default value
-# can be changed using the ``default_interaction_type`` keyword argument of ``ProbabilisticTensorDictModule``.
-#
-# Let us recap: to control the sampling strategy of our network, we can either define a default sampling strategy in the
-# constructor, or override it at runtime through the ``set_interaction_type`` context manager.
-#
-# As we can see from the following example, ``torch.export`` respond correctly to the usage of the decorator: if we ask for
-# a random sample, the output is different than if we ask for the mean:
-#
-
-with set_interaction_type(InteractionType.RANDOM):
-    model_export = export(model, args=(), kwargs={"x": x})
-    print(model_export.module())
-
-with set_interaction_type(InteractionType.MEAN):
-    model_export = export(model, args=(), kwargs={"x": x})
-    print(model_export.module())
 
 ##################################################
 # This is all you need to know to use ``torch.export``. Please refer to the

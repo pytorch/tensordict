@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.usort]
 first_party_detection = false
-target-version = ["py39"]
+target-version = ["py310"]
 excludes = [
     "gallery",
     "tutorials",
@@ -12,7 +12,7 @@ excludes = [
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [project]
 name = "tensordict"
@@ -23,9 +23,8 @@ authors = [
 ]
 readme = "README.md"
 license = { text = "BSD" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -58,6 +57,7 @@ tests = [
 h5 = ["h5py>=3.8"]
 dev = ["pybind11", "ninja"]
 typecheck = ["mypy>=1.0.0"]
+onnx = ["onnx", "onnxscript", "onnxruntime"]
 
 [tool.setuptools]
 include-package-data = false
@@ -74,8 +74,10 @@ exclude = ["test*", "tutorials*", "packaging*", "gallery*", "docs*", "benchmarks
 [tool.setuptools_scm]
 # Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases
 version_scheme = "post-release"
-local_scheme = "node-and-date"
+# Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
+local_scheme = "no-local-version"
 version_file = "tensordict/_version.py"
+fallback_version = "0.10.0"
 
 [tool.mypy]
 files = "tensordict"
