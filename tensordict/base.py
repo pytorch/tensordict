@@ -11094,7 +11094,34 @@ class TensorDictBase(MutableMapping, TensorCollection):
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
+    @implement_for("torch", None, "2.5")
     def _clone_recurse(self) -> Self:  # noqa: D417
+        keys, vals = self._items_list(True, True)
+        items = dict(
+            _zip_strict(
+                keys,
+                (val.clone() if hasattr(val, "clone") else val for val in vals),
+            )
+        )
+
+        def pop(name, val):
+            return items.pop(name, None)
+
+        result = self._fast_apply(
+            pop,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=False,
+            filter_empty=False,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
+
+    @implement_for("torch", "2.5")
+    def _clone_recurse(self) -> Self:  # noqa: F811, D417
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}
