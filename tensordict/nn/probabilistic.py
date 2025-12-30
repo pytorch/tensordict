@@ -820,6 +820,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             Otherwise, only the last module will be used to build the distribution.
             Defaults to ``True`` whenever there are more than one probabilistic modules or the last module is not probabilistic.
             Errors if `return_composite` is `False` and the neither of the above conditions are met.
+        selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
+            ``out_keys`` will be written.
         inplace (bool, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
             :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
             output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
@@ -958,6 +960,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
         *,
+        selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None: ...
 
@@ -968,6 +971,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
         *,
+        selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None: ...
 
@@ -976,6 +980,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
+        selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None:
         if len(modules) == 0:
@@ -1048,7 +1053,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
-        super().__init__(*modules, partial_tolerant=partial_tolerant, inplace=inplace)
+        super().__init__(
+            *modules,
+            partial_tolerant=partial_tolerant,
+            selected_out_keys=selected_out_keys,
+            inplace=inplace,
+        )
         self.return_composite = return_composite
 
     def __getitem__(self, index: int | slice | str) -> Self | TensorDictModuleBase:
