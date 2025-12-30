@@ -3223,7 +3223,7 @@ class LinkedList(list):
 
 
 # register LinkedList in PyTree
-@implement_for("torch", "2.2", None)
+@implement_for("torch", "2.5", None)
 def _register_pytree_node():
     torch.utils._pytree.register_pytree_node(
         LinkedList,
@@ -3234,7 +3234,7 @@ def _register_pytree_node():
     )
 
 
-@implement_for("torch", None, "2.2")
+@implement_for("torch", None, "2.5")
 def _register_pytree_node():  # noqa: F811 # type: ignore
     pass
 
