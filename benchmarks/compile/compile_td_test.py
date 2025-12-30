@@ -19,6 +19,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _skip_compile_on_macos(mode: str) -> None:
+    # macOS CI has shown hard aborts in torch.compile/inductor paths (exit code 134).
+    if sys.platform == "darwin" and mode.startswith("compile"):
+        pytest.skip("Skipping torch.compile benchmarks on macOS (can hard-abort).")
+
+
 @tensorclass
 class MyTensorClass:
     a: torch.Tensor
@@ -119,6 +125,7 @@ def get_flat_tc():
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_add_one_nested(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(add_one, fullgraph=True, mode="reduce-overhead")
@@ -143,6 +150,7 @@ def test_compile_add_one_nested(mode, dict_type, benchmark):
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_nested(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(copy, fullgraph=True, mode="reduce-overhead")
@@ -167,6 +175,7 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_one_flat(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(add_one, fullgraph=True, mode="reduce-overhead")
@@ -196,6 +205,7 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_self_flat(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(add_self, fullgraph=True, mode="reduce-overhead")
@@ -228,6 +238,7 @@ def test_compile_add_self_flat(mode, dict_type, benchmark):
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_flat(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(copy, fullgraph=True, mode="reduce-overhead")
@@ -258,6 +269,7 @@ def test_compile_copy_flat(mode, dict_type, benchmark):
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_assign_and_add(mode, dict_type, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = TensorDict(device=device)
     if dict_type == "tensordict":
@@ -291,6 +303,7 @@ def test_compile_assign_and_add(mode, dict_type, benchmark):
 )
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 def test_compile_assign_and_add_stack(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = LazyStackedTensorDict(TensorDict(device=device), TensorDict(device=device))
     if mode == "compile":
@@ -313,6 +326,7 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 @pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 @pytest.mark.parametrize("index_type", ["tensor", "slice", "int"])
 def test_compile_indexing(mode, dict_type, index_type, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = TensorDict(
         {

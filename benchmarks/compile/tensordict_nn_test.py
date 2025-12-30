@@ -27,6 +27,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _skip_compile_on_macos(mode: str) -> None:
+    # macOS CI has shown hard aborts in torch.compile/inductor paths (exit code 134).
+    if sys.platform == "darwin" and mode.startswith("compile"):
+        pytest.skip("Skipping torch.compile benchmarks on macOS (can hard-abort).")
+
+
 @pytest.fixture(scope="function", autouse=True)
 def auto_device():
     device = torch.get_default_device()
@@ -71,6 +77,7 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_add(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
     module = Mod(lambda x: x + 1, in_keys=["a"], out_keys=[("c", "d")])
@@ -88,6 +95,7 @@ def test_mod_add(mode, benchmark):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -106,6 +114,7 @@ def test_mod_wrap(mode, benchmark):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap_and_backward(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -132,6 +141,7 @@ def test_mod_wrap_and_backward(mode, benchmark):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
 
@@ -159,6 +169,7 @@ def test_seq_add(mode, benchmark):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -194,6 +205,7 @@ def test_seq_wrap(mode, benchmark):
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -236,6 +248,7 @@ def test_seq_wrap_and_backward(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -272,6 +285,7 @@ def test_func_call_runtime(mode, functional, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_cm_runtime(mode, functional, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -312,6 +326,7 @@ def test_func_call_cm_runtime(mode, functional, benchmark):
     "functional,plain_decorator", [[False, None], [True, False], [True, True]]
 )
 def test_func_call_runtime_and_backward(mode, functional, plain_decorator, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -364,6 +379,7 @@ def test_func_call_runtime_and_backward(mode, functional, plain_decorator, bench
 
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_vmap_func_call_cm_runtime(mode, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -394,6 +410,7 @@ def test_vmap_func_call_cm_runtime(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("plain_decorator", [None, False, True])
 def test_vmap_func_call_runtime_and_backward(mode, plain_decorator, benchmark):
+    _skip_compile_on_macos(mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
