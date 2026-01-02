@@ -58,6 +58,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _UNSET,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -1667,24 +1668,25 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
-    try:
-        return self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
-    except KeyError:
-        try:
-            return self._non_tensordict[item]
-        except KeyError:
-            out = getattr(self._tensordict, item, NO_DEFAULT)
-            if out is not NO_DEFAULT:
-                if not callable(out) and not is_non_tensor(out):
-                    return out
-                if is_non_tensor(out):
-                    return (
-                        out.data
-                        if hasattr(out, "data")
-                        else out.tolist(as_linked_list=True)
-                    )
-                return _wrap_method(self, item, out)
-            raise AttributeError(item)
+    # Use _UNSET sentinel instead of try/except for torch.compile compatibility
+    out = self._tensordict._get_str(item, _UNSET, **kwargs)
+    if out is not _UNSET:
+        return out
+    out = self._non_tensordict.get(item, _UNSET)
+    if out is not _UNSET:
+        return out
+    out = getattr(self._tensordict, item, NO_DEFAULT)
+    if out is not NO_DEFAULT:
+        if not callable(out) and not is_non_tensor(out):
+            return out
+        if is_non_tensor(out):
+            return (
+                out.data
+                if hasattr(out, "data")
+                else out.tolist(as_linked_list=True)
+            )
+        return _wrap_method(self, item, out)
+    raise AttributeError(item)
 
 
 def _getattr(self, item: str, **kwargs) -> Any:
