@@ -2864,10 +2864,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @lock_blocked
     def del_(self, key: NestedKey, **kwargs: Any) -> Self:
+        # Use check-before-delete pattern for torch.compile compatibility
+        key_tuple = _unravel_key_to_tuple(key)
+        is_nested = len(key_tuple) > 1
         ids = set()
         cur_len = len(ids)
         is_deleted = False
-        error = None
         for td in self.tensordicts:
             # checking that the td has not been processed yet.
             # It could be that not all sub-tensordicts have the appropriate
@@ -2878,15 +2880,17 @@ class LazyStackedTensorDict(TensorDictBase):
             if new_cur_len == cur_len:
                 continue
             cur_len = new_cur_len
-            try:
-                td.del_(key, **kwargs)
-                is_deleted = True
-            except KeyError as err:
-                error = err
-                continue
+            if key_tuple[0] in td.keys():
+                if is_nested:
+                    # For nested keys, check the full path exists
+                    if key in td.keys(True):
+                        td.del_(key, **kwargs)
+                        is_deleted = True
+                else:
+                    td.del_(key, **kwargs)
+                    is_deleted = True
         if not is_deleted:
-            # we know err is defined because LazyStackedTensorDict cannot be empty
-            raise error
+            raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
         return self
 
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
