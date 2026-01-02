@@ -267,7 +267,9 @@ class TestTD:
             return td.pop("missing", None)
 
         pop_existing_c = torch.compile(pop_existing, fullgraph=True, mode=mode)
-        pop_missing_c = torch.compile(pop_missing_with_default, fullgraph=True, mode=mode)
+        pop_missing_c = torch.compile(
+            pop_missing_with_default, fullgraph=True, mode=mode
+        )
 
         # Test pop existing key
         data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
