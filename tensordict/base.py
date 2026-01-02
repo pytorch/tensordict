@@ -152,13 +152,21 @@ except ImportError:
         return device_module
 
 
-# NO_DEFAULT is used as a placeholder whenever the default is not provided.
-# Using None is not an option since `td.get(key)` is a valid usage.
+# NO_DEFAULT is a sentinel value used to detect when a default argument was not provided.
+# Using None is not an option since `td.get(key)` (returning None) is a valid usage.
+# When passed to methods like `get()`, it signals "raise KeyError if key is missing"
+# rather than returning a default value.
 class _NoDefault(enum.IntEnum):
     ZERO = 0
 
 
 NO_DEFAULT = _NoDefault.ZERO
+
+# _UNSET is a sentinel used in pop() to detect if a key exists without try/except.
+# Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
+# to indicate a missing key. This makes pop() compatible with torch.compile.
+_UNSET = object()
+
 T = TypeVar("T", bound="TensorCollection")
 
 
@@ -8292,19 +8300,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
         key = _unravel_key_to_tuple(key)
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        try:
-            # using try/except for get/del is suboptimal, but
-            # this is faster that checkink if key in self keys
-            out = self.get(key, default)
-            self.del_(key)
-        except KeyError as err:
-            # if default provided, 'out' value will return, else raise error
+        # Use _UNSET sentinel to detect if key exists without try/except (compile-friendly)
+        out = self.get(key, _UNSET)
+        if out is _UNSET:
+            # Key not found
             if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value. "
                     f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
-                ) from err
+                )
+            return default
+        self.del_(key)
         return out
 
     @property
