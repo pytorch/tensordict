@@ -2890,9 +2890,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     td.del_(key, **kwargs)
                     is_deleted = True
         if not is_deleted:
-            raise KeyError(
-                f"Key {key} not found in any of the stacked tensordicts."
-            )
+            raise KeyError(f"Key {key} not found in any of the stacked tensordicts.")
         return self
 
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
