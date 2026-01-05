@@ -335,6 +335,23 @@ def _reverse_flipud(self, args, kwargs, out):
 LAST_OP_MAPS["flipud"] = _reverse_flipud
 
 
+def _reverse_roll(self, args, kwargs, out):
+    # Reverse of roll(shifts, dims) is roll(-shifts, dims)
+    shifts = args[0] if args else kwargs.get("shifts")
+    dims = args[1] if len(args) > 1 else kwargs.get("dims")
+    if isinstance(shifts, int):
+        neg_shifts = -shifts
+    else:
+        neg_shifts = tuple(-s for s in shifts)
+    if not out.is_locked:
+        return out.update(self.roll(neg_shifts, dims), inplace=False)
+    else:
+        return out.update_(self.roll(neg_shifts, dims))
+
+
+LAST_OP_MAPS["roll"] = _reverse_roll
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
