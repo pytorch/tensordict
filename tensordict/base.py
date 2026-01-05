@@ -5033,6 +5033,55 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # Alias for movedim (matching torch.moveaxis)
     moveaxis = movedim
 
+    @_as_context_manager()
+    def flip(self, dims: int | tuple[int, ...]):
+        """Reverse the order of elements in the tensordict along the given dimensions.
+
+        The shape of the tensordict is preserved, but the elements are reordered.
+
+        Args:
+            dims (int or tuple of ints): Dimensions to flip.
+
+        Returns:
+            a new tensordict with the dimensions flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flip(0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Validate dimensions
+        for d in dims:
+            if d < 0 or d >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {d})"
+                )
+
+        def _flip(tensor):
+            return tensor.flip(dims)
+
+        result = self._fast_apply(
+            _flip,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

@@ -96,6 +96,11 @@ def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.flatten(*args, **kwargs)
 
 
+@implements_for_td(torch.flip)
+def _flip(td: T, dims: Sequence[int]) -> T:
+    return td.flip(dims)
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)

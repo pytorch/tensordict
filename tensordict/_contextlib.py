@@ -301,6 +301,18 @@ LAST_OP_MAPS["movedim"] = _reverse_movedim
 LAST_OP_MAPS["moveaxis"] = _reverse_movedim
 
 
+def _reverse_flip(self, args, kwargs, out):
+    # Flip is its own inverse
+    dims = args[0] if args else kwargs.get("dims")
+    if not out.is_locked:
+        return out.update(self.flip(dims), inplace=False)
+    else:
+        return out.update_(self.flip(dims))
+
+
+LAST_OP_MAPS["flip"] = _reverse_flip
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
