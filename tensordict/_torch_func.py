@@ -101,6 +101,16 @@ def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)
 
 
+@implements_for_td(torch.swapaxes)
+def _swapaxes(td: T, axis0: int, axis1: int) -> T:
+    return td.swapaxes(axis0, axis1)
+
+
+@implements_for_td(torch.swapdims)
+def _swapdims(td: T, dim0: int, dim1: int) -> T:
+    return td.swapdims(dim0, dim1)
+
+
 @implements_for_td(torch.gather)
 def _gather(
     input: T,
