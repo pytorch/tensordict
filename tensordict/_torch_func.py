@@ -96,9 +96,41 @@ def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.flatten(*args, **kwargs)
 
 
+@implements_for_td(torch.flip)
+def _flip(td: T, dims: Sequence[int]) -> T:
+    return td.flip(dims)
+
+
+@implements_for_td(torch.fliplr)
+def _fliplr(td: T) -> T:
+    return td.fliplr()
+
+
+@implements_for_td(torch.flipud)
+def _flipud(td: T) -> T:
+    return td.flipud()
+
+
+@implements_for_td(torch.roll)
+def _roll(
+    td: T, shifts: int | Sequence[int], dims: int | Sequence[int] | None = None
+) -> T:
+    return td.roll(shifts, dims)
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)
+
+
+@implements_for_td(torch.swapaxes)
+def _swapaxes(td: T, axis0: int, axis1: int) -> T:
+    return td.swapaxes(axis0, axis1)
+
+
+@implements_for_td(torch.swapdims)
+def _swapdims(td: T, dim0: int, dim1: int) -> T:
+    return td.swapdims(dim0, dim1)
 
 
 @implements_for_td(torch.gather)
