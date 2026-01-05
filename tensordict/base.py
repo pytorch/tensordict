@@ -4925,6 +4925,91 @@ class TensorDictBase(MutableMapping, TensorCollection):
             inv_op_kwargs={"dims": list(map(int, dims_list))},
         )
 
+    @_as_context_manager()
+    def movedim(
+        self, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+    ):
+        """Moves the dimension(s) of input at the position(s) in source to the position(s) in destination.
+
+        Other dimensions of input that are not explicitly moved remain in their
+        original order and appear at the positions not specified in destination.
+
+        Args:
+            source (int or tuple of ints): Original positions of the dims to move.
+                These must be unique.
+            destination (int or tuple of ints): Destination positions for each of
+                the original dims. These must also be unique.
+
+        Returns:
+            a new tensordict with the batch dimensions moved to the desired positions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
+            >>> print(td.movedim(0, 1).shape)
+            torch.Size([4, 3])
+            >>> print(td.movedim((0, 1), (1, 0)).shape)
+            torch.Size([4, 3])
+        """
+        ndim = self.ndim
+
+        # Normalize source and destination to tuples
+        if isinstance(source, int):
+            source = (source,)
+        if isinstance(destination, int):
+            destination = (destination,)
+
+        if len(source) != len(destination):
+            raise ValueError(
+                f"movedim: source and destination must have the same number of elements, "
+                f"got {len(source)} and {len(destination)}"
+            )
+
+        # Normalize negative indices
+        source = tuple(s if s >= 0 else ndim + s for s in source)
+        destination = tuple(d if d >= 0 else ndim + d for d in destination)
+
+        # Validate indices
+        for s in source:
+            if s < 0 or s >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {s})"
+                )
+        for d in destination:
+            if d < 0 or d >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {d})"
+                )
+
+        # Check for duplicates
+        if len(set(source)) != len(source):
+            raise RuntimeError("movedim: repeated dim in source")
+        if len(set(destination)) != len(destination):
+            raise RuntimeError("movedim: repeated dim in destination")
+
+        # Fast path: if source == destination, return self
+        if source == destination:
+            return self
+
+        # Convert movedim to permute dims
+        # Build the permutation by:
+        # 1. Create list of dims not in source
+        # 2. Insert source dims at destination positions
+        remaining_dims = [i for i in range(ndim) if i not in source]
+
+        # Sort source by destination to insert in correct order
+        sorted_pairs = sorted(zip(destination, source))
+        perm = list(remaining_dims)
+        for dest, src in sorted_pairs:
+            perm.insert(dest, src)
+
+        result = self._permute(perm)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    # Alias for movedim (matching torch.moveaxis)
+    moveaxis = movedim
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

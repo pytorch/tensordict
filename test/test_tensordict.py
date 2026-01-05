@@ -2465,6 +2465,103 @@ class TestGeneric:
         assert td1.shape == torch.Size((6, 5, 4))
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 9, device=device),
+            "b": torch.randn(4, 5, 6, 7, device=device),
+            "c": torch.randn(4, 5, 6, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test single dim move
+        td2 = td1.movedim(0, 2)
+        assert td2.shape == torch.Size((5, 6, 4))
+        assert td2["a"].shape == torch.Size((5, 6, 4, 9))
+
+        # Verify matches torch.movedim behavior
+        assert td2["a"].shape == torch.movedim(d["a"], 0, 2).shape
+
+        # Test with negative indices
+        td3 = td1.movedim(-1, 0)
+        assert td3.shape == torch.Size((6, 4, 5))
+        assert td3["c"].shape == torch.Size((6, 4, 5))
+
+        # Test torch.movedim
+        td4 = torch.movedim(td1, 0, 2)
+        assert td4.shape == torch.Size((5, 6, 4))
+
+        # Test tuple dims
+        td5 = td1.movedim((0, 1), (2, 0))
+        assert td5.shape == torch.Size((5, 6, 4))
+        t_ref = torch.movedim(d["a"], (0, 1), (2, 0))
+        assert td5["a"].shape == t_ref.shape
+
+        # Test identity
+        td6 = td1.movedim(1, 1)
+        assert td6 is td1
+
+        # Test moveaxis alias
+        td7 = td1.moveaxis(0, 2)
+        assert td7.shape == torch.Size((5, 6, 4))
+
+        td8 = torch.moveaxis(td1, 0, 2)
+        assert td8.shape == torch.Size((5, 6, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim_exceptions(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 7, device=device),
+            "b": torch.randn(4, 5, 6, 8, 9, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test out of range
+        with pytest.raises(IndexError):
+            td1.movedim(0, 5)
+
+        with pytest.raises(IndexError):
+            td1.movedim(5, 0)
+
+        # Test duplicate source
+        with pytest.raises(RuntimeError, match="repeated dim in source"):
+            td1.movedim((0, 0), (1, 2))
+
+        # Test duplicate destination
+        with pytest.raises(RuntimeError, match="repeated dim in destination"):
+            td1.movedim((0, 1), (2, 2))
+
+        # Test mismatched lengths
+        with pytest.raises(ValueError, match="same number of elements"):
+            td1.movedim((0,), (1, 2))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim_with_tensordict_operations(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(20, 6, 9, device=device),
+            "b": torch.randn(20, 6, 7, device=device),
+            "c": torch.randn(20, 6, device=device),
+        }
+        # Test with view
+        td1 = TensorDict(batch_size=(20, 6), source=d).view(4, 5, 6).movedim(0, 2)
+        assert td1.shape == torch.Size((5, 6, 4))
+
+        # Test with stacked tensordict
+        d2 = {
+            "a": torch.randn(4, 5, 9, device=device),
+            "b": torch.randn(4, 5, 7, device=device),
+            "c": torch.randn(4, 5, device=device),
+        }
+        td2 = stack_td(
+            [TensorDict(batch_size=(4, 5), source=d2).clone() for _ in range(6)],
+            2,
+            contiguous=False,
+        ).movedim(0, 2)
+        assert td2.shape == torch.Size((5, 6, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8097,6 +8194,77 @@ class TestTensorDicts(TestTensorDictsBase):
                 tdt.apply_(lambda x: x * 0 + 1)
             else:
                 tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_movedim(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec:
+            td_moved = td.movedim(0, -1)
+        if is_lazy:
+            return
+        expected_shape = torch.Size([*td.shape[1:], td.shape[0]])
+        assert td_moved.shape == expected_shape
+        for key, value in td_moved.items(True):
+            original_value = td.get(key)
+            assert value.shape == torch.Size(
+                [
+                    *original_value.shape[1 : td.ndim],
+                    original_value.shape[0],
+                    *original_value.shape[td.ndim :],
+                ]
+            )
+
+        # Test with tuple dims
+        with error_dec:
+            td_moved2 = td.movedim((0, 1), (1, 0))
+        if is_lazy:
+            return
+        expected_shape2 = torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        assert td_moved2.shape == expected_shape2
+
+        # Test out of range error
+        with pytest.raises(IndexError):
+            td.movedim(0, td.ndim + 5)
+        with pytest.raises(IndexError):
+            td.movedim(td.ndim + 5, 0)
+
+    @set_lazy_legacy(False)
+    def test_movedim_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().movedim(0, -1) as td_moved:
+            if not td_moved.requires_grad:
+                td_moved.apply_(lambda x: x * 0 + 1)
+            else:
+                td_moved.apply(lambda x: x.data.mul_(0).add_(1))
         if is_lazy:
             return
         assert (td == 1).all()

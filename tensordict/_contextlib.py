@@ -282,6 +282,23 @@ def _reverse_permute(self, args, kwargs, out):
 LAST_OP_MAPS["permute"] = _reverse_permute
 
 
+def _reverse_movedim(self, args, kwargs, out):
+    # Reverse of movedim(source, destination) is movedim(destination, source)
+    if len(args) >= 2:
+        source, destination = args[0], args[1]
+    else:
+        source = args[0] if args else kwargs.get("source")
+        destination = kwargs.get("destination")
+    if not out.is_locked:
+        return out.update(self.movedim(destination, source), inplace=False)
+    else:
+        return out.update_(self.movedim(destination, source))
+
+
+LAST_OP_MAPS["movedim"] = _reverse_movedim
+LAST_OP_MAPS["moveaxis"] = _reverse_movedim
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
