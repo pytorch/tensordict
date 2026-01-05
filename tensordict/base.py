@@ -4820,6 +4820,29 @@ class TensorDictBase(MutableMapping, TensorCollection):
             inv_op_kwargs={"dim0": dim0, "dim1": dim1},
         )
 
+    @_as_context_manager()
+    def swapaxes(self, axis0: int, axis1: int):
+        """Interchange two axes of the tensordict.
+
+        This is an alias for :meth:`~.transpose`.
+
+        Args:
+            axis0 (int): First axis.
+            axis1 (int): Second axis.
+
+        Returns:
+            a new tensordict with the axes swapped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
+            >>> print(td.swapaxes(0, 1).shape)
+            torch.Size([4, 3])
+        """
+        return self.transpose(axis0, axis1)
+
+    # Alias for swapaxes (matching torch.swapdims)
+    swapdims = swapaxes
+
     @overload
     def permute(self, *dims: int): ...
 
@@ -5009,6 +5032,214 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     # Alias for movedim (matching torch.moveaxis)
     moveaxis = movedim
+
+    @_as_context_manager()
+    def flip(self, dims: int | tuple[int, ...]):
+        """Reverse the order of elements in the tensordict along the given dimensions.
+
+        The shape of the tensordict is preserved, but the elements are reordered.
+
+        Args:
+            dims (int or tuple of ints): Dimensions to flip.
+
+        Returns:
+            a new tensordict with the dimensions flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flip(0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Validate dimensions
+        for d in dims:
+            if d < 0 or d >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {d})"
+                )
+
+        def _flip(tensor):
+            return tensor.flip(dims)
+
+        result = self._fast_apply(
+            _flip,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    @_as_context_manager()
+    def fliplr(self):
+        """Flip the tensordict in the left/right direction.
+
+        Flip the entries in each row in the left/right direction.
+        Columns are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 2 batch dimensions.
+
+        Returns:
+            a new tensordict with the second dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.fliplr()["a"])
+            tensor([[2, 1, 0],
+                    [5, 4, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("fliplr requires at least 2 batch dimensions")
+        return self.flip(1)
+
+    @_as_context_manager()
+    def flipud(self):
+        """Flip the tensordict in the up/down direction.
+
+        Flip the entries in each column in the up/down direction.
+        Rows are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 1 batch dimension.
+
+        Returns:
+            a new tensordict with the first dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flipud()["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if self.ndim < 1:
+            raise RuntimeError("flipud requires at least 1 batch dimension")
+        return self.flip(0)
+
+    @_as_context_manager()
+    def roll(self, shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None):
+        """Roll the tensordict along the given dimensions.
+
+        Elements that are shifted beyond the last position are re-introduced at
+        the first position.
+
+        Args:
+            shifts (int or tuple of ints): The number of places by which the elements
+                of the tensordict are shifted. If shifts is a tuple, dims must be a
+                tuple of the same size, and each dimension will be rolled by the
+                corresponding value.
+            dims (int or tuple of ints, optional): Axis along which to roll.
+                By default, the tensordict is flattened before rolling.
+
+        Returns:
+            a new tensordict with elements rolled.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.roll(1, 0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+
+        def _roll(tensor):
+            return tensor.roll(shifts, dims)
+
+        result = self._fast_apply(
+            _roll,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    @_as_context_manager()
+    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)):
+        """Rotate the tensordict by 90 degrees in the plane specified by dims.
+
+        Rotation direction is from the first towards the second axis.
+
+        Args:
+            k (int): Number of times to rotate. Default: 1.
+            dims (tuple of two ints): The plane to rotate in. Default: (0, 1).
+
+        Returns:
+            a new tensordict rotated by 90 degrees.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.rot90()["a"])
+            tensor([[2, 5],
+                    [1, 4],
+                    [0, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("rot90 requires at least 2 batch dimensions")
+        if len(dims) != 2:
+            raise RuntimeError("rot90 requires exactly 2 dims")
+
+        # Normalize dims
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Calculate new batch size
+        k = k % 4  # Normalize k to [0, 3]
+        if k == 0:
+            return self
+
+        batch_size = list(self.batch_size)
+        if k == 1 or k == 3:
+            batch_size[dims[0]], batch_size[dims[1]] = (
+                batch_size[dims[1]],
+                batch_size[dims[0]],
+            )
+
+        if self._has_names():
+            names = list(self.names)
+            if k == 1 or k == 3:
+                names[dims[0]], names[dims[1]] = names[dims[1]], names[dims[0]]
+        else:
+            names = None
+
+        def _rot90(tensor):
+            return tensor.rot90(k, dims)
+
+        result = self._fast_apply(
+            _rot90,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=names,
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
 
     # Cache functionality
     def _erase_cache(self):
