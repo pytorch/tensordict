@@ -101,6 +101,16 @@ def _flip(td: T, dims: Sequence[int]) -> T:
     return td.flip(dims)
 
 
+@implements_for_td(torch.fliplr)
+def _fliplr(td: T) -> T:
+    return td.fliplr()
+
+
+@implements_for_td(torch.flipud)
+def _flipud(td: T) -> T:
+    return td.flipud()
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)
