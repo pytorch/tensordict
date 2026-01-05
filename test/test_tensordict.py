@@ -2792,6 +2792,46 @@ class TestGeneric:
         assert td4.shape == torch.Size((4, 2, 3))
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_atleast_nd(self, device):
+        torch.manual_seed(1)
+
+        # Test atleast_1d
+        td0 = TensorDict({"a": torch.randn(3, device=device)}, batch_size=[])
+        td1 = td0.atleast_1d()
+        assert td1.ndim == 1
+        assert td1.shape == torch.Size([1])
+
+        td_1d = TensorDict({"a": torch.randn(3, device=device)}, batch_size=[3])
+        assert td_1d.atleast_1d() is td_1d  # No change needed
+
+        # Test atleast_2d
+        td2 = td_1d.atleast_2d()
+        assert td2.ndim == 2
+        assert td2.shape == torch.Size([1, 3])
+
+        td_2d = TensorDict({"a": torch.randn(2, 3, device=device)}, batch_size=[2, 3])
+        assert td_2d.atleast_2d() is td_2d  # No change needed
+
+        # Test atleast_3d
+        td3 = td_1d.atleast_3d()
+        assert td3.ndim == 3
+        assert td3.shape == torch.Size([1, 1, 3])
+
+        td3_from_2d = td_2d.atleast_3d()
+        assert td3_from_2d.ndim == 3
+        assert td3_from_2d.shape == torch.Size([1, 2, 3])
+
+        td_3d = TensorDict(
+            {"a": torch.randn(2, 3, 4, device=device)}, batch_size=[2, 3, 4]
+        )
+        assert td_3d.atleast_3d() is td_3d  # No change needed
+
+        # Test torch.atleast_*d
+        assert torch.atleast_1d(td0).shape == torch.Size([1])
+        assert torch.atleast_2d(td_1d).shape == torch.Size([1, 3])
+        assert torch.atleast_3d(td_1d).shape == torch.Size([1, 1, 3])
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8611,6 +8651,29 @@ class TestTensorDicts(TestTensorDictsBase):
         new_shape = (2,) + tuple(original_shape)
         td_broadcast2 = td.broadcast_to(new_shape)
         assert td_broadcast2.shape == torch.Size(new_shape)
+
+    @set_lazy_legacy(False)
+    def test_atleast_nd(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        original_ndim = td.ndim
+
+        # atleast_1d
+        td1 = td.atleast_1d()
+        assert td1.ndim >= 1
+        if original_ndim >= 1:
+            assert td1 is td
+
+        # atleast_2d
+        td2 = td.atleast_2d()
+        assert td2.ndim >= 2
+        if original_ndim >= 2:
+            assert td2 is td
+
+        # atleast_3d
+        td3 = td.atleast_3d()
+        assert td3.ndim >= 3
+        if original_ndim >= 3:
+            assert td3 is td
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

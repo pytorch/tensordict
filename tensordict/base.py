@@ -5376,6 +5376,71 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    @_as_context_manager()
+    def atleast_1d(self):
+        """Returns the tensordict with at least 1 batch dimension.
+
+        If the tensordict already has 1 or more batch dimensions, it is returned unchanged.
+        Otherwise, a dimension of size 1 is prepended.
+
+        Returns:
+            a tensordict with at least 1 batch dimension.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[])
+            >>> print(td.atleast_1d().shape)
+            torch.Size([1])
+        """
+        if self.ndim >= 1:
+            return self
+        return self.unsqueeze(0)
+
+    @_as_context_manager()
+    def atleast_2d(self):
+        """Returns the tensordict with at least 2 batch dimensions.
+
+        If the tensordict already has 2 or more batch dimensions, it is returned unchanged.
+        Otherwise, dimensions of size 1 are prepended to reach 2 dimensions.
+
+        Returns:
+            a tensordict with at least 2 batch dimensions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+            >>> print(td.atleast_2d().shape)
+            torch.Size([1, 3])
+        """
+        if self.ndim >= 2:
+            return self
+        elif self.ndim == 1:
+            return self.unsqueeze(0)
+        else:
+            return self.unsqueeze(0).unsqueeze(0)
+
+    @_as_context_manager()
+    def atleast_3d(self):
+        """Returns the tensordict with at least 3 batch dimensions.
+
+        If the tensordict already has 3 or more batch dimensions, it is returned unchanged.
+        Otherwise, dimensions of size 1 are prepended to reach 3 dimensions.
+
+        Returns:
+            a tensordict with at least 3 batch dimensions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+            >>> print(td.atleast_3d().shape)
+            torch.Size([1, 1, 3])
+        """
+        if self.ndim >= 3:
+            return self
+        elif self.ndim == 2:
+            return self.unsqueeze(0)
+        elif self.ndim == 1:
+            return self.unsqueeze(0).unsqueeze(0)
+        else:
+            return self.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None
