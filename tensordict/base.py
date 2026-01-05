@@ -5241,6 +5241,141 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    def narrow(self, dim: int, start: int, length: int):
+        """Returns a new tensordict that is a narrowed version of the input.
+
+        The dimension dim is input from start to start + length.
+
+        Args:
+            dim (int): The dimension along which to narrow.
+            start (int): Starting index.
+            length (int): Length of the narrowed dimension.
+
+        Returns:
+            a new tensordict narrowed along the specified dimension.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.narrow(1, 1, 2)["a"])
+            tensor([[1, 2],
+                    [4, 5]])
+        """
+        ndim = self.ndim
+        if dim < 0:
+            dim = ndim + dim
+        if dim < 0 or dim >= ndim:
+            raise IndexError(
+                f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {dim})"
+            )
+
+        batch_size = list(self.batch_size)
+        batch_size[dim] = length
+
+        def _narrow(tensor):
+            return tensor.narrow(dim, start, length)
+
+        result = self._fast_apply(
+            _narrow,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    def tile(self, dims: tuple[int, ...]):
+        """Construct a tensordict by repeating the elements.
+
+        The dims argument specifies the number of repetitions in each dimension.
+
+        Args:
+            dims (tuple of ints): The number of repetitions per dimension.
+
+        Returns:
+            a new tensordict with elements repeated.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.tile((2, 1))["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5],
+                    [0, 1, 2],
+                    [3, 4, 5]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        # Calculate new batch size
+        ndim = self.ndim
+        if len(dims) > ndim:
+            # If more dims than batch dims, prepend 1s to batch_size
+            new_batch_size = [1] * (len(dims) - ndim) + list(self.batch_size)
+            for i, d in enumerate(dims):
+                new_batch_size[i] *= d
+        else:
+            # Pad dims with leading 1s
+            new_batch_size = list(self.batch_size)
+            offset = ndim - len(dims)
+            for i, d in enumerate(dims):
+                new_batch_size[offset + i] *= d
+
+        def _tile(tensor):
+            return tensor.tile(dims)
+
+        result = self._fast_apply(
+            _tile,
+            batch_size=torch.Size(new_batch_size),
+            call_on_nested=True,
+            names=None,  # tile invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    def broadcast_to(self, shape: tuple[int, ...]):
+        """Broadcasts the tensordict to a new shape.
+
+        The new shape must be compatible with the original shape.
+
+        Args:
+            shape (tuple of ints): The desired shape.
+
+        Returns:
+            a new tensordict with the shape broadcast.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
+            >>> print(td.broadcast_to((2, 3)).shape)
+            torch.Size([2, 3])
+        """
+        shape = torch.Size(shape)
+
+        def _broadcast_to(tensor):
+            return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
+
+        result = self._fast_apply(
+            _broadcast_to,
+            batch_size=shape,
+            call_on_nested=True,
+            names=None,  # broadcast invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

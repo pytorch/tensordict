@@ -2719,6 +2719,79 @@ class TestGeneric:
             td_1d.rot90()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_narrow(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test narrow
+        td2 = td1.narrow(0, 0, 1)
+        assert td2.shape == torch.Size((1, 3))
+        assert (td2["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        td3 = td1.narrow(1, 1, 2)
+        assert td3.shape == torch.Size((2, 2))
+        assert (td3["b"] == torch.narrow(d["b"], 1, 1, 2)).all()
+
+        # Test torch.narrow
+        td4 = torch.narrow(td1, 0, 0, 1)
+        assert td4.shape == torch.Size((1, 3))
+        assert (td4["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        # Test negative dim
+        td5 = td1.narrow(-1, 0, 2)
+        assert td5.shape == torch.Size((2, 2))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_tile(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test tile
+        td2 = td1.tile((2, 1))
+        assert td2.shape == torch.Size((4, 3))
+        assert (td2["b"] == torch.tile(d["b"], (2, 1))).all()
+
+        # Test tile with more dims
+        td3 = td1.tile((2, 2))
+        assert td3.shape == torch.Size((4, 6))
+        assert (td3["b"] == torch.tile(d["b"], (2, 2))).all()
+
+        # Test torch.tile
+        td4 = torch.tile(td1, (2, 1))
+        assert td4.shape == torch.Size((4, 3))
+        assert (td4["b"] == torch.tile(d["b"], (2, 1))).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_broadcast_to(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(6, device=device).view(2, 3),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test broadcast_to with same shape
+        td2 = td1.broadcast_to((2, 3))
+        assert td2.shape == torch.Size((2, 3))
+
+        # Test broadcast_to with expanded shape
+        td3 = td1.broadcast_to((4, 2, 3))
+        assert td3.shape == torch.Size((4, 2, 3))
+        assert (td3["a"] == torch.broadcast_to(d["a"], (4, 2, 3))).all()
+
+        # Test torch.broadcast_to
+        td4 = torch.broadcast_to(td1, (4, 2, 3))
+        assert td4.shape == torch.Size((4, 2, 3))
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8498,6 +8571,46 @@ class TestTensorDicts(TestTensorDictsBase):
         # Test rot90 twice should preserve shape
         td_rotated2 = td.rot90(2)
         assert td_rotated2.shape == original_shape
+
+    @set_lazy_legacy(False)
+    def test_narrow(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # Narrow first dim
+        td_narrow = td.narrow(0, 0, 1)
+        assert td_narrow.shape[0] == 1
+        assert td_narrow.shape[1:] == td.shape[1:]
+
+        # Narrow second dim
+        td_narrow2 = td.narrow(1, 0, 2)
+        assert td_narrow2.shape[0] == td.shape[0]
+        assert td_narrow2.shape[1] == 2
+
+    @set_lazy_legacy(False)
+    def test_tile(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be tiled due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Tile all dims by 2
+        tile_dims = (2,) * td.ndim
+        td_tiled = td.tile(tile_dims)
+        expected_shape = torch.Size([s * 2 for s in original_shape])
+        assert td_tiled.shape == expected_shape
+
+    @set_lazy_legacy(False)
+    def test_broadcast_to(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be broadcast due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Broadcast to same shape
+        td_broadcast = td.broadcast_to(original_shape)
+        assert td_broadcast.shape == original_shape
+
+        # Broadcast with extra dim
+        new_shape = (2,) + tuple(original_shape)
+        td_broadcast2 = td.broadcast_to(new_shape)
+        assert td_broadcast2.shape == torch.Size(new_shape)
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
