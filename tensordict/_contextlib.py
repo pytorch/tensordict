@@ -365,6 +365,25 @@ def _reverse_rot90(self, args, kwargs, out):
 LAST_OP_MAPS["rot90"] = _reverse_rot90
 
 
+def _reverse_narrow(self, args, kwargs, out):
+    # narrow is not directly reversible, but we can update using index assignment
+    dim = args[0] if args else kwargs.get("dim")
+    start = args[1] if len(args) > 1 else kwargs.get("start")
+    length = args[2] if len(args) > 2 else kwargs.get("length")
+    # Create index for the narrow region
+    idx = (slice(None),) * dim + (slice(start, start + length),)
+    if not out.is_locked:
+        result = out.clone()
+        result[idx] = self
+        return result
+    else:
+        out[idx] = self
+        return out
+
+
+LAST_OP_MAPS["narrow"] = _reverse_narrow
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
