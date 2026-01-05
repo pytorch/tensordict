@@ -147,6 +147,7 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
+    torch.broadcast_to: True,
     torch.cat: True,
     torch.clone: True,
     torch.empty_like: True,
@@ -158,6 +159,7 @@ _TD_PASS_THROUGH = {
     torch.gather: True,
     torch.movedim: True,
     torch.moveaxis: True,
+    torch.narrow: True,
     torch.ones_like: True,
     torch.permute: True,
     torch.rand_like: True,
@@ -169,6 +171,7 @@ _TD_PASS_THROUGH = {
     torch.stack: True,
     torch.swapaxes: True,
     torch.swapdims: True,
+    torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
@@ -345,6 +348,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "bfloat16",
     "bitwise_and",
     "bool",
+    "broadcast_to",
     "cat",
     "cat_from_tensordict",
     "ceil",
@@ -472,6 +476,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "named_apply",
     "nanmean",
     "nansum",
+    "narrow",
     "neg",
     "neg_",
     "new_empty",
@@ -542,6 +547,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "tanh",
     "tanh_",
     "tensor_split",
+    "tile",
     "to",
     "to_h5",
     "to_lazystack",
