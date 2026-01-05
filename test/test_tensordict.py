@@ -2686,6 +2686,39 @@ class TestGeneric:
         assert (td5["b"] == torch.roll(d["b"], -1, 0)).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_rot90(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test rot90
+        td2 = td1.rot90()
+        assert td2.shape == torch.Size((3, 2))
+        assert (td2["b"] == torch.rot90(d["b"])).all()
+
+        # Test rot90 k times
+        td3 = td1.rot90(2)
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.rot90(d["b"], 2)).all()
+
+        td4 = td1.rot90(3)
+        assert td4.shape == torch.Size((3, 2))
+        assert (td4["b"] == torch.rot90(d["b"], 3)).all()
+
+        # Test torch.rot90
+        td5 = torch.rot90(td1, 1, (0, 1))
+        assert td5.shape == torch.Size((3, 2))
+        assert (td5["b"] == torch.rot90(d["b"], 1, (0, 1))).all()
+
+        # Test rot90 requires at least 2 dims
+        td_1d = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="requires at least 2"):
+            td_1d.rot90()
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8451,6 +8484,20 @@ class TestTensorDicts(TestTensorDictsBase):
         # Test roll multiple dims
         td_rolled2 = td.roll((1, 2), (0, 1))
         assert td_rolled2.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_rot90(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        td_rotated = td.rot90()
+        # Shape should swap first two dims
+        assert td_rotated.shape == torch.Size(
+            [original_shape[1], original_shape[0], *original_shape[2:]]
+        )
+
+        # Test rot90 twice should preserve shape
+        td_rotated2 = td.rot90(2)
+        assert td_rotated2.shape == original_shape
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
