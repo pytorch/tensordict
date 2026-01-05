@@ -14127,6 +14127,41 @@ class TestMemmap:
             assert legacy == key
 
 
+class TestFreeThreading:
+    """Tests for free-threading (GIL-less Python) compatibility."""
+
+    def test_concurrent_gc_stress(self):
+        """Regression test for free-threading race condition (PR #1481).
+
+        This test exercises concurrent access to TensorDict instances while
+        triggering garbage collection. On Python 3.14t with PYTHON_GIL=0,
+        this would previously cause segfaults due to a race condition in
+        the _validate_value_cached attribute.
+
+        The test passes on all Python versions but only catches the actual
+        race condition on free-threading builds.
+        """
+        import threading
+
+        def gc_stress():
+            for _ in range(100):
+                td = TensorDict(
+                    {"a": torch.randn(5, 5), "b": {"c": torch.randn(5, 3)}},
+                    batch_size=[5],
+                )
+                # Access _validate_value to trigger the code path that had the race
+                _ = td._validate_value
+                td = None
+                gc.collect()
+
+        threads = [threading.Thread(target=gc_stress) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        # If we get here without segfault, the test passes
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
