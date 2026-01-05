@@ -123,6 +123,11 @@ def _rot90(td: T, k: int = 1, dims: Sequence[int] = (0, 1)) -> T:
     return td.rot90(k, dims)
 
 
+@implements_for_td(torch.narrow)
+def _narrow(td: T, dim: int, start: int, length: int) -> T:
+    return td.narrow(dim, start, length)
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)

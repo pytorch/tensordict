@@ -2719,6 +2719,33 @@ class TestGeneric:
             td_1d.rot90()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_narrow(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test narrow
+        td2 = td1.narrow(0, 0, 1)
+        assert td2.shape == torch.Size((1, 3))
+        assert (td2["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        td3 = td1.narrow(1, 1, 2)
+        assert td3.shape == torch.Size((2, 2))
+        assert (td3["b"] == torch.narrow(d["b"], 1, 1, 2)).all()
+
+        # Test torch.narrow
+        td4 = torch.narrow(td1, 0, 0, 1)
+        assert td4.shape == torch.Size((1, 3))
+        assert (td4["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        # Test negative dim
+        td5 = td1.narrow(-1, 0, 2)
+        assert td5.shape == torch.Size((2, 2))
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8498,6 +8525,19 @@ class TestTensorDicts(TestTensorDictsBase):
         # Test rot90 twice should preserve shape
         td_rotated2 = td.rot90(2)
         assert td_rotated2.shape == original_shape
+
+    @set_lazy_legacy(False)
+    def test_narrow(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # Narrow first dim
+        td_narrow = td.narrow(0, 0, 1)
+        assert td_narrow.shape[0] == 1
+        assert td_narrow.shape[1:] == td.shape[1:]
+
+        # Narrow second dim
+        td_narrow2 = td.narrow(1, 0, 2)
+        assert td_narrow2.shape[0] == td.shape[0]
+        assert td_narrow2.shape[1] == 2
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
