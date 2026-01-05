@@ -138,6 +138,21 @@ def _broadcast_to(td: T, shape: Sequence[int]) -> T:
     return td.broadcast_to(shape)
 
 
+@implements_for_td(torch.atleast_1d)
+def _atleast_1d(td: T) -> T:
+    return td.atleast_1d()
+
+
+@implements_for_td(torch.atleast_2d)
+def _atleast_2d(td: T) -> T:
+    return td.atleast_2d()
+
+
+@implements_for_td(torch.atleast_3d)
+def _atleast_3d(td: T) -> T:
+    return td.atleast_3d()
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)

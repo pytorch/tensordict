@@ -423,6 +423,24 @@ def _reverse_broadcast_to(self, args, kwargs, out):
 LAST_OP_MAPS["broadcast_to"] = _reverse_broadcast_to
 
 
+def _reverse_atleast_1d(self, args, kwargs, out):
+    # Remove added dimensions
+    out_ndim = out.ndim
+    self_ndim = self.ndim
+    if out_ndim > self_ndim:
+        for _ in range(out_ndim - self_ndim):
+            self = self.squeeze(0)
+    if not out.is_locked:
+        return out.update(self, inplace=False)
+    else:
+        return out.update_(self)
+
+
+LAST_OP_MAPS["atleast_1d"] = _reverse_atleast_1d
+LAST_OP_MAPS["atleast_2d"] = _reverse_atleast_1d
+LAST_OP_MAPS["atleast_3d"] = _reverse_atleast_1d
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
