@@ -193,6 +193,8 @@ def _reverse_transpose(self, args, kwargs, out):
 
 
 LAST_OP_MAPS["transpose"] = _reverse_transpose
+LAST_OP_MAPS["swapaxes"] = _reverse_transpose
+LAST_OP_MAPS["swapdims"] = _reverse_transpose
 
 
 def _reverse_flatten_keys(self, args, kwargs, out):
