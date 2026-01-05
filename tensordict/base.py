@@ -5082,6 +5082,56 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    @_as_context_manager()
+    def fliplr(self):
+        """Flip the tensordict in the left/right direction.
+
+        Flip the entries in each row in the left/right direction.
+        Columns are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 2 batch dimensions.
+
+        Returns:
+            a new tensordict with the second dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.fliplr()["a"])
+            tensor([[2, 1, 0],
+                    [5, 4, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("fliplr requires at least 2 batch dimensions")
+        return self.flip(1)
+
+    @_as_context_manager()
+    def flipud(self):
+        """Flip the tensordict in the up/down direction.
+
+        Flip the entries in each column in the up/down direction.
+        Rows are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 1 batch dimension.
+
+        Returns:
+            a new tensordict with the first dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flipud()["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if self.ndim < 1:
+            raise RuntimeError("flipud requires at least 1 batch dimension")
+        return self.flip(0)
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

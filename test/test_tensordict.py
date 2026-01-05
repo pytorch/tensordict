@@ -2624,6 +2624,40 @@ class TestGeneric:
         assert (td5["b"] == torch.flip(d["b"], [-1])).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_fliplr_flipud(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test fliplr
+        td2 = td1.fliplr()
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.fliplr(d["b"])).all()
+
+        # Test torch.fliplr
+        td3 = torch.fliplr(td1)
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.fliplr(d["b"])).all()
+
+        # Test flipud
+        td4 = td1.flipud()
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.flipud(d["b"])).all()
+
+        # Test torch.flipud
+        td5 = torch.flipud(td1)
+        assert td5.shape == torch.Size((2, 3))
+        assert (td5["b"] == torch.flipud(d["b"])).all()
+
+        # Test fliplr requires at least 2 dims
+        td_1d = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="requires at least 2"):
+            td_1d.fliplr()
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8369,6 +8403,16 @@ class TestTensorDicts(TestTensorDictsBase):
         # Test flip multiple dims
         td_flipped2 = td.flip((0, 1))
         assert td_flipped2.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_fliplr_flipud(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # All test TDs have at least 2 batch dims
+        td_lr = td.fliplr()
+        assert td_lr.shape == td.shape
+
+        td_ud = td.flipud()
+        assert td_ud.shape == td.shape
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

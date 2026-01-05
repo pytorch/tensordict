@@ -313,6 +313,28 @@ def _reverse_flip(self, args, kwargs, out):
 LAST_OP_MAPS["flip"] = _reverse_flip
 
 
+def _reverse_fliplr(self, args, kwargs, out):
+    # fliplr is its own inverse
+    if not out.is_locked:
+        return out.update(self.fliplr(), inplace=False)
+    else:
+        return out.update_(self.fliplr())
+
+
+LAST_OP_MAPS["fliplr"] = _reverse_fliplr
+
+
+def _reverse_flipud(self, args, kwargs, out):
+    # flipud is its own inverse
+    if not out.is_locked:
+        return out.update(self.flipud(), inplace=False)
+    else:
+        return out.update_(self.flipud())
+
+
+LAST_OP_MAPS["flipud"] = _reverse_flipud
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
