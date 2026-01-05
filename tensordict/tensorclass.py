@@ -147,6 +147,7 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
+    torch.broadcast_to: True,
     torch.cat: True,
     torch.clone: True,
     torch.empty_like: True,
@@ -347,6 +348,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "bfloat16",
     "bitwise_and",
     "bool",
+    "broadcast_to",
     "cat",
     "cat_from_tensordict",
     "ceil",
