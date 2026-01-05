@@ -5345,6 +5345,40 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    @_as_context_manager()
+    def broadcast_to(self, shape: tuple[int, ...]):
+        """Broadcasts the tensordict to a new shape.
+
+        The new shape must be compatible with the original shape.
+
+        Args:
+            shape (tuple of ints): The desired shape.
+
+        Returns:
+            a new tensordict with the shape broadcast.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
+            >>> print(td.broadcast_to((2, 3)).shape)
+            torch.Size([2, 3])
+        """
+        shape = torch.Size(shape)
+
+        def _broadcast_to(tensor):
+            return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
+
+        result = self._fast_apply(
+            _broadcast_to,
+            batch_size=shape,
+            call_on_nested=True,
+            names=None,  # broadcast invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

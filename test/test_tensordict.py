@@ -2770,6 +2770,28 @@ class TestGeneric:
         assert (td4["b"] == torch.tile(d["b"], (2, 1))).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_broadcast_to(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(6, device=device).view(2, 3),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test broadcast_to with same shape
+        td2 = td1.broadcast_to((2, 3))
+        assert td2.shape == torch.Size((2, 3))
+
+        # Test broadcast_to with expanded shape
+        td3 = td1.broadcast_to((4, 2, 3))
+        assert td3.shape == torch.Size((4, 2, 3))
+        assert (td3["a"] == torch.broadcast_to(d["a"], (4, 2, 3))).all()
+
+        # Test torch.broadcast_to
+        td4 = torch.broadcast_to(td1, (4, 2, 3))
+        assert td4.shape == torch.Size((4, 2, 3))
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8574,6 +8596,21 @@ class TestTensorDicts(TestTensorDictsBase):
         td_tiled = td.tile(tile_dims)
         expected_shape = torch.Size([s * 2 for s in original_shape])
         assert td_tiled.shape == expected_shape
+
+    @set_lazy_legacy(False)
+    def test_broadcast_to(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be broadcast due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Broadcast to same shape
+        td_broadcast = td.broadcast_to(original_shape)
+        assert td_broadcast.shape == original_shape
+
+        # Broadcast with extra dim
+        new_shape = (2,) + tuple(original_shape)
+        td_broadcast2 = td.broadcast_to(new_shape)
+        assert td_broadcast2.shape == torch.Size(new_shape)
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

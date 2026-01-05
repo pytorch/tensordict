@@ -133,6 +133,11 @@ def _tile(td: T, dims: Sequence[int]) -> T:
     return td.tile(dims)
 
 
+@implements_for_td(torch.broadcast_to)
+def _broadcast_to(td: T, shape: Sequence[int]) -> T:
+    return td.broadcast_to(shape)
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)
