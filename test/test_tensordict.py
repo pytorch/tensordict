@@ -2562,6 +2562,68 @@ class TestGeneric:
         assert td2.shape == torch.Size((5, 6, 4))
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_swapaxes(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 9, device=device),
+            "b": torch.randn(4, 5, 6, 7, device=device),
+            "c": torch.randn(4, 5, 6, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test swapaxes
+        td2 = td1.swapaxes(0, 2)
+        assert td2.shape == torch.Size((6, 5, 4))
+        assert td2["a"].shape == torch.Size((6, 5, 4, 9))
+
+        # Verify matches torch.swapaxes behavior
+        assert td2["a"].shape == torch.swapaxes(d["a"], 0, 2).shape
+
+        # Test torch.swapaxes
+        td3 = torch.swapaxes(td1, 0, 2)
+        assert td3.shape == torch.Size((6, 5, 4))
+
+        # Test swapdims alias
+        td4 = td1.swapdims(0, 2)
+        assert td4.shape == torch.Size((6, 5, 4))
+
+        td5 = torch.swapdims(td1, 0, 2)
+        assert td5.shape == torch.Size((6, 5, 4))
+
+        # Test negative indices
+        td6 = td1.swapaxes(-1, -3)
+        assert td6.shape == torch.Size((6, 5, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_flip(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test flip single dim
+        td2 = td1.flip(0)
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.flip(d["b"], [0])).all()
+
+        # Test flip multiple dims
+        td3 = td1.flip((0, 1))
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.flip(d["b"], [0, 1])).all()
+
+        # Test torch.flip
+        td4 = torch.flip(td1, (0,))
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.flip(d["b"], [0])).all()
+
+        # Test negative indices
+        td5 = td1.flip(-1)
+        assert td5.shape == torch.Size((2, 3))
+        assert (td5["b"] == torch.flip(d["b"], [-1])).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8268,6 +8330,45 @@ class TestTensorDicts(TestTensorDictsBase):
         if is_lazy:
             return
         assert (td == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_swapaxes(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec:
+            td_swapped = td.swapaxes(0, 1)
+        if is_lazy:
+            return
+        expected_shape = torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        assert td_swapped.shape == expected_shape
+
+        # Test swapdims alias
+        with error_dec:
+            td_swapped2 = td.swapdims(0, 1)
+        assert td_swapped2.shape == expected_shape
+
+    @set_lazy_legacy(False)
+    def test_flip(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_flipped = td.flip(0)
+        # Shape should be unchanged
+        assert td_flipped.shape == td.shape
+
+        # Test flip multiple dims
+        td_flipped2 = td.flip((0, 1))
+        assert td_flipped2.shape == td.shape
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
