@@ -2658,6 +2658,34 @@ class TestGeneric:
             td_1d.fliplr()
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_roll(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test roll single dim
+        td2 = td1.roll(1, 0)
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.roll(d["b"], 1, 0)).all()
+
+        # Test roll multiple dims
+        td3 = td1.roll((1, 2), (0, 1))
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.roll(d["b"], (1, 2), (0, 1))).all()
+
+        # Test torch.roll
+        td4 = torch.roll(td1, 1, 0)
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.roll(d["b"], 1, 0)).all()
+
+        # Test negative shifts
+        td5 = td1.roll(-1, 0)
+        assert (td5["b"] == torch.roll(d["b"], -1, 0)).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8413,6 +8441,16 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td_ud = td.flipud()
         assert td_ud.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_roll(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_rolled = td.roll(1, 0)
+        assert td_rolled.shape == td.shape
+
+        # Test roll multiple dims
+        td_rolled2 = td.roll((1, 2), (0, 1))
+        assert td_rolled2.shape == td.shape
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

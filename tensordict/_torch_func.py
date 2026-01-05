@@ -111,6 +111,13 @@ def _flipud(td: T) -> T:
     return td.flipud()
 
 
+@implements_for_td(torch.roll)
+def _roll(
+    td: T, shifts: int | Sequence[int], dims: int | Sequence[int] | None = None
+) -> T:
+    return td.roll(shifts, dims)
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)

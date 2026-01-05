@@ -5132,6 +5132,49 @@ class TensorDictBase(MutableMapping, TensorCollection):
             raise RuntimeError("flipud requires at least 1 batch dimension")
         return self.flip(0)
 
+    @_as_context_manager()
+    def roll(self, shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None):
+        """Roll the tensordict along the given dimensions.
+
+        Elements that are shifted beyond the last position are re-introduced at
+        the first position.
+
+        Args:
+            shifts (int or tuple of ints): The number of places by which the elements
+                of the tensordict are shifted. If shifts is a tuple, dims must be a
+                tuple of the same size, and each dimension will be rolled by the
+                corresponding value.
+            dims (int or tuple of ints, optional): Axis along which to roll.
+                By default, the tensordict is flattened before rolling.
+
+        Returns:
+            a new tensordict with elements rolled.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.roll(1, 0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+
+        def _roll(tensor):
+            return tensor.roll(shifts, dims)
+
+        result = self._fast_apply(
+            _roll,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None
