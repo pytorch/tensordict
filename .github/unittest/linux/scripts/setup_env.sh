@@ -40,13 +40,28 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+    if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+        # Install free-threaded Python 3.14 from conda-forge
+        conda create --prefix "${env_dir}" -y -c conda-forge python-freethreading
+        # Set PYTHON_GIL=0 to keep GIL disabled
+        export PYTHON_GIL=0
+    else
+        conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+    fi
 fi
 conda activate "${env_dir}"
 
+# For free-threaded Python, ensure PYTHON_GIL=0 is set
+if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+    export PYTHON_GIL=0
+fi
+
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+# Don't add python version constraint for free-threaded builds
+if [ "${PYTHON_VERSION}" != "3.14t" ]; then
+    echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+fi
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
