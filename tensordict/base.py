@@ -5175,6 +5175,72 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    @_as_context_manager()
+    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)):
+        """Rotate the tensordict by 90 degrees in the plane specified by dims.
+
+        Rotation direction is from the first towards the second axis.
+
+        Args:
+            k (int): Number of times to rotate. Default: 1.
+            dims (tuple of two ints): The plane to rotate in. Default: (0, 1).
+
+        Returns:
+            a new tensordict rotated by 90 degrees.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.rot90()["a"])
+            tensor([[2, 5],
+                    [1, 4],
+                    [0, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("rot90 requires at least 2 batch dimensions")
+        if len(dims) != 2:
+            raise RuntimeError("rot90 requires exactly 2 dims")
+
+        # Normalize dims
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Calculate new batch size
+        k = k % 4  # Normalize k to [0, 3]
+        if k == 0:
+            return self
+
+        batch_size = list(self.batch_size)
+        if k == 1 or k == 3:
+            batch_size[dims[0]], batch_size[dims[1]] = (
+                batch_size[dims[1]],
+                batch_size[dims[0]],
+            )
+
+        if self._has_names():
+            names = list(self.names)
+            if k == 1 or k == 3:
+                names[dims[0]], names[dims[1]] = names[dims[1]], names[dims[0]]
+        else:
+            names = None
+
+        def _rot90(tensor):
+            return tensor.rot90(k, dims)
+
+        result = self._fast_apply(
+            _rot90,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=names,
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None
