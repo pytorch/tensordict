@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3458+gcc53ac56e.d20260105)
+                  main (0.10.0.dev3469+gf6f122524.d20260105)
                 </div>
               
             
@@ -715,6 +715,63 @@ tensordicts to be used.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.atleast_1d">
+<span class="sig-name descname"><span class="pre">atleast_1d</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.atleast_1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the tensordict with at least 1 batch dimension.</p>
+<p>If the tensordict already has 1 or more batch dimensions, it is returned unchanged.
+Otherwise, a dimension of size 1 is prepended.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a tensordict with at least 1 batch dimension.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([1])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.atleast_2d">
+<span class="sig-name descname"><span class="pre">atleast_2d</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.atleast_2d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the tensordict with at least 2 batch dimensions.</p>
+<p>If the tensordict already has 2 or more batch dimensions, it is returned unchanged.
+Otherwise, dimensions of size 1 are prepended to reach 2 dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a tensordict with at least 2 batch dimensions.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">atleast_2d</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([1, 3])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.atleast_3d">
+<span class="sig-name descname"><span class="pre">atleast_3d</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.atleast_3d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the tensordict with at least 3 batch dimensions.</p>
+<p>If the tensordict already has 3 or more batch dimensions, it is returned unchanged.
+Otherwise, dimensions of size 1 are prepended to reach 3 dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a tensordict with at least 3 batch dimensions.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">atleast_3d</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([1, 1, 3])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.auto_batch_size_">
 <span class="sig-name descname"><span class="pre">auto_batch_size_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_compliant_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.auto_batch_size_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the maximum batch-size for the tensordict, up to an optional batch_dims.</p>
@@ -829,6 +886,27 @@ operation.</p>
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.bool">
 <span class="sig-name descname"><span class="pre">bool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.bool" title="Permalink to this definition">¶</a></dt>
 <dd><p>Casts all tensors to <code class="docutils literal notranslate"><span class="pre">torch.bool</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.broadcast_to">
+<span class="sig-name descname"><span class="pre">broadcast_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.broadcast_to" title="Permalink to this definition">¶</a></dt>
+<dd><p>Broadcasts the tensordict to a new shape.</p>
+<p>The new shape must be compatible with the original shape.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<em>tuple of ints</em>) – The desired shape.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with the shape broadcast.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([2, 3])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -1961,6 +2039,79 @@ model.</p>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">model_state_dict</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.flip">
+<span class="sig-name descname"><span class="pre">flip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.flip" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reverse the order of elements in the tensordict along the given dimensions.</p>
+<p>The shape of the tensordict is preserved, but the elements are reordered.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>tuple of ints</em>) – Dimensions to flip.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with the dimensions flipped.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="mi">0</span><span class="p">)[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[3, 4, 5],</span>
+<span class="go">        [0, 1, 2]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.fliplr">
+<span class="sig-name descname"><span class="pre">fliplr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.fliplr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Flip the tensordict in the left/right direction.</p>
+<p>Flip the entries in each row in the left/right direction.
+Columns are preserved, but appear in a different order than before.</p>
+<p>Requires the tensordict to have at least 2 batch dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a new tensordict with the second dimension flipped.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">fliplr</span><span class="p">()[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[2, 1, 0],</span>
+<span class="go">        [5, 4, 3]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.flipud">
+<span class="sig-name descname"><span class="pre">flipud</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.flipud" title="Permalink to this definition">¶</a></dt>
+<dd><p>Flip the tensordict in the up/down direction.</p>
+<p>Flip the entries in each column in the up/down direction.
+Rows are preserved, but appear in a different order than before.</p>
+<p>Requires the tensordict to have at least 1 batch dimension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a new tensordict with the first dimension flipped.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">flipud</span><span class="p">()[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[3, 4, 5],</span>
+<span class="go">        [0, 1, 2]])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -5135,6 +5286,35 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </div>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.narrow">
+<span class="sig-name descname"><span class="pre">narrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.narrow" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new tensordict that is a narrowed version of the input.</p>
+<p>The dimension dim is input from start to start + length.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The dimension along which to narrow.</p></li>
+<li><p><strong>start</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Starting index.</p></li>
+<li><p><strong>length</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Length of the narrowed dimension.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict narrowed along the specified dimension.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">narrow</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[1, 2],</span>
+<span class="go">        [4, 5]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.ndim">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ndim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></em><a class="headerlink" href="#tensordict.TensorDictBase.ndim" title="Permalink to this definition">¶</a></dt>
@@ -6056,6 +6236,68 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">])</span>
 <span class="go">torch.Tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.roll">
+<span class="sig-name descname"><span class="pre">roll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.roll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Roll the tensordict along the given dimensions.</p>
+<p>Elements that are shifted beyond the last position are re-introduced at
+the first position.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shifts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>tuple of ints</em>) – The number of places by which the elements
+of the tensordict are shifted. If shifts is a tuple, dims must be a
+tuple of the same size, and each dimension will be rolled by the
+corresponding value.</p></li>
+<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>tuple of ints</em><em>, </em><em>optional</em>) – Axis along which to roll.
+By default, the tensordict is flattened before rolling.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with elements rolled.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">roll</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[3, 4, 5],</span>
+<span class="go">        [0, 1, 2]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.rot90">
+<span class="sig-name descname"><span class="pre">rot90</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(0,</span> <span class="pre">1)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.rot90" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rotate the tensordict by 90 degrees in the plane specified by dims.</p>
+<p>Rotation direction is from the first towards the second axis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of times to rotate. Default: 1.</p></li>
+<li><p><strong>dims</strong> (<em>tuple of two ints</em>) – The plane to rotate in. Default: (0, 1).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict rotated by 90 degrees.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">rot90</span><span class="p">()[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[2, 5],</span>
+<span class="go">        [1, 4],</span>
+<span class="go">        [0, 3]])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -7058,6 +7300,54 @@ Only applied when <code class="docutils literal notranslate"><span class="pre">r
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.swapaxes">
+<span class="sig-name descname"><span class="pre">swapaxes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.swapaxes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Interchange two axes of the tensordict.</p>
+<p>This is an alias for <a class="reference internal" href="#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>axis0</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – First axis.</p></li>
+<li><p><strong>axis1</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Second axis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with the axes swapped.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([4, 3])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.swapdims">
+<span class="sig-name descname"><span class="pre">swapdims</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.swapdims" title="Permalink to this definition">¶</a></dt>
+<dd><p>Interchange two axes of the tensordict.</p>
+<p>This is an alias for <a class="reference internal" href="#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>axis0</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – First axis.</p></li>
+<li><p><strong>axis1</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Second axis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with the axes swapped.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([4, 3])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.tan">
 <span class="sig-name descname"><span class="pre">tan</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.tan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the <code class="xref py py-meth docutils literal notranslate"><span class="pre">tan()</span></code> value of each element of the TensorDict.</p>
@@ -7113,6 +7403,33 @@ If <cite>indices_or_sections</cite> is a tensor, it must be a zero-dimensional o
 <span class="go">         [10, 11]],</span>
 <span class="go">        [[16, 17],</span>
 <span class="go">         [18, 19]]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictBase.tile">
+<span class="sig-name descname"><span class="pre">tile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.tile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Construct a tensordict by repeating the elements.</p>
+<p>The dims argument specifies the number of repetitions in each dimension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dims</strong> (<em>tuple of ints</em>) – The number of repetitions per dimension.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new tensordict with elements repeated.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">tile</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="go">tensor([[0, 1, 2],</span>
+<span class="go">        [3, 4, 5],</span>
+<span class="go">        [0, 1, 2],</span>
+<span class="go">        [3, 4, 5]])</span>
 </pre></div>
 </div>
 </dd></dl>
