@@ -2746,6 +2746,30 @@ class TestGeneric:
         assert td5.shape == torch.Size((2, 2))
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_tile(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test tile
+        td2 = td1.tile((2, 1))
+        assert td2.shape == torch.Size((4, 3))
+        assert (td2["b"] == torch.tile(d["b"], (2, 1))).all()
+
+        # Test tile with more dims
+        td3 = td1.tile((2, 2))
+        assert td3.shape == torch.Size((4, 6))
+        assert (td3["b"] == torch.tile(d["b"], (2, 2))).all()
+
+        # Test torch.tile
+        td4 = torch.tile(td1, (2, 1))
+        assert td4.shape == torch.Size((4, 3))
+        assert (td4["b"] == torch.tile(d["b"], (2, 1))).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8538,6 +8562,18 @@ class TestTensorDicts(TestTensorDictsBase):
         td_narrow2 = td.narrow(1, 0, 2)
         assert td_narrow2.shape[0] == td.shape[0]
         assert td_narrow2.shape[1] == 2
+
+    @set_lazy_legacy(False)
+    def test_tile(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be tiled due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Tile all dims by 2
+        tile_dims = (2,) * td.ndim
+        td_tiled = td.tile(tile_dims)
+        expected_shape = torch.Size([s * 2 for s in original_shape])
+        assert td_tiled.shape == expected_shape
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

@@ -5290,6 +5290,61 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    @_as_context_manager()
+    def tile(self, dims: tuple[int, ...]):
+        """Construct a tensordict by repeating the elements.
+
+        The dims argument specifies the number of repetitions in each dimension.
+
+        Args:
+            dims (tuple of ints): The number of repetitions per dimension.
+
+        Returns:
+            a new tensordict with elements repeated.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.tile((2, 1))["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5],
+                    [0, 1, 2],
+                    [3, 4, 5]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        # Calculate new batch size
+        ndim = self.ndim
+        if len(dims) > ndim:
+            # If more dims than batch dims, prepend 1s to batch_size
+            new_batch_size = [1] * (len(dims) - ndim) + list(self.batch_size)
+            for i, d in enumerate(dims):
+                new_batch_size[i] *= d
+        else:
+            # Pad dims with leading 1s
+            new_batch_size = list(self.batch_size)
+            offset = ndim - len(dims)
+            for i, d in enumerate(dims):
+                new_batch_size[offset + i] *= d
+
+        def _tile(tensor):
+            return tensor.tile(dims)
+
+        result = self._fast_apply(
+            _tile,
+            batch_size=torch.Size(new_batch_size),
+            call_on_nested=True,
+            names=None,  # tile invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
     # Cache functionality
     def _erase_cache(self):
         self._cache = None

@@ -384,6 +384,27 @@ def _reverse_narrow(self, args, kwargs, out):
 LAST_OP_MAPS["narrow"] = _reverse_narrow
 
 
+def _reverse_tile(self, args, kwargs, out):
+    # tile is not reversible, we take the first tile
+    # Create index to get the first tile
+    out_shape = out.shape
+    self_shape = self.shape
+    ndim_diff = len(out_shape) - len(self_shape)
+    idx = tuple(slice(0, s) for s in self_shape)
+    if ndim_diff > 0:
+        idx = (0,) * ndim_diff + idx
+    if not out.is_locked:
+        result = out.clone()
+        result[idx] = self
+        return result
+    else:
+        out[idx] = self
+        return out
+
+
+LAST_OP_MAPS["tile"] = _reverse_tile
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
