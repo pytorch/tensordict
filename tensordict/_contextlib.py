@@ -193,6 +193,8 @@ def _reverse_transpose(self, args, kwargs, out):
 
 
 LAST_OP_MAPS["transpose"] = _reverse_transpose
+LAST_OP_MAPS["swapaxes"] = _reverse_transpose
+LAST_OP_MAPS["swapdims"] = _reverse_transpose
 
 
 def _reverse_flatten_keys(self, args, kwargs, out):
@@ -297,6 +299,70 @@ def _reverse_movedim(self, args, kwargs, out):
 
 LAST_OP_MAPS["movedim"] = _reverse_movedim
 LAST_OP_MAPS["moveaxis"] = _reverse_movedim
+
+
+def _reverse_flip(self, args, kwargs, out):
+    # Flip is its own inverse
+    dims = args[0] if args else kwargs.get("dims")
+    if not out.is_locked:
+        return out.update(self.flip(dims), inplace=False)
+    else:
+        return out.update_(self.flip(dims))
+
+
+LAST_OP_MAPS["flip"] = _reverse_flip
+
+
+def _reverse_fliplr(self, args, kwargs, out):
+    # fliplr is its own inverse
+    if not out.is_locked:
+        return out.update(self.fliplr(), inplace=False)
+    else:
+        return out.update_(self.fliplr())
+
+
+LAST_OP_MAPS["fliplr"] = _reverse_fliplr
+
+
+def _reverse_flipud(self, args, kwargs, out):
+    # flipud is its own inverse
+    if not out.is_locked:
+        return out.update(self.flipud(), inplace=False)
+    else:
+        return out.update_(self.flipud())
+
+
+LAST_OP_MAPS["flipud"] = _reverse_flipud
+
+
+def _reverse_roll(self, args, kwargs, out):
+    # Reverse of roll(shifts, dims) is roll(-shifts, dims)
+    shifts = args[0] if args else kwargs.get("shifts")
+    dims = args[1] if len(args) > 1 else kwargs.get("dims")
+    if isinstance(shifts, int):
+        neg_shifts = -shifts
+    else:
+        neg_shifts = tuple(-s for s in shifts)
+    if not out.is_locked:
+        return out.update(self.roll(neg_shifts, dims), inplace=False)
+    else:
+        return out.update_(self.roll(neg_shifts, dims))
+
+
+LAST_OP_MAPS["roll"] = _reverse_roll
+
+
+def _reverse_rot90(self, args, kwargs, out):
+    # Reverse of rot90(k, dims) is rot90(-k, dims) or rot90(4-k, dims)
+    k = args[0] if args else kwargs.get("k", 1)
+    dims = args[1] if len(args) > 1 else kwargs.get("dims", (0, 1))
+    if not out.is_locked:
+        return out.update(self.rot90(-k, dims), inplace=False)
+    else:
+        return out.update_(self.rot90(-k, dims))
+
+
+LAST_OP_MAPS["rot90"] = _reverse_rot90
 
 
 def _reverse_view(self, args, kwargs, out):
