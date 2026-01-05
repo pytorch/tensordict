@@ -2465,6 +2465,373 @@ class TestGeneric:
         assert td1.shape == torch.Size((6, 5, 4))
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 9, device=device),
+            "b": torch.randn(4, 5, 6, 7, device=device),
+            "c": torch.randn(4, 5, 6, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test single dim move
+        td2 = td1.movedim(0, 2)
+        assert td2.shape == torch.Size((5, 6, 4))
+        assert td2["a"].shape == torch.Size((5, 6, 4, 9))
+
+        # Verify matches torch.movedim behavior
+        assert td2["a"].shape == torch.movedim(d["a"], 0, 2).shape
+
+        # Test with negative indices
+        td3 = td1.movedim(-1, 0)
+        assert td3.shape == torch.Size((6, 4, 5))
+        assert td3["c"].shape == torch.Size((6, 4, 5))
+
+        # Test torch.movedim
+        td4 = torch.movedim(td1, 0, 2)
+        assert td4.shape == torch.Size((5, 6, 4))
+
+        # Test tuple dims
+        td5 = td1.movedim((0, 1), (2, 0))
+        assert td5.shape == torch.Size((5, 6, 4))
+        t_ref = torch.movedim(d["a"], (0, 1), (2, 0))
+        assert td5["a"].shape == t_ref.shape
+
+        # Test identity
+        td6 = td1.movedim(1, 1)
+        assert td6 is td1
+
+        # Test moveaxis alias
+        td7 = td1.moveaxis(0, 2)
+        assert td7.shape == torch.Size((5, 6, 4))
+
+        td8 = torch.moveaxis(td1, 0, 2)
+        assert td8.shape == torch.Size((5, 6, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim_exceptions(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 7, device=device),
+            "b": torch.randn(4, 5, 6, 8, 9, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test out of range
+        with pytest.raises(IndexError):
+            td1.movedim(0, 5)
+
+        with pytest.raises(IndexError):
+            td1.movedim(5, 0)
+
+        # Test duplicate source
+        with pytest.raises(RuntimeError, match="repeated dim in source"):
+            td1.movedim((0, 0), (1, 2))
+
+        # Test duplicate destination
+        with pytest.raises(RuntimeError, match="repeated dim in destination"):
+            td1.movedim((0, 1), (2, 2))
+
+        # Test mismatched lengths
+        with pytest.raises(ValueError, match="same number of elements"):
+            td1.movedim((0,), (1, 2))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_movedim_with_tensordict_operations(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(20, 6, 9, device=device),
+            "b": torch.randn(20, 6, 7, device=device),
+            "c": torch.randn(20, 6, device=device),
+        }
+        # Test with view
+        td1 = TensorDict(batch_size=(20, 6), source=d).view(4, 5, 6).movedim(0, 2)
+        assert td1.shape == torch.Size((5, 6, 4))
+
+        # Test with stacked tensordict
+        d2 = {
+            "a": torch.randn(4, 5, 9, device=device),
+            "b": torch.randn(4, 5, 7, device=device),
+            "c": torch.randn(4, 5, device=device),
+        }
+        td2 = stack_td(
+            [TensorDict(batch_size=(4, 5), source=d2).clone() for _ in range(6)],
+            2,
+            contiguous=False,
+        ).movedim(0, 2)
+        assert td2.shape == torch.Size((5, 6, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_swapaxes(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.randn(4, 5, 6, 9, device=device),
+            "b": torch.randn(4, 5, 6, 7, device=device),
+            "c": torch.randn(4, 5, 6, device=device),
+        }
+        td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+        # Test swapaxes
+        td2 = td1.swapaxes(0, 2)
+        assert td2.shape == torch.Size((6, 5, 4))
+        assert td2["a"].shape == torch.Size((6, 5, 4, 9))
+
+        # Verify matches torch.swapaxes behavior
+        assert td2["a"].shape == torch.swapaxes(d["a"], 0, 2).shape
+
+        # Test torch.swapaxes
+        td3 = torch.swapaxes(td1, 0, 2)
+        assert td3.shape == torch.Size((6, 5, 4))
+
+        # Test swapdims alias
+        td4 = td1.swapdims(0, 2)
+        assert td4.shape == torch.Size((6, 5, 4))
+
+        td5 = torch.swapdims(td1, 0, 2)
+        assert td5.shape == torch.Size((6, 5, 4))
+
+        # Test negative indices
+        td6 = td1.swapaxes(-1, -3)
+        assert td6.shape == torch.Size((6, 5, 4))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_flip(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test flip single dim
+        td2 = td1.flip(0)
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.flip(d["b"], [0])).all()
+
+        # Test flip multiple dims
+        td3 = td1.flip((0, 1))
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.flip(d["b"], [0, 1])).all()
+
+        # Test torch.flip
+        td4 = torch.flip(td1, (0,))
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.flip(d["b"], [0])).all()
+
+        # Test negative indices
+        td5 = td1.flip(-1)
+        assert td5.shape == torch.Size((2, 3))
+        assert (td5["b"] == torch.flip(d["b"], [-1])).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_fliplr_flipud(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test fliplr
+        td2 = td1.fliplr()
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.fliplr(d["b"])).all()
+
+        # Test torch.fliplr
+        td3 = torch.fliplr(td1)
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.fliplr(d["b"])).all()
+
+        # Test flipud
+        td4 = td1.flipud()
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.flipud(d["b"])).all()
+
+        # Test torch.flipud
+        td5 = torch.flipud(td1)
+        assert td5.shape == torch.Size((2, 3))
+        assert (td5["b"] == torch.flipud(d["b"])).all()
+
+        # Test fliplr requires at least 2 dims
+        td_1d = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="requires at least 2"):
+            td_1d.fliplr()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_roll(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test roll single dim
+        td2 = td1.roll(1, 0)
+        assert td2.shape == torch.Size((2, 3))
+        assert (td2["b"] == torch.roll(d["b"], 1, 0)).all()
+
+        # Test roll multiple dims
+        td3 = td1.roll((1, 2), (0, 1))
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.roll(d["b"], (1, 2), (0, 1))).all()
+
+        # Test torch.roll
+        td4 = torch.roll(td1, 1, 0)
+        assert td4.shape == torch.Size((2, 3))
+        assert (td4["b"] == torch.roll(d["b"], 1, 0)).all()
+
+        # Test negative shifts
+        td5 = td1.roll(-1, 0)
+        assert (td5["b"] == torch.roll(d["b"], -1, 0)).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_rot90(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test rot90
+        td2 = td1.rot90()
+        assert td2.shape == torch.Size((3, 2))
+        assert (td2["b"] == torch.rot90(d["b"])).all()
+
+        # Test rot90 k times
+        td3 = td1.rot90(2)
+        assert td3.shape == torch.Size((2, 3))
+        assert (td3["b"] == torch.rot90(d["b"], 2)).all()
+
+        td4 = td1.rot90(3)
+        assert td4.shape == torch.Size((3, 2))
+        assert (td4["b"] == torch.rot90(d["b"], 3)).all()
+
+        # Test torch.rot90
+        td5 = torch.rot90(td1, 1, (0, 1))
+        assert td5.shape == torch.Size((3, 2))
+        assert (td5["b"] == torch.rot90(d["b"], 1, (0, 1))).all()
+
+        # Test rot90 requires at least 2 dims
+        td_1d = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="requires at least 2"):
+            td_1d.rot90()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_narrow(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test narrow
+        td2 = td1.narrow(0, 0, 1)
+        assert td2.shape == torch.Size((1, 3))
+        assert (td2["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        td3 = td1.narrow(1, 1, 2)
+        assert td3.shape == torch.Size((2, 2))
+        assert (td3["b"] == torch.narrow(d["b"], 1, 1, 2)).all()
+
+        # Test torch.narrow
+        td4 = torch.narrow(td1, 0, 0, 1)
+        assert td4.shape == torch.Size((1, 3))
+        assert (td4["b"] == torch.narrow(d["b"], 0, 0, 1)).all()
+
+        # Test negative dim
+        td5 = td1.narrow(-1, 0, 2)
+        assert td5.shape == torch.Size((2, 2))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_tile(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(24, device=device).view(2, 3, 4),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test tile
+        td2 = td1.tile((2, 1))
+        assert td2.shape == torch.Size((4, 3))
+        assert (td2["b"] == torch.tile(d["b"], (2, 1))).all()
+
+        # Test tile with more dims
+        td3 = td1.tile((2, 2))
+        assert td3.shape == torch.Size((4, 6))
+        assert (td3["b"] == torch.tile(d["b"], (2, 2))).all()
+
+        # Test torch.tile
+        td4 = torch.tile(td1, (2, 1))
+        assert td4.shape == torch.Size((4, 3))
+        assert (td4["b"] == torch.tile(d["b"], (2, 1))).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_broadcast_to(self, device):
+        torch.manual_seed(1)
+        d = {
+            "a": torch.arange(6, device=device).view(2, 3),
+            "b": torch.arange(6, device=device).view(2, 3),
+        }
+        td1 = TensorDict(batch_size=(2, 3), source=d)
+
+        # Test broadcast_to with same shape
+        td2 = td1.broadcast_to((2, 3))
+        assert td2.shape == torch.Size((2, 3))
+
+        # Test broadcast_to with expanded shape
+        td3 = td1.broadcast_to((4, 2, 3))
+        assert td3.shape == torch.Size((4, 2, 3))
+        assert (td3["a"] == torch.broadcast_to(d["a"], (4, 2, 3))).all()
+
+        # Test torch.broadcast_to
+        td4 = torch.broadcast_to(td1, (4, 2, 3))
+        assert td4.shape == torch.Size((4, 2, 3))
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_atleast_nd(self, device):
+        torch.manual_seed(1)
+
+        # Test atleast_1d
+        td0 = TensorDict({"a": torch.randn(3, device=device)}, batch_size=[])
+        td1 = td0.atleast_1d()
+        assert td1.ndim == 1
+        assert td1.shape == torch.Size([1])
+
+        td_1d = TensorDict({"a": torch.randn(3, device=device)}, batch_size=[3])
+        assert td_1d.atleast_1d() is td_1d  # No change needed
+
+        # Test atleast_2d
+        td2 = td_1d.atleast_2d()
+        assert td2.ndim == 2
+        assert td2.shape == torch.Size([1, 3])
+
+        td_2d = TensorDict({"a": torch.randn(2, 3, device=device)}, batch_size=[2, 3])
+        assert td_2d.atleast_2d() is td_2d  # No change needed
+
+        # Test atleast_3d
+        td3 = td_1d.atleast_3d()
+        assert td3.ndim == 3
+        assert td3.shape == torch.Size([1, 1, 3])
+
+        td3_from_2d = td_2d.atleast_3d()
+        assert td3_from_2d.ndim == 3
+        assert td3_from_2d.shape == torch.Size([1, 2, 3])
+
+        td_3d = TensorDict(
+            {"a": torch.randn(2, 3, 4, device=device)}, batch_size=[2, 3, 4]
+        )
+        assert td_3d.atleast_3d() is td_3d  # No change needed
+
+        # Test torch.atleast_*d
+        assert torch.atleast_1d(td0).shape == torch.Size([1])
+        assert torch.atleast_2d(td_1d).shape == torch.Size([1, 3])
+        assert torch.atleast_3d(td_1d).shape == torch.Size([1, 1, 3])
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
         torch.manual_seed(1)
         # Just one of the tensors have requires_grad
@@ -8100,6 +8467,213 @@ class TestTensorDicts(TestTensorDictsBase):
         if is_lazy:
             return
         assert (td == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_movedim(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec:
+            td_moved = td.movedim(0, -1)
+        if is_lazy:
+            return
+        expected_shape = torch.Size([*td.shape[1:], td.shape[0]])
+        assert td_moved.shape == expected_shape
+        for key, value in td_moved.items(True):
+            original_value = td.get(key)
+            assert value.shape == torch.Size(
+                [
+                    *original_value.shape[1 : td.ndim],
+                    original_value.shape[0],
+                    *original_value.shape[td.ndim :],
+                ]
+            )
+
+        # Test with tuple dims
+        with error_dec:
+            td_moved2 = td.movedim((0, 1), (1, 0))
+        if is_lazy:
+            return
+        expected_shape2 = torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        assert td_moved2.shape == expected_shape2
+
+        # Test out of range error
+        with pytest.raises(IndexError):
+            td.movedim(0, td.ndim + 5)
+        with pytest.raises(IndexError):
+            td.movedim(td.ndim + 5, 0)
+
+    @set_lazy_legacy(False)
+    def test_movedim_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().movedim(0, -1) as td_moved:
+            if not td_moved.requires_grad:
+                td_moved.apply_(lambda x: x * 0 + 1)
+            else:
+                td_moved.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_swapaxes(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec:
+            td_swapped = td.swapaxes(0, 1)
+        if is_lazy:
+            return
+        expected_shape = torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        assert td_swapped.shape == expected_shape
+
+        # Test swapdims alias
+        with error_dec:
+            td_swapped2 = td.swapdims(0, 1)
+        assert td_swapped2.shape == expected_shape
+
+    @set_lazy_legacy(False)
+    def test_flip(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_flipped = td.flip(0)
+        # Shape should be unchanged
+        assert td_flipped.shape == td.shape
+
+        # Test flip multiple dims
+        td_flipped2 = td.flip((0, 1))
+        assert td_flipped2.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_fliplr_flipud(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # All test TDs have at least 2 batch dims
+        td_lr = td.fliplr()
+        assert td_lr.shape == td.shape
+
+        td_ud = td.flipud()
+        assert td_ud.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_roll(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_rolled = td.roll(1, 0)
+        assert td_rolled.shape == td.shape
+
+        # Test roll multiple dims
+        td_rolled2 = td.roll((1, 2), (0, 1))
+        assert td_rolled2.shape == td.shape
+
+    @set_lazy_legacy(False)
+    def test_rot90(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        td_rotated = td.rot90()
+        # Shape should swap first two dims
+        assert td_rotated.shape == torch.Size(
+            [original_shape[1], original_shape[0], *original_shape[2:]]
+        )
+
+        # Test rot90 twice should preserve shape
+        td_rotated2 = td.rot90(2)
+        assert td_rotated2.shape == original_shape
+
+    @set_lazy_legacy(False)
+    def test_narrow(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # Narrow first dim
+        td_narrow = td.narrow(0, 0, 1)
+        assert td_narrow.shape[0] == 1
+        assert td_narrow.shape[1:] == td.shape[1:]
+
+        # Narrow second dim
+        td_narrow2 = td.narrow(1, 0, 2)
+        assert td_narrow2.shape[0] == td.shape[0]
+        assert td_narrow2.shape[1] == 2
+
+    @set_lazy_legacy(False)
+    def test_tile(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be tiled due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Tile all dims by 2
+        tile_dims = (2,) * td.ndim
+        td_tiled = td.tile(tile_dims)
+        expected_shape = torch.Size([s * 2 for s in original_shape])
+        assert td_tiled.shape == expected_shape
+
+    @set_lazy_legacy(False)
+    def test_broadcast_to(self, td_name, device):
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("sub_td cannot be broadcast due to shape constraints")
+        td = getattr(self, td_name)(device)
+        original_shape = td.shape
+        # Broadcast to same shape
+        td_broadcast = td.broadcast_to(original_shape)
+        assert td_broadcast.shape == original_shape
+
+        # Broadcast with extra dim
+        new_shape = (2,) + tuple(original_shape)
+        td_broadcast2 = td.broadcast_to(new_shape)
+        assert td_broadcast2.shape == torch.Size(new_shape)
+
+    @set_lazy_legacy(False)
+    def test_atleast_nd(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        original_ndim = td.ndim
+
+        # atleast_1d
+        td1 = td.atleast_1d()
+        assert td1.ndim >= 1
+        if original_ndim >= 1:
+            assert td1 is td
+
+        # atleast_2d
+        td2 = td.atleast_2d()
+        assert td2.ndim >= 2
+        if original_ndim >= 2:
+            assert td2 is td
+
+        # atleast_3d
+        td3 = td.atleast_3d()
+        assert td3.ndim >= 3
+        if original_ndim >= 3:
+            assert td3 is td
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):

@@ -259,6 +259,60 @@ class TestTD:
         assert unflatten_keys_c(data) is not data
         assert unflatten_keys_c(data)["a", "b"] is data["a.b"]
 
+    def test_pop(self, mode):
+        def pop_existing(td: TensorDict):
+            return td.pop("a")
+
+        def pop_missing_with_default(td: TensorDict):
+            return td.pop("missing", None)
+
+        pop_existing_c = torch.compile(pop_existing, fullgraph=True, mode=mode)
+        pop_missing_c = torch.compile(
+            pop_missing_with_default, fullgraph=True, mode=mode
+        )
+
+        # Test pop existing key
+        data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
+        result = pop_existing(data.clone())
+        assert result == 1
+
+        data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
+        result_c = pop_existing_c(data.clone())
+        assert result_c == 1
+
+        # Verify key is removed
+        data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
+        _ = pop_existing_c(data)
+        assert "a" not in data.keys()
+        assert "b" in data.keys()
+
+        # Test pop missing key with default
+        data = TensorDict({"a": torch.tensor(1)})
+        result = pop_missing_with_default(data.clone())
+        assert result is None
+
+        data = TensorDict({"a": torch.tensor(1)})
+        result_c = pop_missing_c(data.clone())
+        assert result_c is None
+
+    def test_select_strict_false(self, mode):
+        def select_keys(td: TensorDict):
+            return td.select("a", "missing_key", strict=False)
+
+        select_keys_c = torch.compile(select_keys, fullgraph=True, mode=mode)
+
+        # Test select with strict=False
+        data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
+        result = select_keys(data)
+        assert "a" in result.keys()
+        assert "missing_key" not in result.keys()
+        assert "b" not in result.keys()
+
+        result_c = select_keys_c(data)
+        assert "a" in result_c.keys()
+        assert "missing_key" not in result_c.keys()
+        assert "b" not in result_c.keys()
+
     def test_names(self, mode):
         import torch._dynamo.exc
 

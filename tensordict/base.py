@@ -152,13 +152,21 @@ except ImportError:
         return device_module
 
 
-# NO_DEFAULT is used as a placeholder whenever the default is not provided.
-# Using None is not an option since `td.get(key)` is a valid usage.
+# NO_DEFAULT is a sentinel value used to detect when a default argument was not provided.
+# Using None is not an option since `td.get(key)` (returning None) is a valid usage.
+# When passed to methods like `get()`, it signals "raise KeyError if key is missing"
+# rather than returning a default value.
 class _NoDefault(enum.IntEnum):
     ZERO = 0
 
 
 NO_DEFAULT = _NoDefault.ZERO
+
+# _UNSET is a sentinel used in pop() to detect if a key exists without try/except.
+# Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
+# to indicate a missing key. This makes pop() compatible with torch.compile.
+_UNSET = object()
+
 T = TypeVar("T", bound="TensorCollection")
 
 
@@ -4809,6 +4817,29 @@ class TensorDictBase(MutableMapping, TensorCollection):
             inv_op_kwargs={"dim0": dim0, "dim1": dim1},
         )
 
+    @_as_context_manager()
+    def swapaxes(self, axis0: int, axis1: int):
+        """Interchange two axes of the tensordict.
+
+        This is an alias for :meth:`~.transpose`.
+
+        Args:
+            axis0 (int): First axis.
+            axis1 (int): Second axis.
+
+        Returns:
+            a new tensordict with the axes swapped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
+            >>> print(td.swapaxes(0, 1).shape)
+            torch.Size([4, 3])
+        """
+        return self.transpose(axis0, axis1)
+
+    # Alias for swapaxes (matching torch.swapdims)
+    swapdims = swapaxes
+
     @overload
     def permute(self, *dims: int): ...
 
@@ -4913,6 +4944,499 @@ class TensorDictBase(MutableMapping, TensorCollection):
             custom_op_kwargs={"dims": list(map(int, dims_list))},
             inv_op_kwargs={"dims": list(map(int, dims_list))},
         )
+
+    @_as_context_manager()
+    def movedim(
+        self, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+    ):
+        """Moves the dimension(s) of input at the position(s) in source to the position(s) in destination.
+
+        Other dimensions of input that are not explicitly moved remain in their
+        original order and appear at the positions not specified in destination.
+
+        Args:
+            source (int or tuple of ints): Original positions of the dims to move.
+                These must be unique.
+            destination (int or tuple of ints): Destination positions for each of
+                the original dims. These must also be unique.
+
+        Returns:
+            a new tensordict with the batch dimensions moved to the desired positions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
+            >>> print(td.movedim(0, 1).shape)
+            torch.Size([4, 3])
+            >>> print(td.movedim((0, 1), (1, 0)).shape)
+            torch.Size([4, 3])
+        """
+        ndim = self.ndim
+
+        # Normalize source and destination to tuples
+        if isinstance(source, int):
+            source = (source,)
+        if isinstance(destination, int):
+            destination = (destination,)
+
+        if len(source) != len(destination):
+            raise ValueError(
+                f"movedim: source and destination must have the same number of elements, "
+                f"got {len(source)} and {len(destination)}"
+            )
+
+        # Normalize negative indices
+        source = tuple(s if s >= 0 else ndim + s for s in source)
+        destination = tuple(d if d >= 0 else ndim + d for d in destination)
+
+        # Validate indices
+        for s in source:
+            if s < 0 or s >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {s})"
+                )
+        for d in destination:
+            if d < 0 or d >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {d})"
+                )
+
+        # Check for duplicates
+        if len(set(source)) != len(source):
+            raise RuntimeError("movedim: repeated dim in source")
+        if len(set(destination)) != len(destination):
+            raise RuntimeError("movedim: repeated dim in destination")
+
+        # Fast path: if source == destination, return self
+        if source == destination:
+            return self
+
+        # Convert movedim to permute dims
+        # Build the permutation by:
+        # 1. Create list of dims not in source
+        # 2. Insert source dims at destination positions
+        remaining_dims = [i for i in range(ndim) if i not in source]
+
+        # Sort source by destination to insert in correct order
+        sorted_pairs = sorted(zip(destination, source))
+        perm = list(remaining_dims)
+        for dest, src in sorted_pairs:
+            perm.insert(dest, src)
+
+        result = self._permute(perm)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    # Alias for movedim (matching torch.moveaxis)
+    moveaxis = movedim
+
+    @_as_context_manager()
+    def flip(self, dims: int | tuple[int, ...]):
+        """Reverse the order of elements in the tensordict along the given dimensions.
+
+        The shape of the tensordict is preserved, but the elements are reordered.
+
+        Args:
+            dims (int or tuple of ints): Dimensions to flip.
+
+        Returns:
+            a new tensordict with the dimensions flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flip(0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Validate dimensions
+        for d in dims:
+            if d < 0 or d >= ndim:
+                raise IndexError(
+                    f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {d})"
+                )
+
+        def _flip(tensor):
+            return tensor.flip(dims)
+
+        result = self._fast_apply(
+            _flip,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    @_as_context_manager()
+    def fliplr(self):
+        """Flip the tensordict in the left/right direction.
+
+        Flip the entries in each row in the left/right direction.
+        Columns are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 2 batch dimensions.
+
+        Returns:
+            a new tensordict with the second dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.fliplr()["a"])
+            tensor([[2, 1, 0],
+                    [5, 4, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("fliplr requires at least 2 batch dimensions")
+        return self.flip(1)
+
+    @_as_context_manager()
+    def flipud(self):
+        """Flip the tensordict in the up/down direction.
+
+        Flip the entries in each column in the up/down direction.
+        Rows are preserved, but appear in a different order than before.
+
+        Requires the tensordict to have at least 1 batch dimension.
+
+        Returns:
+            a new tensordict with the first dimension flipped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.flipud()["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+        if self.ndim < 1:
+            raise RuntimeError("flipud requires at least 1 batch dimension")
+        return self.flip(0)
+
+    @_as_context_manager()
+    def roll(self, shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None):
+        """Roll the tensordict along the given dimensions.
+
+        Elements that are shifted beyond the last position are re-introduced at
+        the first position.
+
+        Args:
+            shifts (int or tuple of ints): The number of places by which the elements
+                of the tensordict are shifted. If shifts is a tuple, dims must be a
+                tuple of the same size, and each dimension will be rolled by the
+                corresponding value.
+            dims (int or tuple of ints, optional): Axis along which to roll.
+                By default, the tensordict is flattened before rolling.
+
+        Returns:
+            a new tensordict with elements rolled.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.roll(1, 0)["a"])
+            tensor([[3, 4, 5],
+                    [0, 1, 2]])
+        """
+
+        def _roll(tensor):
+            return tensor.roll(shifts, dims)
+
+        result = self._fast_apply(
+            _roll,
+            batch_size=self.batch_size,
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    @_as_context_manager()
+    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)):
+        """Rotate the tensordict by 90 degrees in the plane specified by dims.
+
+        Rotation direction is from the first towards the second axis.
+
+        Args:
+            k (int): Number of times to rotate. Default: 1.
+            dims (tuple of two ints): The plane to rotate in. Default: (0, 1).
+
+        Returns:
+            a new tensordict rotated by 90 degrees.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.rot90()["a"])
+            tensor([[2, 5],
+                    [1, 4],
+                    [0, 3]])
+        """
+        if self.ndim < 2:
+            raise RuntimeError("rot90 requires at least 2 batch dimensions")
+        if len(dims) != 2:
+            raise RuntimeError("rot90 requires exactly 2 dims")
+
+        # Normalize dims
+        ndim = self.ndim
+        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+
+        # Calculate new batch size
+        k = k % 4  # Normalize k to [0, 3]
+        if k == 0:
+            return self
+
+        batch_size = list(self.batch_size)
+        if k == 1 or k == 3:
+            batch_size[dims[0]], batch_size[dims[1]] = (
+                batch_size[dims[1]],
+                batch_size[dims[0]],
+            )
+
+        if self._has_names():
+            names = list(self.names)
+            if k == 1 or k == 3:
+                names[dims[0]], names[dims[1]] = names[dims[1]], names[dims[0]]
+        else:
+            names = None
+
+        def _rot90(tensor):
+            return tensor.rot90(k, dims)
+
+        result = self._fast_apply(
+            _rot90,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=names,
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    def narrow(self, dim: int, start: int, length: int):
+        """Returns a new tensordict that is a narrowed version of the input.
+
+        The dimension dim is input from start to start + length.
+
+        Args:
+            dim (int): The dimension along which to narrow.
+            start (int): Starting index.
+            length (int): Length of the narrowed dimension.
+
+        Returns:
+            a new tensordict narrowed along the specified dimension.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.narrow(1, 1, 2)["a"])
+            tensor([[1, 2],
+                    [4, 5]])
+        """
+        ndim = self.ndim
+        if dim < 0:
+            dim = ndim + dim
+        if dim < 0 or dim >= ndim:
+            raise IndexError(
+                f"Dimension out of range (expected to be in range of [-{ndim}, {ndim - 1}], but got {dim})"
+            )
+
+        batch_size = list(self.batch_size)
+        batch_size[dim] = length
+
+        def _narrow(tensor):
+            return tensor.narrow(dim, start, length)
+
+        result = self._fast_apply(
+            _narrow,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=self._maybe_names(),
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    def tile(self, dims: tuple[int, ...]):
+        """Construct a tensordict by repeating the elements.
+
+        The dims argument specifies the number of repetitions in each dimension.
+
+        Args:
+            dims (tuple of ints): The number of repetitions per dimension.
+
+        Returns:
+            a new tensordict with elements repeated.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
+            >>> print(td["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5]])
+            >>> print(td.tile((2, 1))["a"])
+            tensor([[0, 1, 2],
+                    [3, 4, 5],
+                    [0, 1, 2],
+                    [3, 4, 5]])
+        """
+        if isinstance(dims, int):
+            dims = (dims,)
+
+        # Calculate new batch size
+        ndim = self.ndim
+        if len(dims) > ndim:
+            # If more dims than batch dims, prepend 1s to batch_size
+            new_batch_size = [1] * (len(dims) - ndim) + list(self.batch_size)
+            for i, d in enumerate(dims):
+                new_batch_size[i] *= d
+        else:
+            # Pad dims with leading 1s
+            new_batch_size = list(self.batch_size)
+            offset = ndim - len(dims)
+            for i, d in enumerate(dims):
+                new_batch_size[offset + i] *= d
+
+        def _tile(tensor):
+            return tensor.tile(dims)
+
+        result = self._fast_apply(
+            _tile,
+            batch_size=torch.Size(new_batch_size),
+            call_on_nested=True,
+            names=None,  # tile invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    def broadcast_to(self, shape: tuple[int, ...]):
+        """Broadcasts the tensordict to a new shape.
+
+        The new shape must be compatible with the original shape.
+
+        Args:
+            shape (tuple of ints): The desired shape.
+
+        Returns:
+            a new tensordict with the shape broadcast.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
+            >>> print(td.broadcast_to((2, 3)).shape)
+            torch.Size([2, 3])
+        """
+        shape = torch.Size(shape)
+
+        def _broadcast_to(tensor):
+            return tensor.broadcast_to(shape + tensor.shape[self.ndim :])
+
+        result = self._fast_apply(
+            _broadcast_to,
+            batch_size=shape,
+            call_on_nested=True,
+            names=None,  # broadcast invalidates names
+            propagate_lock=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
+
+    @_as_context_manager()
+    def atleast_1d(self):
+        """Returns the tensordict with at least 1 batch dimension.
+
+        If the tensordict already has 1 or more batch dimensions, it is returned unchanged.
+        Otherwise, a dimension of size 1 is prepended.
+
+        Returns:
+            a tensordict with at least 1 batch dimension.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[])
+            >>> print(td.atleast_1d().shape)
+            torch.Size([1])
+        """
+        if self.ndim >= 1:
+            return self
+        return self.unsqueeze(0)
+
+    @_as_context_manager()
+    def atleast_2d(self):
+        """Returns the tensordict with at least 2 batch dimensions.
+
+        If the tensordict already has 2 or more batch dimensions, it is returned unchanged.
+        Otherwise, dimensions of size 1 are prepended to reach 2 dimensions.
+
+        Returns:
+            a tensordict with at least 2 batch dimensions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+            >>> print(td.atleast_2d().shape)
+            torch.Size([1, 3])
+        """
+        if self.ndim >= 2:
+            return self
+        elif self.ndim == 1:
+            return self.unsqueeze(0)
+        else:
+            return self.unsqueeze(0).unsqueeze(0)
+
+    @_as_context_manager()
+    def atleast_3d(self):
+        """Returns the tensordict with at least 3 batch dimensions.
+
+        If the tensordict already has 3 or more batch dimensions, it is returned unchanged.
+        Otherwise, dimensions of size 1 are prepended to reach 3 dimensions.
+
+        Returns:
+            a tensordict with at least 3 batch dimensions.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+            >>> print(td.atleast_3d().shape)
+            torch.Size([1, 1, 3])
+        """
+        if self.ndim >= 3:
+            return self
+        elif self.ndim == 2:
+            return self.unsqueeze(0)
+        elif self.ndim == 1:
+            return self.unsqueeze(0).unsqueeze(0)
+        else:
+            return self.unsqueeze(0).unsqueeze(0).unsqueeze(0)
 
     # Cache functionality
     def _erase_cache(self):
@@ -8285,19 +8809,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
         key = _unravel_key_to_tuple(key)
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        try:
-            # using try/except for get/del is suboptimal, but
-            # this is faster that checkink if key in self keys
-            out = self.get(key, default)
-            self.del_(key)
-        except KeyError as err:
-            # if default provided, 'out' value will return, else raise error
+        # Use _UNSET sentinel to detect if key exists without try/except (compile-friendly)
+        out = self.get(key, _UNSET)
+        if out is _UNSET:
+            # Key not found
             if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value. "
                     f"Keys={self.keys(include_nested=isinstance(key, tuple))}."
-                ) from err
+                )
+            return default
+        self.del_(key)
         return out
 
     @property
@@ -11087,7 +11610,34 @@ class TensorDictBase(MutableMapping, TensorCollection):
         torch._foreach_cosh_(self._values_list(True, True))
         return self
 
+    @implement_for("torch", None, "2.5")
     def _clone_recurse(self) -> Self:  # noqa: D417
+        keys, vals = self._items_list(True, True)
+        items = dict(
+            _zip_strict(
+                keys,
+                (val.clone() if hasattr(val, "clone") else val for val in vals),
+            )
+        )
+
+        def pop(name, val):
+            return items.pop(name, None)
+
+        result = self._fast_apply(
+            pop,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=False,
+            filter_empty=False,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
+
+    @implement_for("torch", "2.5")
+    def _clone_recurse(self) -> Self:  # noqa: F811, D417
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}

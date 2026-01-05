@@ -58,6 +58,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _UNSET,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -146,19 +147,34 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
+    torch.atleast_1d: True,
+    torch.atleast_2d: True,
+    torch.atleast_3d: True,
+    torch.broadcast_to: True,
     torch.cat: True,
     torch.clone: True,
     torch.empty_like: True,
     torch.flatten: True,
+    torch.flip: True,
+    torch.fliplr: True,
+    torch.flipud: True,
     torch.full_like: True,
     torch.gather: True,
+    torch.movedim: True,
+    torch.moveaxis: True,
+    torch.narrow: True,
     torch.ones_like: True,
     torch.permute: True,
     torch.rand_like: True,
     torch.randn_like: True,
+    torch.roll: True,
+    torch.rot90: True,
     torch.split: True,
     torch.squeeze: True,
     torch.stack: True,
+    torch.swapaxes: True,
+    torch.swapdims: True,
+    torch.tile: True,
     torch.unbind: True,
     torch.unflatten: True,
     torch.unsqueeze: True,
@@ -330,11 +346,15 @@ _FALLBACK_METHOD_FROM_TD = [
     "asin_",
     "atan",
     "atan_",
+    "atleast_1d",
+    "atleast_2d",
+    "atleast_3d",
     "auto_batch_size_",
     "auto_device_",
     "bfloat16",
     "bitwise_and",
     "bool",
+    "broadcast_to",
     "cat",
     "cat_from_tensordict",
     "ceil",
@@ -387,6 +407,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "filter_non_tensor_data",
     "flatten",
     "flatten_keys",
+    "flip",
+    "fliplr",
+    "flipud",
     "float",
     "float16",
     "float32",
@@ -452,11 +475,14 @@ _FALLBACK_METHOD_FROM_TD = [
     "minimum",
     "minimum_",
     "mod",
+    "movedim",
+    "moveaxis",
     "mul",
     "mul_",
     "named_apply",
     "nanmean",
     "nansum",
+    "narrow",
     "neg",
     "neg_",
     "new_empty",
@@ -489,6 +515,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "replace",
     "requires_grad_",
     "reshape",
+    "roll",
+    "rot90",
     "round",
     "round_",
     "rsub",
@@ -512,6 +540,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "sqrt_",
     "squeeze",
     "stack",
+    "swapaxes",
+    "swapdims",
     "stack_from_tensordict",
     "stack_tensors",
     "std",
@@ -523,6 +553,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "tanh",
     "tanh_",
     "tensor_split",
+    "tile",
     "to",
     "to_h5",
     "to_lazystack",
@@ -1667,24 +1698,21 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
-    try:
-        return self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
-    except KeyError:
-        try:
-            return self._non_tensordict[item]
-        except KeyError:
-            out = getattr(self._tensordict, item, NO_DEFAULT)
-            if out is not NO_DEFAULT:
-                if not callable(out) and not is_non_tensor(out):
-                    return out
-                if is_non_tensor(out):
-                    return (
-                        out.data
-                        if hasattr(out, "data")
-                        else out.tolist(as_linked_list=True)
-                    )
-                return _wrap_method(self, item, out)
-            raise AttributeError(item)
+    # Use _UNSET sentinel instead of try/except for torch.compile compatibility
+    out = self._tensordict._get_str(item, _UNSET, **kwargs)
+    if out is not _UNSET:
+        return out
+    out = self._non_tensordict.get(item, _UNSET)
+    if out is not _UNSET:
+        return out
+    out = getattr(self._tensordict, item, NO_DEFAULT)
+    if out is not NO_DEFAULT:
+        if not callable(out) and not is_non_tensor(out):
+            return out
+        if is_non_tensor(out):
+            return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
+        return _wrap_method(self, item, out)
+    raise AttributeError(item)
 
 
 def _getattr(self, item: str, **kwargs) -> Any:

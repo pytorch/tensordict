@@ -45,6 +45,7 @@ from tensordict.base import (
     _maybe_broadcast_other,
     _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
+    _UNSET,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -3392,8 +3393,8 @@ class TensorDict(TensorDictBase):
                 else:
                     key, subkey = key[0], key[1:]
 
-                val = self._get_str(key, default=None if not strict else NO_DEFAULT)
-                if val is None:
+                val = self._get_str(key, default=_UNSET if not strict else NO_DEFAULT)
+                if val is _UNSET:
                     continue
                 source[key] = val
                 if len(subkey):

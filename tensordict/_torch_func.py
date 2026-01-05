@@ -96,9 +96,76 @@ def _flatten(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.flatten(*args, **kwargs)
 
 
+@implements_for_td(torch.flip)
+def _flip(td: T, dims: Sequence[int]) -> T:
+    return td.flip(dims)
+
+
+@implements_for_td(torch.fliplr)
+def _fliplr(td: T) -> T:
+    return td.fliplr()
+
+
+@implements_for_td(torch.flipud)
+def _flipud(td: T) -> T:
+    return td.flipud()
+
+
+@implements_for_td(torch.roll)
+def _roll(
+    td: T, shifts: int | Sequence[int], dims: int | Sequence[int] | None = None
+) -> T:
+    return td.roll(shifts, dims)
+
+
+@implements_for_td(torch.rot90)
+def _rot90(td: T, k: int = 1, dims: Sequence[int] = (0, 1)) -> T:
+    return td.rot90(k, dims)
+
+
+@implements_for_td(torch.narrow)
+def _narrow(td: T, dim: int, start: int, length: int) -> T:
+    return td.narrow(dim, start, length)
+
+
+@implements_for_td(torch.tile)
+def _tile(td: T, dims: Sequence[int]) -> T:
+    return td.tile(dims)
+
+
+@implements_for_td(torch.broadcast_to)
+def _broadcast_to(td: T, shape: Sequence[int]) -> T:
+    return td.broadcast_to(shape)
+
+
+@implements_for_td(torch.atleast_1d)
+def _atleast_1d(td: T) -> T:
+    return td.atleast_1d()
+
+
+@implements_for_td(torch.atleast_2d)
+def _atleast_2d(td: T) -> T:
+    return td.atleast_2d()
+
+
+@implements_for_td(torch.atleast_3d)
+def _atleast_3d(td: T) -> T:
+    return td.atleast_3d()
+
+
 @implements_for_td(torch.transpose)
 def _transpose(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
     return td.transpose(*args, **kwargs)
+
+
+@implements_for_td(torch.swapaxes)
+def _swapaxes(td: T, axis0: int, axis1: int) -> T:
+    return td.swapaxes(axis0, axis1)
+
+
+@implements_for_td(torch.swapdims)
+def _swapdims(td: T, dim0: int, dim1: int) -> T:
+    return td.swapdims(dim0, dim1)
 
 
 @implements_for_td(torch.gather)
@@ -334,6 +401,18 @@ def _masked_select(td: T, *args: Any, **kwargs: Any) -> T:
 @implements_for_td(torch.permute)
 def _permute(td: T, dims: Sequence[int]) -> T:
     return td.permute(*dims)
+
+
+@implements_for_td(torch.movedim)
+def _movedim(td: T, source: int | Sequence[int], destination: int | Sequence[int]) -> T:
+    return td.movedim(source, destination)
+
+
+@implements_for_td(torch.moveaxis)
+def _moveaxis(
+    td: T, source: int | Sequence[int], destination: int | Sequence[int]
+) -> T:
+    return td.moveaxis(source, destination)
 
 
 @implements_for_td(torch.cat)
