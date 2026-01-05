@@ -5241,7 +5241,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @_as_context_manager()
     def narrow(self, dim: int, start: int, length: int):
         """Returns a new tensordict that is a narrowed version of the input.
 
@@ -5290,7 +5289,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @_as_context_manager()
     def tile(self, dims: tuple[int, ...]):
         """Construct a tensordict by repeating the elements.
 
@@ -5345,7 +5343,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    @_as_context_manager()
     def broadcast_to(self, shape: tuple[int, ...]):
         """Broadcasts the tensordict to a new shape.
 
