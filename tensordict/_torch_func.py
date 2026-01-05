@@ -336,6 +336,18 @@ def _permute(td: T, dims: Sequence[int]) -> T:
     return td.permute(*dims)
 
 
+@implements_for_td(torch.movedim)
+def _movedim(td: T, source: int | Sequence[int], destination: int | Sequence[int]) -> T:
+    return td.movedim(source, destination)
+
+
+@implements_for_td(torch.moveaxis)
+def _moveaxis(
+    td: T, source: int | Sequence[int], destination: int | Sequence[int]
+) -> T:
+    return td.moveaxis(source, destination)
+
+
 @implements_for_td(torch.cat)
 def _cat(
     list_of_tensordicts: Sequence[T],

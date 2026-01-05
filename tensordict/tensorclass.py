@@ -153,6 +153,8 @@ _TD_PASS_THROUGH = {
     torch.flatten: True,
     torch.full_like: True,
     torch.gather: True,
+    torch.movedim: True,
+    torch.moveaxis: True,
     torch.ones_like: True,
     torch.permute: True,
     torch.rand_like: True,
@@ -453,6 +455,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "minimum",
     "minimum_",
     "mod",
+    "movedim",
+    "moveaxis",
     "mul",
     "mul_",
     "named_apply",
@@ -1680,11 +1684,7 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
         if not callable(out) and not is_non_tensor(out):
             return out
         if is_non_tensor(out):
-            return (
-                out.data
-                if hasattr(out, "data")
-                else out.tolist(as_linked_list=True)
-            )
+            return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
     raise AttributeError(item)
 
