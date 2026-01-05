@@ -4820,6 +4820,29 @@ class TensorDictBase(MutableMapping, TensorCollection):
             inv_op_kwargs={"dim0": dim0, "dim1": dim1},
         )
 
+    @_as_context_manager()
+    def swapaxes(self, axis0: int, axis1: int):
+        """Interchange two axes of the tensordict.
+
+        This is an alias for :meth:`~.transpose`.
+
+        Args:
+            axis0 (int): First axis.
+            axis1 (int): Second axis.
+
+        Returns:
+            a new tensordict with the axes swapped.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3, 4])
+            >>> print(td.swapaxes(0, 1).shape)
+            torch.Size([4, 3])
+        """
+        return self.transpose(axis0, axis1)
+
+    # Alias for swapaxes (matching torch.swapdims)
+    swapdims = swapaxes
+
     @overload
     def permute(self, *dims: int): ...
 
