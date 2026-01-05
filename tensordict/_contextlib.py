@@ -352,6 +352,19 @@ def _reverse_roll(self, args, kwargs, out):
 LAST_OP_MAPS["roll"] = _reverse_roll
 
 
+def _reverse_rot90(self, args, kwargs, out):
+    # Reverse of rot90(k, dims) is rot90(-k, dims) or rot90(4-k, dims)
+    k = args[0] if args else kwargs.get("k", 1)
+    dims = args[1] if len(args) > 1 else kwargs.get("dims", (0, 1))
+    if not out.is_locked:
+        return out.update(self.rot90(-k, dims), inplace=False)
+    else:
+        return out.update_(self.rot90(-k, dims))
+
+
+LAST_OP_MAPS["rot90"] = _reverse_rot90
+
+
 def _reverse_view(self, args, kwargs, out):
     if not out.is_locked:
         return out.update(self.view(out.shape), inplace=False)
