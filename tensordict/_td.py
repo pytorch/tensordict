@@ -3437,7 +3437,7 @@ class TensorDict(TensorDictBase):
         if not len(keys):
             return self.copy() if not inplace else self
         if not inplace:
-            _tensordict = copy(self._tensordict)
+            _tensordict = dict(self._tensordict)
         else:
             _tensordict = self._tensordict
         keys_to_exclude = None

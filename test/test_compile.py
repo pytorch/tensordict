@@ -313,6 +313,21 @@ class TestTD:
         assert "missing_key" not in result_c.keys()
         assert "b" not in result_c.keys()
 
+    def test_exclude(self, mode):
+        def exclude_keys(td: TensorDict):
+            return td.exclude("b")
+
+        exclude_keys_c = torch.compile(exclude_keys, fullgraph=True, mode=mode)
+
+        data = TensorDict({"a": torch.tensor(1), "b": torch.tensor(2)})
+        result = exclude_keys(data)
+        assert "a" in result.keys()
+        assert "b" not in result.keys()
+
+        result_c = exclude_keys_c(data)
+        assert "a" in result_c.keys()
+        assert "b" not in result_c.keys()
+
     def test_names(self, mode):
         import torch._dynamo.exc
 
