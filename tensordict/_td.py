@@ -926,8 +926,7 @@ class TensorDict(TensorDictBase):
 
             names = None
             if self._has_names():
-                names = copy(self.names)
-                names = [name for i, name in enumerate(names) if i != dim]
+                names = [name for i, name in enumerate(self.names) if i != dim]
 
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
@@ -948,8 +947,7 @@ class TensorDict(TensorDictBase):
 
             names = None
             if self._has_names():
-                names = copy(self.names)
-                names = [name for i, name in enumerate(names) if i != dim]
+                names = [name for i, name in enumerate(self.names) if i != dim]
 
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
@@ -1071,7 +1069,7 @@ class TensorDict(TensorDictBase):
                 return result
 
             if self._has_names():
-                names = copy(self.names)
+                names = list(self.names)
             else:
                 names = None
             if not call_on_nested:
@@ -1088,11 +1086,10 @@ class TensorDict(TensorDictBase):
         elif dim is not NO_DEFAULT or keepdim:
             names = None
             if self._has_names():
-                names = copy(self.names)
                 if not keepdim and isinstance(dim, tuple):
-                    names = [name for i, name in enumerate(names) if i not in dim]
+                    names = [name for i, name in enumerate(self.names) if i not in dim]
                 else:
-                    names = [name for i, name in enumerate(names) if i != dim]
+                    names = [name for i, name in enumerate(self.names) if i != dim]
             if dim is not NO_DEFAULT:
                 kwargs["dim"] = dim
             if keepdim is not NO_DEFAULT:
@@ -1745,8 +1742,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         names = None
         if self._has_names():
-            names = copy(self.names)
-            names = [name for i, name in enumerate(names) if i != dim]
+            names = [name for i, name in enumerate(self.names) if i != dim]
             # We could use any() but dynamo doesn't like generators
             for name in names:
                 if name is not None:
@@ -2072,7 +2068,7 @@ class TensorDict(TensorDictBase):
     def _squeeze(self, dim=None):
         batch_size = self.batch_size
         if dim is None:
-            names = copy(self.names) if self._has_names() else None
+            names = list(self.names) if self._has_names() else None
             if names is not None:
                 batch_size, names = _zip_strict(
                     *[
@@ -2114,7 +2110,7 @@ class TensorDict(TensorDictBase):
         batch_size = list(batch_size)
         batch_size.pop(dim)
         batch_size = list(batch_size)
-        names = copy(self.names) if self._has_names() else None
+        names = list(self.names) if self._has_names() else None
         if names:
             names.pop(dim)
 
@@ -2149,7 +2145,7 @@ class TensorDict(TensorDictBase):
         batch_size.insert(newdim, 1)
         batch_size = torch.Size(batch_size)
 
-        names = copy(self.names) if self._has_names() else None
+        names = list(self.names) if self._has_names() else None
         if names:
             names.insert(newdim, None)
 
@@ -2243,7 +2239,10 @@ class TensorDict(TensorDictBase):
         from tensordict import TensorDict
 
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
-        input_dict = copy(input_dict)
+        if is_compiling():
+            input_dict = type(input_dict)(input_dict)
+        else:
+            input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
                 cur_value = self.get(key)

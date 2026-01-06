@@ -5560,7 +5560,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         # replace ellipsis if any
-        names_copy = copy(names)
+        names_copy = list(names)
         if any(name is Ellipsis for name in names):
             ellipsis_name = [NO_DEFAULT for _ in range(self.ndim - len(names) + 1)]
             names = []
@@ -6053,7 +6053,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 return self.update(self_flatten.unflatten_keys("."))
 
         # copy since we'll be using pop
-        state_dict = copy(state_dict)
+        if is_compiling():
+            state_dict = type(state_dict)(state_dict)
+        else:
+            state_dict = copy(state_dict)
         batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device", None)
 
@@ -8959,7 +8962,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
         )
         if self._has_names():
-            names = copy(self.names)
+            names = list(self.names)
             for _ in range(len(unflattened_size) - 1):
                 names.insert(dim, None)
             out.names = names
