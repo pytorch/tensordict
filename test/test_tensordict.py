@@ -16,6 +16,7 @@ import pathlib
 import platform
 import re
 import sys
+import sysconfig
 import warnings
 import weakref
 from collections import UserDict
@@ -14130,6 +14131,10 @@ class TestMemmap:
 class TestFreeThreading:
     """Tests for free-threading (GIL-less Python) compatibility."""
 
+    @pytest.mark.skipif(
+        not sysconfig.get_config_var("Py_GIL_DISABLED"),
+        reason="Only runs on free-threading Python builds (3.13t+)",
+    )
     def test_concurrent_gc_stress(self):
         """Regression test for free-threading race condition (PR #1481).
 
