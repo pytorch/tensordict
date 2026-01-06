@@ -6,6 +6,7 @@
 import tensordict._reductions
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
+from tensordict._schema import TensorDictSchema, TensorSpec
 from tensordict._td import (
     cat,
     from_consolidated,
@@ -106,6 +107,9 @@ __all__ = [
     "MemoryMappedTensor",
     "PersistentTensorDict",
     "NestedKey",
+    # Schema classes for torch.compile optimization
+    "TensorDictSchema",
+    "TensorSpec",
     # Factory functions
     "from_dict",
     "from_any",

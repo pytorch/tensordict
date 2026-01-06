@@ -58,6 +58,7 @@ import torch
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
+from tensordict._schema import TensorDictSchema, TensorSpec
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
@@ -13219,6 +13220,178 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 v = v._tensordict
             v._last_op = None
         return self
+
+    def _compute_schema(self, batch_dims: int | None = None) -> TensorDictSchema:
+        """Compute a schema representation of this TensorDict's structure.
+
+        The schema captures:
+        - All keys (sorted for determinism)
+        - Nested TensorDict schemas (recursively)
+        - Tensor specifications (dtype, device, non-batch shape)
+        - Number of batch dimensions
+        - Device constraint
+
+        Args:
+            batch_dims: Number of leading dimensions to treat as dynamic batch dims.
+                If None, uses ``self.batch_dims``.
+
+        Returns:
+            A frozen TensorDictSchema representing this TensorDict's structure.
+        """
+        if batch_dims is None:
+            batch_dims = self.batch_dims
+
+        keys = tuple(sorted(self.keys()))
+        nested = []
+        tensors = []
+
+        for key in keys:
+            value = self._get_str(key, default=NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                nested.append((key, value._compute_schema(batch_dims)))
+            elif isinstance(value, Tensor):
+                shape_suffix = tuple(value.shape[batch_dims:])
+                spec = TensorSpec(
+                    dtype=value.dtype,
+                    device=value.device,
+                    shape_suffix=shape_suffix,
+                )
+                tensors.append((key, spec))
+            # Skip non-tensor data in schema (they don't affect compilation guards)
+
+        return TensorDictSchema(
+            keys=keys,
+            nested_schemas=tuple(nested),
+            tensor_specs=tuple(tensors),
+            batch_dims=batch_dims,
+            device=self.device,
+        )
+
+    _frozen_schema: TensorDictSchema | None = None
+    _frozen_schema_hash: int | None = None
+
+    @property
+    def has_frozen_schema(self) -> bool:
+        """Returns True if this TensorDict has a frozen schema."""
+        return self._frozen_schema is not None
+
+    def freeze_schema_(self, *, batch_dims: int | None = None) -> Self:
+        """Freeze the schema for torch.compile optimization.
+
+        After calling this method, the TensorDict structure (keys, dtypes, devices,
+        non-batch shapes) is considered immutable. Operations that would modify
+        the schema (adding/removing keys, changing tensor specs) will raise errors.
+
+        This allows torch.compile to use a single hash guard on the schema instead
+        of generating per-key guards for key presence, ordering, and tensor metadata,
+        drastically reducing compilation overhead.
+
+        Args:
+            batch_dims: Number of leading dimensions to treat as dynamic batch dims.
+                If None, uses ``self.batch_dims``. These dimensions can vary in size
+                without violating the schema.
+
+        Returns:
+            self
+
+        Example:
+            >>> td = TensorDict({
+            ...     "obs": torch.zeros(32, 84, 84),
+            ...     "action": torch.zeros(32, 4),
+            ... }, batch_size=[32])
+            >>> td.freeze_schema_(batch_dims=1)  # First dim is dynamic batch
+            >>> # Now torch.compile will use efficient schema-based guards
+            >>> @torch.compile
+            ... def process(td):
+            ...     return td["obs"] + 1
+
+        Note:
+            - This also freezes schemas of all nested TensorDicts recursively.
+            - To unfreeze, call :meth:`unfreeze_schema_`.
+            - This is different from :meth:`lock_` which prevents value modifications.
+              ``freeze_schema_`` only prevents structural changes.
+        """
+        schema = self._compute_schema(batch_dims)
+        self._frozen_schema = schema
+        self._frozen_schema_hash = hash(schema)
+
+        # Also freeze nested TensorDicts
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                value.freeze_schema_(batch_dims=batch_dims)
+
+        return self
+
+    def unfreeze_schema_(self) -> Self:
+        """Unfreeze the schema, allowing structural modifications again.
+
+        Returns:
+            self
+        """
+        self._frozen_schema = None
+        self._frozen_schema_hash = None
+
+        # Also unfreeze nested TensorDicts
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                value.unfreeze_schema_()
+
+        return self
+
+    def _validate_schema(self) -> bool:
+        """Check if current structure matches frozen schema.
+
+        Returns:
+            True if schema matches or no schema is frozen.
+
+        Raises:
+            RuntimeError: If the current structure doesn't match the frozen schema.
+        """
+        if self._frozen_schema is None:
+            return True
+
+        current = self._compute_schema(self._frozen_schema.batch_dims)
+        if current != self._frozen_schema:
+            raise RuntimeError(
+                f"TensorDict schema violated.\n"
+                f"Expected:\n{self._frozen_schema}\n"
+                f"Got:\n{current}"
+            )
+        return True
+
+    def _check_schema_key_allowed(self, key: str) -> None:
+        """Check if a key operation is allowed under the frozen schema.
+
+        Args:
+            key: The key being set or deleted.
+
+        Raises:
+            RuntimeError: If the key is not in the frozen schema.
+        """
+        if self._frozen_schema is None:
+            return
+
+        if key not in self._frozen_schema.keys:
+            raise RuntimeError(
+                f"Cannot add key '{key}' to TensorDict with frozen schema. "
+                f"Allowed keys: {self._frozen_schema.keys}. "
+                f"Call unfreeze_schema_() first if you need to modify the structure."
+            )
+
+    def _check_schema_delete_allowed(self, key: str) -> None:
+        """Check if deleting a key is allowed under the frozen schema.
+
+        Args:
+            key: The key being deleted.
+
+        Raises:
+            RuntimeError: If schema is frozen (deletions not allowed).
+        """
+        if self._frozen_schema is not None:
+            raise RuntimeError(
+                f"Cannot delete key '{key}' from TensorDict with frozen schema. "
+                f"Call unfreeze_schema_() first if you need to modify the structure."
+            )
 
     # Clone, select, exclude, empty
     def select(
