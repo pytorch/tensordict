@@ -143,6 +143,22 @@ class TestTD:
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
 
+    def test_stack_refine_names_nested(self, mode):
+        def stack_and_refine(td0, td1):
+            out = torch.stack([td0, td1], 0)
+            out.refine_names("time")
+            return out
+
+        stack_and_refine_c = torch.compile(stack_and_refine, fullgraph=True, mode=mode)
+
+        td0 = TensorDict({"params": TensorDict({"g": torch.tensor(1.0)}, [])}, [])
+        td1 = TensorDict({"params": TensorDict({"g": torch.tensor(2.0)}, [])}, [])
+
+        out = stack_and_refine_c(td0, td1)
+        assert out.names == ["time"]
+        assert out["params"].names == ["time"]
+        torch.testing.assert_close(out["params", "g"], torch.tensor([1.0, 2.0]))
+
     def test_cat(self, mode):
         def cat_tds(td0, td1):
             # return TensorDict.cat([td0, td1])

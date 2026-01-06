@@ -100,7 +100,6 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import nn, Tensor
-from torch._dynamo import graph_break
 from torch._functorch.vmap import _maybe_remove_batch_dim
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
@@ -2345,11 +2344,15 @@ class TensorDict(TensorDictBase):
     @names.setter
     def names(self, value):
         if is_compiling():
-            if value is not None:
-                graph_break()
+            # Dimension names are metadata-only and not part of the numerical graph.
+            # Under torch.compile we avoid graph breaks here (which can lead to
+            # partially materialized nested TensorDict objects across graph
+            # boundaries). We also avoid touching nested TensorDicts here.
+            if value is None:
+                self._td_dim_names = None
             else:
-                # We have already made sure that the tensordict was not named
-                return
+                self._td_dim_names = list(value)
+            return
 
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -2385,9 +2388,11 @@ class TensorDict(TensorDictBase):
             return
         for item in self._tensordict.values():
             if _is_tensor_collection(type(item)):
-                item_names = item.names
-                td_names = list(names) + item_names[len(names) :]
-                item.rename_(*td_names)
+                item_names = item._td_dim_names
+                if item_names is None:
+                    item._td_dim_names = list(names)
+                else:
+                    item._td_dim_names = list(names) + list(item_names)[len(names) :]
 
     @property
     def device(self) -> torch.device | None:
