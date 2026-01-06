@@ -328,6 +328,53 @@ class TestTD:
         assert "a" in result_c.keys()
         assert "b" not in result_c.keys()
 
+    def test_all_any(self, mode):
+        def call_all(td: TensorDict):
+            return td.all(dim=0)
+
+        def call_any(td: TensorDict):
+            return td.any(dim=0)
+
+        call_all_c = torch.compile(call_all, fullgraph=True, mode=mode)
+        call_any_c = torch.compile(call_any, fullgraph=True, mode=mode)
+
+        data = TensorDict(
+            {"a": torch.tensor([[True, False], [True, True]])},
+            batch_size=[2, 2],
+        )
+
+        result_all = call_all(data)
+        result_all_c = call_all_c(data)
+        assert (result_all["a"] == result_all_c["a"]).all()
+        assert result_all_c.shape == torch.Size([2])
+
+        result_any = call_any(data)
+        result_any_c = call_any_c(data)
+        assert (result_any["a"] == result_any_c["a"]).all()
+        assert result_any_c.shape == torch.Size([2])
+
+    def test_squeeze_unsqueeze(self, mode):
+        def call_squeeze(td: TensorDict):
+            return td.squeeze(0)
+
+        def call_unsqueeze(td: TensorDict):
+            return td.unsqueeze(0)
+
+        call_squeeze_c = torch.compile(call_squeeze, fullgraph=True, mode=mode)
+        call_unsqueeze_c = torch.compile(call_unsqueeze, fullgraph=True, mode=mode)
+
+        data = TensorDict({"a": torch.randn(1, 3)}, batch_size=[1, 3])
+
+        result_squeeze = call_squeeze(data)
+        result_squeeze_c = call_squeeze_c(data)
+        assert result_squeeze.shape == result_squeeze_c.shape
+        assert result_squeeze_c.shape == torch.Size([3])
+
+        result_unsqueeze = call_unsqueeze(result_squeeze)
+        result_unsqueeze_c = call_unsqueeze_c(result_squeeze_c)
+        assert result_unsqueeze.shape == result_unsqueeze_c.shape
+        assert result_unsqueeze_c.shape == torch.Size([1, 3])
+
     def test_names(self, mode):
         import torch._dynamo.exc
 

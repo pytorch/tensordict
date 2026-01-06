@@ -1661,7 +1661,7 @@ def _share_memory_(self):
 
 
 def _load_memmap(cls, prefix: Path, metadata: dict, *, robust_key, **kwargs):
-    non_tensordict = copy(metadata)
+    non_tensordict = dict(metadata)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
@@ -2689,7 +2689,7 @@ def _state_dict(
             destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
         )
     }
-    state_dict["_non_tensordict"] = copy(self._non_tensordict)
+    state_dict["_non_tensordict"] = dict(self._non_tensordict)
     return state_dict
 
 
@@ -3750,9 +3750,7 @@ class NonTensorDataBase(TensorClass):
 
         _metadata = {}
         if prefix is not None:
-            _metadata = copy(self._metadata)
-            if _metadata is None:
-                _metadata = {}
+            _metadata = dict(self._metadata) if self._metadata is not None else {}
             _metadata["memmap_prefix"] = prefix
             _metadata["memmaped"] = memmaped
 
