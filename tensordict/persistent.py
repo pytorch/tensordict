@@ -559,8 +559,9 @@ class PersistentTensorDict(TensorDictBase):
             self._batch_size = _batch_size
 
     _erase_names = TensorDict._erase_names
-    names = TensorDict.names
     _has_names = TensorDict._has_names
+    _set_names = TensorDict._set_names
+    names = TensorDict.names
 
     def _rename_subtds(self, names):
         if names is None:
