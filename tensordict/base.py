@@ -3536,9 +3536,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # we can simply add empty names after the current ones.
             # Otherwise, we discard the extra existing names.
             if len(names) < len(new_batch_size):
-                self.names = names + [None] * (len(new_batch_size) - len(names))
+                self._set_names(names + [None] * (len(new_batch_size) - len(names)))
             else:
-                self.names = names[: self.batch_dims]
+                self._set_names(names[: self.batch_dims])
+
+    @abc.abstractmethod
+    def _set_names(self, names: Sequence[str] | None) -> None: ...
 
     @property
     def batch_dims(self) -> int:
@@ -5455,6 +5458,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
+    @names.setter
+    def names(self, value):
+        self._set_names(value)
+
     def _get_names_idx(self, idx):
         if not self._has_names():
             return None
@@ -5585,7 +5592,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     raise RuntimeError(
                         f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}."
                     )
-        self.names = names
+        self._set_names(names)
         # we also need to rename the sub-tensordicts
         # self._rename_subtds(self.names)
         return self
@@ -5637,7 +5644,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert td.names == list("abgd")
         """
         if len(names) == 1 and names[0] is None:
-            self.names = None
+            self._set_names(None)
         if rename_map and names:
             raise ValueError(
                 "Passed both a name map and a name list. " "Only one is accepted."
@@ -5657,9 +5664,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 raise ValueError(
                     f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}."
                 )
-            self.names = cnames
+            self._set_names(cnames)
         else:
-            self.names = names
+            self._set_names(names)
         return self
 
     @abc.abstractmethod
@@ -13033,7 +13040,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     value = value.clone(False).refine_names(*self.names)
             else:
                 if value._has_names():
-                    self.names = value.names[: self.batch_dims]
+                    self._set_names(value.names[: self.batch_dims])
         return value
 
     def _validate_value_batchfree(
@@ -13122,7 +13129,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     )
             else:
                 if value._has_names():
-                    self.names = value.names[: self.batch_dims]
+                    self._set_names(value.names[: self.batch_dims])
         return value
 
     def _validate_value_batchfree_devicefree(
