@@ -598,12 +598,15 @@ class LazyStackedTensorDict(TensorDictBase):
     @names.setter
     @erase_cache  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
-        if value is None:
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
             for td in self.tensordicts:
                 td.names = None
             self._td_dim_name = None
         else:
-            names_c = list(value)
+            names_c = list(names)
             name = names_c[self.stack_dim]
             self._td_dim_name = name
             del names_c[self.stack_dim]
@@ -4583,14 +4586,19 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     @property
     def names(self):
-        names = copy(self._source.names)
+        names = list(self._source.names)
         dim = self.custom_op_kwargs.get("dim")
         names.insert(dim, None)
         return names
 
     @names.setter
     def names(self, value):
-        if value[: self.batch_dims] == self.names:
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
             return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
@@ -4631,7 +4639,7 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     @property
     def names(self):
-        names = copy(self._source.names)
+        names = list(self._source.names)
         dim = self.custom_op_kwargs["dim"]
         if self._source.batch_size[dim] == 1:
             del names[dim]
@@ -4639,7 +4647,12 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
-        if value[: self.batch_dims] == self.names:
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
             return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
@@ -4683,6 +4696,13 @@ class _ViewedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -4751,7 +4771,7 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     @property
     def names(self):
-        names = copy(self._source.names)
+        names = list(self._source.names)
         dim0 = self.custom_op_kwargs["dim0"]
         dim1 = self.custom_op_kwargs["dim1"]
         names = [
@@ -4762,6 +4782,13 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -4860,12 +4887,17 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     @property
     def names(self):
-        names = copy(self._source.names)
+        names = list(self._source.names)
         return [names[i] for i in self.custom_op_kwargs["dims"]]
 
     @names.setter
     def names(self, value):
-        if value[: self.batch_dims] == self.names:
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
             return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."

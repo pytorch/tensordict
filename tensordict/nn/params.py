@@ -695,6 +695,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def _set_device(self, device: torch.device) -> Self: ...  # type: ignore[misc]
 
     @_fallback
+    def _set_names(self, names: Sequence[str] | None) -> None: ...
+
+    @_fallback
     def auto_device_(self) -> Self: ...
 
     __getitems__ = __getitem__

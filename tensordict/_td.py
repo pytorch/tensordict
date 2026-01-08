@@ -304,7 +304,7 @@ class TensorDict(TensorDictBase):
             self._batch_size = self._parse_batch_size(source, batch_size)
             # TODO: this breaks when stacking tensorclasses with dynamo
             if not is_compiling():
-                self.names = names
+                self._set_names(names)
 
             for key, value in source.items():
                 self.set(key, value, non_blocking=sub_non_blocking)
@@ -2343,30 +2343,22 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        if is_compiling():
-            # Dimension names are metadata-only and not part of the numerical graph.
-            # Under torch.compile we avoid graph breaks here (which can lead to
-            # partially materialized nested TensorDict objects across graph
-            # boundaries). We also avoid touching nested TensorDicts here.
-            if value is None:
-                self._td_dim_names = None
-            else:
-                self._td_dim_names = list(value)
-            return
+        self._set_names(value)
 
+    def _set_names(self, names: Sequence[str] | None):
         # we don't run checks on types for efficiency purposes
-        if value is None:
-            self._rename_subtds(value)
+        if names is None:
+            self._rename_subtds(names)
             self._erase_names()
             return
-        value = list(value)
+        value = list(names)
         # Faster but incompatible with dynamo
         # num_none = sum(v is None for v in value)
         num_none = 0
         for v in value:
             num_none += v is None
         if num_none == self.batch_dims:
-            self.names = None
+            self._set_names(None)
             return
         if num_none:
             num_none -= 1
@@ -3696,6 +3688,13 @@ class _SubTensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
+        self._set_names(value)
+
+    def _set_names(self, names: Sequence[str] | None):
+        if names is None:
+            names = [None] * self.batch_dims
+        if names[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a subtensordict cannot be modified. Instantiate it as a TensorDict first."
         )
