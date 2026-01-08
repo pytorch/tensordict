@@ -2387,15 +2387,23 @@ class TensorDict(TensorDictBase):
                     item._erase_names()
             return
         for item in self._tensordict.values():
-            if _is_tensor_collection(type(item)):
+            if isinstance(item, TensorDict):
+                # For TensorDict items, we can directly set _td_dim_names
                 item_names = item._td_dim_names
                 if item_names is None:
                     # Extend names with None for the remaining dimensions
-                    item._td_dim_names = list(names) + [None] * (
-                        item.batch_dims - len(names)
-                    )
+                    td_names = list(names) + [None] * (item.batch_dims - len(names))
                 else:
-                    item._td_dim_names = list(names) + list(item_names)[len(names) :]
+                    td_names = list(names) + list(item_names)[len(names) :]
+                item._td_dim_names = td_names
+                # Recursively rename nested tensor collections
+                item._rename_subtds(td_names)
+            elif _is_tensor_collection(type(item)):
+                # For other tensor collections (tensorclasses, NonTensorData, etc.),
+                # use the public API which handles the renaming correctly
+                item_names = item.names
+                td_names = list(names) + item_names[len(names) :]
+                item.rename_(*td_names)
 
     @property
     def device(self) -> torch.device | None:
