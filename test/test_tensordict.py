@@ -11818,6 +11818,53 @@ class TestNamedDims(TestTensorDictsBase):
         )
         assert td[0][""].names == td[""][0].names == ["d"]
 
+    def test_nested_indexing_extra_dims(self):
+        """Regression test: indexing nested TensorDicts with more batch dims than parent.
+
+        When a nested TensorDict has more batch dimensions than its parent and names
+        are set on the parent, the nested TensorDict should get properly extended names.
+        Indexing should not raise IndexError due to mismatched name list length.
+        """
+        # Structure: parent [10, 5] -> next [10, 5] -> data [10, 5, 3]
+        parent = TensorDict(
+            {
+                "next": TensorDict(
+                    {
+                        "data": TensorDict(
+                            {"truncated": torch.ones(10, 5, 3, dtype=torch.bool)},
+                            batch_size=[10, 5, 3],
+                        )
+                    },
+                    batch_size=[10, 5],
+                )
+            },
+            batch_size=[10, 5],
+        )
+        parent.names = ["time", "batch"]
+
+        # Verify names are properly extended to nested TensorDicts
+        assert parent["next"]._td_dim_names == ["time", "batch"]
+        assert parent["next"]["data"]._td_dim_names == ["time", "batch", None]
+
+        # This should not raise IndexError: list index out of range
+        result = parent[..., -1]
+        assert result.batch_size == torch.Size([10])
+        assert result.names == ["time"]
+        assert result["next"].batch_size == torch.Size([10])
+        assert result["next"].names == ["time"]
+        assert result["next", "data"].batch_size == torch.Size([10, 3])
+        assert result["next", "data"].names == ["time", None]
+        assert result["next", "data", "truncated"].all()
+
+        # Test with integer indexing that removes first dimension
+        result2 = parent[0]
+        assert result2.batch_size == torch.Size([5])
+        assert result2.names == ["batch"]
+        assert result2["next"].batch_size == torch.Size([5])
+        assert result2["next"].names == ["batch"]
+        assert result2["next", "data"].batch_size == torch.Size([5, 3])
+        assert result2["next", "data"].names == ["batch", None]
+
     def test_nested_stacked_td(self):
         td = self.nested_stacked_td("cpu")
         td.names = list("abcd")
