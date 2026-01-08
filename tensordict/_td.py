@@ -2390,7 +2390,10 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(type(item)):
                 item_names = item._td_dim_names
                 if item_names is None:
-                    item._td_dim_names = list(names)
+                    # Extend names with None for the remaining dimensions
+                    item._td_dim_names = list(names) + [None] * (
+                        item.batch_dims - len(names)
+                    )
                 else:
                     item._td_dim_names = list(names) + list(item_names)[len(names) :]
 
