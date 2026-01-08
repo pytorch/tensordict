@@ -1003,6 +1003,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 *modules,
                 partial_tolerant=partial_tolerant,
                 return_composite=return_composite,
+                selected_out_keys=selected_out_keys,
                 inplace=inplace,
             )
         else:
@@ -1033,9 +1034,19 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             )
             for m in modules_list
         ):
-            return TensorDictSequential(
-                modules, partial_tolerant=partial_tolerant, inplace=inplace
+            # No probabilistic modules - initialize as a regular TensorDictSequential
+            TensorDictSequential.__init__(
+                self,
+                *modules,
+                partial_tolerant=partial_tolerant,
+                selected_out_keys=selected_out_keys,
+                inplace=inplace,
             )
+            self._requires_sample = False
+            self.__dict__["_det_part"] = None
+            # Use return_composite=True so forward() just iterates through modules
+            self.return_composite = True
+            return
 
         # if the modules not including the final probabilistic module return the sampled
         # key we won't be sampling it again, in that case
