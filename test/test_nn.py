@@ -1256,6 +1256,98 @@ class TestTDSequence:
         assert "foo1" not in out
         assert out["key2"] == 1
 
+    def test_prob_key_exclusion_constructor(self):
+        module1 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        prob_module = ProbabilisticTensorDictModule(
+            in_keys=["foo1", "key3"],
+            out_keys=["key2"],
+            distribution_class=Normal,
+        )
+        seq = TensorDictSequential(
+            module1, module2, prob_module, selected_out_keys=["key2"]
+        )
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert seq.out_keys == ["key2"]
+
+    def test_prob_key_exclusion_constructor_exec(self):
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        prob_module = ProbabilisticTensorDictModule(
+            in_keys={"loc": "foo1", "scale": "key3"},
+            out_keys=["key2"],
+            distribution_class=Normal,
+        )
+        seq = ProbabilisticTensorDictSequential(
+            module1, module2, prob_module, selected_out_keys=["key2"]
+        )
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert seq.out_keys == ["key2"]
+        td = TensorDict(key1=0, key2=0, key3=1)
+        out = seq(td)
+        assert out is td
+        assert "key1" in out
+        assert "key2" in out
+        assert "key3" in out
+        assert "foo1" not in out
+
+    def test_prob_seq_no_prob_modules(self):
+        """Test ProbabilisticTensorDictSequential with no probabilistic modules.
+
+        When no probabilistic modules are passed, it should initialize as a regular
+        TensorDictSequential and still work correctly, including with selected_out_keys.
+        """
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["foo1", "key3"], out_keys=["result"]
+        )
+        # No probabilistic modules - should still work
+        seq = ProbabilisticTensorDictSequential(module1, module2)
+        assert set(seq.in_keys) == {"key1", "key2", "key3"}
+        assert set(seq.out_keys) == {"foo1", "result"}
+
+        # Verify internal attributes are set correctly for no-prob-modules case
+        assert seq._requires_sample is False
+        assert seq._det_part is None
+        assert seq.return_composite is True
+
+        td = TensorDict(key1=1, key2=2, key3=3)
+        out = seq(td)
+        assert out is td
+        assert out["foo1"] == 3  # 1 + 2
+        assert out["result"] == 6  # 3 + 3
+
+    def test_prob_seq_no_prob_modules_selected_out_keys(self):
+        """Test ProbabilisticTensorDictSequential with no prob modules and selected_out_keys."""
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["foo1", "key3"], out_keys=["result"]
+        )
+        # No probabilistic modules, but with selected_out_keys
+        seq = ProbabilisticTensorDictSequential(
+            module1, module2, selected_out_keys=["result"]
+        )
+        assert set(seq.in_keys) == {"key1", "key2", "key3"}
+        assert seq.out_keys == ["result"]
+
+        td = TensorDict(key1=1, key2=2, key3=3)
+        out = seq(td)
+        assert out is td
+        assert "foo1" not in out  # Should be excluded
+        assert out["result"] == 6  # 3 + 3
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)
