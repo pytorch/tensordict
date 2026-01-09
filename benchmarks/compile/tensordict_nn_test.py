@@ -5,6 +5,7 @@
 import argparse
 import functools
 import gc
+import platform
 import sys
 
 import pytest
@@ -20,6 +21,7 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+IS_MACOS_ARM64 = platform.system() == "Darwin" and platform.machine() == "arm64"
 
 pytestmark = pytest.mark.skipif(
     sys.version_info >= (3, 14),
@@ -106,6 +108,9 @@ def test_mod_wrap(mode, benchmark):
 )
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap_and_backward(mode, benchmark):
+    if mode != "eager" and IS_MACOS_ARM64:
+        pytest.skip("torch.compile backward crashes on macOS ARM64")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -194,6 +199,9 @@ def test_seq_wrap(mode, benchmark):
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
+    if mode != "eager" and IS_MACOS_ARM64:
+        pytest.skip("torch.compile backward crashes on macOS ARM64")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -312,6 +320,9 @@ def test_func_call_cm_runtime(mode, functional, benchmark):
     "functional,plain_decorator", [[False, None], [True, False], [True, True]]
 )
 def test_func_call_runtime_and_backward(mode, functional, plain_decorator, benchmark):
+    if mode != "eager" and IS_MACOS_ARM64:
+        pytest.skip("torch.compile backward crashes on macOS ARM64")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -394,6 +405,9 @@ def test_vmap_func_call_cm_runtime(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("plain_decorator", [None, False, True])
 def test_vmap_func_call_runtime_and_backward(mode, plain_decorator, benchmark):
+    if mode != "eager" and IS_MACOS_ARM64:
+        pytest.skip("torch.compile backward crashes on macOS ARM64")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)

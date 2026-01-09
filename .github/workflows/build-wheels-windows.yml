@@ -34,7 +34,7 @@ jobs:
           - repository: pytorch/tensordict
             pre-script: .github/scripts/win-pre-script.bat
             env-script: .github/scripts/version_script_windows.bat
-            post-script: ""
+            post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py
             package-name: tensordict
     name: ${{ matrix.repository }}
@@ -52,4 +52,4 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       build-platform: python-build-package
-      build-command: "python -m build --wheel --no-isolation && python packaging/wheel/relocate.py"
+      build-command: "python -m build --wheel --no-isolation"
