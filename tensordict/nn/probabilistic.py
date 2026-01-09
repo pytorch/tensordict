@@ -1035,13 +1035,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             for m in modules_list
         ):
             # No probabilistic modules - initialize as a regular TensorDictSequential
-            TensorDictSequential.__init__(
-                self,
-                *modules,
-                partial_tolerant=partial_tolerant,
-                selected_out_keys=selected_out_keys,
-                inplace=inplace,
-            )
+            kwargs = {
+                "partial_tolerant": partial_tolerant,
+                "inplace": inplace,
+            }
+            if selected_out_keys is not None:
+                kwargs["selected_out_keys"] = selected_out_keys
+            TensorDictSequential.__init__(self, *modules, **kwargs)
             self._requires_sample = False
             self.__dict__["_det_part"] = None
             # Use return_composite=True so forward() just iterates through modules
@@ -1064,12 +1064,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
 
-        super().__init__(
-            *modules,
-            partial_tolerant=partial_tolerant,
-            selected_out_keys=selected_out_keys,
-            inplace=inplace,
-        )
+        kwargs = {
+            "partial_tolerant": partial_tolerant,
+            "inplace": inplace,
+        }
+        if selected_out_keys is not None:
+            kwargs["selected_out_keys"] = selected_out_keys
+        super().__init__(*modules, **kwargs)
         self.return_composite = return_composite
 
     def __getitem__(self, index: int | slice | str) -> Self | TensorDictModuleBase:

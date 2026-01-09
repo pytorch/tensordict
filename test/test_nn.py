@@ -1348,6 +1348,53 @@ class TestTDSequence:
         assert "foo1" not in out  # Should be excluded
         assert out["result"] == 6  # 3 + 3
 
+    def test_prob_seq_subclass_without_selected_out_keys_arg(self):
+        """Non-regression test: subclasses with MRO that doesn't support selected_out_keys.
+
+        This mimics scenarios like TorchRL's SafeProbabilisticTensorDictSequential where
+        an intermediate class in the MRO doesn't accept selected_out_keys.
+        """
+
+        class IntermediateSequential(TensorDictSequential):
+            """A sequential that doesn't accept selected_out_keys in __init__."""
+
+            def __init__(self, *modules, partial_tolerant=False, inplace=None):
+                super().__init__(
+                    *modules, partial_tolerant=partial_tolerant, inplace=inplace
+                )
+
+        class CustomProbabilisticSequential(
+            ProbabilisticTensorDictSequential, IntermediateSequential
+        ):
+            """Subclass with IntermediateSequential in MRO."""
+
+            def __init__(self, *modules, partial_tolerant=False):
+                # This mirrors TorchRL's SafeProbabilisticTensorDictSequential pattern
+                super().__init__(*modules, partial_tolerant=partial_tolerant)
+
+        # Test with probabilistic modules - should not raise
+        module1 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        prob_module = ProbabilisticTensorDictModule(
+            in_keys={"loc": "foo1", "scale": "key3"},
+            out_keys=["sample"],
+            distribution_class=Normal,
+        )
+        seq = CustomProbabilisticSequential(module1, prob_module)
+        td = TensorDict(key1=0, key2=0, key3=1)
+        out = seq(td)
+        assert "sample" in out
+
+        # Test without probabilistic modules - should also not raise
+        module2 = TensorDictModule(
+            lambda x, y: x + y, in_keys=["foo1", "key3"], out_keys=["result"]
+        )
+        seq2 = CustomProbabilisticSequential(module1, module2)
+        td2 = TensorDict(key1=1, key2=2, key3=3)
+        out2 = seq2(td2)
+        assert out2["result"] == 6
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)
