@@ -62,11 +62,16 @@ if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     # For free-threaded Python, install dependencies directly via pip
     # to avoid channel conflicts with conda env update
     pip install --upgrade pip
+    # Core test dependencies that should work with 3.14t
     pip install hypothesis future cloudpickle pytest pytest-benchmark pytest-cov \
         pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout \
-        expecttest coverage h5py orjson ninja protobuf
-    # numpy<2.0.0 constraint - try to install, some packages may not support 3.14t yet
+        expecttest coverage ninja protobuf
+    # numpy - try with constraint first, then without
     pip install "numpy<2.0.0" || pip install numpy || echo "numpy installation failed, continuing..."
+    # h5py requires HDF5 libs - try conda first, then pip, then skip
+    conda install -c conda-forge h5py -y || pip install h5py || echo "h5py not available for Python 3.14t, skipping"
+    # orjson does not support free-threaded Python yet
+    echo "Skipping orjson - does not support free-threaded Python"
     # mosaicml-streaming may not be available for 3.14t
     pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
     # Install cmake and pybind11
