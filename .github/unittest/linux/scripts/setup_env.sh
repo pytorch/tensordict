@@ -55,20 +55,31 @@ fi
 
 conda activate "${env_dir}"
 
-# 3. Install Conda dependencies
+# 3. Install dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-# Don't add python version constraint for free-threaded builds
-if [ "${PYTHON_VERSION}" != "3.14t" ]; then
+
+if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+    # For free-threaded Python, install dependencies directly via pip
+    # to avoid channel conflicts with conda env update
+    pip install --upgrade pip
+    pip install hypothesis future cloudpickle pytest pytest-benchmark pytest-cov \
+        pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout \
+        expecttest coverage h5py orjson ninja protobuf
+    # numpy<2.0.0 constraint - try to install, some packages may not support 3.14t yet
+    pip install "numpy<2.0.0" || pip install numpy || echo "numpy installation failed, continuing..."
+    # mosaicml-streaming may not be available for 3.14t
+    pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
+    # Install cmake and pybind11
+    conda install -c conda-forge cmake pybind11 -y
+else
+    # For regular Python, use conda
     echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+    cat "${this_dir}/environment.yml"
+    pip install pip --upgrade
+    conda env update --file "${this_dir}/environment.yml" --prune
+    conda install anaconda::cmake -y
+    conda install -c conda-forge pybind11 -y
 fi
-cat "${this_dir}/environment.yml"
-
-pip install pip --upgrade
-
-conda env update --file "${this_dir}/environment.yml" --prune
-
-conda install anaconda::cmake -y
-conda install -c conda-forge pybind11 -y
 
 #if [[ $OSTYPE == 'darwin'* ]]; then
 #  printf "* Installing C++ for OSX\n"
