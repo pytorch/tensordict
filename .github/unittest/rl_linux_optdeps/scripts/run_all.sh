@@ -125,6 +125,9 @@ python -c "import functorch"
 pybind11_DIR="$(python -m pybind11 --cmakedir)"
 export pybind11_DIR
 
+# Install build dependencies for --no-build-isolation
+uv_pip_install setuptools wheel
+
 # install tensordict
 printf "* Installing tensordict\n"
 uv_pip_install --no-build-isolation --no-deps -e .
