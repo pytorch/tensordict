@@ -41,48 +41,30 @@ printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
     if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-        # Install free-threaded Python 3.14 using deadsnakes PPA
-        apt install -y software-properties-common
-        add-apt-repository -y ppa:deadsnakes/ppa
-        apt update -y
-        apt install -y python3.14-nogil python3.14-nogil-venv python3.14-nogil-dev
-        # Create a virtual environment using free-threaded Python
-        python3.14t -m venv "${env_dir}"
+        # Install free-threaded Python 3.14 from conda-forge
+        # Need both python=3.14 AND python-freethreading to get the nogil build
+        conda create --prefix "${env_dir}" -y -c conda-forge python=3.14 python-freethreading
     else
         conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
     fi
 fi
 
-# Activate the environment
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-    source "${env_dir}/bin/activate"
-else
-    conda activate "${env_dir}"
-fi
+conda activate "${env_dir}"
 
-# 3. Install dependencies
+# 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
+# Don't add python version constraint for free-threaded builds
+if [ "${PYTHON_VERSION}" != "3.14t" ]; then
+    echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+fi
+cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
 
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-    # For free-threaded Python, install dependencies via pip
-    # Install build tools from apt
-    apt install -y cmake
-    # Install test dependencies (mirrors environment.yml)
-    pip install pybind11 numpy expecttest pyyaml hypothesis future cloudpickle \
-        pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail \
-        pytest-rerunfailures pytest-timeout coverage h5py orjson ninja protobuf
-    # Note: mosaicml-streaming may not be available for 3.14t yet, skip if fails
-    pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
-else
-    # For regular Python, use conda
-    echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-    cat "${this_dir}/environment.yml"
-    conda env update --file "${this_dir}/environment.yml" --prune
-    conda install anaconda::cmake -y
-    conda install -c conda-forge pybind11 -y
-fi
+conda env update --file "${this_dir}/environment.yml" --prune
+
+conda install anaconda::cmake -y
+conda install -c conda-forge pybind11 -y
 
 #if [[ $OSTYPE == 'darwin'* ]]; then
 #  printf "* Installing C++ for OSX\n"

@@ -8,13 +8,8 @@ unset PYTORCH_VERSION
 set -e
 set -v
 
-# Activate the environment
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-    source ./env/bin/activate
-else
-    eval "$(./conda/bin/conda shell.bash hook)"
-    conda activate ./env
-fi
+eval "$(./conda/bin/conda shell.bash hook)"
+conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     echo "Using cpu build"
