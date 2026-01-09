@@ -43,7 +43,8 @@ if [ ! -d "${env_dir}" ]; then
     if [ "${PYTHON_VERSION}" == "3.14t" ]; then
         # Install free-threaded Python 3.14 from conda-forge
         # Need both python=3.14 AND python-freethreading to get the nogil build
-        conda create --prefix "${env_dir}" -y -c conda-forge python=3.14 python-freethreading
+        # Also include pip explicitly as it's not included by default in free-threaded builds
+        conda create --prefix "${env_dir}" -y -c conda-forge python=3.14 python-freethreading pip
     else
         conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
     fi
