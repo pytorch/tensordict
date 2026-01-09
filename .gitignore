@@ -155,3 +155,6 @@ rn.md
 .github/scripts/debug-build.sh
 0.8/0.9
 scratch/*
+
+# Auto-generated version file (setuptools_scm)
+tensordict/_version.py
