@@ -1,5 +1,5 @@
 #!/bin/bash
-# Windows-specific version script for Git Bash environment
+# Windows-specific version script for use with conda run
 # This script is called by test-infra as: ${CONDA_RUN} ${ENV_SCRIPT} ${BUILD_COMMAND}
 # It sets up environment variables and then executes the build command passed as arguments
 

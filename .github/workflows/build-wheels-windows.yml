@@ -33,7 +33,7 @@ jobs:
         include:
           - repository: pytorch/tensordict
             pre-script: .github/scripts/win-pre-script.bat
-            env-script: .github/scripts/version_script_windows.sh
+            env-script: .github/scripts/version_script_windows.bat
             post-script: ""
             smoke-test-script: test/smoke_test.py
             package-name: tensordict
