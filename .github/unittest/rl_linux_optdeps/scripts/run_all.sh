@@ -82,6 +82,7 @@ uv_pip_install \
   pytest-mock \
   pytest-instafail \
   pytest-rerunfailures \
+  pytest-timeout \
   expecttest \
   "pybind11[global]>=2.13" \
   pyyaml \
