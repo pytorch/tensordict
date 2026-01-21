@@ -1575,10 +1575,9 @@ def _expand_index(index, batch_size):
 
 def _renamed_inplace_method(fn):
     def wrapper(*args, **kwargs):
-        warnings.warn(
-            f"{fn.__name__.rstrip('_')} has been deprecated, use {fn.__name__} instead"
+        raise RuntimeError(
+            f"{fn.__name__.rstrip('_')} has been removed, use {fn.__name__} instead"
         )
-        return fn(*args, **kwargs)
 
     return wrapper
 
