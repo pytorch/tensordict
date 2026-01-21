@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3515+gf7f04d1ca.d20260112)
+                  main (0.10.0.dev3518+g95d8d17da.d20260121)
                 </div>
               
             
@@ -499,7 +499,7 @@ a full list of the supported operations, check the tensordict documentation.</p>
 <p>Saving a tensorclass instance can be achieved with the <cite>memmap</cite> method.
 The saving strategy is as follows: tensor data will be saved using memory-mapped
 tensors, and non-tensor data that can be serialized using a json format will
-be saved as such. Other data types will be saved using <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.9)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, which
+be saved as such. Other data types will be saved using <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, which
 relies on <cite>pickle</cite>.</p>
 <p>Deserializing a <cite>tensorclass</cite> can be done via <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.
 The instance created will have the same type as the one saved provided that
@@ -547,8 +547,8 @@ thrown</p>
 <span class="go">UserWarning: Meta data at &#39;non_tensordata&#39; may or may not be equal, this may result in undefined behaviours</span>
 </pre></div>
 </div>
-<p>Even though <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports torch functions like <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.9)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a>
-and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.9)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, the non-tensor / meta data is not validated.
+<p>Even though <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports torch functions like <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a>
+and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, the non-tensor / meta data is not validated.
 The torch operation is performed on the tensor data and while returning the
 output, the non-tensor / meta data of the first tensor class object is
 considered. User needs to make sure that all the list of tensor class objects

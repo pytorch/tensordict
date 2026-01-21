@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3515+gf7f04d1ca.d20260112)
+                  main (0.10.0.dev3518+g95d8d17da.d20260121)
                 </div>
               
             
@@ -374,7 +374,7 @@ but modified to demonstrate use of <code class="docutils literal notranslate"><s
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using device: </span><span class="si">{</span><a href="https://docs.python.org/3/library/stdtypes.html#str" title="builtins.str" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cuda
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">torchvision.datasets</span></code> module contains a number of convenient pre-prepared
@@ -623,166 +623,166 @@ adjust how we unpack the data to the more explicit key-based retrieval offered b
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict(
     fields={
-        images: Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
-        targets: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False)},
+        images: Tensor(shape=torch.Size([64, 28, 28]), device=cuda:0, dtype=torch.float32, is_shared=True),
+        targets: Tensor(shape=torch.Size([64]), device=cuda:0, dtype=torch.int64, is_shared=True)},
     batch_size=torch.Size([64]),
-    device=cpu,
-    is_shared=False)
+    device=cuda:0,
+    is_shared=True)
 Epoch 1
 -------------------------
-loss: 2.300432 [    0/60000]
-loss: 2.286777 [ 6400/60000]
-loss: 2.267166 [12800/60000]
-loss: 2.269058 [19200/60000]
-loss: 2.245633 [25600/60000]
-loss: 2.219791 [32000/60000]
-loss: 2.229633 [38400/60000]
-loss: 2.188613 [44800/60000]
-loss: 2.193209 [51200/60000]
-loss: 2.170406 [57600/60000]
+loss: 2.312890 [    0/60000]
+loss: 2.295523 [ 6400/60000]
+loss: 2.279977 [12800/60000]
+loss: 2.264998 [19200/60000]
+loss: 2.253261 [25600/60000]
+loss: 2.220694 [32000/60000]
+loss: 2.234914 [38400/60000]
+loss: 2.202104 [44800/60000]
+loss: 2.201689 [51200/60000]
+loss: 2.166003 [57600/60000]
 Test Error:
- Accuracy: 46.2%, Avg loss: 2.157969
+ Accuracy: 30.8%, Avg loss: 2.163291
 
 Epoch 2
 -------------------------
-loss: 2.165371 [    0/60000]
-loss: 2.159589 [ 6400/60000]
-loss: 2.101649 [12800/60000]
-loss: 2.122993 [19200/60000]
-loss: 2.077180 [25600/60000]
-loss: 2.018255 [32000/60000]
-loss: 2.043698 [38400/60000]
-loss: 1.959614 [44800/60000]
-loss: 1.969116 [51200/60000]
-loss: 1.915879 [57600/60000]
+loss: 2.184335 [    0/60000]
+loss: 2.163465 [ 6400/60000]
+loss: 2.116146 [12800/60000]
+loss: 2.124596 [19200/60000]
+loss: 2.079227 [25600/60000]
+loss: 2.019147 [32000/60000]
+loss: 2.055747 [38400/60000]
+loss: 1.979233 [44800/60000]
+loss: 1.993624 [51200/60000]
+loss: 1.922002 [57600/60000]
 Test Error:
- Accuracy: 60.7%, Avg loss: 1.904065
+ Accuracy: 49.3%, Avg loss: 1.918262
 
 Epoch 3
 -------------------------
-loss: 1.932506 [    0/60000]
-loss: 1.910024 [ 6400/60000]
-loss: 1.790651 [12800/60000]
-loss: 1.829714 [19200/60000]
-loss: 1.744193 [25600/60000]
-loss: 1.685082 [32000/60000]
-loss: 1.698830 [38400/60000]
-loss: 1.595084 [44800/60000]
-loss: 1.621320 [51200/60000]
-loss: 1.530703 [57600/60000]
+loss: 1.957429 [    0/60000]
+loss: 1.914954 [ 6400/60000]
+loss: 1.815056 [12800/60000]
+loss: 1.851368 [19200/60000]
+loss: 1.739168 [25600/60000]
+loss: 1.693143 [32000/60000]
+loss: 1.721127 [38400/60000]
+loss: 1.620396 [44800/60000]
+loss: 1.655339 [51200/60000]
+loss: 1.545995 [57600/60000]
 Test Error:
- Accuracy: 60.7%, Avg loss: 1.541624
+ Accuracy: 58.4%, Avg loss: 1.558739
 
 Epoch 4
 -------------------------
-loss: 1.603610 [    0/60000]
-loss: 1.576121 [ 6400/60000]
-loss: 1.422004 [12800/60000]
-loss: 1.489163 [19200/60000]
-loss: 1.391173 [25600/60000]
-loss: 1.373184 [32000/60000]
-loss: 1.378164 [38400/60000]
-loss: 1.299002 [44800/60000]
-loss: 1.334885 [51200/60000]
-loss: 1.245804 [57600/60000]
+loss: 1.631321 [    0/60000]
+loss: 1.577847 [ 6400/60000]
+loss: 1.441690 [12800/60000]
+loss: 1.505491 [19200/60000]
+loss: 1.381529 [25600/60000]
+loss: 1.384439 [32000/60000]
+loss: 1.393316 [38400/60000]
+loss: 1.318431 [44800/60000]
+loss: 1.358781 [51200/60000]
+loss: 1.250847 [57600/60000]
 Test Error:
- Accuracy: 62.8%, Avg loss: 1.267814
+ Accuracy: 62.8%, Avg loss: 1.277943
 
 Epoch 5
 -------------------------
-loss: 1.341092 [    0/60000]
-loss: 1.329086 [ 6400/60000]
-loss: 1.162058 [12800/60000]
-loss: 1.260601 [19200/60000]
-loss: 1.151645 [25600/60000]
-loss: 1.169518 [32000/60000]
-loss: 1.180071 [38400/60000]
-loss: 1.115708 [44800/60000]
-loss: 1.154498 [51200/60000]
-loss: 1.081761 [57600/60000]
+loss: 1.365085 [    0/60000]
+loss: 1.326127 [ 6400/60000]
+loss: 1.174018 [12800/60000]
+loss: 1.268364 [19200/60000]
+loss: 1.146077 [25600/60000]
+loss: 1.180013 [32000/60000]
+loss: 1.189651 [38400/60000]
+loss: 1.129298 [44800/60000]
+loss: 1.171059 [51200/60000]
+loss: 1.080033 [57600/60000]
 Test Error:
- Accuracy: 64.3%, Avg loss: 1.097270
+ Accuracy: 64.7%, Avg loss: 1.104474
 
-TensorDict training done! time:  8.7388 s
+TensorDict training done! time:  5.2229 s
 Epoch 1
 -------------------------
-loss: 2.308533 [    0/60000]
-loss: 2.297061 [ 6400/60000]
-loss: 2.279615 [12800/60000]
-loss: 2.270587 [19200/60000]
-loss: 2.254108 [25600/60000]
-loss: 2.225533 [32000/60000]
-loss: 2.234650 [38400/60000]
-loss: 2.204360 [44800/60000]
-loss: 2.202047 [51200/60000]
-loss: 2.164139 [57600/60000]
+loss: 2.294003 [    0/60000]
+loss: 2.287627 [ 6400/60000]
+loss: 2.269862 [12800/60000]
+loss: 2.272574 [19200/60000]
+loss: 2.250853 [25600/60000]
+loss: 2.221608 [32000/60000]
+loss: 2.224322 [38400/60000]
+loss: 2.193047 [44800/60000]
+loss: 2.186691 [51200/60000]
+loss: 2.159594 [57600/60000]
 Test Error:
- Accuracy: 43.5%, Avg loss: 2.166307
+ Accuracy: 46.7%, Avg loss: 2.158005
 
 Epoch 2
 -------------------------
-loss: 2.175119 [    0/60000]
-loss: 2.163843 [ 6400/60000]
-loss: 2.116532 [12800/60000]
-loss: 2.127633 [19200/60000]
-loss: 2.072155 [25600/60000]
-loss: 2.027065 [32000/60000]
-loss: 2.041775 [38400/60000]
-loss: 1.979010 [44800/60000]
-loss: 1.982720 [51200/60000]
-loss: 1.896946 [57600/60000]
+loss: 2.154341 [    0/60000]
+loss: 2.152444 [ 6400/60000]
+loss: 2.100783 [12800/60000]
+loss: 2.121562 [19200/60000]
+loss: 2.063657 [25600/60000]
+loss: 2.009456 [32000/60000]
+loss: 2.023842 [38400/60000]
+loss: 1.955452 [44800/60000]
+loss: 1.953957 [51200/60000]
+loss: 1.879315 [57600/60000]
 Test Error:
- Accuracy: 54.1%, Avg loss: 1.905877
+ Accuracy: 58.1%, Avg loss: 1.888204
 
 Epoch 3
 -------------------------
-loss: 1.934696 [    0/60000]
-loss: 1.899935 [ 6400/60000]
-loss: 1.802577 [12800/60000]
-loss: 1.836327 [19200/60000]
-loss: 1.721419 [25600/60000]
-loss: 1.684450 [32000/60000]
-loss: 1.682298 [38400/60000]
-loss: 1.602583 [44800/60000]
-loss: 1.617384 [51200/60000]
-loss: 1.498683 [57600/60000]
+loss: 1.910328 [    0/60000]
+loss: 1.883157 [ 6400/60000]
+loss: 1.775887 [12800/60000]
+loss: 1.814897 [19200/60000]
+loss: 1.694544 [25600/60000]
+loss: 1.660315 [32000/60000]
+loss: 1.662089 [38400/60000]
+loss: 1.580060 [44800/60000]
+loss: 1.599819 [51200/60000]
+loss: 1.487001 [57600/60000]
 Test Error:
- Accuracy: 60.6%, Avg loss: 1.531639
+ Accuracy: 61.0%, Avg loss: 1.515173
 
 Epoch 4
 -------------------------
-loss: 1.591250 [    0/60000]
-loss: 1.552322 [ 6400/60000]
-loss: 1.418483 [12800/60000]
-loss: 1.488567 [19200/60000]
-loss: 1.365003 [25600/60000]
-loss: 1.367365 [32000/60000]
-loss: 1.360225 [38400/60000]
-loss: 1.301629 [44800/60000]
-loss: 1.327764 [51200/60000]
-loss: 1.218641 [57600/60000]
+loss: 1.581255 [    0/60000]
+loss: 1.539585 [ 6400/60000]
+loss: 1.400431 [12800/60000]
+loss: 1.467130 [19200/60000]
+loss: 1.340155 [25600/60000]
+loss: 1.355790 [32000/60000]
+loss: 1.351548 [38400/60000]
+loss: 1.289786 [44800/60000]
+loss: 1.321858 [51200/60000]
+loss: 1.218277 [57600/60000]
 Test Error:
- Accuracy: 63.0%, Avg loss: 1.257508
+ Accuracy: 62.9%, Avg loss: 1.248489
 
 Epoch 5
 -------------------------
-loss: 1.329967 [    0/60000]
-loss: 1.308264 [ 6400/60000]
-loss: 1.151509 [12800/60000]
-loss: 1.262610 [19200/60000]
-loss: 1.131510 [25600/60000]
-loss: 1.163730 [32000/60000]
-loss: 1.166430 [38400/60000]
-loss: 1.117983 [44800/60000]
-loss: 1.149105 [51200/60000]
-loss: 1.058495 [57600/60000]
+loss: 1.329787 [    0/60000]
+loss: 1.298656 [ 6400/60000]
+loss: 1.142066 [12800/60000]
+loss: 1.247147 [19200/60000]
+loss: 1.117071 [25600/60000]
+loss: 1.158523 [32000/60000]
+loss: 1.165921 [38400/60000]
+loss: 1.110785 [44800/60000]
+loss: 1.148397 [51200/60000]
+loss: 1.064747 [57600/60000]
 Test Error:
- Accuracy: 64.5%, Avg loss: 1.089931
+ Accuracy: 64.3%, Avg loss: 1.086124
 
-Training done! time:  36.3253 s
+Training done! time:  35.1689 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 58.624 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 58.164 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-data-fashion-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">data_fashion.ipynb</span></code></a></p>
