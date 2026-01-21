@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import warnings
-
 from typing import Any, Callable, Dict, Mapping, Sequence
 
 import torch
@@ -102,7 +100,6 @@ def pad_sequence(
     pad_dim: int = 0,
     padding_value: float = 0.0,
     out: T | None = None,
-    device: DeviceType | None = None,
     return_mask: bool | NestedKey = False,
 ) -> T:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
@@ -140,12 +137,6 @@ def pad_sequence(
             device=None,
             is_shared=False)
     """
-    if device is not None:
-        warnings.warn(
-            "The device argument is ignored by this function and will be removed in v0.5. To cast your"
-            " result to a different device, call `tensordict.to(device)` instead."
-        )
-
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
 

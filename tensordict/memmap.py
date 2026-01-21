@@ -825,8 +825,10 @@ class MemoryMappedTensor(torch.Tensor):
 
     @property
     def _tensor(self):
-        # for bc-compatibility with MemmapTensor, to be deprecated in v0.4
-        return self
+        raise RuntimeError(
+            "_tensor property has been removed. MemoryMappedTensor is now a tensor subclass "
+            "and can be used directly without accessing _tensor."
+        )
 
     def __setstate__(self, state):
         if "filename" in state:
