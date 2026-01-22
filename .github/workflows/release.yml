@@ -207,9 +207,6 @@ jobs:
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    permissions:
-      id-token: write
-      contents: read
 
   build-windows:
     name: Build Windows Wheels
@@ -218,9 +215,6 @@ jobs:
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    permissions:
-      id-token: write
-      contents: read
 
   build-macos:
     name: Build macOS Wheels
@@ -229,9 +223,6 @@ jobs:
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    permissions:
-      id-token: write
-      contents: read
 
   build-aarch64:
     name: Build Aarch64 Linux Wheels
@@ -240,9 +231,6 @@ jobs:
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
-    permissions:
-      id-token: write
-      contents: read
 
   # =============================================================================
   # COLLECT WHEELS
