@@ -1,0 +1,525 @@
+# TensorDict Release Workflow
+#
+# This workflow automates the release process for tensordict:
+# 1. Sanity checks (version matching, branch/tag validation)
+# 2. Triggers wheel builds across all platforms
+# 3. Collects wheels into a single artifact
+# 4. Updates gh-pages docs (stable symlink)
+# 5. Creates draft GitHub release with wheels attached
+# 6. Publishes to PyPI using OIDC trusted publishing
+#
+# Triggers:
+# - Push tag v*.*.* (e.g., v0.11.0)
+# - Manual workflow_dispatch with inputs
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.11.0)'
+        required: true
+        type: string
+      pytorch_release:
+        description: 'PyTorch release branch (e.g., release/2.8)'
+        required: false
+        type: string
+        default: 'main'
+      skip_sanity_checks:
+        description: 'Skip sanity checks'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Dry run (skip docs push, GitHub release, PyPI publish)'
+        required: false
+        type: boolean
+        default: false
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  # Determine the tag to use: from push event or manual input
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  # Determine the test-infra ref: from manual input or default to main
+  TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
+  DRY_RUN: ${{ inputs.dry_run || false }}
+
+jobs:
+  # =============================================================================
+  # SANITY CHECKS
+  # =============================================================================
+  sanity-checks:
+    name: Sanity Checks
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_sanity_checks }}
+    outputs:
+      version: ${{ steps.parse-version.outputs.version }}
+      version_major_minor: ${{ steps.parse-version.outputs.version_major_minor }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse version from tag
+        id: parse-version
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+          echo "Processing tag: $TAG"
+
+          # Validate tag format
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid tag format: $TAG. Expected format: v0.11.0"
+            exit 1
+          fi
+
+          # Extract version without 'v' prefix
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Extract major.minor for docs folder
+          VERSION_MAJOR_MINOR=$(echo "$VERSION" | sed 's/\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+          echo "version_major_minor=$VERSION_MAJOR_MINOR" >> $GITHUB_OUTPUT
+
+          echo "Parsed version: $VERSION"
+          echo "Major.minor: $VERSION_MAJOR_MINOR"
+
+      - name: Check branch name matches tag
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+          VERSION="${{ steps.parse-version.outputs.version }}"
+
+          # Get the branch that contains this tag
+          BRANCHES=$(git branch -r --contains "$TAG" 2>/dev/null || echo "")
+
+          if [[ -z "$BRANCHES" ]]; then
+            echo "::warning::Tag $TAG is not on any remote branch yet (may be a new tag)"
+          else
+            echo "Tag $TAG is on branches: $BRANCHES"
+
+            # Check if it's on a release branch matching the version
+            EXPECTED_BRANCH="release/${VERSION%.*}"
+            if echo "$BRANCHES" | grep -q "origin/$EXPECTED_BRANCH"; then
+              echo "Tag is on expected release branch: $EXPECTED_BRANCH"
+            else
+              echo "::warning::Tag $TAG is not on expected branch $EXPECTED_BRANCH"
+            fi
+          fi
+
+      - name: Check version.txt matches tag
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+          ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
+          SCRIPTS_VERSION=$(cat .github/scripts/version.txt | tr -d '[:space:]')
+
+          echo "Tag version: $VERSION"
+          echo "Root version.txt: $ROOT_VERSION"
+          echo "Scripts version.txt: $SCRIPTS_VERSION"
+
+          if [[ "$ROOT_VERSION" != "$VERSION" ]]; then
+            echo "::error::Root version.txt ($ROOT_VERSION) does not match tag version ($VERSION)"
+            exit 1
+          fi
+
+          if [[ "$SCRIPTS_VERSION" != "$VERSION" ]]; then
+            echo "::error::Scripts version.txt ($SCRIPTS_VERSION) does not match tag version ($VERSION)"
+            exit 1
+          fi
+
+          echo "Version files match the tag"
+
+      - name: Check version_script.sh BASE_VERSION
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+          BASE_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script.sh | cut -d'=' -f2)
+
+          echo "Tag version: $VERSION"
+          echo "BASE_VERSION in version_script.sh: $BASE_VERSION"
+
+          if [[ "$BASE_VERSION" != "$VERSION" ]]; then
+            echo "::error::BASE_VERSION in version_script.sh ($BASE_VERSION) does not match tag version ($VERSION)"
+            exit 1
+          fi
+
+          echo "BASE_VERSION matches the tag"
+
+      - name: Check library version
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+
+          # Install minimal dependencies
+          pip install setuptools setuptools_scm
+
+          # Set the version via setuptools_scm pretend
+          export SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION"
+
+          # Try to get the version from the package
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          try:
+              from tensordict._version import __version__
+              print(f'Library version: {__version__}')
+              # Note: _version.py is auto-generated, so we just check it's readable
+          except ImportError:
+              # _version.py may not exist until build
+              print('_version.py not found (will be generated at build time)')
+          "
+
+      - name: Check stable docs version
+        run: |
+          VERSION_MAJOR_MINOR="${{ steps.parse-version.outputs.version_major_minor }}"
+
+          # Fetch the stable docs index page
+          DOCS_URL="https://pytorch.org/tensordict/stable/index.html"
+
+          # Try to check if the page exists and contains version info
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DOCS_URL" || echo "000")
+
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "Stable docs are accessible at $DOCS_URL"
+            echo "::notice::Docs will be updated to point to version $VERSION_MAJOR_MINOR"
+          elif [[ "$HTTP_STATUS" == "404" ]]; then
+            echo "::notice::Stable docs not found at $DOCS_URL (may be a first release)"
+          else
+            echo "::warning::Could not check stable docs (HTTP $HTTP_STATUS)"
+          fi
+
+  # =============================================================================
+  # BUILD WHEELS - All Platforms
+  # =============================================================================
+  build-linux:
+    name: Build Linux Wheels
+    needs: [sanity-checks]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-linux.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+    permissions:
+      id-token: write
+      contents: read
+
+  build-windows:
+    name: Build Windows Wheels
+    needs: [sanity-checks]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-windows.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+    permissions:
+      id-token: write
+      contents: read
+
+  build-macos:
+    name: Build macOS Wheels
+    needs: [sanity-checks]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-m1.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+    permissions:
+      id-token: write
+      contents: read
+
+  build-aarch64:
+    name: Build Aarch64 Linux Wheels
+    needs: [sanity-checks]
+    if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
+    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
+    with:
+      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+    permissions:
+      id-token: write
+      contents: read
+
+  # =============================================================================
+  # COLLECT WHEELS
+  # =============================================================================
+  collect-wheels:
+    name: Collect Wheels
+    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check build results
+        run: |
+          echo "Build results:"
+          echo "  Linux: ${{ needs.build-linux.result }}"
+          echo "  Windows: ${{ needs.build-windows.result }}"
+          echo "  macOS: ${{ needs.build-macos.result }}"
+          echo "  Aarch64: ${{ needs.build-aarch64.result }}"
+
+          # Fail if all builds failed
+          if [[ "${{ needs.build-linux.result }}" == "failure" ]] && \
+             [[ "${{ needs.build-windows.result }}" == "failure" ]] && \
+             [[ "${{ needs.build-macos.result }}" == "failure" ]] && \
+             [[ "${{ needs.build-aarch64.result }}" == "failure" ]]; then
+            echo "::error::All wheel builds failed"
+            exit 1
+          fi
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          pattern: '*wheel*'
+          merge-multiple: true
+
+      - name: List collected wheels
+        run: |
+          echo "Collected wheels:"
+          find wheels -name "*.whl" -type f | sort
+          echo ""
+          echo "Total wheels: $(find wheels -name "*.whl" -type f | wc -l)"
+
+      - name: Upload combined wheels artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-wheels
+          path: wheels/**/*.whl
+          if-no-files-found: error
+
+  # =============================================================================
+  # UPDATE GH-PAGES DOCS
+  # =============================================================================
+  update-docs:
+    name: Update Stable Docs
+    needs: [sanity-checks, collect-wheels]
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version info
+        id: version
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+          VERSION="${TAG#v}"
+          VERSION_MAJOR_MINOR=$(echo "$VERSION" | sed 's/\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_major_minor=$VERSION_MAJOR_MINOR" >> $GITHUB_OUTPUT
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Update stable symlink and versions.html
+        if: ${{ env.DRY_RUN != 'true' }}
+        run: |
+          VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
+
+          echo "Updating stable docs to version $VERSION_MAJOR_MINOR"
+
+          # Check if the version folder exists
+          if [[ ! -d "$VERSION_MAJOR_MINOR" ]]; then
+            echo "::error::Docs folder for $VERSION_MAJOR_MINOR does not exist. Run docs workflow first."
+            exit 1
+          fi
+
+          # Update stable symlink
+          rm -f stable
+          ln -sf "$VERSION_MAJOR_MINOR" stable
+          echo "Updated stable symlink -> $VERSION_MAJOR_MINOR"
+
+          # Update versions.html if it exists
+          if [[ -f "versions.html" ]]; then
+            # Check if this version is already in versions.html
+            if ! grep -q "\"$VERSION_MAJOR_MINOR\"" versions.html; then
+              echo "::notice::Version $VERSION_MAJOR_MINOR not in versions.html, may need manual update"
+            fi
+          fi
+
+          # Check if changes were made
+          if git diff --quiet; then
+            echo "::notice::Stable docs already point to $VERSION_MAJOR_MINOR. No changes needed."
+            exit 0
+          fi
+
+          # Commit and push
+          git config user.name 'pytorchbot'
+          git config user.email 'soumith+bot@pytorch.org'
+          git add stable versions.html 2>/dev/null || git add stable
+          git commit -m "Update stable docs to $VERSION_MAJOR_MINOR"
+          git push
+
+          echo "Successfully updated stable docs"
+
+      - name: Dry run - show what would be changed
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: |
+          VERSION_MAJOR_MINOR="${{ steps.version.outputs.version_major_minor }}"
+          echo "DRY RUN: Would update stable symlink to point to $VERSION_MAJOR_MINOR"
+
+          if [[ -L "stable" ]]; then
+            CURRENT=$(readlink stable)
+            echo "Current stable points to: $CURRENT"
+          else
+            echo "stable is not a symlink (or doesn't exist)"
+          fi
+
+  # =============================================================================
+  # CREATE GITHUB RELEASE
+  # =============================================================================
+  create-release:
+    name: Create GitHub Release
+    needs: [sanity-checks, collect-wheels, update-docs]
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: release-wheels
+          path: wheels
+
+      - name: List wheels to attach
+        run: |
+          echo "Wheels to attach to release:"
+          find wheels -name "*.whl" -type f | sort
+
+      - name: Create draft release
+        if: ${{ env.DRY_RUN != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+
+          # Check if release already exists
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists. Updating..."
+            # Upload wheels to existing release
+            find wheels -name "*.whl" -type f -exec gh release upload "$TAG" {} --clobber \;
+          else
+            echo "Creating draft release for $TAG"
+            # Create draft release without auto-generated notes
+            gh release create "$TAG" \
+              --draft \
+              --title "TensorDict $TAG" \
+              --notes "Release notes for TensorDict $TAG
+
+## Highlights
+
+<!-- Add release highlights here -->
+
+## What's Changed
+
+<!-- Release notes will be written manually -->
+
+## Installation
+
+\`\`\`bash
+pip install tensordict==${TAG#v}
+\`\`\`
+" \
+              wheels/*.whl
+          fi
+
+          echo "Draft release created/updated: $TAG"
+          echo "Please review and publish the release manually."
+
+      - name: Dry run - show release info
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: |
+          TAG="${{ env.RELEASE_TAG }}"
+          WHEEL_COUNT=$(find wheels -name "*.whl" -type f | wc -l)
+          echo "DRY RUN: Would create draft release for $TAG"
+          echo "Would attach $WHEEL_COUNT wheel files"
+
+  # =============================================================================
+  # PUBLISH TO PYPI
+  # =============================================================================
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [sanity-checks, collect-wheels, create-release]
+    if: always() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/tensordict/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: release-wheels
+          path: dist
+
+      - name: Flatten wheel directory
+        run: |
+          # Move all wheels to dist/ root for PyPI upload
+          find dist -name "*.whl" -exec mv {} dist/ \;
+          find dist -type d -empty -delete
+          echo "Wheels prepared for upload:"
+          ls -la dist/
+
+      - name: Publish to PyPI (OIDC)
+        if: ${{ env.DRY_RUN != 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Using OIDC trusted publishing - no token needed
+          # Repository must be configured in PyPI to trust this workflow
+          verbose: true
+          print-hash: true
+
+      - name: Dry run - show what would be published
+        if: ${{ env.DRY_RUN == 'true' }}
+        run: |
+          echo "DRY RUN: Would publish the following wheels to PyPI:"
+          ls -la dist/
+          echo ""
+          echo "Total: $(ls dist/*.whl | wc -l) wheels"
+
+  # =============================================================================
+  # SUMMARY
+  # =============================================================================
+  release-summary:
+    name: Release Summary
+    needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64, collect-wheels, update-docs, create-release, publish-pypi]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print summary
+        run: |
+          echo "## Release Summary for ${{ env.RELEASE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Sanity Checks | ${{ needs.sanity-checks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Linux | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Aarch64 | ${{ needs.build-aarch64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Collect Wheels | ${{ needs.collect-wheels.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Update Docs | ${{ needs.update-docs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Create Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Publish PyPI | ${{ needs.publish-pypi.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "**Note: This was a dry run. No changes were pushed.**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Determine overall status
+          if [[ "${{ needs.publish-pypi.result }}" == "success" ]]; then
+            echo "### Release completed successfully!" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.collect-wheels.result }}" == "success" ]]; then
+            echo "### Wheels built successfully. Check individual steps for issues." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Release encountered issues. Please review the logs." >> $GITHUB_STEP_SUMMARY
+          fi

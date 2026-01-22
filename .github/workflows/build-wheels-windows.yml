@@ -11,6 +11,13 @@ on:
         # NOTE: Binary build pipelines should only get triggered on release candidate builds
         # Release candidate tags look like: v1.11.0-rc1
         - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  workflow_call:
+    inputs:
+      test-infra-ref:
+        description: 'Branch of pytorch/test-infra to use (e.g., release/2.8 for stable PyTorch)'
+        required: false
+        type: string
+        default: 'main'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +31,7 @@ jobs:
       package-type: wheel
       os: windows
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
   build:
     needs: generate-matrix
     strategy:
@@ -43,7 +50,7 @@ jobs:
       repository: ${{ matrix.repository }}
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       pre-script: ${{ matrix.pre-script }}
       env-script: ${{ matrix.env-script }}
