@@ -41,46 +41,44 @@ printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
     if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-        # Install free-threaded Python 3.14 from conda-forge
-        # Need both python=3.14 AND python-freethreading to get the nogil build
-        # Also include pip explicitly as it's not included by default in free-threaded builds
-        # Configure conda-forge channel first to avoid 403 errors
-        conda config --add channels conda-forge
-        conda config --set channel_priority strict
-        conda create --prefix "${env_dir}" -y python=3.14 python-freethreading pip
+        # Install free-threaded Python 3.14 using deadsnakes PPA
+        apt install -y software-properties-common
+        add-apt-repository -y ppa:deadsnakes/ppa
+        apt update -y
+        apt install -y python3.14-nogil python3.14-nogil-venv python3.14-nogil-dev
+        # Create a virtual environment using free-threaded Python
+        python3.14t -m venv "${env_dir}"
     else
         conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
     fi
 fi
 
-conda activate "${env_dir}"
+# Activate the environment
+if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+    source "${env_dir}/bin/activate"
+else
+    conda activate "${env_dir}"
+fi
 
 # 3. Install dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 
+pip install pip --upgrade
+
 if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-    # For free-threaded Python, install dependencies directly via pip
-    # to avoid channel conflicts with conda env update
-    pip install --upgrade pip
-    # Core test dependencies that should work with 3.14t
-    pip install hypothesis future cloudpickle pytest pytest-benchmark pytest-cov \
-        pytest-mock pytest-instafail pytest-rerunfailures pytest-timeout \
-        expecttest coverage ninja protobuf
-    # numpy - try with constraint first, then without
-    pip install "numpy<2.0.0" || pip install numpy || echo "numpy installation failed, continuing..."
-    # h5py requires HDF5 libs - try conda first, then pip, then skip
-    conda install -c conda-forge h5py -y || pip install h5py || echo "h5py not available for Python 3.14t, skipping"
-    # orjson does not support free-threaded Python yet
-    echo "Skipping orjson - does not support free-threaded Python"
-    # mosaicml-streaming may not be available for 3.14t
+    # For free-threaded Python, install dependencies via pip
+    # Install build tools from apt
+    apt install -y cmake
+    # Install test dependencies (mirrors environment.yml)
+    pip install pybind11 numpy expecttest pyyaml hypothesis future cloudpickle \
+        pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail \
+        pytest-rerunfailures pytest-timeout coverage h5py orjson ninja protobuf
+    # Note: mosaicml-streaming may not be available for 3.14t yet, skip if fails
     pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
-    # Install cmake and pybind11
-    conda install -c conda-forge cmake pybind11 -y
 else
     # For regular Python, use conda
     echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
     cat "${this_dir}/environment.yml"
-    pip install pip --upgrade
     conda env update --file "${this_dir}/environment.yml" --prune
     conda install anaconda::cmake -y
     conda install -c conda-forge pybind11 -y
