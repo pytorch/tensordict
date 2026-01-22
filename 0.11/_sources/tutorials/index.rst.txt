@@ -1,0 +1,241 @@
+:orphan:
+
+README Tutos
+============
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to control where the contents of a TensorDict are stored in memory, either by sending those contents to a device, or by utilizing memory maps.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_memory_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_memory`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Simplifying PyTorch Memory Management with TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to slice, index, and mask a TensorDict.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_slicing_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_slicing`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Slicing, Indexing, and Masking</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to take advantage of memory pre-allocation in TensorDict.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_preallocation_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_preallocation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Pre-allocating memory with TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_export_thumb.png
+    :alt:
+
+  :doc:`/tutorials/export`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Exporting tensordict modules</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to work with and manipulate the keys in a TensorDict, including getting and setting keys, iterating over keys, manipulating nested values, and flattening the keys.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_keys_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_keys`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Manipulating the keys of a TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_streamed_tensordict_thumb.png
+    :alt:
+
+  :doc:`/tutorials/streamed_tensordict`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Building tensordicts from streams</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_module_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_module`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TensorDictModule</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to manipulate the shape of a TensorDict and its contents.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_shapes_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensordict_shapes`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Manipulating the shape of a TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Using tensorclasses for datasets">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensorclass_fashion_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensorclass_fashion`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Using tensorclasses for datasets</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Using TensorDict for datasets">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_data_fashion_thumb.png
+    :alt:
+
+  :doc:`/tutorials/data_fashion`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Using TensorDict for datasets</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Batched data loading with tensorclasses">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensorclass_imagenet_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensorclass_imagenet`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Batched data loading with tensorclasses</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /tutorials/tensordict_memory
+   /tutorials/tensordict_slicing
+   /tutorials/tensordict_preallocation
+   /tutorials/export
+   /tutorials/tensordict_keys
+   /tutorials/streamed_tensordict
+   /tutorials/tensordict_module
+   /tutorials/tensordict_shapes
+   /tutorials/tensorclass_fashion
+   /tutorials/data_fashion
+   /tutorials/tensorclass_imagenet
+
+
+.. only:: html
+
+  .. container:: sphx-glr-footer sphx-glr-footer-gallery
+
+    .. container:: sphx-glr-download sphx-glr-download-python
+
+      :download:`Download all examples in Python source code: tutorials_python.zip </tutorials/tutorials_python.zip>`
+
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+      :download:`Download all examples in Jupyter notebooks: tutorials_jupyter.zip </tutorials/tutorials_jupyter.zip>`
+
+
+.. only:: html
+
+ .. rst-class:: sphx-glr-signature
+
+    `Gallery generated by Sphinx-Gallery <https://sphinx-gallery.github.io>`_
