@@ -40,9 +40,10 @@ on:
         default: false
 
 # Ensure only one release workflow runs at a time
+# cancel-in-progress: true means new runs cancel previous ones
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
