@@ -9,15 +9,14 @@
 # 6. Publishes to PyPI using OIDC trusted publishing
 #
 # Triggers:
-# - Push tag v*.*.* (e.g., v0.11.0)
-# - Manual workflow_dispatch with inputs
+# - Manual workflow_dispatch only (no automatic triggers)
+#
+# NOTE: This workflow is NOT automatically triggered on tag push to avoid
+# race conditions with wheel builds. Use workflow_dispatch to trigger releases.
 
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
@@ -50,13 +49,12 @@ permissions:
   id-token: write
 
 env:
-  # Determine the tag to use: from push event or manual input
-  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  # Release tag from manual input
+  RELEASE_TAG: ${{ inputs.tag }}
   # Determine the test-infra ref: from manual input or default to main
   TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
-  # Auto-triggered (tag push) always runs in dry-run mode
-  # Only manual workflow_dispatch with dry_run=false will actually publish
-  DRY_RUN: ${{ github.event_name == 'push' || inputs.dry_run || false }}
+  # Dry run mode from input
+  DRY_RUN: ${{ inputs.dry_run }}
 
 jobs:
   # =============================================================================
