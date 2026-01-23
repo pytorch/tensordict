@@ -54,7 +54,9 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
   # Determine the test-infra ref: from manual input or default to main
   TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
-  DRY_RUN: ${{ inputs.dry_run || false }}
+  # Auto-triggered (tag push) always runs in dry-run mode
+  # Only manual workflow_dispatch with dry_run=false will actually publish
+  DRY_RUN: ${{ github.event_name == 'push' || inputs.dry_run || false }}
 
 jobs:
   # =============================================================================

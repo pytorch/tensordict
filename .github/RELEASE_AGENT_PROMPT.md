@@ -153,7 +153,21 @@ Check and update if necessary.
 
 ---
 
-## Step 4: Create Release Branch
+## Step 4: Commit Version Changes on the main branch (On major only)
+
+Check that the version hasn't been bumped yet!
+If not:
+```bash
+git checkout -b bump-v{version} origin/main
+git add version.txt .github/scripts/version.txt .github/scripts/version_script.sh
+git commit -m "Bump version to {version_without_v}"
+gh pr create -t "Bump version to {version_without_v}" -b ""
+```
+Then merge the PR.
+
+---
+
+## Step 5: Create Release Branch
 
 ```bash
 # Create release branch from main
@@ -167,7 +181,9 @@ git checkout -b release/0.11
 
 ---
 
-## Step 5: Commit Version Changes
+## Step 6: Commit Version Changes (On minor only)
+
+On minors, the version is bumped locally on the release branch.
 
 ```bash
 git add version.txt .github/scripts/version.txt .github/scripts/version_script.sh
@@ -176,7 +192,7 @@ git commit -m "Bump version to {version_without_v}"
 
 ---
 
-## Step 6: Create and Push Tag
+## Step 7: Create and Push Tag
 
 ```bash
 # Create annotated tag
@@ -189,9 +205,10 @@ git push origin {version_tag}
 
 ---
 
-## Step 7: Trigger Release Workflow
+## Step 8: Trigger Release Workflow
 
-The push of the tag will automatically trigger `.github/workflows/release.yml`.
+The push of the tag will automatically trigger `.github/workflows/release.yml` in dry-run mode.
+
 
 To manually trigger with specific options:
 
@@ -204,7 +221,7 @@ To manually trigger with specific options:
 
 ---
 
-## Step 8: Create Draft GitHub Release
+## Step 9: Create Draft GitHub Release
 
 If not using the automated workflow, create manually:
 
@@ -217,7 +234,7 @@ gh release create {version_tag} \
 
 ---
 
-## Step 9: Monitor Workflow
+## Step 10: Monitor Workflow
 
 Watch the release workflow for:
 
