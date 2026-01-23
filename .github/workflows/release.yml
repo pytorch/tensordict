@@ -246,7 +246,17 @@ jobs:
   collect-wheels:
     name: Collect Wheels
     needs: [sanity-checks, build-linux, build-windows, build-macos, build-aarch64]
-    if: always() && !cancelled()
+    # Only run when ALL build jobs succeed. This ensures:
+    # 1. Incomplete wheel sets are never collected
+    # 2. If a build fails, this job is "skipped" (not "failed")
+    # 3. Re-running the failed build job will also trigger this job
+    if: |
+      always() && !cancelled() &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.build-aarch64.result == 'success' &&
+      (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Check build results
@@ -256,15 +266,8 @@ jobs:
           echo "  Windows: ${{ needs.build-windows.result }}"
           echo "  macOS: ${{ needs.build-macos.result }}"
           echo "  Aarch64: ${{ needs.build-aarch64.result }}"
-
-          # Fail if all builds failed
-          if [[ "${{ needs.build-linux.result }}" == "failure" ]] && \
-             [[ "${{ needs.build-windows.result }}" == "failure" ]] && \
-             [[ "${{ needs.build-macos.result }}" == "failure" ]] && \
-             [[ "${{ needs.build-aarch64.result }}" == "failure" ]]; then
-            echo "::error::All wheel builds failed"
-            exit 1
-          fi
+          echo ""
+          echo "All builds succeeded - proceeding with wheel collection"
 
       - name: Download all wheel artifacts
         uses: actions/download-artifact@v4
