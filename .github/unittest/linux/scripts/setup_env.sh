@@ -41,13 +41,26 @@ printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
     if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-        # Install free-threaded Python 3.14 using deadsnakes PPA
-        apt install -y software-properties-common
-        add-apt-repository -y ppa:deadsnakes/ppa
-        apt update -y
-        apt install -y python3.14-nogil python3.14-nogil-venv python3.14-nogil-dev
+        # Install free-threaded Python 3.14 using pyenv with --disable-gil
+        # Install build dependencies
+        apt install -y build-essential libssl-dev zlib1g-dev \
+            libbz2-dev libreadline-dev libsqlite3-dev curl git \
+            libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+
+        # Install pyenv
+        export PYENV_ROOT="${root_dir}/.pyenv"
+        curl https://pyenv.run | bash
+        export PATH="${PYENV_ROOT}/bin:${PATH}"
+        eval "$(pyenv init -)"
+
+        # Build Python 3.14 with free-threading (--disable-gil)
+        PYTHON_CONFIGURE_OPTS="--disable-gil" pyenv install 3.14
+
+        # Set pyenv to use this version
+        pyenv global 3.14
+
         # Create a virtual environment using free-threaded Python
-        python3.14t -m venv "${env_dir}"
+        python3 -m venv "${env_dir}"
     else
         conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
     fi
@@ -55,6 +68,12 @@ fi
 
 # Activate the environment
 if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+    # Ensure pyenv is initialized (needed for activation even if env already exists)
+    export PYENV_ROOT="${root_dir}/.pyenv"
+    export PATH="${PYENV_ROOT}/bin:${PATH}"
+    if command -v pyenv &> /dev/null; then
+        eval "$(pyenv init -)"
+    fi
     source "${env_dir}/bin/activate"
 else
     conda activate "${env_dir}"
