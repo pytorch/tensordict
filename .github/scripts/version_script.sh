@@ -3,7 +3,7 @@
 # Read base version from version.txt (explicit absolute path)
 # This script is located at: .github/scripts/version_script.sh
 # The version.txt file is at: .github/scripts/version.txt
-BASE_VERSION=0.10.0
+BASE_VERSION=0.11.0
 echo "Base version: $BASE_VERSION"
 
 # Only set static version for release branches and release candidate tags
