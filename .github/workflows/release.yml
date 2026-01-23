@@ -270,7 +270,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: wheels
-          pattern: '*wheel*'
+          # pytorch/test-infra uploads artifacts named like: pytorch_tensordict__3.11_cpu_x86_64
+          pattern: 'pytorch_tensordict*'
           merge-multiple: true
 
       - name: List collected wheels
