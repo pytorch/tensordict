@@ -175,8 +175,8 @@ git checkout main
 git pull origin main
 git checkout -b release/{major.minor}
 
-# Example: for v0.11.0
-git checkout -b release/0.11
+# Example: for v0.11.0 (Must always contain version, major and minor)
+git checkout -b release/0.11.0
 ```
 
 ---

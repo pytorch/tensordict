@@ -402,20 +402,20 @@ jobs:
               --title "TensorDict $TAG" \
               --notes "Release notes for TensorDict $TAG
 
-## Highlights
+          ## Highlights
 
-<!-- Add release highlights here -->
+          <!-- Add release highlights here -->
 
-## What's Changed
+          ## What's Changed
 
-<!-- Release notes will be written manually -->
+          <!-- Release notes will be written manually -->
 
-## Installation
+          ## Installation
 
-\`\`\`bash
-pip install tensordict==${TAG#v}
-\`\`\`
-" \
+          \`\`\`bash
+          pip install tensordict==${TAG#v}
+          \`\`\`
+          " \
               wheels/*.whl
           fi
 
