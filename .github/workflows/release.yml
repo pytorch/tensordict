@@ -199,8 +199,12 @@ jobs:
           fi
 
   # =============================================================================
-  # BUILD WHEELS - All Platforms
+  # BUILD WHEELS - All Platforms (Sequential to avoid concurrency conflicts)
   # =============================================================================
+  # NOTE: Builds run sequentially because pytorch/test-infra workflows use a
+  # shared concurrency group that causes parallel builds to cancel each other.
+  # See: https://github.com/pytorch/tensordict/issues/XXX for tracking.
+
   build-linux:
     name: Build Linux Wheels
     needs: [sanity-checks]
@@ -211,7 +215,8 @@ jobs:
 
   build-windows:
     name: Build Windows Wheels
-    needs: [sanity-checks]
+    needs: [sanity-checks, build-linux]
+    # Run after Linux build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
@@ -219,7 +224,8 @@ jobs:
 
   build-macos:
     name: Build macOS Wheels
-    needs: [sanity-checks]
+    needs: [sanity-checks, build-windows]
+    # Run after Windows build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
@@ -227,7 +233,8 @@ jobs:
 
   build-aarch64:
     name: Build Aarch64 Linux Wheels
-    needs: [sanity-checks]
+    needs: [sanity-checks, build-macos]
+    # Run after macOS build completes (success or failure) to avoid concurrency conflicts
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
