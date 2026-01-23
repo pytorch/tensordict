@@ -124,7 +124,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[1.6141, 0.0000, 0.4265, 0.0000]], grad_fn=<ReluBackward0>), tensor([[-0.3737,  0.8424,  1.0544, -0.8647]], grad_fn=<AddmmBackward0>), tensor([[-0.3737,  0.8424]], grad_fn=<SplitBackward0>), tensor([[1.7772, 0.5478]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.2847, 0.0000, 0.1891, 0.1201]], grad_fn=<ReluBackward0>), tensor([[-0.3306, -0.0335,  0.5568, -0.1209]], grad_fn=<AddmmBackward0>), tensor([[-0.3306, -0.0335]], grad_fn=<SplitBackward0>), tensor([[1.3841, 0.9258]], grad_fn=<ClampMinBackward0>))
 
 
 
@@ -248,8 +248,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  521.90 micro-seconds
-    Time for exported module:  364.54 micro-seconds
+    Time for TDModule:  510.45 micro-seconds
+    Time for exported module:  377.42 micro-seconds
 
 
 
@@ -432,7 +432,7 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[-0.3737,  0.8424]], grad_fn=<SplitBackward0>)
+    tensor([[-0.3306, -0.0335]], grad_fn=<SplitBackward0>)
 
 
 

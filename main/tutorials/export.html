@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.10.0.dev3534+g9ac1d0c2c.d20260123)
+                  main (0.10.0.dev3535+gdf170d639.d20260123)
                 </div>
               
             
@@ -414,7 +414,7 @@ multiple outputs from a single tensor.</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[1.6141, 0.0000, 0.4265, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.3737,  0.8424,  1.0544, -0.8647]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.3737,  0.8424]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.7772, 0.5478]], grad_fn=&lt;ClampMinBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.2847, 0.0000, 0.1891, 0.1201]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.3306, -0.0335,  0.5568, -0.1209]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.3306, -0.0335]], grad_fn=&lt;SplitBackward0&gt;), tensor([[1.3841, 0.9258]], grad_fn=&lt;ClampMinBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -487,8 +487,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><a href="https://docs.python.org/3/library/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  521.90 micro-seconds
-Time for exported module:  364.54 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  510.45 micro-seconds
+Time for exported module:  377.42 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -619,7 +619,7 @@ When an <cite>x</cite> input is provided, we expect our model to output a single
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.3737,  0.8424]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.3306, -0.0335]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor.
