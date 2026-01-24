@@ -122,17 +122,17 @@ jobs:
       - name: Check all version files match tag
         run: |
           VERSION="${{ steps.parse-version.outputs.version }}"
-          
+
           echo "=============================================="
           echo "Checking all 4 version files match tag: $VERSION"
           echo "=============================================="
-          
+
           # Read all 4 version files
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
           SCRIPTS_VERSION=$(cat .github/scripts/version.txt | tr -d '[:space:]')
           SCRIPT_SH_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script.sh | cut -d'=' -f2)
           SCRIPT_WIN_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script_windows.sh | cut -d'=' -f2)
-          
+
           echo ""
           echo "Version file contents:"
           echo "  Tag version:                              $VERSION"
@@ -141,35 +141,35 @@ jobs:
           echo "  .github/scripts/version_script.sh:        $SCRIPT_SH_VERSION"
           echo "  .github/scripts/version_script_windows.sh: $SCRIPT_WIN_VERSION"
           echo ""
-          
+
           # Check all files match each other first
           MISMATCH=0
-          
+
           if [[ "$ROOT_VERSION" != "$SCRIPTS_VERSION" ]]; then
             echo "::error::version.txt ($ROOT_VERSION) != .github/scripts/version.txt ($SCRIPTS_VERSION)"
             MISMATCH=1
           fi
-          
+
           if [[ "$ROOT_VERSION" != "$SCRIPT_SH_VERSION" ]]; then
             echo "::error::version.txt ($ROOT_VERSION) != version_script.sh ($SCRIPT_SH_VERSION)"
             MISMATCH=1
           fi
-          
+
           if [[ "$ROOT_VERSION" != "$SCRIPT_WIN_VERSION" ]]; then
             echo "::error::version.txt ($ROOT_VERSION) != version_script_windows.sh ($SCRIPT_WIN_VERSION)"
             echo "::error::Windows wheels will be built with wrong version!"
             MISMATCH=1
           fi
-          
+
           if [[ "$MISMATCH" == "1" ]]; then
             echo ""
             echo "::error::Version files are inconsistent! All 4 files must have the same version."
             echo "::error::Please update all files listed in Step 3 of RELEASE_AGENT_PROMPT.md"
             exit 1
           fi
-          
+
           echo "✓ All version files are consistent with each other"
-          
+
           # Now check they match the tag
           if [[ "$ROOT_VERSION" != "$VERSION" ]]; then
             echo ""
@@ -177,7 +177,7 @@ jobs:
             echo "::error::Either the tag is wrong or the version files need to be updated."
             exit 1
           fi
-          
+
           echo "✓ All version files match the tag version ($VERSION)"
           echo ""
           echo "Version check passed!"
