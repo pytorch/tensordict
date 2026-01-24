@@ -154,7 +154,23 @@ jobs:
             exit 1
           fi
 
-          echo "BASE_VERSION matches the tag"
+          echo "BASE_VERSION in version_script.sh matches the tag"
+
+      - name: Check version_script_windows.sh BASE_VERSION
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+          BASE_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script_windows.sh | cut -d'=' -f2)
+
+          echo "Tag version: $VERSION"
+          echo "BASE_VERSION in version_script_windows.sh: $BASE_VERSION"
+
+          if [[ "$BASE_VERSION" != "$VERSION" ]]; then
+            echo "::error::BASE_VERSION in version_script_windows.sh ($BASE_VERSION) does not match tag version ($VERSION)"
+            echo "::error::Windows wheels will be built with wrong version!"
+            exit 1
+          fi
+
+          echo "BASE_VERSION in version_script_windows.sh matches the tag"
 
       - name: Check library version
         run: |
