@@ -77,7 +77,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "tensordict/_version.py"
-fallback_version = "0.10.0"
+fallback_version = "0.11.0"
 
 [tool.mypy]
 files = "tensordict"
