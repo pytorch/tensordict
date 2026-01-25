@@ -1,6 +1,6 @@
 @echo off
 
-set BASE_VERSION=0.10.0
+set BASE_VERSION=0.11.0
 echo Base version: %BASE_VERSION%
 
 REM Only set static version for release branches and release candidate tags
