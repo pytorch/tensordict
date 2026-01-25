@@ -749,6 +749,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
+
+        # Check schema on first tensordict (all should have same schema)
+        if not inplace and self.tensordicts:
+            first_td = self.tensordicts[0]
+            if key not in first_td.keys():
+                first_td._check_schema_key_allowed(key)
+
         if not validated:
             value = self._validate_value(
                 value,
@@ -2867,6 +2874,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @lock_blocked
     def del_(self, key: NestedKey, **kwargs: Any) -> Self:
+        # Check schema on first tensordict (all should have same schema)
+        if self.tensordicts:
+            self.tensordicts[0]._check_schema_delete_allowed(
+                _unravel_key_to_tuple(key)[0]
+            )
+
         # Use check-before-delete pattern for torch.compile compatibility
         key_tuple = _unravel_key_to_tuple(key)
         is_nested = len(key_tuple) > 1

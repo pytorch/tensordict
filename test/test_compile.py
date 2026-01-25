@@ -1443,6 +1443,216 @@ class TestCompileNontensor:
         torch.compile(self.fn_with_device_without_batch_size)(data)
 
 
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+class TestSchemaFreeze:
+    """Tests for freeze_schema_() functionality for torch.compile optimization."""
+
+    def test_freeze_schema_basic(self):
+        """Test basic schema freezing and unfreezing."""
+        td = TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.zeros(3, 2)},
+            batch_size=[3],
+        )
+        assert not td.has_frozen_schema
+        assert td._frozen_schema is None
+        assert td._frozen_schema_hash is None
+
+        # Freeze schema
+        td.freeze_schema_()
+        assert td.has_frozen_schema
+        assert td._frozen_schema is not None
+        assert td._frozen_schema_hash is not None
+
+        # Check schema content
+        schema = td._frozen_schema
+        assert schema.keys == ("a", "b")
+        assert schema.batch_dims == 1
+        assert len(schema.tensor_specs) == 2
+
+        # Unfreeze
+        td.unfreeze_schema_()
+        assert not td.has_frozen_schema
+        assert td._frozen_schema is None
+
+    def test_freeze_schema_blocks_new_keys(self):
+        """Test that frozen schema blocks adding new keys."""
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td.freeze_schema_()
+
+        with pytest.raises(RuntimeError, match="Cannot add key"):
+            td.set("b", torch.randn(3, 2))
+
+        with pytest.raises(RuntimeError, match="Cannot add key"):
+            td["c"] = torch.randn(3, 2)
+
+    def test_freeze_schema_allows_existing_keys(self):
+        """Test that frozen schema allows updating existing keys."""
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td.freeze_schema_()
+
+        # Should work - updating existing key
+        td.set("a", torch.randn(3, 4))
+        td["a"] = torch.randn(3, 4)
+        td.set_("a", torch.randn(3, 4))
+
+    def test_freeze_schema_blocks_delete(self):
+        """Test that frozen schema blocks deleting keys."""
+        td = TensorDict({"a": torch.randn(3, 4), "b": torch.randn(3, 2)}, batch_size=[3])
+        td.freeze_schema_()
+
+        with pytest.raises(RuntimeError, match="Cannot delete key"):
+            td.del_("a")
+
+        with pytest.raises(RuntimeError, match="Cannot delete key"):
+            del td["b"]
+
+    def test_freeze_schema_blocks_rename(self):
+        """Test that frozen schema blocks renaming keys."""
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td.freeze_schema_()
+
+        with pytest.raises(RuntimeError, match="Cannot rename key"):
+            td.rename_key_("a", "b")
+
+    def test_freeze_schema_nested(self):
+        """Test that freeze_schema_ propagates to nested TensorDicts."""
+        td = TensorDict(
+            {
+                "a": torch.randn(3, 4),
+                "nested": TensorDict({"b": torch.randn(3, 2)}, batch_size=[3]),
+            },
+            batch_size=[3],
+        )
+
+        td.freeze_schema_()
+
+        # Both should be frozen
+        assert td.has_frozen_schema
+        assert td["nested"].has_frozen_schema
+
+        # Both should block new keys
+        with pytest.raises(RuntimeError, match="Cannot add key"):
+            td.set("c", torch.randn(3, 1))
+
+        with pytest.raises(RuntimeError, match="Cannot add key"):
+            td["nested"].set("d", torch.randn(3, 1))
+
+        # Unfreeze propagates too
+        td.unfreeze_schema_()
+        assert not td.has_frozen_schema
+        assert not td["nested"].has_frozen_schema
+
+    def test_freeze_schema_with_batch_dims(self):
+        """Test schema with explicit batch_dims."""
+        td = TensorDict(
+            {"obs": torch.randn(32, 10, 84, 84)},  # batch, time, H, W
+            batch_size=[32, 10],
+        )
+
+        # Freeze with batch_dims=2: first 2 dims are dynamic
+        td.freeze_schema_(batch_dims=2)
+
+        schema = td._frozen_schema
+        assert schema.batch_dims == 2
+
+        # Check that shape_suffix captures non-batch dims
+        obs_spec = dict(schema.tensor_specs)["obs"]
+        assert obs_spec.shape_suffix == (84, 84)
+
+    def test_freeze_schema_hash_stability(self):
+        """Test that schema hash is deterministic for same structure."""
+        td1 = TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.zeros(3, 2)},
+            batch_size=[3],
+        )
+        td2 = TensorDict(
+            {"a": torch.randn(3, 4), "b": torch.zeros(3, 2)},
+            batch_size=[3],
+        )
+
+        td1.freeze_schema_()
+        td2.freeze_schema_()
+
+        # Same structure should have same hash
+        assert td1._frozen_schema_hash == td2._frozen_schema_hash
+        assert td1._frozen_schema == td2._frozen_schema
+
+    def test_freeze_schema_hash_different_for_different_structure(self):
+        """Test that schema hash differs for different structures."""
+        td1 = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td2 = TensorDict({"b": torch.randn(3, 4)}, batch_size=[3])
+        td3 = TensorDict({"a": torch.randn(3, 4, 5)}, batch_size=[3])
+
+        td1.freeze_schema_()
+        td2.freeze_schema_()
+        td3.freeze_schema_()
+
+        # Different keys -> different hash
+        assert td1._frozen_schema_hash != td2._frozen_schema_hash
+
+        # Different shape suffix -> different hash
+        assert td1._frozen_schema_hash != td3._frozen_schema_hash
+
+    @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
+    def test_freeze_schema_compile_basic(self, mode):
+        """Test that frozen schema TensorDict can be compiled."""
+
+        def process(td):
+            td["a"] = td["a"] + 1
+            return td
+
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td.freeze_schema_()
+
+        process_c = torch.compile(process, fullgraph=True, mode=mode)
+        result = process_c(td.clone())
+
+        torch.testing.assert_close(result["a"], td["a"] + 1)
+
+    @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
+    def test_freeze_schema_compile_nested(self, mode):
+        """Test that compiled function works with nested frozen TensorDicts."""
+
+        def process(td):
+            td["a"] = td["a"] + 1
+            td["nested", "b"] = td["nested", "b"] * 2
+            return td
+
+        td = TensorDict(
+            {
+                "a": torch.randn(3, 4),
+                "nested": TensorDict({"b": torch.randn(3, 2)}, batch_size=[3]),
+            },
+            batch_size=[3],
+        )
+        td.freeze_schema_()
+
+        process_c = torch.compile(process, fullgraph=True, mode=mode)
+        td_clone = td.clone()
+        result = process_c(td_clone)
+
+        torch.testing.assert_close(result["a"], td["a"] + 1)
+        torch.testing.assert_close(result["nested", "b"], td["nested", "b"] * 2)
+
+    def test_pytree_context_includes_schema_hash(self):
+        """Test that pytree flatten includes schema_hash when frozen."""
+        from tensordict._pytree import _tensordict_flatten
+
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+
+        # Without freeze, no schema_hash in context
+        _, context = _tensordict_flatten(td)
+        assert "schema_hash" not in context
+
+        # With freeze, schema_hash is in context
+        td.freeze_schema_()
+        _, context = _tensordict_flatten(td)
+        assert "schema_hash" in context
+        assert context["schema_hash"] == td._frozen_schema_hash
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
