@@ -38,6 +38,15 @@ on:
         required: false
         type: boolean
         default: false
+      wheel_variants:
+        description: 'Which wheel variants to collect (cpu recommended for tensordict)'
+        required: false
+        type: choice
+        options:
+          - cpu
+          - gpu
+          - all
+        default: 'cpu'
 
 # Ensure only one release workflow runs at a time
 # cancel-in-progress: true means new runs cancel previous ones
@@ -295,26 +304,70 @@ jobs:
           echo ""
           echo "All builds succeeded - proceeding with wheel collection"
 
-      - name: Download all wheel artifacts
+      - name: Download wheel artifacts
         uses: actions/download-artifact@v4
         with:
-          path: wheels
+          path: wheels-raw
+          # Pattern based on wheel_variants input:
+          # - cpu: Only CPU builds (recommended - avoids duplicate wheel conflicts)
+          # - gpu: Only CUDA builds
+          # - all: All variants (requires deduplication)
           # pytorch/test-infra uploads artifacts named like: pytorch_tensordict__3.11_cpu_x86_64
-          pattern: 'pytorch_tensordict*'
+          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_tensordict__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_tensordict*' || 'pytorch_tensordict__*_cpu_*' }}
           merge-multiple: true
+
+      - name: Deduplicate and verify wheels
+        run: |
+          # When downloading gpu/all variants, multiple artifacts may contain
+          # wheels with the same filename (e.g., CUDA 12.6 and CUDA 12.8 both
+          # produce tensordict-X.Y.Z-cpXX-cpXX-manylinux_x86_64.whl).
+          # merge-multiple can cause corruption when this happens.
+          # We deduplicate by keeping only unique wheel filenames.
+          mkdir -p wheels
+          echo "Processing wheels..."
+          
+          # Find all wheels and copy unique ones (first occurrence wins)
+          for wheel in $(find wheels-raw -name "*.whl" -type f | sort); do
+            basename=$(basename "$wheel")
+            if [[ ! -f "wheels/$basename" ]]; then
+              cp "$wheel" "wheels/$basename"
+              echo "  Kept: $basename"
+            else
+              echo "  Skip duplicate: $basename"
+            fi
+          done
+          
+          # Verify all wheels are valid zip files
+          echo ""
+          echo "Verifying wheel integrity..."
+          CORRUPTED=0
+          for wheel in wheels/*.whl; do
+            if python3 -c "import zipfile; zipfile.ZipFile('$wheel')" 2>/dev/null; then
+              echo "  OK: $(basename $wheel)"
+            else
+              echo "  CORRUPTED: $(basename $wheel)"
+              CORRUPTED=1
+            fi
+          done
+          
+          if [[ $CORRUPTED -eq 1 ]]; then
+            echo ""
+            echo "ERROR: One or more wheels are corrupted!"
+            exit 1
+          fi
 
       - name: List collected wheels
         run: |
           echo "Collected wheels:"
-          find wheels -name "*.whl" -type f | sort
+          ls -la wheels/*.whl | sort
           echo ""
-          echo "Total wheels: $(find wheels -name "*.whl" -type f | wc -l)"
+          echo "Total wheels: $(ls wheels/*.whl 2>/dev/null | wc -l)"
 
       - name: Upload combined wheels artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-wheels
-          path: wheels/**/*.whl
+          path: wheels/*.whl
           if-no-files-found: error
 
   # =============================================================================
