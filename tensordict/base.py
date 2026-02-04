@@ -12451,10 +12451,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
+
+            def _maximum_passthrough(x, y=None):
+                if y is None:
+                    y = other
+                # Unwrap pass-through values
+                x_data = x.data if _pass_through(x) else x
+                y_data = y.data if _pass_through(y) else y
+                result_data = torch.maximum(x_data, y_data)
+                # Re-wrap if x was pass-through
+                if _pass_through(x):
+                    result = type(x)(result_data)
+                    result.batch_size = x.batch_size
+                    return result
+                return result_data
+
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.maximum(x, y), other)
+                return self.apply(_maximum_passthrough, other)
             else:
-                return self.apply(lambda x: torch.maximum(x, other))
+                return self.apply(_maximum_passthrough)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12537,10 +12552,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
+
+            def _minimum_passthrough(x, y=None):
+                if y is None:
+                    y = other
+                # Unwrap pass-through values
+                x_data = x.data if _pass_through(x) else x
+                y_data = y.data if _pass_through(y) else y
+                result_data = torch.minimum(x_data, y_data)
+                # Re-wrap if x was pass-through
+                if _pass_through(x):
+                    result = type(x)(result_data)
+                    result.batch_size = x.batch_size
+                    return result
+                return result_data
+
             if _is_tensor_collection(type(other)):
-                return self.apply(lambda x, y: torch.minimum(x, y), other)
+                return self.apply(_minimum_passthrough, other)
             else:
-                return self.apply(lambda x: torch.minimum(x, other))
+                return self.apply(_minimum_passthrough)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
