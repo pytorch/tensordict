@@ -51,25 +51,6 @@ td["shared_weights"].shape  # torch.Size([128, 64]) - NOT [4, 3, 128, 64]
 
 4. **Data operations apply normally**: Operations like `to(device)`, `to(dtype)`, arithmetic (`+`, `-`, `*`, `/`), `clamp`, `maximum`, etc. apply to the underlying data as expected.
 
-### Example: Shape Operations
-
-```python
-td = TensorDict({
-    "a": torch.randn(4, 3, 5),
-    "unbatched": UnbatchedTensor(torch.randn(7, 11)),
-}, batch_size=[4, 3])
-
-# Split the TensorDict
-td1, td2 = td.split(2, dim=0)
-
-# Regular tensor is split
-td1["a"].shape  # torch.Size([2, 3, 5])
-
-# UnbatchedTensor data is UNCHANGED
-td1.get("unbatched").data.shape  # torch.Size([7, 11]) - same as original!
-td1.get("unbatched").batch_size  # torch.Size([2, 3]) - updated to match td1
-```
-
 ### Important: Accessing UnbatchedTensor
 
 - **`td["key"]`** returns the underlying `.data` tensor (for convenience)
@@ -81,8 +62,8 @@ Use `.get()` when you need to access the `batch_size` property or preserve the w
 
 ## Current Status
 
-- **275 tests passing** with `td_with_unbatched` fixture
-- **85 tests skipped** (legitimate semantic incompatibilities + slow tests)
+- **254 tests passing** with `td_with_unbatched` fixture
+- **106 tests skipped** (legitimate semantic incompatibilities + features not yet implemented)
 - **12 tests xfail** (memmap support - needs implementation)
 
 ---
@@ -108,20 +89,48 @@ The memmap functionality needs to:
 
 ---
 
-## Skipped Tests - Legitimate Semantic Incompatibilities
+## Skipped Tests - Features Not Yet Implemented
 
-These tests are skipped because the operations have semantic incompatibilities with UnbatchedTensor.
+### Indexed Assignment (requires internal _tensordict batch_size handling)
+
+| Test | Reason |
+|------|--------|
+| `test_setitem` | Internal `_tensordict` has batch_size=[] which mismatches during indexed assignment |
+| `test_setitem_slice` | Same issue as test_setitem |
+| `test_broadcast` | Same issue - uses indexed assignment |
+
+### Dimension Mismatch Issues (expand_as_right)
+
+| Test | Reason |
+|------|--------|
+| `test_where` | expand_as_right dimension mismatch between UnbatchedTensor and batch dims |
+| `test_where_pad` | Same issue |
+| `test_masked_fill` | Same issue |
+| `test_masked_fill_` | Same issue |
+
+### Other Features Needing Implementation
+
+| Test | Reason |
+|------|--------|
+| `test_zero_grad` | `backward()` requires scalar output, UnbatchedTensor isn't scalar |
+| `test_losses` | `l1_loss`, `mse_loss` etc. not implemented for UnbatchedTensor |
+| `test_new_full`, `test_new_ones`, `test_new_tensor`, `test_new_zeros` | Comparison with UnbatchedTensor needs investigation |
+| `test_cast_to` | Needs investigation |
+
+---
+
+## Skipped Tests - Legitimate Semantic Incompatibilities
 
 ### Shape-Dependent Operations (Cannot Work)
 
-| Test | Reason | Possible Improvement |
-|------|--------|---------------------|
-| `test_add_batch_dim_cache` | vmap requires consistent batch dimensions | Add `pytest.raises` to verify error |
-| `test_reduction` | Reductions over batch dims don't apply to unbatched data | Skip unbatched keys in reduction |
-| `test_reduction_feature` | Same as above | Skip unbatched keys in reduction |
-| `test_logsumexp` | Reduction operation over batch dims | Skip unbatched keys |
-| `test_softmax` | Softmax over batch dim doesn't apply | Skip unbatched keys |
-| `test_view_dtype` | View with dtype has shape implications | Needs investigation |
+| Test | Reason |
+|------|--------|
+| `test_add_batch_dim_cache` | vmap requires consistent batch dimensions |
+| `test_reduction` | Reductions over batch dims don't apply to unbatched data |
+| `test_reduction_feature` | Same as above |
+| `test_logsumexp` | Reduction operation over batch dims |
+| `test_softmax` | Softmax over batch dim doesn't apply |
+| `test_view_dtype` | View with dtype has shape implications |
 
 ### TensorClass Structure Incompatibilities
 
@@ -155,45 +164,23 @@ Added `_pass_through` fallback to avoid `torch._foreach_*` stripping wrappers:
 | `test_autograd_grad` | Unwrap/wrap in `_grad` function | `_torch_func.py` |
 | `test_losses` | `neg`, `neg_` patched | `base.py` |
 
-### Phase 2: Other Fixes (All Fixed)
+### Phase 2: Other Fixes
 
 | Test | Fix Applied |
 |------|-------------|
-| `test_clamp` | foreach fallback |
-| `test_maximum` | foreach fallback |
-| `test_mul` | foreach fallback added |
-| `test_neg` | foreach fallback added |
 | `test_data_ptr` | Added `untyped_storage()`, `data_ptr()` methods to UnbatchedTensor |
 | `test_new_tensor` | Works after `mul` fix |
 | `test_replace` | Specialized test for regular tensors only |
 | `test_to_device_dtype_inplace` | Added `device`, `dtype` properties to UnbatchedTensor |
-| `test_setitem` | Specialized test verifying no-op for unbatched |
-| `test_setitem_nested_dict_value` | Works without changes |
-| `test_setitem_slice` | Specialized test verifying no-op for unbatched |
-| `test_nestedtensor_stack` (8 variants) | Works without changes |
 | `test_state_dict` | Added `state_dict()`, `load_state_dict()` to UnbatchedTensor |
-| `test_state_dict_assign` | Same as above |
-| `test_state_dict_strict` | Same as above |
 
-### Key Code Changes
+### Phase 3: Regression Fixes
 
-1. **`tensordict/_unbatched.py`** - Added methods:
-   - `backward()` - delegates to data
-   - `grad` property - wraps/unwraps gradient
-   - `device`, `dtype` properties
-   - `untyped_storage()`, `data_ptr()` methods
-   - `state_dict()`, `load_state_dict()` methods
-
-2. **`tensordict/base.py`** - Added pass-through checks to:
-   - `clamp_max`, `clamp_max_`, `clamp_min`, `clamp_min_`
-   - `maximum`, `maximum_`, `minimum`, `minimum_`
-   - `mul`, `mul_`
-   - `neg`, `neg_`
-   - `items()`, `values()` - skip recursing into pass-through values
-
-3. **`tensordict/_torch_func.py`** - Modified `_grad()`:
-   - Unwrap UnbatchedTensors before `torch.autograd.grad`
-   - Wrap gradients back into UnbatchedTensor afterward
+| Issue | Fix Applied |
+|-------|-------------|
+| Empty TensorDict crash | Added `if not vals: return self.copy()` to foreach operations |
+| NonTensorData yielded as leaf | Fixed `_default_is_leaf` to only consider `_pass_through` attribute |
+| maximum/minimum with UnbatchedTensor | Added unwrap/wrap logic in pass-through fallback |
 
 ---
 
@@ -228,29 +215,6 @@ from tensordict.utils import _pass_through
 if _pass_through(value):
     # This is an UnbatchedTensor or similar pass-through type
 ```
-
-### Fixing Foreach Operations Pattern
-
-For methods that use `torch._foreach_*` functions:
-
-```python
-keys, vals = self._items_list(True, True)
-# Check once if any pass-through values exist - if so, fallback to apply
-if any(_pass_through(v) for v in vals):
-    if _is_tensor_collection(type(other)):
-        return self.apply(lambda x, y: x.op(y), other)
-    else:
-        return self.apply(lambda x: x.op(other))
-# ... original foreach path for non-pass-through cases
-```
-
-### Implementing Memmap Support
-
-In `tensordict/_td.py`:
-
-1. **`_populate_memmap()`**: Check for UnbatchedTensor, store `.data`
-2. **`_update_metadata()`**: Add `"_is_unbatched": True` to entry metadata
-3. **`_load_memmap()`**: Check for `_is_unbatched`, wrap in UnbatchedTensor
 
 ### User Rules to Follow
 
