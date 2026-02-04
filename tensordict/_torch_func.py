@@ -232,7 +232,9 @@ def _gather(
         if _pass_through(value):
             value_copy = value.copy()
             value_copy.batch_size = index.shape
-            out._set_str(key, value_copy, validated=True, inplace=False, non_blocking=False)
+            out._set_str(
+                key, value_copy, validated=True, inplace=False, non_blocking=False
+            )
         else:
             _gather_tensor(value, out, key)
     return out
@@ -499,11 +501,14 @@ def _cat(
                 # Copy first and update batch_size
                 copy = first_item.copy()
                 copy.batch_size = batch_size
-                out._set_str(key, copy, validated=True, inplace=False, non_blocking=False)
+                out._set_str(
+                    key, copy, validated=True, inplace=False, non_blocking=False
+                )
             else:
                 with (
                     _ErrorInteceptor(
-                        key, "Attempted to concatenate tensors on different devices at key"
+                        key,
+                        "Attempted to concatenate tensors on different devices at key",
                     )
                     if not is_compiling()
                     else contextlib.nullcontext()
@@ -516,7 +521,8 @@ def _cat(
                         )
                     else:
                         out.set_(
-                            key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+                            key,
+                            torch.cat([td.get(key) for td in list_of_tensordicts], dim),
                         )
         return out
 
@@ -1040,7 +1046,9 @@ def _grad(
     if grad_outputs is not None:
         tup_grad_outputs = tuple(
             _unwrap_pass_through(v)
-            for v in grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            for v in grad_outputs._values_list(
+                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
         )
     else:
         tup_grad_outputs = None
@@ -1050,7 +1058,9 @@ def _grad(
         for v in outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
     )
 
-    keys, all_inputs_raw = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    keys, all_inputs_raw = inputs._items_list(
+        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+    )
     all_inputs = [_unwrap_pass_through(v) for v in all_inputs_raw]
 
     all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)

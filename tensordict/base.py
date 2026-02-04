@@ -10928,6 +10928,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def neg(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             return self.apply(lambda x: -x)
@@ -10948,6 +10951,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def neg_(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict in-place."""
         vals = self._values_list(True, True)
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             self.apply_(lambda x: x.neg_())
@@ -11840,6 +11846,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check once if any pass-through values exist - if so, fallback to apply
         # to avoid foreach ops stripping wrappers like UnbatchedTensor
         if any(_pass_through(v) for v in vals):
@@ -11901,6 +11910,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                if alpha is not None:
+                    self.apply_(lambda x, y: x.add_(y, alpha=alpha), other)
+                else:
+                    self.apply_(lambda x, y: x.add_(y), other)
+            else:
+                if alpha is not None:
+                    self.apply_(lambda x: x.add_(other, alpha=alpha))
+                else:
+                    self.apply_(lambda x: x.add_(other))
+            return self
         if alpha is not None:
             torch._foreach_add_(vals, other_val, alpha=alpha)
         else:
@@ -12295,6 +12320,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12332,6 +12360,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12380,6 +12411,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12412,6 +12446,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12460,6 +12497,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12492,6 +12532,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12540,6 +12583,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12579,6 +12625,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12634,6 +12683,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -12673,6 +12725,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
         # Check for pass-through values to avoid foreach ops stripping wrappers
         if any(_pass_through(v) for v in vals):
             if _is_tensor_collection(type(other)):
@@ -15886,6 +15941,12 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 def _default_is_leaf(cls: Type) -> bool:
     """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type.
 
+    Pass-through types (like UnbatchedTensor) have ``_pass_through=True`` and are considered leaves
+    because their shape doesn't conform to batch dimensions.
+
+    Note: NonTensorData types are NOT considered leaves here (they have ``_is_non_tensor=True``
+    but not ``_pass_through=True``), so they are excluded from leaves when ``leaves_only=True``.
+
     Examples:
         >>> from tensordict import TensorDict, default_is_leaf
         >>> import torch
@@ -15897,7 +15958,10 @@ def _default_is_leaf(cls: Type) -> bool:
 
     .. seealso:: :meth:`~tensordict.is_leaf_nontensor`.
     """
-    return not _is_tensor_collection(cls) or _pass_through_cls(cls)
+    # Only check for _pass_through attribute, not _is_non_tensor
+    # This ensures NonTensorData is NOT considered a leaf (preserving original behavior)
+    # while UnbatchedTensor IS considered a leaf
+    return not _is_tensor_collection(cls) or getattr(cls, "_pass_through", False)
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:

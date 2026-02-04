@@ -187,7 +187,9 @@ class UnbatchedTensor(TensorClass):
         if isinstance(result, (list, tuple)):
             out = []
             for tensordict_result in result:
-                item = _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
+                item = _from_tensordict_with_copy(
+                    tensorclass_instance, tensordict_result
+                )
                 item.batch_size = source_batch_size
                 out.append(item)
             return type(result)(out)
@@ -288,40 +290,52 @@ class UnbatchedTensor(TensorClass):
         return result
 
     def __add__(self, other):
-        return self._wrap_result(self.data + (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data + (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __radd__(self, other):
         return self._wrap_result(other + self.data)
 
     def __sub__(self, other):
-        return self._wrap_result(self.data - (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data - (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __rsub__(self, other):
         return self._wrap_result(other - self.data)
 
     def __mul__(self, other):
-        return self._wrap_result(self.data * (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data * (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __rmul__(self, other):
         return self._wrap_result(other * self.data)
 
     def __truediv__(self, other):
-        return self._wrap_result(self.data / (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data / (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __rtruediv__(self, other):
         return self._wrap_result(other / self.data)
 
     def __floordiv__(self, other):
-        return self._wrap_result(self.data // (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data // (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __rfloordiv__(self, other):
         return self._wrap_result(other // self.data)
 
     def __pow__(self, other):
-        return self._wrap_result(self.data ** (other.data if isinstance(other, UnbatchedTensor) else other))
+        return self._wrap_result(
+            self.data ** (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
 
     def __rpow__(self, other):
-        return self._wrap_result(other ** self.data)
+        return self._wrap_result(other**self.data)
 
     def __neg__(self):
         return self._wrap_result(-self.data)
@@ -334,12 +348,22 @@ class UnbatchedTensor(TensorClass):
 
     def add(self, other, *, alpha=None):
         if alpha is not None:
-            return self._wrap_result(self.data.add(other.data if isinstance(other, UnbatchedTensor) else other, alpha=alpha))
+            return self._wrap_result(
+                self.data.add(
+                    other.data if isinstance(other, UnbatchedTensor) else other,
+                    alpha=alpha,
+                )
+            )
         return self + other
 
     def sub(self, other, *, alpha=None):
         if alpha is not None:
-            return self._wrap_result(self.data.sub(other.data if isinstance(other, UnbatchedTensor) else other, alpha=alpha))
+            return self._wrap_result(
+                self.data.sub(
+                    other.data if isinstance(other, UnbatchedTensor) else other,
+                    alpha=alpha,
+                )
+            )
         return self - other
 
     def mul(self, other):

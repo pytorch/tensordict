@@ -1496,7 +1496,9 @@ class TensorDict(TensorDictBase):
                     if hasattr(item_trsf, "batch_size"):
                         item_trsf.batch_size = batch_size
                 else:
-                    _others = [_other._get_str(key, default=default) for _other in others]
+                    _others = [
+                        _other._get_str(key, default=default) for _other in others
+                    ]
                     if named:
                         if nested_keys:
                             item_trsf = fn(

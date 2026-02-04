@@ -6101,7 +6101,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_lock_change_names(self, td_name, device):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor doesn't have names because its shape doesn't follow batch dims
-            pytest.skip("UnbatchedTensor has no names attribute (shape independent of batch)")
+            pytest.skip(
+                "UnbatchedTensor has no names attribute (shape independent of batch)"
+            )
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         try:
@@ -6196,7 +6198,9 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("dim", [1, (1,), (1, -1)])
     def test_logsumexp(self, td_name, device, has_out, keepdim, dim):
         if td_name == "td_with_unbatched":
-            pytest.skip("UnbatchedTensor incompatible with reduction ops that check shape")
+            pytest.skip(
+                "UnbatchedTensor incompatible with reduction ops that check shape"
+            )
         td = getattr(self, td_name)(device)
         if not has_out:
             out = None
@@ -6309,11 +6313,15 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: masking set is a no-op for UnbatchedTensor data
             original_unbatched = td.get("unbatched").data.clone()
-            mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(0.8)
+            mask = torch.zeros(
+                td.batch_size, dtype=torch.bool, device=device
+            ).bernoulli_(0.8)
             n = mask.sum()
             d = td.ndimension()
             pseudo_td = td.exclude("unbatched").apply(
-                lambda item: torch.zeros((n, *item.shape[d:]), dtype=item.dtype, device=device),
+                lambda item: torch.zeros(
+                    (n, *item.shape[d:]), dtype=item.dtype, device=device
+                ),
                 batch_size=[n, *td.batch_size[d:]],
             )
             td[mask] = pseudo_td
@@ -6714,7 +6722,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_nested_dict_init(self, td_name, device):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: to_dict() returns nested dict structure which can't be re-initialized directly
-            pytest.skip("UnbatchedTensor to_dict() returns nested structure incompatible with TensorDict init")
+            pytest.skip(
+                "UnbatchedTensor to_dict() returns nested structure incompatible with TensorDict init"
+            )
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td.unlock_()
@@ -7240,7 +7250,9 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_reduction_feature(self, td_name, device, red, tmpdir):
         if td_name == "td_with_unbatched":
-            pytest.skip("UnbatchedTensor incompatible with reduction ops that check shape")
+            pytest.skip(
+                "UnbatchedTensor incompatible with reduction ops that check shape"
+            )
         td = getattr(self, td_name)(device)
         td = _to_float(td, td_name, tmpdir)
         if td_name in ("nested_tensorclass", "td_h5"):
@@ -9267,7 +9279,9 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: where_pad is a no-op for UnbatchedTensor data
             original_unbatched = td.get("unbatched").data.clone()
-            mask = torch.zeros(td.shape, dtype=torch.bool, device=td.device).bernoulli_()
+            mask = torch.zeros(
+                td.shape, dtype=torch.bool, device=td.device
+            ).bernoulli_()
             td_empty = td.empty()
             result = td.where(mask, td_empty, pad=1)
             # UnbatchedTensor data should be unchanged
