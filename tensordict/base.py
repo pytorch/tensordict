@@ -152,6 +152,20 @@ except ImportError:
         return device_module
 
 
+def _sync_cuda_transfer(stream=None):
+    """Wait only for CUDA work up to the current point (e.g. queued D2H copies).
+
+    Uses a CUDA event instead of torch.cuda.synchronize() so we do not wait
+    for all pending GPU work, only for work recorded up to the event.
+    """
+    event = torch.cuda.Event()
+    if stream is not None:
+        event.record(stream)
+    else:
+        event.record()
+    event.synchronize()
+
+
 # NO_DEFAULT is a sentinel value used to detect when a default argument was not provided.
 # Using None is not an option since `td.get(key)` (returning None) is a valid usage.
 # When passed to methods like `get()`, it signals "raise KeyError if key is missing"
@@ -15523,7 +15537,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if non_cpu_device is not None:
                 device_type = _get_available_device_type()
                 device_module = _get_device_module(device_type)
-                if hasattr(device_module, "current_stream"):
+                if device_type == "cuda" and hasattr(device_module, "current_stream"):
+                    stream = device_module.current_stream(non_cpu_device)
+                    _sync_cuda_transfer(stream)
+                elif hasattr(device_module, "current_stream"):
                     device_module.current_stream(non_cpu_device).synchronize()
                 else:
                     # Some device modules, such as torch.mps, don't have current_stream attr
@@ -15557,7 +15574,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if device_type == "cuda":
             # TODO: dynamo doesn't like torch.cuda.is_initialized
             if not is_compiling() and torch.cuda.is_initialized():
-                torch.cuda.synchronize()
+                _sync_cuda_transfer()
         else:
             device_module = _get_device_module(device_type)
             device_module.synchronize()
