@@ -325,7 +325,7 @@ jobs:
           # We deduplicate by keeping only unique wheel filenames.
           mkdir -p wheels
           echo "Processing wheels..."
-          
+
           # Find all wheels and copy unique ones (first occurrence wins)
           for wheel in $(find wheels-raw -name "*.whl" -type f | sort); do
             basename=$(basename "$wheel")
@@ -336,7 +336,7 @@ jobs:
               echo "  Skip duplicate: $basename"
             fi
           done
-          
+
           # Verify all wheels are valid zip files
           echo ""
           echo "Verifying wheel integrity..."
@@ -349,7 +349,7 @@ jobs:
               CORRUPTED=1
             fi
           done
-          
+
           if [[ $CORRUPTED -eq 1 ]]; then
             echo ""
             echo "ERROR: One or more wheels are corrupted!"
