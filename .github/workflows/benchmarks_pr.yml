@@ -104,6 +104,30 @@ jobs:
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
+      - name: Align benchmark JSONs
+        run: |
+          python3 -c "
+          import json
+          with open('${{ env.BASELINE_JSON }}') as f:
+              baseline = json.load(f)
+          with open('${{ env.CONTENDER_JSON }}') as f:
+              contender = json.load(f)
+          base_names = {b['fullname'] for b in baseline['benchmarks']}
+          cont_names = {b['fullname'] for b in contender['benchmarks']}
+          common = base_names & cont_names
+          new_tests = cont_names - base_names
+          removed_tests = base_names - cont_names
+          if new_tests:
+              print(f'New benchmarks (skipped in comparison): {new_tests}')
+          if removed_tests:
+              print(f'Removed benchmarks (skipped in comparison): {removed_tests}')
+          baseline['benchmarks'] = [b for b in baseline['benchmarks'] if b['fullname'] in common]
+          contender['benchmarks'] = [b for b in contender['benchmarks'] if b['fullname'] in common]
+          with open('${{ env.BASELINE_JSON }}', 'w') as f:
+              json.dump(baseline, f)
+          with open('${{ env.CONTENDER_JSON }}', 'w') as f:
+              json.dump(contender, f)
+          "
       - name: Publish results
         uses: apbard/pytest-benchmark-commenter@v3
         with:
