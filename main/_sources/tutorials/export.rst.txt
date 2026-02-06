@@ -124,7 +124,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.1586, 0.0557, 0.8450, 1.2713]], grad_fn=<ReluBackward0>), tensor([[-0.0872,  0.1449, -0.4386, -0.5309]], grad_fn=<AddmmBackward0>), tensor([[-0.0872,  0.1449]], grad_fn=<SplitBackward0>), tensor([[0.7475, 0.7004]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.7100, 0.0000, 0.6633, 1.1454]], grad_fn=<ReluBackward0>), tensor([[ 0.4415, -0.5018,  0.6437,  0.2282]], grad_fn=<AddmmBackward0>), tensor([[ 0.4415, -0.5018]], grad_fn=<SplitBackward0>), tensor([[1.4497, 1.1494]], grad_fn=<ClampMinBackward0>))
 
 
 
@@ -248,8 +248,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  523.09 micro-seconds
-    Time for exported module:  386.00 micro-seconds
+    Time for TDModule:  486.37 micro-seconds
+    Time for exported module:  346.42 micro-seconds
 
 
 
@@ -276,52 +276,52 @@ and the FX graph:
         def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
-        
+
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
-        
+
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
-        
+
     fx graph: class GraphModule(torch.nn.Module):
         def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
-        
+
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
             relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
-        
+
             # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
             linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
             chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
             getitem: "f32[1, 2]" = chunk[0]
             getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/utils.py:70 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
             add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
             softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
             add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
-        
+
             # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
             clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
             return (relu, linear_1, getitem, clamp_min)
-        
+
 
 
 
@@ -432,7 +432,7 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[-0.0872,  0.1449]], grad_fn=<SplitBackward0>)
+    tensor([[ 0.4415, -0.5018]], grad_fn=<SplitBackward0>)
 
 
 
@@ -514,7 +514,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.408 seconds)
+   **Total running time of the script:** (0 minutes 0.291 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
