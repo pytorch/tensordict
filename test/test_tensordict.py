@@ -2165,6 +2165,36 @@ class TestGeneric:
             TensorDict(td_dict, device="cpu", non_blocking=False)
             assert _SYNC_COUNTER == 0
 
+    def test_to_cpu_correctness_many_tensors(self):
+        """Transfer many tensors from CUDA to CPU with default .to('cpu').
+
+        Verifies that event-based sync (or full sync) completes before we read
+        values; a subsample of keys/indices is checked. Multiple iterations
+        help catch flaky sync issues.
+        """
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+        num_tensors = 10_000
+        tensor_shape = (8,)
+        num_iterations = 10
+        for _ in range(num_iterations):
+            td = TensorDict(
+                {
+                    str(i): torch.full(
+                        tensor_shape, float(i), device="cuda", dtype=torch.float32
+                    )
+                    for i in range(num_tensors)
+                },
+                batch_size=[],
+            )
+            td_cpu = td.to("cpu")
+            # Subsample: first, middle, last keys and a few indices
+            for key in ("0", str(num_tensors // 2), str(num_tensors - 1)):
+                expected = float(key)
+                assert (td_cpu[key] == expected).all(), f"key={key}"
+            assert td_cpu["0"][0].item() == 0.0
+            assert td_cpu[str(num_tensors - 1)][-1].item() == float(num_tensors - 1)
+
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
         td = TensorDict(
