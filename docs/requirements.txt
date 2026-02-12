@@ -12,5 +12,4 @@ sphinxcontrib-htmlhelp
 myst-parser
 docutils
 
-torchvision
 tqdm

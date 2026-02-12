@@ -55,9 +55,9 @@ jobs:
         conda activate "./env"
 
         # Install PyTorch (CPU version for docs)
-        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
-        # Install tensordict runtime deps explicitly (except torch/torchvision which are handled above),
+        # Install tensordict runtime deps explicitly (except torch which is handled above),
         # then install tensordict without resolving dependencies to avoid any solver changing the
         # PyTorch build (stable vs nightly).
         python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
