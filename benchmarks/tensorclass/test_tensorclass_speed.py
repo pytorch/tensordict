@@ -46,6 +46,25 @@ def test_tc_init_nested(benchmark):
     )
 
 
+class ManyFieldsTC(TensorClass["tensor_only"]):
+    f0: torch.Tensor
+    f1: torch.Tensor
+    f2: torch.Tensor
+    f3: torch.Tensor
+    f4: torch.Tensor
+    f5: torch.Tensor
+    f6: torch.Tensor
+    f7: torch.Tensor
+    f8: torch.Tensor
+    f9: torch.Tensor
+
+
+def test_tc_init_many_fields(benchmark):
+    z = torch.zeros(())
+    kwargs = {f"f{i}": z for i in range(10)}
+    benchmark(lambda: ManyFieldsTC(**kwargs))
+
+
 def test_tc_first_layer_tensor(benchmark):
     d = MyData(a=0, b=1, c="a string", d=MyData(None, None, None))
 
