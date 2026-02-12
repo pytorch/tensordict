@@ -7,12 +7,16 @@ the historical status data stored on gh-pages.
 
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+log = logging.getLogger(__name__)
 
 
 # All nightly workflows tracked by the orchestrator.
@@ -358,9 +362,7 @@ def generate_badge_json(history: list[dict], output_file: Path) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Collect nightly workflow status")
     parser.add_argument("--owner", default="pytorch", help="GitHub repository owner")
-    parser.add_argument(
-        "--repo", default="tensordict", help="GitHub repository name"
-    )
+    parser.add_argument("--repo", default="tensordict", help="GitHub repository name")
     parser.add_argument(
         "--token", default=os.environ.get("GITHUB_TOKEN"), help="GitHub token"
     )
@@ -385,7 +387,7 @@ def main():
     args = parser.parse_args()
 
     if not args.token:
-        print("Error: GITHUB_TOKEN environment variable or --token argument required")
+        log.error("GITHUB_TOKEN environment variable or --token argument required")
         sys.exit(1)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -405,21 +407,21 @@ def main():
 
         # Skip if we already have data for this date (unless it's today or --force)
         if date_str in existing_dates and days_ago > 0 and not args.force:
-            print(f"Skipping {date_str} - already have data")
+            log.info("Skipping %s - already have data", date_str)
             continue
 
-        print(f"Collecting status for {date_str}...")
+        log.info("Collecting status for %s...", date_str)
         try:
             daily_status = collect_status_for_date(
                 args.owner, args.repo, args.token, date
             )
             daily_status["summary"] = calculate_summary(daily_status)
             new_entries.append(daily_status)
-            print(f"  Orchestrator ran: {daily_status['orchestrator_ran']}")
+            log.info("  Orchestrator ran: %s", daily_status["orchestrator_ran"])
             if daily_status["orchestrator_ran"]:
-                print(f"  Summary: {daily_status['summary']}")
+                log.info("  Summary: %s", daily_status["summary"])
         except Exception as e:
-            print(f"  Error collecting status: {e}")
+            log.error("  Error collecting status: %s", e)
 
     # Merge new entries with existing history
     # Replace entries for dates we just collected (in case of updates)
@@ -431,12 +433,12 @@ def main():
     # Save outputs
     output_history_file = args.output_dir / "history.json"
     save_history(merged_history, output_history_file)
-    print(f"Saved history to {output_history_file}")
+    log.info("Saved history to %s", output_history_file)
 
     # Generate badge
     badge_file = args.output_dir / "badge.json"
     generate_badge_json(merged_history, badge_file)
-    print(f"Saved badge data to {badge_file}")
+    log.info("Saved badge data to %s", badge_file)
 
 
 if __name__ == "__main__":
