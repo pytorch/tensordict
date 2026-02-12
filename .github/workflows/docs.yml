@@ -11,6 +11,7 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.

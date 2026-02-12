@@ -7,6 +7,7 @@ on:
     branches:
       - "*"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   deployments: write
