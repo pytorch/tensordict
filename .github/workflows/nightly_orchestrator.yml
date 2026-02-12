@@ -62,6 +62,8 @@ jobs:
   update-status-dashboard:
     name: Update Status Dashboard
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs:
       - test-linux
       - test-macos
