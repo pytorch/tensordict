@@ -749,6 +749,43 @@ class TestTC:
         tc_op_c = locked_op_c(data)
         assert (tc_op == tc_op_c).all()
 
+    def test_tc_shadow_clone(self, mode):
+        """Shadow-mode TensorClass clone should not cause graph breaks (gh-1547)."""
+
+        class ShadowState(TensorClass["shadow"]):
+            x: torch.Tensor
+            v: torch.Tensor
+
+        def step(s):
+            clone = s.clone(recurse=False)
+            clone.x = s.x + s.v
+            return clone
+
+        s = ShadowState(x=torch.randn(3), v=torch.randn(3), batch_size=[])
+        step_c = torch.compile(step, fullgraph=True, mode=mode)
+        eager_result = step(s)
+        compiled_result = step_c(s)
+        assert_close(eager_result, compiled_result)
+        assert compiled_result is not s
+        # v should be preserved (shallow clone)
+        assert compiled_result.v is s.v
+
+    def test_tc_shadow_replace(self, mode):
+        """Shadow-mode TensorClass replace should not cause graph breaks (gh-1547)."""
+
+        class ShadowState(TensorClass["shadow"]):
+            x: torch.Tensor
+            v: torch.Tensor
+
+        def step(s):
+            return s.replace(x=s.x + s.v)
+
+        s = ShadowState(x=torch.randn(3), v=torch.randn(3), batch_size=[])
+        step_c = torch.compile(step, fullgraph=True, mode=mode)
+        eager_result = step(s)
+        compiled_result = step_c(s)
+        assert_close(eager_result, compiled_result)
+
     def test_td_new_unsafe(self, mode):
 
         class MyTd(TensorDict):
