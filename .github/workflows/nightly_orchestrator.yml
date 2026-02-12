@@ -47,6 +47,8 @@ jobs:
 
   benchmarks:
     uses: ./.github/workflows/benchmarks.yml
+    with:
+      skip-upload: true
     secrets: inherit
     permissions:
       id-token: write
