@@ -443,6 +443,19 @@ def test_creation_nested_2(benchmark, a, b):
     benchmark(TensorDict, {"a": a, "b": {"b1": b}}, [3, 4])
 
 
+@pytest.mark.parametrize("num_keys", [10, 50, 100])
+def test_creation_many_keys(benchmark, num_keys):
+    tensors = {str(i): torch.zeros(3, 4, 5) for i in range(num_keys)}
+    benchmark(TensorDict, tensors, [3, 4])
+
+
+@pytest.mark.parametrize("num_keys", [10, 50])
+def test_creation_nested_many_keys(benchmark, num_keys):
+    tensors = {str(i): torch.zeros(3, 4, 5) for i in range(num_keys)}
+    tensors["nested"] = {str(i): torch.zeros(3, 4, 5) for i in range(num_keys)}
+    benchmark(TensorDict, tensors, [3, 4])
+
+
 def test_clone(benchmark, td):
     benchmark(td.clone)
 
