@@ -817,9 +817,7 @@ class TestTC:
                 ),
             )
 
-        init = CarryState(
-            val=torch.tensor(0.0), count=torch.tensor(0), batch_size=[]
-        )
+        init = CarryState(val=torch.tensor(0.0), count=torch.tensor(0), batch_size=[])
 
         def fn():
             return while_loop(cond, body, (init,))
