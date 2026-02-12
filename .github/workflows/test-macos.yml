@@ -8,6 +8,7 @@ on:
       - main
       - release/*
   workflow_dispatch:
+  workflow_call:
 
 env:
   CHANNEL: "nightly"

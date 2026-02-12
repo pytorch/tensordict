@@ -15,6 +15,8 @@
 [![circleci](https://circleci.com/gh/pytorch/tensordict.svg?style=shield)][#circleci-package]
 [![Conda - Platform](https://img.shields.io/conda/pn/conda-forge/tensordict?logo=anaconda&style=flat)][#conda-forge-package]
 [![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
+[![Nightly](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml)
+[![Nightly Dashboard](https://img.shields.io/badge/Nightly-Dashboard-blue)](https://pytorch.github.io/tensordict/nightly-status/)
 
 [#docs-package]: https://pytorch.github.io/tensordict/
 [#docs-package-benchmark]: https://pytorch.github.io/tensordict/dev/bench/
