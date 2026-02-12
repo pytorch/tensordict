@@ -46,6 +46,21 @@ jobs:
 
           echo "Extracted label: $LABEL"
 
+          # Validate against accepted labels
+          ACCEPTED_LABELS="BugFix CI Compile Deprecation Docs Feature Perf Refactor Setup Test"
+          FOUND=0
+          for ACCEPTED in $ACCEPTED_LABELS; do
+            if [[ "$LABEL" == "$ACCEPTED" ]]; then
+              FOUND=1
+              break
+            fi
+          done
+
+          if [[ "$FOUND" -eq 0 ]]; then
+            echo "::error::Label '$LABEL' is not in the accepted list: $ACCEPTED_LABELS"
+            exit 1
+          fi
+
           # Add the label to the PR
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
 

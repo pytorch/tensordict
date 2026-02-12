@@ -1696,6 +1696,13 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
+    # Guard against infinite recursion when _tensordict/_non_tensordict are
+    # not yet set (e.g. during Dynamo tracing of the constructor or pytree
+    # unflatten inside while_loop).  Raising AttributeError here is the
+    # correct __getattr__ protocol — Python will propagate it as "attribute
+    # not found".
+    if item in ("_tensordict", "_non_tensordict"):
+        raise AttributeError(item)
     # Use _UNSET sentinel instead of try/except for torch.compile compatibility
     out = self._tensordict._get_str(item, _UNSET, **kwargs)
     if out is not _UNSET:
@@ -1714,6 +1721,14 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
 
 
 def _getattr(self, item: str, **kwargs) -> Any:
+    # Guard against infinite recursion when _tensordict/_non_tensordict are
+    # not yet set (e.g. during Dynamo tracing of the constructor or pytree
+    # unflatten inside while_loop).  Raising AttributeError here is the
+    # correct __getattr__ protocol — Python will propagate it as "attribute
+    # not found".
+    if item in ("_tensordict", "_non_tensordict"):
+        raise AttributeError(item)
+
     __dataclass_fields__ = type(self).__expected_keys__
 
     if item in __dataclass_fields__:
