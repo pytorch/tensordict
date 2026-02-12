@@ -23,7 +23,7 @@ jobs:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.3.0-runtime-ubuntu22.04
+      image: nvidia/cuda:12.8.0-runtime-ubuntu22.04
       options: --gpus all
     steps:
       - name: Who triggered this?
@@ -65,10 +65,13 @@ jobs:
           source .venv/local/bin/activate
           echo "=== uv version ==="
           uv --version
-          uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu126
+          uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
           uv pip install "pybind11[global]" "setuptools" "wheel" "ninja"
           uv pip install pytest pytest-benchmark
+          # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
+          # that was explicitly installed above, and avoid any solver replacing it.
           uv pip install -e . --no-deps
+          uv run --active python -c "import torch; print(torch.__version__)"
           ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
       - name: check GPU presence
         if: matrix.device == 'GPU'
