@@ -786,6 +786,47 @@ class TestTC:
         compiled_result = step_c(s)
         assert_close(eager_result, compiled_result)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="while_loop requires torch>=2.6",
+    )
+    @pytest.mark.xfail(
+        reason="Dynamo cannot symbolically trace TensorClass._tensordict "
+        "access inside while_loop's pytree flatten (gh-1547). "
+        "Requires Dynamo-side support for custom pytree nodes in "
+        "higher-order ops.",
+    )
+    def test_tc_while_loop(self, mode):
+        """TensorClass as carry in while_loop should not crash (gh-1547)."""
+        from torch._higher_order_ops.while_loop import while_loop
+
+        @tensorclass
+        class CarryState:
+            val: torch.Tensor
+            count: torch.Tensor
+
+        def cond(state):
+            return state.count < 5
+
+        def body(state):
+            return (
+                CarryState(
+                    val=state.val + 1,
+                    count=state.count + 1,
+                    batch_size=[],
+                ),
+            )
+
+        init = CarryState(val=torch.tensor(0.0), count=torch.tensor(0), batch_size=[])
+
+        def fn():
+            return while_loop(cond, body, (init,))
+
+        fn_c = torch.compile(fn, mode=mode)
+        (result,) = fn_c()
+        assert result.val.item() == 5.0
+        assert result.count.item() == 5
+
     def test_td_new_unsafe(self, mode):
 
         class MyTd(TensorDict):
