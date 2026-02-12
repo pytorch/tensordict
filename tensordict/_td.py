@@ -306,8 +306,22 @@ class TensorDict(TensorDictBase):
             if not is_compiling():
                 self._set_names(names)
 
+            # Fast path: bypass the set() → _set_tuple() → _set_str() dispatch
+            # chain during init. We know the dict is empty (no inplace needed)
+            # and not locked, so we can validate and assign directly.
+            _tensordict = self._tensordict
+            _validate_value = self._validate_value
             for key, value in source.items():
-                self.set(key, value, non_blocking=sub_non_blocking)
+                if isinstance(key, str):
+                    _tensordict[key] = _validate_value(
+                        value,
+                        check_shape=True,
+                        non_blocking=sub_non_blocking,
+                    )
+                else:
+                    # Tuple keys need nested TensorDict creation via the
+                    # standard path.
+                    self.set(key, value, non_blocking=sub_non_blocking)
             if call_sync:
                 if _device_recorder.has_transfer():
                     self._sync_all()
