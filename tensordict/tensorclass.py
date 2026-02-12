@@ -995,7 +995,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             except AttributeError:
                 pass
     _get_type_hints(cls, tensor_only=tensor_only)
-    cls.__init__ = _init_wrapper(cls.__init__, cls, frozen, shadow, tensor_only)
+    # Detect user-defined __setattr__ that must be called during init.
+    # After dataclass(), frozen=True adds a guard __setattr__, which is not
+    # user-defined and gets bypassed by the frozen __init__ via
+    # object.__setattr__. Only non-frozen classes can have a real custom one.
+    _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
+    cls.__init__ = _init_wrapper(
+        cls.__init__, cls, frozen, shadow, tensor_only, _has_custom_setattr
+    )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
@@ -1195,7 +1202,12 @@ def _from_tensordict_with_none(tc, tensordict):
 
 
 def _init_wrapper(
-    __init__: Callable, cls, frozen: bool, shadow: bool, tensor_only: bool
+    __init__: Callable,
+    cls,
+    frozen: bool,
+    shadow: bool,
+    tensor_only: bool,
+    _has_custom_setattr: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
@@ -1305,13 +1317,47 @@ def _init_wrapper(
         self.__setattr_parent__("_non_tensordict", {})
         self.__setattr_parent__("_is_initialized", True)
 
-        # convert the non tensor data in a regular data
-        __init__(self, **kwargs)
-        if frozen:
-            local_setattr = _setattr
-            for key, val in kwargs.items():
-                local_setattr(self, key, val)
-                del self.__dict__[key]
+        if _has_custom_setattr:
+            # The class defines a custom __setattr__ that must be
+            # respected during init. Fall back to the dataclass __init__
+            # which routes through __setattr__ for each field.
+            __init__(self, **kwargs)
+        else:
+            # Bypass the dataclass __init__ to avoid per-key __setattr__
+            # overhead. The dataclass __init__ just does self.key = value
+            # per field, which goes through __setattr__ → set(). Calling
+            # set() directly saves the __setattr__ dispatch cost. For
+            # frozen dataclasses this also avoids double-setting (dataclass
+            # __init__ writes to __dict__ via object.__setattr__, then
+            # _setattr re-routes to _tensordict, then __dict__ cleanup).
+            #
+            # Fields with None defaults are intentionally skipped by the
+            # default-handling above, but the dataclass __init__ would
+            # still assign them. Ensure every expected key is present.
+            if not is_compiling():
+                for key in self.__expected_keys__:
+                    kwargs.setdefault(key, None)
+            if tensor_only:
+                # Fast path: validate and assign directly to the
+                # underlying dict, skipping the set → _set_str →
+                # _tensordict._set_str chain entirely.
+                _td = self._tensordict
+                _td_dict = _td._tensordict
+                _non_td = self._non_tensordict
+                _validate = _td._validate_value
+                for key, value in kwargs.items():
+                    if value is None:
+                        _non_td[key] = None
+                    else:
+                        _td_dict[key] = _validate(
+                            value, check_shape=True, non_blocking=False
+                        )
+            else:
+                _set = type(self).set
+                for key, value in kwargs.items():
+                    _set(self, key, value)
+            if not is_compiling() and hasattr(type(self), "__post_init__"):
+                self.__post_init__()
         if lock:
             self._tensordict.lock_()
 
