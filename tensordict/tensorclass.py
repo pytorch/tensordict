@@ -1546,27 +1546,24 @@ def _from_tensordict(
         for key in to_add:
             non_tensordict[key] = None
 
+    # Bypass __init__ — we already have a tensordict to use as the underlying
+    # storage so there is no need to create an empty one and populate it.
+    # Under torch.compile the cls(**kwargs) path caused graph breaks because
+    # Dynamo cannot trace through the TensorClass __init__ wrapper (property
+    # descriptors, shadow-mode fields, etc.).  Using __new__ + direct attribute
+    # setting is both faster in eager mode and compile-friendly.
+    tc = cls.__new__(cls)
     if not is_compiling():
-        # bypass initialisation. this means we don't incur any overhead creating an
-        # empty tensordict and writing values to it. we can skip this because we already
-        # have a tensordict to use as the underlying tensordict
-        tc = cls.__new__(cls)
-        tc.__dict__.update(
-            {"_tensordict": tensordict, "_non_tensordict": non_tensordict}
-        )
-        # since we aren't calling the dataclass init method, we need to manually check
-        # whether a __post_init__ method has been defined and invoke it if so
-        if hasattr(cls, "__post_init__"):
-            tc.__post_init__()
-        return tc
+        tc.__dict__["_tensordict"] = tensordict
+        tc.__dict__["_non_tensordict"] = non_tensordict
     else:
-        # TODO: things that did NOT work: **tensordict, dict(tensordict)
-        kwargs = dict(tensordict.items())
-        kwargs.update(non_tensordict)
-        kwargs["batch_size"] = tensordict.batch_size
-        kwargs["device"] = tensordict.device
-        kwargs["names"] = tensordict._maybe_names()
-        return cls(**kwargs)
+        object.__setattr__(tc, "_tensordict", tensordict)
+        object.__setattr__(tc, "_non_tensordict", non_tensordict)
+    # since we aren't calling the dataclass __init__, we need to manually
+    # check whether a __post_init__ method has been defined and invoke it
+    if not is_compiling() and hasattr(cls, "__post_init__"):
+        tc.__post_init__()
+    return tc
 
 
 def _memmap_(
