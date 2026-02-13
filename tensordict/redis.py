@@ -85,6 +85,108 @@ def _bytes_to_tensor(
     return torch.frombuffer(buf, dtype=dtype).reshape(shape)
 
 
+def _decode_meta(raw_meta: dict) -> dict[str, str]:
+    """Decode a Redis hash response (bytes keys/values) to a ``{str: str}`` dict."""
+    return {
+        k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+        for k, v in raw_meta.items()
+    }
+
+
+def _compute_byte_ranges(
+    shape: list[int],
+    dtype: torch.dtype,
+    idx,
+) -> list[tuple[int, int]] | None:
+    """Compute ``(byte_offset, byte_length)`` pairs for indexing ``shape[0]`` with *idx*.
+
+    Returns ``None`` when *idx* is an unsupported type, signalling that the
+    caller should fall back to a full read-modify-write.
+    """
+    # Unwrap 1-element tuples produced by _SubTensorDict
+    if isinstance(idx, tuple):
+        if len(idx) == 1:
+            idx = idx[0]
+        else:
+            return None  # multi-dim tuple: fall back
+
+    # Ellipsis selects everything along the first dim
+    if idx is Ellipsis:
+        idx = slice(None)
+
+    elem_size = torch.tensor([], dtype=dtype).element_size()
+    row_size = elem_size
+    for s in shape[1:]:
+        row_size *= s
+
+    if isinstance(idx, int):
+        pos = idx % shape[0]
+        return [(pos * row_size, row_size)]
+
+    if isinstance(idx, slice):
+        positions = range(*idx.indices(shape[0]))
+        return [(p * row_size, row_size) for p in positions]
+
+    if isinstance(idx, range):
+        return [(p * row_size, row_size) for p in idx]
+
+    if isinstance(idx, list):
+        return [(int(p) * row_size, row_size) for p in idx]
+
+    if isinstance(idx, torch.Tensor):
+        if idx.dtype == torch.bool:
+            positions = idx.nonzero(as_tuple=False).squeeze(-1).tolist()
+        else:
+            positions = idx.reshape(-1).tolist()
+        return [(int(p) * row_size, row_size) for p in positions]
+
+    return None  # unsupported index type
+
+
+def _getitem_result_shape(
+    shape: list[int],
+    idx,
+) -> list[int]:
+    """Compute the result shape of ``tensor[idx]`` without creating a tensor.
+
+    Only handles first-dimension indexing (same cases as ``_compute_byte_ranges``).
+    """
+    if isinstance(idx, tuple):
+        if len(idx) == 1:
+            idx = idx[0]
+        else:
+            # Multi-dim: not handled, let caller use torch logic
+            return list(torch.zeros(shape)[idx].shape)
+
+    if idx is Ellipsis:
+        idx = slice(None)
+
+    rest = list(shape[1:])
+
+    if isinstance(idx, int):
+        return rest
+
+    if isinstance(idx, slice):
+        n = len(range(*idx.indices(shape[0])))
+        return [n] + rest
+
+    if isinstance(idx, range):
+        return [len(idx)] + rest
+
+    if isinstance(idx, list):
+        return [len(idx)] + rest
+
+    if isinstance(idx, torch.Tensor):
+        if idx.dtype == torch.bool:
+            n = int(idx.sum().item())
+        else:
+            n = idx.numel()
+        return [n] + rest
+
+    # Fallback
+    return list(torch.zeros(shape)[idx].shape)
+
+
 class _RedisTDKeysView(_TensorDictKeysView):
     """Keys view for RedisTensorDict backed by a Redis key registry."""
 
@@ -218,6 +320,7 @@ class RedisTensorDict(TensorDictBase):
         device=None,
         client=None,
         td_id: str | None = None,
+        cache_metadata: bool = True,
         **redis_kwargs,
     ):
         if not _has_redis:
@@ -236,6 +339,12 @@ class RedisTensorDict(TensorDictBase):
 
         # Nested TensorDict cache
         self._nested_tensordicts: dict[str, RedisTensorDict] = {}
+
+        # Metadata cache: (shape, dtype) per key_path, shared with nested views
+        self._cache_metadata = cache_metadata
+        self._meta_cache: dict[str, tuple[list[int], torch.dtype]] | None = (
+            {} if cache_metadata else None
+        )
 
         # Unique identifier for this TensorDict instance in Redis
         self._td_id = td_id or str(uuid.uuid4())
@@ -298,6 +407,8 @@ class RedisTensorDict(TensorDictBase):
         obj._td_id = parent._td_id
         obj._prefix = key_prefix
         obj._namespace = parent._namespace
+        obj._cache_metadata = parent._cache_metadata
+        obj._meta_cache = parent._meta_cache
 
         obj._host = parent._host
         obj._port = parent._port
@@ -374,15 +485,19 @@ class RedisTensorDict(TensorDictBase):
     ):
         """Store a tensor's data and metadata in Redis."""
         data = _tensor_to_bytes(tensor)
+        shape = list(tensor.shape)
+        dtype = tensor.dtype
         meta = {
-            "shape": json.dumps(list(tensor.shape)),
-            "dtype": _dtype_to_str(tensor.dtype),
+            "shape": json.dumps(shape),
+            "dtype": _dtype_to_str(dtype),
         }
         pipe = self._client.pipeline()
         pipe.set(self._data_key(key_path), data)
         pipe.hset(self._meta_key(key_path), mapping=meta)
         pipe.sadd(self._keys_registry_key, key_path)
         await pipe.execute()
+        if self._meta_cache is not None:
+            self._meta_cache[key_path] = (shape, dtype)
 
     async def _aset_non_tensor(self, key_path: str, value: Any):
         """Store a non-tensor value in Redis."""
@@ -410,12 +525,12 @@ class RedisTensorDict(TensorDictBase):
         pipe = self._client.pipeline()
         pipe.get(self._data_key(key_path))
         pipe.hgetall(self._meta_key(key_path))
-        data, meta = await pipe.execute()
+        data, raw_meta = await pipe.execute()
 
         if data is None:
             return None
 
-        meta = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in meta.items()}
+        meta = _decode_meta(raw_meta)
 
         if meta.get("is_non_tensor") == "1":
             return self._deserialize_non_tensor(data, meta)
@@ -430,10 +545,7 @@ class RedisTensorDict(TensorDictBase):
     async def _aget_metadata(self, key_path: str) -> dict:
         """Retrieve metadata for a key without downloading tensor data."""
         raw = await self._client.hgetall(self._meta_key(key_path))
-        return {
-            k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
-            for k, v in raw.items()
-        }
+        return _decode_meta(raw)
 
     async def _adel_key(self, key_path: str):
         """Delete a key's data, metadata, and registry entry."""
@@ -442,11 +554,44 @@ class RedisTensorDict(TensorDictBase):
         pipe.delete(self._meta_key(key_path))
         pipe.srem(self._keys_registry_key, key_path)
         await pipe.execute()
+        if self._meta_cache is not None:
+            self._meta_cache.pop(key_path, None)
 
     async def _aget_all_keys(self) -> set[str]:
         """Get all registered key paths from Redis."""
         raw = await self._client.smembers(self._keys_registry_key)
         return {k.decode() if isinstance(k, bytes) else k for k in raw}
+
+    async def _aget_metadata_batch(
+        self, key_paths: list[str]
+    ) -> dict[str, tuple[list[int], torch.dtype]]:
+        """Get ``(shape, dtype)`` for multiple keys, using the local cache when available.
+
+        Cache misses are fetched via a single Redis pipeline and stored back
+        into ``_meta_cache`` (when caching is enabled).
+        """
+        result: dict[str, tuple[list[int], torch.dtype]] = {}
+        uncached: list[str] = []
+        for kp in key_paths:
+            if self._meta_cache is not None and kp in self._meta_cache:
+                result[kp] = self._meta_cache[kp]
+            else:
+                uncached.append(kp)
+
+        if uncached:
+            pipe = self._client.pipeline()
+            for kp in uncached:
+                pipe.hgetall(self._meta_key(kp))
+            raw_metas = await pipe.execute()
+            for kp, raw_meta in zip(uncached, raw_metas):
+                meta = _decode_meta(raw_meta)
+                shape = json.loads(meta["shape"])
+                dtype = _str_to_dtype(meta["dtype"])
+                result[kp] = (shape, dtype)
+                if self._meta_cache is not None:
+                    self._meta_cache[kp] = (shape, dtype)
+
+        return result
 
     async def _aget_batch_tensors(
         self, key_paths: list[str]
@@ -471,10 +616,7 @@ class RedisTensorDict(TensorDictBase):
         for kp, data, raw_meta in zip(key_paths, data_list, meta_list):
             if data is None:
                 continue
-            meta = {
-                k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
-                for k, v in raw_meta.items()
-            }
+            meta = _decode_meta(raw_meta)
             if meta.get("is_non_tensor") == "1":
                 result[kp] = self._deserialize_non_tensor(data, meta)
             else:
@@ -485,6 +627,139 @@ class RedisTensorDict(TensorDictBase):
                     tensor = tensor.to(self._device)
                 result[kp] = tensor
         return result
+
+    # ---- Byte-range batch operations ----
+
+    async def _abatch_get_at(
+        self, key_paths: list[str], idx
+    ) -> dict[str, torch.Tensor]:
+        """Batch-fetch slices of multiple tensors using ``GETRANGE``.
+
+        Falls back to full ``GET`` for key-paths whose index cannot be
+        decomposed into byte ranges.
+        """
+        if not key_paths:
+            return {}
+
+        meta_map = await self._aget_metadata_batch(key_paths)
+
+        # Build GETRANGE pipeline
+        pipe = self._client.pipeline()
+        # Each entry: (key_path, shape, dtype, n_ranges)
+        range_plan: list[tuple[str, list[int], torch.dtype, int]] = []
+        fallback_kps: list[str] = []
+
+        for kp in key_paths:
+            shape, dtype = meta_map[kp]
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            if ranges is None:
+                fallback_kps.append(kp)
+                continue
+            for byte_offset, byte_length in ranges:
+                pipe.getrange(
+                    self._data_key(kp),
+                    byte_offset,
+                    byte_offset + byte_length - 1,
+                )
+            range_plan.append((kp, shape, dtype, len(ranges)))
+
+        results_flat = await pipe.execute() if range_plan else []
+
+        # Reassemble tensors from byte chunks
+        result: dict[str, torch.Tensor] = {}
+        flat_idx = 0
+        for kp, shape, dtype, n_ranges in range_plan:
+            chunks = results_flat[flat_idx:flat_idx + n_ranges]
+            flat_idx += n_ranges
+            data = b"".join(chunks)
+            result_shape = _getitem_result_shape(shape, idx)
+            tensor = _bytes_to_tensor(data, result_shape, dtype)
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            result[kp] = tensor
+
+        # Fallback: full GET + local index
+        if fallback_kps:
+            tensors = await self._aget_batch_tensors(fallback_kps)
+            for kp, tensor in tensors.items():
+                result[kp] = tensor[idx]
+
+        return result
+
+    async def _abatch_set_at(
+        self, items: dict[str, tuple[torch.Tensor, object]]
+    ):
+        """Batch-write slices of multiple tensors using ``SETRANGE``.
+
+        *items* maps ``key_path`` to ``(value_tensor, idx)``.
+        Falls back to :meth:`_abatch_read_modify_write` for indices that
+        cannot be decomposed into byte ranges.
+        """
+        if not items:
+            return
+
+        key_paths = list(items.keys())
+        meta_map = await self._aget_metadata_batch(key_paths)
+
+        # Prepare SETRANGE commands
+        setrange_cmds: list[tuple[str, int, bytes]] = []
+        fallback_kps: list[str] = []
+
+        for kp in key_paths:
+            shape, dtype = meta_map[kp]
+            value, idx = items[kp]
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            if ranges is None:
+                fallback_kps.append(kp)
+                continue
+            value_bytes = _tensor_to_bytes(value.contiguous())
+            offset = 0
+            for byte_offset, byte_length in ranges:
+                setrange_cmds.append((
+                    self._data_key(kp),
+                    byte_offset,
+                    value_bytes[offset:offset + byte_length],
+                ))
+                offset += byte_length
+
+        if setrange_cmds:
+            pipe = self._client.pipeline()
+            for redis_key, byte_offset, chunk in setrange_cmds:
+                pipe.setrange(redis_key, byte_offset, chunk)
+            await pipe.execute()
+
+        if fallback_kps:
+            await self._abatch_read_modify_write(
+                fallback_kps, {kp: items[kp] for kp in fallback_kps}
+            )
+
+    async def _abatch_read_modify_write(
+        self, key_paths: list[str], items: dict[str, tuple[torch.Tensor, object]]
+    ):
+        """Pipelined full read-modify-write fallback for exotic indices.
+
+        Downloads complete tensors for all *key_paths* in one pipeline,
+        patches them in memory, and re-uploads in a second pipeline.
+        """
+        # Pipeline GET data + metadata
+        pipe = self._client.pipeline()
+        for kp in key_paths:
+            pipe.get(self._data_key(kp))
+            pipe.hgetall(self._meta_key(kp))
+        raw_results = await pipe.execute()
+
+        # Patch in memory, prepare SET pipeline
+        pipe = self._client.pipeline()
+        for i, kp in enumerate(key_paths):
+            data, raw_meta = raw_results[2 * i], raw_results[2 * i + 1]
+            meta = _decode_meta(raw_meta)
+            shape = json.loads(meta["shape"])
+            dtype = _str_to_dtype(meta["dtype"])
+            existing = _bytes_to_tensor(data, shape, dtype)
+            value, idx = items[kp]
+            existing[idx] = value
+            pipe.set(self._data_key(kp), _tensor_to_bytes(existing))
+        await pipe.execute()
 
     # ---- Sync helpers ----
 
@@ -545,27 +820,21 @@ class RedisTensorDict(TensorDictBase):
         if index_unravel:
             return self.set(index_unravel, value, inplace=True)
 
+        # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
         if isinstance(index, list):
             index = torch.tensor(index)
-        sub_td = self._get_sub_tensordict(index)
-        err_set_batch_size = None
+
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])
-            try:
-                value.batch_size = sub_td.batch_size
-            except RuntimeError as err0:
-                err_set_batch_size = err0
-        if value.shape != sub_td.shape:
-            try:
-                value = value.expand(sub_td.shape)
-            except RuntimeError as err:
-                if err_set_batch_size is not None:
-                    raise err from err_set_batch_size
-                raise RuntimeError(
-                    f"Cannot broadcast the tensordict {value} to the shape of "
-                    f"the indexed {type(self).__name__} {self}[{index}]."
-                ) from err
-        sub_td.update(value, inplace=True)
+
+        # Collect all leaf items
+        items: dict[str, tuple[torch.Tensor, object]] = {}
+        for key in value.keys(include_nested=True, leaves_only=True):
+            key_tuple = _unravel_key_to_tuple(key)
+            key_path = self._full_key_path(_KEY_SEP.join(key_tuple))
+            items[key_path] = (value.get(key), index)
+
+        self._run_sync(self._abatch_set_at(items))
 
     def _get_str(self, key, default=NO_DEFAULT, **kwargs):
         key_path = self._full_key_path(key)
@@ -597,6 +866,44 @@ class RedisTensorDict(TensorDictBase):
         )
 
     _get_tuple = TensorDict._get_tuple
+
+    def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
+        """Retrieve an indexed slice of a single tensor via ``GETRANGE``."""
+        key_path = self._full_key_path(key)
+        all_keys = self._get_all_keys()
+
+        # Nested tensordict: delegate
+        prefix_check = key_path + _KEY_SEP
+        if any(k.startswith(prefix_check) for k in all_keys):
+            td = self._get_str(key, default, **kwargs)
+            if td is default:
+                return td
+            return td[idx]
+
+        if key_path not in all_keys:
+            if default is not NO_DEFAULT:
+                return default
+            raise KeyError(
+                f"key {key} not found in {type(self).__name__}"
+            )
+
+        result = self._run_sync(self._abatch_get_at([key_path], idx))
+        tensor = result.get(key_path)
+        if tensor is None:
+            if default is not NO_DEFAULT:
+                return default
+            raise KeyError(key)
+        return tensor
+
+    def _get_at_tuple(self, key, idx, default=NO_DEFAULT, **kwargs):
+        """Retrieve an indexed slice via nested key tuple."""
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
+            return self._get_at_str(key[0], idx, default=default, **kwargs)
+        first = self._get_str(key[0], default, **kwargs)
+        if first is default:
+            return default
+        return first._get_at_tuple(key[1:], idx, default=default, **kwargs)
 
     def _convert_inplace(self, inplace, key):
         """Convert BEST_ATTEMPT_INPLACE sentinel to a bool."""
@@ -712,15 +1019,9 @@ class RedisTensorDict(TensorDictBase):
         return self
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
-        # For Redis, we need to read-modify-write
         key_path = self._full_key_path(key)
-        existing = self._run_sync(self._aget_tensor(key_path))
-        if existing is None:
-            raise KeyError(
-                f"key {key} not found in {type(self).__name__} for set_at_"
-            )
-        existing[idx] = value
-        self._run_sync(self._aset_tensor(key_path, existing))
+        items = {key_path: (value, idx)}
+        self._run_sync(self._abatch_set_at(items))
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
@@ -1245,6 +1546,7 @@ class RedisTensorDict(TensorDictBase):
             "_redis_kwargs": self._redis_kwargs,
             "_is_locked": self._is_locked,
             "_td_dim_names": self._td_dim_names,
+            "_cache_metadata": self._cache_metadata,
         }
         return state
 
@@ -1268,6 +1570,8 @@ class RedisTensorDict(TensorDictBase):
         self._is_shared = False
         self._is_memmap = False
         self._nested_tensordicts = {}
+        self._cache_metadata = state.get("_cache_metadata", True)
+        self._meta_cache = {} if self._cache_metadata else None
 
         # Recreate event loop and client
         self._loop = asyncio.new_event_loop()
