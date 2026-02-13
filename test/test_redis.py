@@ -4,24 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import importlib
 import pickle
 
 import pytest
 import torch
 from tensordict import TensorDict
 
-try:
-    import redis
-
-    _has_redis = True
-except ImportError:
-    _has_redis = False
+_has_redis = importlib.util.find_spec("redis", None) is not None
 
 
 def _redis_available():
     """Check if a Redis server is reachable on localhost:6379."""
     if not _has_redis:
         return False
+    import redis
+
     try:
         r = redis.Redis(host="localhost", port=6379, db=0, socket_connect_timeout=2)
         r.ping()
