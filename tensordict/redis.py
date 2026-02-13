@@ -218,10 +218,6 @@ class RedisTensorDict(TensorDictBase):
         device=None,
         client=None,
         td_id: str | None = None,
-        _internal_prefix: str = "",
-        _internal_client=None,
-        _internal_loop=None,
-        _internal_thread=None,
         **redis_kwargs,
     ):
         if not _has_redis:
@@ -245,7 +241,7 @@ class RedisTensorDict(TensorDictBase):
         self._td_id = td_id or str(uuid.uuid4())
 
         # Key prefix within this tensordict (for nested views)
-        self._prefix = _internal_prefix
+        self._prefix = ""
 
         # Namespace prefix for Redis keys
         self._namespace = prefix
@@ -257,39 +253,66 @@ class RedisTensorDict(TensorDictBase):
         self._unix_socket_path = unix_socket_path
         self._redis_kwargs = redis_kwargs
 
-        # Set up the async event loop and client
-        if _internal_client is not None:
-            # Reuse existing client/loop (for nested TensorDicts)
-            self._client = _internal_client
-            self._loop = _internal_loop
-            self._thread = _internal_thread
-            self._owns_loop = False
-        else:
-            # Create a new event loop in a background thread
-            self._loop = asyncio.new_event_loop()
-            self._thread = threading.Thread(
-                target=self._loop.run_forever, daemon=True
-            )
-            self._thread.start()
-            self._owns_loop = True
+        # Create a new event loop in a background thread
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._loop.run_forever, daemon=True
+        )
+        self._thread.start()
+        self._owns_loop = True
 
-            if client is not None:
-                self._client = client
+        if client is not None:
+            self._client = client
+        else:
+            connect_kwargs = dict(redis_kwargs)
+            if unix_socket_path is not None:
+                connect_kwargs["unix_socket_path"] = unix_socket_path
             else:
-                connect_kwargs = dict(redis_kwargs)
-                if unix_socket_path is not None:
-                    connect_kwargs["unix_socket_path"] = unix_socket_path
-                else:
-                    connect_kwargs["host"] = host
-                    connect_kwargs["port"] = port
-                connect_kwargs["db"] = db
-                self._client = aioredis.Redis(**connect_kwargs)
+                connect_kwargs["host"] = host
+                connect_kwargs["port"] = port
+            connect_kwargs["db"] = db
+            self._client = aioredis.Redis(**connect_kwargs)
 
         self._batch_size = torch.Size(batch_size)
         self._device = torch.device(device) if device is not None else None
 
         # Persist batch_size and device to Redis
         self._run_sync(self._apersist_metadata())
+
+    @classmethod
+    def _new_nested(cls, *, parent: RedisTensorDict, key_prefix: str, batch_size=None):
+        """Create a nested view sharing the parent's Redis client and event loop.
+
+        This is an internal factory used for nested TensorDict access. The
+        returned instance shares the same connection and TD identity but
+        operates under a different key prefix.
+        """
+        obj = cls.__new__(cls)
+        obj._locked_tensordicts = []
+        obj._lock_id = set()
+        obj._is_shared = False
+        obj._is_memmap = False
+        obj._nested_tensordicts = {}
+        obj._td_dim_names = None
+
+        obj._td_id = parent._td_id
+        obj._prefix = key_prefix
+        obj._namespace = parent._namespace
+
+        obj._host = parent._host
+        obj._port = parent._port
+        obj._db = parent._db
+        obj._unix_socket_path = parent._unix_socket_path
+        obj._redis_kwargs = parent._redis_kwargs
+
+        obj._client = parent._client
+        obj._loop = parent._loop
+        obj._thread = parent._thread
+        obj._owns_loop = False
+
+        obj._batch_size = torch.Size(batch_size) if batch_size is not None else parent._batch_size
+        obj._device = parent._device
+        return obj
 
     def _run_sync(self, coro):
         """Run an async coroutine synchronously via the background event loop."""
@@ -555,15 +578,8 @@ class RedisTensorDict(TensorDictBase):
             # Return a nested RedisTensorDict view
             nested = self._nested_tensordicts.get(key)
             if nested is None:
-                nested = RedisTensorDict(
-                    batch_size=self._batch_size,
-                    device=self._device,
-                    td_id=self._td_id,
-                    prefix=self._namespace,
-                    _internal_prefix=key_path,
-                    _internal_client=self._client,
-                    _internal_loop=self._loop,
-                    _internal_thread=self._thread,
+                nested = RedisTensorDict._new_nested(
+                    parent=self, key_prefix=key_path,
                 )
                 self._nested_tensordicts[key] = nested
             return nested
@@ -632,15 +648,9 @@ class RedisTensorDict(TensorDictBase):
             # Create nested tensordict and populate it
             target_td = self._nested_tensordicts.get(key)
             if target_td is None:
-                target_td = RedisTensorDict(
+                target_td = RedisTensorDict._new_nested(
+                    parent=self, key_prefix=key_path,
                     batch_size=value.batch_size,
-                    device=self._device,
-                    td_id=self._td_id,
-                    prefix=self._namespace,
-                    _internal_prefix=key_path,
-                    _internal_client=self._client,
-                    _internal_loop=self._loop,
-                    _internal_thread=self._thread,
                 )
                 self._nested_tensordicts[key] = target_td
             target_td.update(value, inplace=inplace)
@@ -692,15 +702,9 @@ class RedisTensorDict(TensorDictBase):
             self._run_sync(self._aset_non_tensor(key_path, raw_value))
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
-            nested = RedisTensorDict(
+            nested = RedisTensorDict._new_nested(
+                parent=self, key_prefix=nested_prefix,
                 batch_size=value.batch_size,
-                device=self._device,
-                td_id=self._td_id,
-                prefix=self._namespace,
-                _internal_prefix=nested_prefix,
-                _internal_client=self._client,
-                _internal_loop=self._loop,
-                _internal_thread=self._thread,
             )
             nested.update(value, inplace=inplace)
         else:
@@ -953,6 +957,7 @@ class RedisTensorDict(TensorDictBase):
 
     def _clone(self, recurse: bool = True) -> RedisTensorDict:
         if recurse:
+            # Deep clone: new UUID, copies all data
             new_td = RedisTensorDict(
                 host=self._host,
                 port=self._port,
@@ -961,24 +966,13 @@ class RedisTensorDict(TensorDictBase):
                 prefix=self._namespace,
                 batch_size=self._batch_size,
                 device=self._device,
-                _internal_client=self._client,
-                _internal_loop=self._loop,
-                _internal_thread=self._thread,
             )
-            # Copy all data to the new TD
             new_td.update(self.to_tensordict())
             return new_td
         else:
             # Shallow clone: same Redis data, new Python wrapper
-            return RedisTensorDict(
-                batch_size=self._batch_size,
-                device=self._device,
-                td_id=self._td_id,
-                prefix=self._namespace,
-                _internal_prefix=self._prefix,
-                _internal_client=self._client,
-                _internal_loop=self._loop,
-                _internal_thread=self._thread,
+            return RedisTensorDict._new_nested(
+                parent=self, key_prefix=self._prefix,
             )
 
     # ---- Misc required overrides ----
