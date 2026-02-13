@@ -10,6 +10,7 @@ import pickle
 import pytest
 import torch
 from tensordict import TensorDict
+from tensordict.redis import RedisTensorDict
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
 
@@ -47,7 +48,6 @@ class TestRedisTensorDict:
     @pytest.fixture(autouse=True)
     def redis_td(self):
         """Create a fresh RedisTensorDict and clean up after the test."""
-        from tensordict.redis import RedisTensorDict
 
         td = RedisTensorDict(batch_size=[10], db=15)
         yield td
@@ -97,7 +97,6 @@ class TestRedisTensorDict:
 
         # Access the nested tensordict
         nested = redis_td["nested"]
-        from tensordict.redis import RedisTensorDict
 
         assert isinstance(nested, RedisTensorDict)
         result2 = nested["obs"]
@@ -117,7 +116,6 @@ class TestRedisTensorDict:
 
     def test_from_dict(self):
         """Construct from a dict."""
-        from tensordict.redis import RedisTensorDict
 
         source = {"obs": torch.randn(5, 3), "reward": torch.randn(5, 1)}
         td = RedisTensorDict.from_dict(source, batch_size=[5], db=15)
@@ -131,7 +129,6 @@ class TestRedisTensorDict:
 
     def test_from_dict_tensordict_input(self):
         """Construct via from_dict with a TensorDict as input."""
-        from tensordict.redis import RedisTensorDict
 
         source = TensorDict(
             {"obs": torch.randn(5, 3), "reward": torch.randn(5, 1)}, [5]
@@ -271,7 +268,6 @@ class TestRedisTensorDict:
 
     def test_clone_recurse(self, redis_td):
         """Test deep clone."""
-        from tensordict.redis import RedisTensorDict
 
         redis_td["obs"] = torch.randn(10, 3)
         cloned = redis_td.clone()
@@ -285,7 +281,6 @@ class TestRedisTensorDict:
 
     def test_clone_no_recurse(self, redis_td):
         """Test shallow clone (same Redis data)."""
-        from tensordict.redis import RedisTensorDict
 
         redis_td["obs"] = torch.randn(10, 3)
         shallow = redis_td.clone(False)
@@ -306,7 +301,6 @@ class TestRedisTensorDict:
 
     def test_entry_class(self, redis_td):
         """Test entry_class returns correct types."""
-        from tensordict.redis import RedisTensorDict
 
         redis_td["obs"] = torch.randn(10, 3)
         redis_td["nested", "a"] = torch.randn(10, 2)
@@ -315,7 +309,6 @@ class TestRedisTensorDict:
 
     def test_device(self):
         """Test device attribute."""
-        from tensordict.redis import RedisTensorDict
 
         td = RedisTensorDict(batch_size=[5], device="cpu", db=15)
         try:
@@ -372,7 +365,6 @@ class TestRedisTensorDict:
 
     def test_reconnect_by_id(self):
         """Connect to an existing RedisTensorDict by ID."""
-        from tensordict.redis import RedisTensorDict
 
         td1 = RedisTensorDict(batch_size=[5], db=15)
         try:
@@ -412,7 +404,6 @@ class TestRedisTensorDict:
 
     def test_from_tensordict(self):
         """Test from_tensordict classmethod."""
-        from tensordict.redis import RedisTensorDict
 
         source = TensorDict(
             {"obs": torch.randn(5, 3), "action": torch.randn(5, 2)}, [5]
@@ -428,7 +419,6 @@ class TestRedisTensorDict:
 
     def test_from_tensordict_preserves_device(self):
         """from_tensordict should preserve the source device by default."""
-        from tensordict.redis import RedisTensorDict
 
         source = TensorDict(
             {"x": torch.randn(3)}, [3], device="cpu"
@@ -442,7 +432,6 @@ class TestRedisTensorDict:
 
     def test_from_redis(self):
         """Test from_redis: reconnect to existing data by td_id."""
-        from tensordict.redis import RedisTensorDict
 
         # Writer creates data
         writer = RedisTensorDict(batch_size=[5], db=15)
@@ -464,14 +453,12 @@ class TestRedisTensorDict:
 
     def test_from_redis_not_found(self):
         """from_redis should raise KeyError for unknown td_id."""
-        from tensordict.redis import RedisTensorDict
 
         with pytest.raises(KeyError, match="No RedisTensorDict"):
             RedisTensorDict.from_redis(td_id="nonexistent-uuid", db=15)
 
     def test_from_redis_with_device_override(self):
         """from_redis should allow overriding the device."""
-        from tensordict.redis import RedisTensorDict
 
         writer = RedisTensorDict(batch_size=[3], device="cpu", db=15)
         try:
