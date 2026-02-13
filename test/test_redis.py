@@ -347,8 +347,9 @@ class TestRedisTensorDict:
         assert not redis_td.is_contiguous()
 
     def test_shape_ops_raise(self, redis_td):
-        """Shape ops should raise RuntimeError."""
+        """Shape ops raise on RedisTensorDict but work after to_local()."""
         redis_td["obs"] = torch.randn(10, 3)
+
         with pytest.raises(RuntimeError):
             redis_td.view(2, 5)
         with pytest.raises(RuntimeError):
@@ -357,6 +358,12 @@ class TestRedisTensorDict:
             redis_td.unsqueeze(0)
         with pytest.raises(RuntimeError):
             redis_td.squeeze(0)
+
+        # Escape hatch: materialize first, then shape ops work
+        local = redis_td.to_local()
+        assert local.view(2, 5).shape == torch.Size([2, 5])
+        assert local.unsqueeze(0).shape == torch.Size([1, 10])
+        assert local.squeeze(0).shape == torch.Size([10])
 
     def test_share_memory_raises(self, redis_td):
         """share_memory_ should raise."""
