@@ -8,6 +8,9 @@
 set -e
 set -v
 
+export DEBIAN_FRONTEND=noninteractive
+export TZ=Etc/UTC
+
 apt update -y && apt install git wget gcc -y
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
