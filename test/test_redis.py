@@ -129,8 +129,8 @@ class TestRedisTensorDict:
             td.clear_redis()
             td.close()
 
-    def test_from_tensordict(self):
-        """Construct from a TensorDict."""
+    def test_from_dict_tensordict_input(self):
+        """Construct via from_dict with a TensorDict as input."""
         from tensordict.redis import RedisTensorDict
 
         source = TensorDict(
@@ -409,6 +409,86 @@ class TestRedisTensorDict:
         assert "old_name" not in redis_td.keys()
         assert "new_name" in redis_td.keys()
         assert torch.allclose(redis_td["new_name"], tensor)
+
+    def test_from_tensordict(self):
+        """Test from_tensordict classmethod."""
+        from tensordict.redis import RedisTensorDict
+
+        source = TensorDict(
+            {"obs": torch.randn(5, 3), "action": torch.randn(5, 2)}, [5]
+        )
+        td = RedisTensorDict.from_tensordict(source, db=15)
+        try:
+            assert td.batch_size == torch.Size([5])
+            assert torch.allclose(td["obs"], source["obs"])
+            assert torch.allclose(td["action"], source["action"])
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_from_tensordict_preserves_device(self):
+        """from_tensordict should preserve the source device by default."""
+        from tensordict.redis import RedisTensorDict
+
+        source = TensorDict(
+            {"x": torch.randn(3)}, [3], device="cpu"
+        )
+        td = RedisTensorDict.from_tensordict(source, db=15)
+        try:
+            assert td.device == torch.device("cpu")
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_from_redis(self):
+        """Test from_redis: reconnect to existing data by td_id."""
+        from tensordict.redis import RedisTensorDict
+
+        # Writer creates data
+        writer = RedisTensorDict(batch_size=[5], db=15)
+        try:
+            obs = torch.randn(5, 3)
+            writer["obs"] = obs
+            td_id = writer._td_id
+
+            # Reader reconnects from a different handle
+            reader = RedisTensorDict.from_redis(td_id=td_id, db=15)
+            try:
+                assert reader.batch_size == torch.Size([5])
+                assert torch.allclose(reader["obs"], obs)
+            finally:
+                reader.close()
+        finally:
+            writer.clear_redis()
+            writer.close()
+
+    def test_from_redis_not_found(self):
+        """from_redis should raise KeyError for unknown td_id."""
+        from tensordict.redis import RedisTensorDict
+
+        with pytest.raises(KeyError, match="No RedisTensorDict"):
+            RedisTensorDict.from_redis(td_id="nonexistent-uuid", db=15)
+
+    def test_from_redis_with_device_override(self):
+        """from_redis should allow overriding the device."""
+        from tensordict.redis import RedisTensorDict
+
+        writer = RedisTensorDict(batch_size=[3], device="cpu", db=15)
+        try:
+            writer["x"] = torch.randn(3)
+            td_id = writer._td_id
+
+            reader = RedisTensorDict.from_redis(
+                td_id=td_id, db=15, device="cpu"
+            )
+            try:
+                assert reader.device == torch.device("cpu")
+                assert reader["x"].device == torch.device("cpu")
+            finally:
+                reader.close()
+        finally:
+            writer.clear_redis()
+            writer.close()
 
 
 if __name__ == "__main__":

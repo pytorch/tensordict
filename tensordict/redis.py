@@ -951,6 +951,172 @@ class RedisTensorDict(TensorDictBase):
             out.update(TensorDict(input_dict, batch_size=batch_size))
         return out
 
+    @classmethod
+    def from_tensordict(
+        cls,
+        td: TensorDictBase,
+        *,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device=None,
+        **kwargs,
+    ) -> RedisTensorDict:
+        """Upload a TensorDict to Redis.
+
+        Creates a new :class:`RedisTensorDict` and copies all tensor data from
+        the provided TensorDict into Redis.
+
+        Args:
+            td (TensorDictBase): The source TensorDict whose data will be
+                stored in Redis.
+
+        Keyword Args:
+            host (str): Redis hostname. Defaults to ``"localhost"``.
+            port (int): Redis port. Defaults to ``6379``.
+            db (int): Redis database. Defaults to ``0``.
+            unix_socket_path (str, optional): Unix socket path.
+            prefix (str): Redis key namespace. Defaults to ``"tensordict"``.
+            device (torch.device, optional): Device override for retrieved
+                tensors. If ``None``, uses the source TensorDict's device.
+            **kwargs: Extra Redis connection kwargs.
+
+        Returns:
+            A new RedisTensorDict backed by the uploaded data.
+
+        Examples:
+            >>> local = TensorDict({"obs": torch.randn(10, 84)}, [10])
+            >>> remote = RedisTensorDict.from_tensordict(local, host="my-redis")
+            >>> remote["obs"].shape
+            torch.Size([10, 84])
+        """
+        if device is None:
+            device = td.device
+
+        connect_kwargs = {}
+        if unix_socket_path is not None:
+            connect_kwargs["unix_socket_path"] = unix_socket_path
+        else:
+            connect_kwargs["host"] = host
+            connect_kwargs["port"] = port
+        connect_kwargs["db"] = db
+
+        out = cls(
+            batch_size=td.batch_size,
+            device=device,
+            prefix=prefix,
+            **connect_kwargs,
+            **kwargs,
+        )
+        out.update(td)
+        return out
+
+    @classmethod
+    def from_redis(
+        cls,
+        *,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        td_id: str,
+        device=None,
+        **kwargs,
+    ) -> RedisTensorDict:
+        """Connect to an existing RedisTensorDict stored on a Redis server.
+
+        This is the cross-node entry point: one process stores data with
+        :meth:`from_tensordict` (or regular ``__setitem__``), and another
+        process on any machine that can reach the same Redis server
+        reconstructs the handle by passing the same ``td_id``.
+
+        Batch size and device are read from the metadata already persisted
+        in Redis by the original writer.
+
+        Keyword Args:
+            host (str): Redis hostname. Defaults to ``"localhost"``.
+            port (int): Redis port. Defaults to ``6379``.
+            db (int): Redis database. Defaults to ``0``.
+            unix_socket_path (str, optional): Unix socket path.
+            prefix (str): Redis key namespace. Defaults to ``"tensordict"``.
+            td_id (str): The unique identifier of the TensorDict to reconnect
+                to. Obtain this from a previously created instance via
+                ``td._td_id``.
+            device (torch.device, optional): Device override for retrieved
+                tensors. If ``None``, uses the device stored in Redis.
+            **kwargs: Extra Redis connection kwargs.
+
+        Returns:
+            A RedisTensorDict connected to the existing data.
+
+        Examples:
+            On node A (writer)::
+
+                td = RedisTensorDict(host="shared-redis", batch_size=[100])
+                td["obs"] = torch.randn(100, 84)
+                print(td._td_id)  # e.g. "a1b2c3d4-..."
+
+            On node B (reader)::
+
+                td = RedisTensorDict.from_redis(
+                    host="shared-redis",
+                    td_id="a1b2c3d4-...",
+                )
+                td["obs"]  # fetched from the shared Redis
+        """
+        import redis.asyncio as aioredis
+
+        connect_kwargs = dict(kwargs)
+        if unix_socket_path is not None:
+            connect_kwargs["unix_socket_path"] = unix_socket_path
+        else:
+            connect_kwargs["host"] = host
+            connect_kwargs["port"] = port
+        connect_kwargs["db"] = db
+
+        # Temporarily create an async client to read stored metadata
+        loop = asyncio.new_event_loop()
+        client = aioredis.Redis(**connect_kwargs)
+
+        async def _read_meta():
+            batch_size_key = f"{prefix}:{{{td_id}}}:__batch_size__"
+            device_key = f"{prefix}:{{{td_id}}}:__device__"
+            pipe = client.pipeline()
+            pipe.get(batch_size_key)
+            pipe.get(device_key)
+            raw_bs, raw_dev = await pipe.execute()
+            await client.aclose()
+            return raw_bs, raw_dev
+
+        raw_bs, raw_dev = loop.run_until_complete(_read_meta())
+        loop.close()
+
+        if raw_bs is None:
+            raise KeyError(
+                f"No RedisTensorDict with td_id={td_id!r} found at "
+                f"{host}:{port} db={db} (prefix={prefix!r})."
+            )
+
+        batch_size = torch.Size(json.loads(raw_bs))
+        if device is None:
+            dev_str = raw_dev.decode() if isinstance(raw_dev, bytes) else raw_dev
+            device = torch.device(dev_str) if dev_str else None
+
+        return cls(
+            host=host,
+            port=port,
+            db=db,
+            unix_socket_path=unix_socket_path,
+            prefix=prefix,
+            batch_size=batch_size,
+            device=device,
+            td_id=td_id,
+            **kwargs,
+        )
+
     from_dict_instance = TensorDict.from_dict_instance
 
     # ---- Cloning ----
