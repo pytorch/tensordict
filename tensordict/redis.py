@@ -53,6 +53,33 @@ else:
 # Separator used for nested key paths in Redis keys
 _KEY_SEP = "."
 
+# Lua scripts executed server-side to batch byte-range operations into a
+# single round-trip per key.  Each script takes ONE Redis key and a flat
+# argument list encoding the byte ranges.
+
+# GETRANGES: ARGV = [offset1, length1, offset2, length2, ...]
+# Returns the *concatenated* bytes from all ranges.
+_LUA_GETRANGES = """\
+local key = KEYS[1]
+local parts = {}
+for i = 1, #ARGV, 2 do
+    local off = tonumber(ARGV[i])
+    local len = tonumber(ARGV[i + 1])
+    parts[#parts + 1] = redis.call('GETRANGE', key, off, off + len - 1)
+end
+return table.concat(parts)
+"""
+
+# SETRANGES: ARGV = [offset1, data1, offset2, data2, ...]
+# Applies all SETRANGEs atomically; returns "OK".
+_LUA_SETRANGES = """\
+local key = KEYS[1]
+for i = 1, #ARGV, 2 do
+    redis.call('SETRANGE', key, tonumber(ARGV[i]), ARGV[i + 1])
+end
+return redis.status_reply('OK')
+"""
+
 
 def _dtype_to_str(dtype: torch.dtype) -> str:
     """Convert a torch.dtype to its string representation."""
@@ -102,10 +129,14 @@ def _compute_byte_ranges(
     dtype: torch.dtype,
     idx,
 ) -> list[tuple[int, int]] | None:
-    """Compute ``(byte_offset, byte_length)`` pairs for indexing ``shape[0]`` with *idx*.
+    """Compute per-row ``(byte_offset, byte_length)`` pairs for the write path.
 
     Returns ``None`` when *idx* is an unsupported type, signalling that the
     caller should fall back to a full read-modify-write.
+
+    Every index type (int, slice, list, tensor, bool) returns one
+    ``(offset, row_size)`` entry per selected row.  This is the canonical
+    decomposition used by the ``SETRANGES`` Lua script.
     """
     # Unwrap 1-element tuples produced by _SubTensorDict
     if isinstance(idx, tuple):
@@ -131,7 +162,7 @@ def _compute_byte_ranges(
         positions = range(*idx.indices(shape[0])) if isinstance(idx, slice) else idx
         if len(positions) == 0:
             return []
-        # Contiguous with step 1: return a single range
+        # Contiguous step-1: single covering range
         if positions.step == 1:
             return [(positions[0] * row_size, len(positions) * row_size)]
         return [(p * row_size, row_size) for p in positions]
@@ -147,6 +178,83 @@ def _compute_byte_ranges(
         return [(int(p) * row_size, row_size) for p in positions]
 
     return None  # unsupported index type
+
+
+def _compute_covering_range(
+    shape: list[int],
+    dtype: torch.dtype,
+    idx,
+) -> tuple[int, int] | None:
+    """Compute a single ``(byte_offset, byte_length)`` for the read path.
+
+    For **int** and **slice** (any step), returns one covering range.
+    Returns ``None`` for all other index types (scatter, unsupported).
+    """
+    if isinstance(idx, tuple):
+        idx = idx[0] if len(idx) == 1 else None
+    if idx is None:
+        return None
+    if idx is Ellipsis:
+        idx = slice(None)
+
+    elem_size = torch.tensor([], dtype=dtype).element_size()
+    row_size = elem_size
+    for s in shape[1:]:
+        row_size *= s
+
+    if isinstance(idx, int):
+        pos = idx % shape[0]
+        return (pos * row_size, row_size)
+
+    if isinstance(idx, (slice, range)):
+        positions = range(*idx.indices(shape[0])) if isinstance(idx, slice) else idx
+        if len(positions) == 0:
+            return (0, 0)
+        start = positions[0]
+        stop = positions[-1] + 1
+        return (start * row_size, (stop - start) * row_size)
+
+    return None
+
+
+def _get_local_idx(idx, shape_0: int):
+    """Return a local post-index to apply after fetching a covering range.
+
+    For **int** and **step-1 slices** returns ``None`` (the fetched bytes
+    match the result shape exactly).
+
+    For **step > 1 slices** returns a ``slice(None, None, step)`` to stride
+    the covering range.
+
+    For tensor / list / bool returns ``None`` — the Lua path fetches exactly
+    the needed rows so no post-processing is required.
+    """
+    if isinstance(idx, tuple):
+        idx = idx[0] if len(idx) == 1 else idx
+    if idx is Ellipsis:
+        return None
+    if isinstance(idx, int):
+        return None
+    if isinstance(idx, (slice, range)):
+        positions = range(*idx.indices(shape_0)) if isinstance(idx, slice) else idx
+        if len(positions) == 0 or positions.step == 1:
+            return None
+        return slice(None, None, positions.step)
+    # tensor / list / bool — Lua fetches exact rows
+    return None
+
+
+def _is_scattered_index(idx) -> bool:
+    """Return True when *idx* is tensor / list / bool (scattered, use Lua)."""
+    if isinstance(idx, tuple):
+        idx = idx[0] if len(idx) == 1 else idx
+    if idx is Ellipsis:
+        return False
+    if isinstance(idx, (int, slice, range)):
+        return False
+    if isinstance(idx, (list, torch.Tensor)):
+        return True
+    return False
 
 
 def _getitem_result_shape(
@@ -191,73 +299,6 @@ def _getitem_result_shape(
 
     # Fallback
     return list(torch.zeros(shape)[idx].shape)
-
-
-def _compute_covering_range(
-    shape: list[int],
-    dtype: torch.dtype,
-    idx,
-) -> tuple[int, int, object] | None:
-    """Compute a single covering byte range for indexed reads.
-
-    Returns ``(byte_offset, byte_length, local_idx)`` or ``None``.
-    - **byte_offset / byte_length**: a single contiguous GETRANGE span.
-    - **local_idx**: ``None`` when the fetched bytes are already the result
-      (int index, step-1 slice), or an index to apply on the covering tensor's
-      first dimension to extract the requested rows.
-
-    This always emits at most **one** GETRANGE per key regardless of index type.
-    """
-    # Unwrap 1-element tuples
-    if isinstance(idx, tuple):
-        if len(idx) == 1:
-            idx = idx[0]
-        else:
-            return None
-
-    if idx is Ellipsis:
-        idx = slice(None)
-
-    elem_size = torch.tensor([], dtype=dtype).element_size()
-    row_size = elem_size
-    for s in shape[1:]:
-        row_size *= s
-
-    if isinstance(idx, int):
-        pos = idx % shape[0]
-        return (pos * row_size, row_size, None)
-
-    if isinstance(idx, (slice, range)):
-        positions = range(*idx.indices(shape[0])) if isinstance(idx, slice) else idx
-        if len(positions) == 0:
-            return (0, 0, None)
-        start = positions[0]
-        stop = positions[-1] + 1  # make exclusive
-        covering_rows = stop - start
-        if positions.step == 1:
-            return (start * row_size, covering_rows * row_size, None)
-        # Step > 1: fetch covering range, stride locally
-        local_idx = slice(None, None, positions.step)
-        return (start * row_size, covering_rows * row_size, local_idx)
-
-    if isinstance(idx, list):
-        idx = torch.tensor(idx)
-
-    if isinstance(idx, torch.Tensor):
-        if idx.dtype == torch.bool:
-            positions = idx.nonzero(as_tuple=False).squeeze(-1)
-        else:
-            positions = idx.reshape(-1)
-        if positions.numel() == 0:
-            return (0, 0, None)
-        min_pos = int(positions.min().item())
-        max_pos = int(positions.max().item())
-        covering_rows = max_pos - min_pos + 1
-        # Shift indices relative to covering range start
-        local_idx = positions - min_pos
-        return (min_pos * row_size, covering_rows * row_size, local_idx)
-
-    return None
 
 
 class _RedisTDKeysView(_TensorDictKeysView):
@@ -708,10 +749,15 @@ class RedisTensorDict(TensorDictBase):
     ) -> dict[str, torch.Tensor]:
         """Batch-fetch indexed slices of multiple tensors.
 
-        Uses :func:`_compute_covering_range` so that every key emits **at most
-        one** ``GETRANGE`` command, regardless of whether the index is an int,
-        slice-with-step, tensor, or boolean mask.  A local post-index is
-        applied when the covering range is larger than the result.
+        Two strategies per key (always exactly **K** pipeline commands for
+        **K** keys):
+
+        * **int / slice (any step)** — a single ``GETRANGE`` fetches the
+          covering range.  A local post-index (``[::step]``) is applied when
+          the step is > 1.
+        * **list / tensor / bool mask** — the ``GETRANGES`` Lua script
+          executes all per-row ``GETRANGE`` calls server-side in one ``EVAL``,
+          returning concatenated bytes.
 
         Falls back to full ``GET`` + local indexing for unsupported index types.
         """
@@ -719,50 +765,68 @@ class RedisTensorDict(TensorDictBase):
             return {}
 
         meta_map = await self._aget_metadata_batch(key_paths)
+        scattered = _is_scattered_index(idx)
 
         pipe = self._client.pipeline()
-        # (key_path, covering_shape, dtype, local_idx, has_data)
+        # (key_path, result_shape, dtype, local_idx, has_cmd)
         plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
         fallback_kps: list[str] = []
 
         for kp in key_paths:
             shape, dtype = meta_map[kp]
-            cr = _compute_covering_range(shape, dtype, idx)
-            if cr is None:
-                fallback_kps.append(kp)
-                continue
-            byte_offset, byte_length, local_idx = cr
-            elem_size = torch.tensor([], dtype=dtype).element_size()
-            rest = shape[1:]
-            row_bytes = elem_size * (
-                int(torch.tensor(rest).prod().item()) if rest else 1
-            )
-            covering_rows = byte_length // row_bytes if row_bytes > 0 else 0
-            covering_shape = [covering_rows] + rest
-            has_data = byte_length > 0
-            if has_data:
+            result_shape = _getitem_result_shape(shape, idx)
+            local_idx = _get_local_idx(idx, shape[0])
+
+            if scattered:
+                ranges = _compute_byte_ranges(shape, dtype, idx)
+                if ranges is None:
+                    fallback_kps.append(kp)
+                    continue
+                if not ranges:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
+                argv: list[int] = []
+                for byte_offset, byte_length in ranges:
+                    argv.append(byte_offset)
+                    argv.append(byte_length)
+                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
+            else:
+                cr = _compute_covering_range(shape, dtype, idx)
+                if cr is None:
+                    fallback_kps.append(kp)
+                    continue
+                byte_offset, byte_length = cr
+                if byte_length == 0:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
                 pipe.getrange(
                     self._data_key(kp),
                     byte_offset,
                     byte_offset + byte_length - 1,
                 )
-            plan.append((kp, covering_shape, dtype, local_idx, has_data))
+            plan.append((kp, result_shape, dtype, local_idx, True))
 
-        raw_results = await pipe.execute() if any(p[4] for p in plan) else []
+        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
+        raw_results = await pipe.execute() if has_cmds else []
 
         result: dict[str, torch.Tensor] = {}
         ri = 0
-        for kp, covering_shape, dtype, local_idx, has_data in plan:
-            result_shape = _getitem_result_shape(meta_map[kp][0], idx)
-            if not has_data:
+        for kp, result_shape, dtype, local_idx, has_cmd in plan:
+            if not has_cmd:
                 result[kp] = torch.empty(result_shape, dtype=dtype)
                 continue
             data = raw_results[ri]
             ri += 1
-            tensor = _bytes_to_tensor(data, covering_shape, dtype)
+            # For Lua path: data is already exactly the needed rows.
+            # For GETRANGE path: data may be a covering range needing post-index.
+            tensor = _bytes_to_tensor(
+                data,
+                result_shape if local_idx is None else [-1] + list(meta_map[kp][0][1:]),
+                dtype,
+            )
             if local_idx is not None:
                 tensor = tensor[local_idx]
-            tensor = tensor.reshape(result_shape)
+                tensor = tensor.reshape(result_shape)
             if self._device is not None:
                 tensor = tensor.to(self._device)
             result[kp] = tensor
@@ -830,35 +894,47 @@ class RedisTensorDict(TensorDictBase):
         for kp in cached_meta:
             tensor_kps.append(kp)
 
-        # -- Stage 2: build single-GETRANGE pipeline -------------------------
+        # -- Stage 2: pipelined byte-range reads (hybrid) ---------------------
         pipe = self._client.pipeline()
+        scattered = _is_scattered_index(idx)
 
-        # (kp, covering_shape, dtype, local_idx, has_data)
+        # (kp, result_shape, dtype, local_idx, has_cmd)
         plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
         fallback_tensor_kps: list[str] = []
 
         for kp in tensor_kps:
             shape, dtype = all_meta[kp]
-            cr = _compute_covering_range(shape, dtype, idx)
-            if cr is None:
-                fallback_tensor_kps.append(kp)
-                continue
-            byte_offset, byte_length, local_idx = cr
-            elem_size = torch.tensor([], dtype=dtype).element_size()
-            rest = shape[1:]
-            row_bytes = elem_size * (
-                int(torch.tensor(rest).prod().item()) if rest else 1
-            )
-            covering_rows = byte_length // row_bytes if row_bytes > 0 else 0
-            covering_shape = [covering_rows] + rest
-            has_data = byte_length > 0
-            if has_data:
+            result_shape = _getitem_result_shape(shape, idx)
+            local_idx = _get_local_idx(idx, shape[0])
+
+            if scattered:
+                ranges = _compute_byte_ranges(shape, dtype, idx)
+                if ranges is None:
+                    fallback_tensor_kps.append(kp)
+                    continue
+                if not ranges:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
+                argv: list[int] = []
+                for byte_offset, byte_length in ranges:
+                    argv.append(byte_offset)
+                    argv.append(byte_length)
+                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
+            else:
+                cr = _compute_covering_range(shape, dtype, idx)
+                if cr is None:
+                    fallback_tensor_kps.append(kp)
+                    continue
+                byte_offset, byte_length = cr
+                if byte_length == 0:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
                 pipe.getrange(
                     self._data_key(kp),
                     byte_offset,
                     byte_offset + byte_length - 1,
                 )
-            plan.append((kp, covering_shape, dtype, local_idx, has_data))
+            plan.append((kp, result_shape, dtype, local_idx, True))
 
         # Full GET for fallback tensors
         for kp in fallback_tensor_kps:
@@ -869,23 +945,31 @@ class RedisTensorDict(TensorDictBase):
         for kp in non_tensor_kps:
             pipe.get(self._data_key(kp))
 
-        all_results = await pipe.execute()
+        has_cmds = (
+            any(has_cmd for _, _, _, _, has_cmd in plan)
+            or fallback_tensor_kps
+            or non_tensor_kps
+        )
+        all_results = await pipe.execute() if has_cmds else []
 
         # -- Stage 3: reassemble results -----------------------------------
         result: dict[str, torch.Tensor | Any] = {}
 
         flat_idx = 0
-        for kp, covering_shape, dtype, local_idx, has_data in plan:
-            result_shape = _getitem_result_shape(all_meta[kp][0], idx)
-            if not has_data:
+        for kp, result_shape, dtype, local_idx, has_cmd in plan:
+            if not has_cmd:
                 result[kp] = torch.empty(result_shape, dtype=dtype)
                 continue
             data = all_results[flat_idx]
             flat_idx += 1
-            tensor = _bytes_to_tensor(data, covering_shape, dtype)
+            tensor = _bytes_to_tensor(
+                data,
+                result_shape if local_idx is None else [-1] + list(all_meta[kp][0][1:]),
+                dtype,
+            )
             if local_idx is not None:
                 tensor = tensor[local_idx]
-            tensor = tensor.reshape(result_shape)
+                tensor = tensor.reshape(result_shape)
             if self._device is not None:
                 tensor = tensor.to(self._device)
             result[kp] = tensor
@@ -918,12 +1002,14 @@ class RedisTensorDict(TensorDictBase):
 
         Three strategies, chosen per-key:
 
-        1. **Direct SETRANGE** (int, step-1 slice): value bytes are written in
-           a single ``SETRANGE`` without reading first.
-        2. **Partial read-modify-write** (step>1, tensor, bool mask): fetch the
-           *covering range* via ``GETRANGE``, patch in memory, write back with
-           ``SETRANGE``.  2 commands per key across 2 pipelines.
-        3. **Full read-modify-write** fallback for unsupported indices.
+        1. **Direct SETRANGE** (int, step-1 slice) — value bytes match the
+           covering range exactly.
+        2. **Lua SETRANGES** (list / tensor / bool) — per-row
+           ``(offset, data)`` pairs executed server-side in one ``EVAL``.
+        3. **Covering-range RMW** (step>1 slice) — fetch the covering
+           range, patch locally, write back.  Two commands per key but avoids
+           sending thousands of Lua arguments.
+        4. **Full RMW** fallback for unsupported indices.
         """
         if not items:
             return
@@ -931,55 +1017,83 @@ class RedisTensorDict(TensorDictBase):
         key_paths = list(items.keys())
         meta_map = await self._aget_metadata_batch(key_paths)
 
-        # Classify each key-path into one of three strategies.
-        # Store (kp, byte_offset, byte_length, local_idx) for covering-range keys.
-        direct_kps: list[tuple[str, int]] = []  # (kp, byte_offset)
-        partial_kps: list[tuple[str, int, int, object, list[int], torch.dtype]] = []
+        # ---- Phase 1: classify each key --------------------------------
+        direct_kps: list[str] = []  # int, step-1 slice
+        lua_kps: list[str] = []  # tensor / list / bool
+        rmw_kps: list[str] = []  # step>1 slice (covering RMW)
         fallback_kps: list[str] = []
 
         for kp in key_paths:
-            shape, dtype = meta_map[kp]
             _, idx = items[kp]
-            cr = _compute_covering_range(shape, dtype, idx)
-            if cr is None:
+            shape, dtype = meta_map[kp]
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            if ranges is None:
                 fallback_kps.append(kp)
-                continue
-            byte_offset, byte_length, local_idx = cr
-            if local_idx is None:
-                direct_kps.append((kp, byte_offset))
+            elif not ranges:
+                pass  # empty index, nothing to write
+            elif len(ranges) == 1:
+                direct_kps.append(kp)
+            elif _is_scattered_index(idx):
+                lua_kps.append(kp)
             else:
-                partial_kps.append(
-                    (kp, byte_offset, byte_length, local_idx, shape, dtype)
-                )
+                # step>1 slice — many ranges, but a contiguous covering range
+                rmw_kps.append(kp)
 
-        # --- Strategy 1: direct SETRANGE (single pipeline) -----------------
-        if direct_kps:
-            pipe = self._client.pipeline()
-            for kp, byte_offset in direct_kps:
-                value, _ = items[kp]
-                pipe.setrange(
-                    self._data_key(kp),
-                    byte_offset,
-                    _tensor_to_bytes(value.contiguous()),
-                )
+        # ---- Phase 2: single pipeline for direct + lua -------------------
+        pipe = self._client.pipeline()
+        has_pipe_cmds = False
+
+        for kp in direct_kps:
+            value, idx = items[kp]
+            shape, dtype = meta_map[kp]
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            byte_offset, _ = ranges[0]
+            pipe.setrange(
+                self._data_key(kp),
+                byte_offset,
+                _tensor_to_bytes(value.contiguous()),
+            )
+            has_pipe_cmds = True
+
+        for kp in lua_kps:
+            value, idx = items[kp]
+            shape, dtype = meta_map[kp]
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            value_bytes = _tensor_to_bytes(value.contiguous())
+            argv: list = []
+            offset = 0
+            for byte_offset, byte_length in ranges:
+                argv.append(byte_offset)
+                argv.append(value_bytes[offset : offset + byte_length])
+                offset += byte_length
+            pipe.eval(_LUA_SETRANGES, 1, self._data_key(kp), *argv)
+            has_pipe_cmds = True
+
+        if has_pipe_cmds:
             await pipe.execute()
 
-        # --- Strategy 2: partial covering-range RMW (two pipelines) --------
-        if partial_kps:
+        # ---- Phase 3: covering-range RMW for step>1 slices ---------------
+        if rmw_kps:
             # Pipeline 1: GETRANGE covering ranges
             pipe = self._client.pipeline()
-            for kp, byte_offset, byte_length, _, _, _ in partial_kps:
+            cr_data: list[tuple[str, int, int, list[int], torch.dtype]] = []
+            for kp in rmw_kps:
+                shape, dtype = meta_map[kp]
+                _, idx = items[kp]
+                cr = _compute_covering_range(shape, dtype, idx)
+                byte_offset, byte_length = cr
                 pipe.getrange(
                     self._data_key(kp),
                     byte_offset,
                     byte_offset + byte_length - 1,
                 )
+                cr_data.append((kp, byte_offset, byte_length, shape, dtype))
             raw_covers = await pipe.execute()
 
-            # Patch in memory and pipeline 2: SETRANGE
+            # Patch locally, then Pipeline 2: SETRANGE
             pipe = self._client.pipeline()
-            for (kp, byte_offset, byte_length, local_idx, shape, dtype), data in zip(
-                partial_kps, raw_covers
+            for (kp, byte_offset, byte_length, shape, dtype), data in zip(
+                cr_data, raw_covers
             ):
                 rest = shape[1:]
                 elem_size = torch.tensor([], dtype=dtype).element_size()
@@ -989,7 +1103,8 @@ class RedisTensorDict(TensorDictBase):
                 covering_rows = byte_length // row_bytes if row_bytes > 0 else 0
                 covering_shape = [covering_rows] + rest
                 covering_tensor = _bytes_to_tensor(data, covering_shape, dtype)
-                value, _ = items[kp]
+                value, idx = items[kp]
+                local_idx = _get_local_idx(idx, shape[0])
                 covering_tensor[local_idx] = value
                 pipe.setrange(
                     self._data_key(kp),
@@ -998,7 +1113,7 @@ class RedisTensorDict(TensorDictBase):
                 )
             await pipe.execute()
 
-        # --- Strategy 3: full RMW fallback ---------------------------------
+        # ---- Phase 4: full RMW fallback ----------------------------------
         if fallback_kps:
             await self._abatch_read_modify_write(
                 fallback_kps, {kp: items[kp] for kp in fallback_kps}
