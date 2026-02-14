@@ -47,6 +47,7 @@ from tensordict.functional import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
+from tensordict.redis import RedisTensorDict
 from tensordict.tensorclass import (
     from_dataclass,
     MetaData,
@@ -105,6 +106,7 @@ __all__ = [
     "TensorClass",
     "MemoryMappedTensor",
     "PersistentTensorDict",
+    "RedisTensorDict",
     "NestedKey",
     # Factory functions
     "from_dict",
