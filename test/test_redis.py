@@ -626,6 +626,47 @@ class TestRedisTensorDict:
         sub = redis_td[...]
         assert torch.allclose(sub["obs"], obs)
 
+    def test_indexed_read_step_slice(self, redis_td):
+        """td[::2] should return every other row via covering range."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        sub = redis_td[::2]
+        assert sub["obs"].shape == torch.Size([5, 3])
+        assert torch.allclose(sub["obs"], obs[::2])
+
+    def test_indexed_read_step3(self, redis_td):
+        """td[1::3] should fetch covering range and stride locally."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        sub = redis_td[1::3]
+        assert sub["obs"].shape == torch.Size([3, 3])
+        assert torch.allclose(sub["obs"], obs[1::3])
+
+    def test_indexed_write_step_slice(self, redis_td):
+        """td[::2] = subtd should use partial covering-range RMW."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        new_vals = torch.ones(5, 3) * 9.0
+        redis_td[::2] = TensorDict({"obs": new_vals}, [5])
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[::2], new_vals)
+        # Odd rows should remain zero
+        assert torch.allclose(full[1::2], torch.zeros(5, 3))
+
+    def test_indexed_write_step3(self, redis_td):
+        """td[1::3] = subtd should use partial covering-range RMW."""
+        redis_td["obs"] = torch.arange(30, dtype=torch.float).reshape(10, 3)
+        original = redis_td["obs"].clone()
+        new_vals = torch.ones(3, 3) * -1.0
+        redis_td[1::3] = TensorDict({"obs": new_vals}, [3])
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[1::3], new_vals)
+        # Unmodified rows should stay the same
+        for i in range(10):
+            if i not in (1, 4, 7):
+                assert torch.allclose(full[i], original[i])
+
     # ---- set_at_ via byte-range ----
 
     def test_set_at_byte_range(self, redis_td):
