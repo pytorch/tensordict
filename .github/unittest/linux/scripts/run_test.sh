@@ -26,6 +26,23 @@ export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
 export TD_GET_DEFAULTS_TO_NONE=1
 export LIST_TO_STACK=1
 
+# Start Redis server for test_redis.py (non-fatal if unavailable)
+if command -v redis-server &> /dev/null; then
+    redis-server --daemonize yes --save "" --appendonly no || true
+else
+    case "$(uname -s)" in
+        Linux*)
+            apt update -y && apt install -y redis-server && redis-server --daemonize yes --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
+            ;;
+        Darwin*)
+            brew install redis 2>/dev/null && redis-server --daemonize yes --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
+            ;;
+        *)
+            echo "Redis server not available on this platform, redis tests will be skipped"
+            ;;
+    esac
+fi
+
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120
 coverage run -m pytest ./benchmarks --instafail -v --durations 20
