@@ -486,6 +486,191 @@ class TestRedisTensorDict:
             writer.clear_redis()
             writer.close()
 
+    # ---- Byte-range indexed read tests ----
+
+    def test_indexed_read_int(self, redis_td):
+        """td[i] should return the correct slice via GETRANGE."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        sub = redis_td[5]
+        result = sub["obs"]
+        assert result.shape == torch.Size([3])
+        assert torch.allclose(result, obs[5])
+
+    def test_indexed_read_slice(self, redis_td):
+        """td[2:5] should return the correct slice via GETRANGE."""
+        obs = torch.randn(10, 4)
+        redis_td["obs"] = obs
+        sub = redis_td[2:5]
+        result = sub["obs"]
+        assert result.shape == torch.Size([3, 4])
+        assert torch.allclose(result, obs[2:5])
+
+    def test_indexed_read_fancy(self, redis_td):
+        """td[tensor_idx] should return correct rows via GETRANGE."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        idx = torch.tensor([1, 4, 7])
+        sub = redis_td[idx]
+        result = sub["obs"]
+        assert result.shape == torch.Size([3, 3])
+        assert torch.allclose(result, obs[idx])
+
+    def test_indexed_read_bool_mask(self, redis_td):
+        """td[bool_mask] should return correct rows via GETRANGE."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[0] = True
+        mask[3] = True
+        mask[9] = True
+        sub = redis_td[mask]
+        result = sub["obs"]
+        assert result.shape == torch.Size([3, 3])
+        assert torch.allclose(result, obs[mask])
+
+    def test_indexed_read_multiple_keys(self, redis_td):
+        """Indexed read should work across multiple leaf keys."""
+        obs = torch.randn(10, 4)
+        action = torch.randn(10, 2)
+        redis_td["obs"] = obs
+        redis_td["action"] = action
+        sub = redis_td[3]
+        assert torch.allclose(sub["obs"], obs[3])
+        assert torch.allclose(sub["action"], action[3])
+
+    # ---- Byte-range indexed write tests ----
+
+    def test_indexed_write_int(self, redis_td):
+        """td[5] = subtd should only modify row 5 via SETRANGE."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        redis_td["action"] = torch.zeros(10, 2)
+
+        new_obs = torch.ones(3)
+        new_action = torch.ones(2) * 2.0
+        redis_td[5] = TensorDict({"obs": new_obs, "action": new_action}, [])
+
+        full_obs = redis_td["obs"]
+        full_action = redis_td["action"]
+        # Row 5 should be updated
+        assert torch.allclose(full_obs[5], new_obs)
+        assert torch.allclose(full_action[5], new_action)
+        # Other rows should be untouched
+        assert torch.allclose(full_obs[:5], torch.zeros(5, 3))
+        assert torch.allclose(full_obs[6:], torch.zeros(4, 3))
+
+    def test_indexed_write_slice(self, redis_td):
+        """td[2:5] = subtd should modify rows 2-4 via SETRANGE."""
+        redis_td["obs"] = torch.zeros(10, 3)
+
+        new_vals = torch.ones(3, 3) * 7.0
+        redis_td[2:5] = TensorDict({"obs": new_vals}, [3])
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[2:5], new_vals)
+        assert torch.allclose(full[:2], torch.zeros(2, 3))
+        assert torch.allclose(full[5:], torch.zeros(5, 3))
+
+    def test_indexed_write_list(self, redis_td):
+        """td[[0, 3, 7]] = subtd should modify selected rows."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        idx = [0, 3, 7]
+        new_vals = torch.ones(3, 3) * 5.0
+        redis_td[idx] = TensorDict({"obs": new_vals}, [3])
+
+        full = redis_td["obs"]
+        for i, pos in enumerate(idx):
+            assert torch.allclose(full[pos], new_vals[i])
+        # Unselected rows should be zero
+        for pos in [1, 2, 4, 5, 6, 8, 9]:
+            assert torch.allclose(full[pos], torch.zeros(3))
+
+    def test_indexed_write_tensor(self, redis_td):
+        """td[tensor_idx] = subtd should modify selected rows."""
+        redis_td["obs"] = torch.zeros(10, 4)
+        idx = torch.tensor([2, 5, 8])
+        new_vals = torch.ones(3, 4) * 3.0
+        redis_td[idx] = TensorDict({"obs": new_vals}, [3])
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[idx], new_vals)
+        # Check untouched
+        untouched = torch.tensor([0, 1, 3, 4, 6, 7, 9])
+        assert torch.allclose(full[untouched], torch.zeros(7, 4))
+
+    def test_indexed_write_bool_mask(self, redis_td):
+        """td[mask] = subtd should modify masked rows."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[1] = True
+        mask[4] = True
+        mask[9] = True
+        new_vals = torch.ones(3, 3) * 9.0
+        redis_td[mask] = TensorDict({"obs": new_vals}, [3])
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[mask], new_vals)
+        assert torch.allclose(full[~mask], torch.zeros(7, 3))
+
+    def test_indexed_write_ellipsis(self, redis_td):
+        """td[...] = subtd should overwrite all rows via SETRANGE."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        new_vals = torch.ones(10, 3) * 4.0
+        redis_td[...] = TensorDict({"obs": new_vals}, [10])
+        assert torch.allclose(redis_td["obs"], new_vals)
+
+    def test_indexed_read_ellipsis(self, redis_td):
+        """td[...] should return all rows."""
+        obs = torch.randn(10, 3)
+        redis_td["obs"] = obs
+        sub = redis_td[...]
+        assert torch.allclose(sub["obs"], obs)
+
+    # ---- set_at_ via byte-range ----
+
+    def test_set_at_byte_range(self, redis_td):
+        """set_at_ should use SETRANGE for a single key."""
+        redis_td["obs"] = torch.zeros(10, 3)
+        new_val = torch.ones(3) * 42.0
+        redis_td.set_at_("obs", new_val, 3)
+
+        full = redis_td["obs"]
+        assert torch.allclose(full[3], new_val)
+        assert torch.allclose(full[:3], torch.zeros(3, 3))
+        assert torch.allclose(full[4:], torch.zeros(6, 3))
+
+    # ---- Metadata caching tests ----
+
+    def test_cache_metadata_default(self, redis_td):
+        """Metadata cache should be populated after writes by default."""
+        redis_td["obs"] = torch.randn(10, 3)
+        assert redis_td._meta_cache is not None
+        # The cache should contain the key's metadata
+        key_path = redis_td._full_key_path("obs")
+        assert key_path in redis_td._meta_cache
+        shape, dtype = redis_td._meta_cache[key_path]
+        assert shape == [10, 3]
+        assert dtype == torch.float32
+
+    def test_cache_metadata_disabled(self):
+        """cache_metadata=False should disable the local cache."""
+        td = RedisTensorDict(batch_size=[5], db=15, cache_metadata=False)
+        try:
+            assert td._meta_cache is None
+            td["x"] = torch.randn(5, 3)
+            assert td._meta_cache is None
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_cache_evicted_on_delete(self, redis_td):
+        """Deleting a key should evict it from the metadata cache."""
+        redis_td["obs"] = torch.randn(10, 3)
+        key_path = redis_td._full_key_path("obs")
+        assert key_path in redis_td._meta_cache
+        redis_td.del_("obs")
+        assert key_path not in redis_td._meta_cache
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
