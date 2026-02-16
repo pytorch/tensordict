@@ -67,6 +67,7 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:You are using `torch.load` with `weights_only=False`"
     ),
+    pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")

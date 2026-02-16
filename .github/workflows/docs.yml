@@ -55,8 +55,8 @@ jobs:
         eval "$(./conda/bin/conda shell.bash hook)"
         conda activate "./env"
 
-        # Install PyTorch (CPU version for docs)
-        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+        # Install PyTorch and torchvision (CPU version for docs)
+        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
         # Install tensordict runtime deps explicitly (except torch which is handled above),
         # then install tensordict without resolving dependencies to avoid any solver changing the

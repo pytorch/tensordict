@@ -94,8 +94,10 @@ if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     # Install test dependencies (mirrors environment.yml)
     pip install pybind11 numpy expecttest pyyaml hypothesis future cloudpickle \
         pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail \
-        pytest-rerunfailures pytest-timeout coverage h5py orjson ninja protobuf redis
-    # Note: mosaicml-streaming may not be available for 3.14t yet, skip if fails
+        pytest-rerunfailures pytest-timeout coverage ninja protobuf redis
+    # h5py, orjson and mosaicml-streaming may not be available for 3.14t yet
+    pip install h5py || echo "h5py not available for Python 3.14t, skipping"
+    pip install orjson || echo "orjson not available for Python 3.14t, skipping"
     pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
 else
     # For regular Python, use conda

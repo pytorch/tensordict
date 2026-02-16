@@ -159,6 +159,7 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
+    pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
 mp_ctx = "spawn"
@@ -12795,6 +12796,8 @@ class TestMap:
     @pytest.mark.parametrize("h5", [False, True])
     @pytest.mark.parametrize("has_out", [False, True])
     def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
+        if h5 and not _has_h5py:
+            pytest.skip("h5py not installed")
         gc.collect()
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
         if h5:

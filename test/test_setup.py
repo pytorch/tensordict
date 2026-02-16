@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import venv
 from pathlib import Path
 
@@ -102,6 +103,10 @@ def test_install_strategies_version(
 ):
     if shutil.which("cmake") is None:
         pytest.skip("cmake not available")
+    if no_build_isolation and sysconfig.get_config_var("Py_GIL_DISABLED"):
+        pytest.skip(
+            "no-build-isolation installs are unreliable on free-threaded Python"
+        )
 
     base_version = (_ROOT / "version.txt").read_text().strip()
     if not base_version:
