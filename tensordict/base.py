@@ -14391,6 +14391,59 @@ class TensorDictBase(MutableMapping, TensorCollection):
             out.names = self.names
         return out
 
+    def to_redis(
+        self,
+        *,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device=None,
+        **kwargs,
+    ) -> Any:
+        """Upload this TensorDict to a Redis server.
+
+        Returns a :class:`~tensordict.redis.RedisTensorDict` (or
+        :class:`~tensordict.redis.RedisLazyStackedTensorDict` for heterogeneous
+        lazy stacks) backed by the uploaded data.
+
+        For :class:`LazyStackedTensorDict` inputs, data is streamed in chunks
+        to avoid materialising the full stack in memory.
+
+        Keyword Args:
+            host (str): Redis hostname.  Defaults to ``"localhost"``.
+            port (int): Redis port.  Defaults to ``6379``.
+            db (int): Redis database number.  Defaults to ``0``.
+            unix_socket_path (str, optional): Unix domain socket path.
+            prefix (str): Redis key namespace.  Defaults to ``"tensordict"``.
+            device (torch.device, optional): Device override for retrieved
+                tensors.  If ``None``, uses this TensorDict's device.
+            **kwargs: Extra Redis connection keyword arguments.
+
+        Returns:
+            A Redis-backed TensorDict instance.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
+            >>> redis_td = td.to_redis(host="localhost")
+            >>> redis_td["obs"].shape
+            torch.Size([10, 84])
+        """
+        from tensordict.redis import RedisTensorDict
+
+        return RedisTensorDict.from_tensordict(
+            self,
+            host=host,
+            port=port,
+            db=db,
+            unix_socket_path=unix_socket_path,
+            prefix=prefix,
+            device=device,
+            **kwargs,
+        )
+
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:  # noqa: D417
