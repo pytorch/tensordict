@@ -100,6 +100,7 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get(("g", "h")))
 
 
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
     tmpdir = Path(tmpdir)
     td = TensorDict(
