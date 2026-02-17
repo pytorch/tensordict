@@ -517,7 +517,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "round",
     "round_",
     "rsub",
-    "select",
     "separates",
     "set_",
     "set_non_tensor",
@@ -1125,6 +1124,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
+    if not hasattr(cls, "select") and "select" not in expected_keys:
+        cls.select = _tc_select
     if not hasattr(cls, "to_tensordict") and "to_tensordict" not in expected_keys:
         cls.to_tensordict = _to_tensordict
     if not hasattr(cls, "device") and "device" not in expected_keys:
@@ -2370,6 +2371,20 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
                 continue
         td.set_non_tensor(key, val)
     return td
+
+
+def _tc_select(
+    self, *keys, inplace: bool = False, strict: bool = True, as_tensordict: bool = False
+):
+    """TensorClass-specific select that supports ``as_tensordict``."""
+    td = self._tensordict
+    result = td.select(*keys, inplace=inplace, strict=strict)
+    if as_tensordict:
+        return result
+    if result is td:
+        return self
+    non_tensordict = dict(self._non_tensordict)
+    return type(self)._from_tensordict(result, non_tensordict, safe=False)
 
 
 def _device(self) -> torch.device:
