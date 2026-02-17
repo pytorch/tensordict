@@ -985,7 +985,6 @@ class TestRedisLazyStackedTensorDict:
             redis_td.clear_redis()
             redis_td.close()
 
-
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, redis_stack):
@@ -1079,9 +1078,7 @@ class TestBackendAndCompat:
 
     def test_backend_from_tensordict(self):
         local = TensorDict({"a": torch.randn(5)}, [5])
-        td = TensorDictStore.from_tensordict(
-            local, backend="dragonfly", db=15
-        )
+        td = TensorDictStore.from_tensordict(local, backend="dragonfly", db=15)
         try:
             assert td._backend == "dragonfly"
         finally:
@@ -1146,10 +1143,7 @@ class TestBackendAndCompat:
             td.close()
 
     def test_lazy_stack_backend(self):
-        tds = [
-            TensorDict({"a": torch.randn(4)}, batch_size=[4])
-            for _ in range(3)
-        ]
+        tds = [TensorDict({"a": torch.randn(4)}, batch_size=[4]) for _ in range(3)]
         ltd = lazy_stack(tds)
         rltd = LazyStackedTensorDictStore.from_lazy_stack(
             ltd, backend="dragonfly", db=15

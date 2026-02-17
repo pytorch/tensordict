@@ -2386,9 +2386,7 @@ class _StoreStackElementView(TensorDictBase):
         nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
         if nested_keys:
             result = self._run_sync(
-                self._parent._abatch_get_element_keys(
-                    self._element_idx, nested_keys
-                )
+                self._parent._abatch_get_element_keys(self._element_idx, nested_keys)
             )
             source: dict = {}
             for kp, tensor in result.items():
@@ -2398,15 +2396,11 @@ class _StoreStackElementView(TensorDictBase):
                 for part in parts[:-1]:
                     d = d.setdefault(part, {})
                 d[parts[-1]] = tensor
-            return TensorDict(
-                source, batch_size=self._batch_size, device=self._device
-            )
+            return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
         if key_path in all_keys:
             result = self._run_sync(
-                self._parent._abatch_get_element_keys(
-                    self._element_idx, [key_path]
-                )
+                self._parent._abatch_get_element_keys(self._element_idx, [key_path])
             )
             t = result.get(key_path)
             if t is not None:
@@ -2496,9 +2490,7 @@ class _StoreStackElementView(TensorDictBase):
             raise RuntimeError(_LOCK_ERROR)
         if isinstance(value, torch.Tensor):
             self._run_sync(
-                self._parent._aset_element_key(
-                    self._element_idx, key_path, value
-                )
+                self._parent._aset_element_key(self._element_idx, key_path, value)
             )
         elif is_tensor_collection(value):
             for sub_key in value.keys(include_nested=True, leaves_only=True):
@@ -2528,12 +2520,12 @@ class _StoreStackElementView(TensorDictBase):
         for key in value.keys(include_nested=True, leaves_only=True):
             key_tuple = _unravel_key_to_tuple(key)
             key_path = _KEY_SEP.join(key_tuple)
-            existing = self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
+            existing = (
+                self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
+            )
             existing[index] = value.get(key)
             self._run_sync(
-                self._parent._aset_element_key(
-                    self._element_idx, key_path, existing
-                )
+                self._parent._aset_element_key(self._element_idx, key_path, existing)
             )
 
     def _index_tensordict(self, index):
@@ -2543,9 +2535,7 @@ class _StoreStackElementView(TensorDictBase):
         # Read full element tensor, patch locally, write back
         tensor = self._get_str(key)
         tensor[idx] = value
-        self._run_sync(
-            self._parent._aset_element_key(self._element_idx, key, tensor)
-        )
+        self._run_sync(self._parent._aset_element_key(self._element_idx, key, tensor))
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
@@ -2575,9 +2565,7 @@ class _StoreStackElementView(TensorDictBase):
             )
             if inplace is True and not has_key:
                 raise KeyError(
-                    _KEY_ERROR.format(
-                        key, type(self).__name__, sorted(self.keys())
-                    )
+                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
                 )
             inplace = has_key
         return inplace
@@ -2631,9 +2619,7 @@ class _StoreStackElementView(TensorDictBase):
     # ---- materialization ----
 
     def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
-        result_map = self._run_sync(
-            self._parent._abatch_get_element(self._element_idx)
-        )
+        result_map = self._run_sync(self._parent._abatch_get_element(self._element_idx))
         source: dict = {}
         for kp, tensor in result_map.items():
             parts = kp.split(_KEY_SEP)
@@ -2641,9 +2627,7 @@ class _StoreStackElementView(TensorDictBase):
             for part in parts[:-1]:
                 d = d.setdefault(part, {})
             d[parts[-1]] = tensor
-        return TensorDict(
-            source, batch_size=self._batch_size, device=self._device
-        )
+        return TensorDict(source, batch_size=self._batch_size, device=self._device)
 
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
@@ -2659,9 +2643,7 @@ class _StoreStackElementView(TensorDictBase):
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        raise RuntimeError(
-            "Cannot popitem from a stack element view."
-        )
+        raise RuntimeError("Cannot popitem from a stack element view.")
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
@@ -2786,7 +2768,9 @@ class _StoreStackElementView(TensorDictBase):
         return self.to_tensordict().chunk(chunks, dim)
 
     def share_memory_(self):
-        raise NotImplementedError(f"Cannot call share_memory_ on a {type(self).__name__}.")
+        raise NotImplementedError(
+            f"Cannot call share_memory_ on a {type(self).__name__}."
+        )
 
     def _memmap_(self, **kw):
         raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
@@ -2794,7 +2778,9 @@ class _StoreStackElementView(TensorDictBase):
     def make_memmap(self, key, shape, *, dtype=None, robust_key=None):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
-    def make_memmap_from_storage(self, key, storage, shape, *, dtype=None, robust_key=None):
+    def make_memmap_from_storage(
+        self, key, storage, shape, *, dtype=None, robust_key=None
+    ):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
     def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=None):
@@ -3394,9 +3380,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     ):
         """Write a single key for one stack element via SETRANGE."""
         pos = element_idx % self._count
-        raw_meta = _decode_meta(
-            await self._client.hgetall(self._meta_key(key_path))
-        )
+        raw_meta = _decode_meta(await self._client.hgetall(self._meta_key(key_path)))
 
         # Key doesn't exist yet — need to register and upload
         if not raw_meta:
@@ -3449,9 +3433,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
                     f"full stacked tensor via the parent."
                 )
             offset = pos * row_bytes
-            await self._client.setrange(
-                self._data_key(key_path), offset, raw_bytes
-            )
+            await self._client.setrange(self._data_key(key_path), offset, raw_bytes)
         else:
             off_data = await self._client.getrange(
                 self._idx_key(key_path), pos * 8, (pos + 2) * 8 - 1
@@ -3465,9 +3447,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
                     f"Shape changes on individual elements of a heterogeneous "
                     f"key are not supported."
                 )
-            await self._client.setrange(
-                self._data_key(key_path), start, raw_bytes
-            )
+            await self._client.setrange(self._data_key(key_path), start, raw_bytes)
 
     async def _abatch_get_at(
         self, key_paths: list[str], idx
@@ -3580,9 +3560,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 elem_shape = full_shape[1:]
                 row_bytes = self._row_bytes(elem_shape, dtype)
                 offset = pos * row_bytes
-                write_pipe.setrange(
-                    self._data_key(kp), offset, _tensor_to_bytes(value)
-                )
+                write_pipe.setrange(self._data_key(kp), offset, _tensor_to_bytes(value))
             else:
                 off_data = hetero_offsets[hi]
                 hi += 1
@@ -4196,9 +4174,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         loop.close()
 
         if raw_type is None:
-            raise KeyError(
-                f"No LazyStackedTensorDictStore with td_id={td_id!r} found."
-            )
+            raise KeyError(f"No LazyStackedTensorDictStore with td_id={td_id!r} found.")
 
         count = int(raw_count)
         stack_dim = int(raw_sd)
