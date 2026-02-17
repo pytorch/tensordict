@@ -9,11 +9,11 @@ This module exists so that ``from tensordict.redis import RedisTensorDict``
 continues to work.  New code should import from ``tensordict.store`` instead.
 """
 
-from tensordict.store._redis import (  # noqa: F401
+from tensordict.store._store import (  # noqa: F401
     LazyStackedTensorDictStore,
     LazyStackedTensorDictStore as RedisLazyStackedTensorDict,
-    RedisTensorDict,
     TensorDictStore,
+    TensorDictStore as RedisTensorDict,
 )
 
 __all__ = [
