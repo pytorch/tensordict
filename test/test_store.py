@@ -1337,6 +1337,43 @@ class TestNonTensorIndexing:
             store.clear_redis()
             store.close()
 
+    def test_setitem_with_nested_tensorclass(self, store_kwargs):
+        """Nested TensorClass values must not be misclassified as non-tensor leaves.
+
+        TensorClass does not inherit from TensorDictBase, so an isinstance check
+        against TensorDictBase would wrongly route it to non-tensor serialisation.
+        """
+
+        @tensorclass
+        class History:
+            obs: torch.Tensor
+            label: str
+
+        @tensorclass
+        class Transition:
+            obs: torch.Tensor
+            history: History
+
+        history = History(obs=torch.randn(3), label="step0", batch_size=[])
+        t = Transition(obs=torch.randn(4), history=history, batch_size=[])
+
+        td = TensorDict({"obs": torch.zeros(5, 4)}, [5])
+        td["history"] = TensorDict(
+            {"obs": torch.zeros(5, 3)}, [5]
+        )
+        td["history"].set_non_tensor("label", "init")
+
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[0] = t.to_tensordict()
+            recovered = store[0]
+            assert torch.allclose(recovered["obs"], t.obs)
+            assert torch.allclose(recovered["history", "obs"], history.obs)
+            assert recovered.get_non_tensor(("history", "label")) == "step0"
+        finally:
+            store.clear_redis()
+            store.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

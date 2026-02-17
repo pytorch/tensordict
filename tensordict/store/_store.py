@@ -1500,7 +1500,7 @@ class TensorDictStore(TensorDictBase):
                 non_tensor_items.append((key_path, val.data))
             elif isinstance(val, torch.Tensor):
                 tensor_items[key_path] = (val, index)
-            elif not isinstance(val, TensorDictBase):
+            elif not is_tensor_collection(val):
                 non_tensor_items.append((key_path, val))
 
         if tensor_items:
