@@ -1558,6 +1558,36 @@ class TestTensorClass:
         assert (data_select == 1).all()
         assert "a" in data_select._tensordict
 
+    def test_is_non_tensor_key(self):
+        @tensorclass
+        class Transition:
+            obs: torch.Tensor
+            label: str
+
+        t = Transition(obs=torch.randn(4), label="cat", batch_size=[])
+
+        # TensorClass: is_non_tensor(key) checks internal representation
+        assert t.is_non_tensor("label")
+        assert not t.is_non_tensor("obs")
+
+        # Confirm the standalone is_non_tensor gives False on unwrapped value
+        from tensordict import is_non_tensor
+
+        assert not is_non_tensor(t.get("label"))
+
+        # Plain TensorDict: consistent behaviour
+        td = TensorDict({"obs": torch.randn(4)}, [])
+        td.set_non_tensor("label", "cat")
+        assert td.is_non_tensor("label")
+        assert not td.is_non_tensor("obs")
+
+        # Nested key support
+        nested_td = TensorDict({"a": TensorDict({}, [])}, [])
+        nested_td["a"].set_non_tensor("x", 42)
+        nested_td["a", "y"] = torch.zeros(3)
+        assert nested_td.is_non_tensor(("a", "x"))
+        assert not nested_td.is_non_tensor(("a", "y"))
+
     @set_list_to_stack(True)
     def test_set_list_in_constructor(self):
         obj = MyTensorClass(

@@ -7601,6 +7601,53 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return data
         return value
 
+    def is_non_tensor(self, key: NestedKey) -> bool:
+        """Checks if the value associated with a key is a non-tensor (:class:`~tensordict.NonTensorData`).
+
+        Unlike the standalone :func:`~tensordict.is_non_tensor` function which checks
+        a value directly, this method checks the **internal representation** of the
+        stored value, making it reliable for both :class:`~tensordict.TensorDict` and
+        :class:`~tensordict.TensorClass` instances.
+
+        This is useful because :class:`~tensordict.TensorClass` ``get()`` unwraps
+        :class:`~tensordict.NonTensorData` to plain values, so calling
+        ``is_non_tensor(tc.get(key))`` on the result would return ``False``.
+        This method always checks the wrapped storage.
+
+        Args:
+            key (NestedKey): the key to check.
+
+        Returns:
+            ``True`` if the value stored at ``key`` is a
+            :class:`~tensordict.NonTensorData` or :class:`~tensordict.NonTensorStack`,
+            ``False`` otherwise.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict({"obs": torch.randn(4)}, [])
+            >>> td.set_non_tensor("label", "cat")
+            >>> td.is_non_tensor("label")
+            True
+            >>> td.is_non_tensor("obs")
+            False
+
+        See also:
+            :meth:`~tensordict.TensorDictBase.set_non_tensor`,
+            :meth:`~tensordict.TensorDictBase.get_non_tensor`.
+        """
+        key = unravel_key(key)
+        return self._is_non_tensor_leaf(key)
+
+    def _is_non_tensor_leaf(self, key: NestedKey):
+        if isinstance(key, tuple):
+            if len(key) == 1:
+                return self._is_non_tensor_leaf(key[0])
+            subtd = self._get_str(key[0], NO_DEFAULT)
+            return subtd._is_non_tensor_leaf(key[1:])
+        val = self._get_str(key, NO_DEFAULT)
+        return _is_non_tensor(type(val))
+
     def filter_non_tensor_data(self) -> Self:
         """Filters out all non-tensor-data."""
 
