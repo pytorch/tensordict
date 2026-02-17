@@ -14409,9 +14409,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         to avoid materialising the full stack in memory.
 
         Keyword Args:
-            backend (str): Store backend — ``"redis"`` (default),
-                ``"dragonfly"``, ``"keydb"``, or any Redis-wire-compatible
-                server name.
+            backend (STORE_BACKENDS): Store backend — ``"redis"`` (default)
+                or ``"dragonfly"``.
             host (str): Server hostname.  Defaults to ``"localhost"``.
             port (int): Server port.  Defaults to ``6379``.
             db (int): Database number.  Defaults to ``0``.
@@ -14434,7 +14433,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> # Using Dragonfly instead of Redis
             >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")
         """
-        from tensordict.store import TensorDictStore
+        from tensordict.store._store import TensorDictStore
 
         return TensorDictStore.from_tensordict(
             self,
