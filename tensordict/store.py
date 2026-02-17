@@ -34,6 +34,7 @@ from tensordict.base import (
 from tensordict.utils import (
     _as_context_manager,
     _getitem_batch_size,
+    _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
     erase_cache,
@@ -122,6 +123,35 @@ def _decode_meta(raw_meta: dict) -> dict[str, str]:
         )
         for k, v in raw_meta.items()
     }
+
+
+def _resolve_tensorclass(
+    explicit: type | str | None,
+    raw_stored: bytes | None,
+) -> type | None:
+    """Resolve a TensorClass type from an explicit argument or a stored path.
+
+    Args:
+        explicit: A class, a ``"module.ClassName"`` string, or ``None``.
+        raw_stored: The raw bytes read from the ``__tensorclass__`` Redis key
+            (may be ``None`` if nothing was stored).
+
+    Returns:
+        The resolved TensorClass type, or ``None`` if there is nothing to
+        resolve.
+    """
+    if isinstance(explicit, type):
+        return explicit
+    class_path: str | None = explicit
+    if class_path is None and raw_stored is not None:
+        class_path = (
+            raw_stored.decode() if isinstance(raw_stored, bytes) else raw_stored
+        )
+    if class_path is None:
+        return None
+    module_path, _, class_name = class_path.rpartition(".")
+    mod = importlib.import_module(module_path)
+    return getattr(mod, class_name)
 
 
 def _compute_byte_ranges(
@@ -513,6 +543,9 @@ class TensorDictStore(TensorDictBase):
         self._batch_size = torch.Size(batch_size)
         self._device = torch.device(device) if device is not None else None
 
+        # Fully-qualified class path for TensorClass round-trips (optional)
+        self._tensorclass_cls: str | None = None
+
         # Persist batch_size and device to the store
         self._run_sync(self._apersist_metadata())
 
@@ -554,6 +587,7 @@ class TensorDictStore(TensorDictBase):
             torch.Size(batch_size) if batch_size is not None else parent._batch_size
         )
         obj._device = parent._device
+        obj._tensorclass_cls = None
         return obj
 
     def _run_sync(self, coro):
@@ -595,6 +629,11 @@ class TensorDictStore(TensorDictBase):
         """Redis key for stored device."""
         return self._redis_key("__device__")
 
+    @property
+    def _tensorclass_key(self) -> str:
+        """Redis key for the stored TensorClass fully-qualified class path."""
+        return self._redis_key("__tensorclass__")
+
     def _full_key_path(self, key: str) -> str:
         """Build the full dot-separated key path including prefix."""
         if self._prefix:
@@ -604,11 +643,13 @@ class TensorDictStore(TensorDictBase):
     # ---- Async internal methods ----
 
     async def _apersist_metadata(self):
-        """Persist batch_size and device to Redis."""
+        """Persist batch_size, device, and optional tensorclass path to the store."""
         pipe = self._client.pipeline()
         pipe.set(self._batch_size_key, json.dumps(list(self._batch_size)))
         device_str = str(self._device) if self._device is not None else ""
         pipe.set(self._device_key, device_str)
+        if self._tensorclass_cls is not None:
+            pipe.set(self._tensorclass_key, self._tensorclass_cls)
         await pipe.execute()
 
     async def _aset_tensor(self, key_path: str, tensor: torch.Tensor):
@@ -1775,6 +1816,12 @@ class TensorDictStore(TensorDictBase):
                 **kwargs,
             )
 
+        # Detect TensorClass and record its fully-qualified class path
+        td_type = type(td)
+        tensorclass_cls: str | None = None
+        if _is_tensorclass(td_type):
+            tensorclass_cls = f"{td_type.__module__}.{td_type.__qualname__}"
+
         out = cls(
             backend=backend,
             batch_size=td.batch_size,
@@ -1783,6 +1830,9 @@ class TensorDictStore(TensorDictBase):
             **connect_kwargs,
             **kwargs,
         )
+        if tensorclass_cls is not None:
+            out._tensorclass_cls = tensorclass_cls
+            out._run_sync(out._apersist_metadata())
         out.update(td)
         return out
 
@@ -1798,6 +1848,7 @@ class TensorDictStore(TensorDictBase):
         prefix: str = "tensordict",
         td_id: str,
         device=None,
+        tensorclass_cls: type | str | None = None,
         **kwargs,
     ) -> TensorDictStore:
         """Connect to an existing TensorDictStore on a remote server.
@@ -1809,6 +1860,11 @@ class TensorDictStore(TensorDictBase):
 
         Batch size and device are read from the metadata already persisted
         in the store by the original writer.
+
+        If the original writer was a TensorClass instance, the class path
+        is stored automatically. On retrieval, the TensorClass is
+        reconstructed by importing the class. You can also pass
+        ``tensorclass_cls`` explicitly to override or skip the auto-import.
 
         Keyword Args:
             backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
@@ -1822,10 +1878,17 @@ class TensorDictStore(TensorDictBase):
                 ``td._td_id``.
             device (torch.device, optional): Device override for retrieved
                 tensors. If ``None``, uses the device stored in the server.
+            tensorclass_cls (type | str | None): TensorClass to wrap the
+                result with.  If a class, used directly via
+                ``cls._from_tensordict``.  If a string, interpreted as a
+                fully-qualified class path (``"module.ClassName"``) and
+                imported.  If ``None`` (default), the class path stored in
+                the server (if any) is used automatically.
             **kwargs: Extra connection kwargs.
 
         Returns:
-            A TensorDictStore connected to the existing data.
+            A TensorDictStore (or TensorClass wrapping one) connected to the
+            existing data.
 
         Examples:
             On node A (writer)::
@@ -1859,14 +1922,16 @@ class TensorDictStore(TensorDictBase):
         async def _read_meta():
             batch_size_key = f"{prefix}:{{{td_id}}}:__batch_size__"
             device_key = f"{prefix}:{{{td_id}}}:__device__"
+            tc_key = f"{prefix}:{{{td_id}}}:__tensorclass__"
             pipe = client.pipeline()
             pipe.get(batch_size_key)
             pipe.get(device_key)
-            raw_bs, raw_dev = await pipe.execute()
+            pipe.get(tc_key)
+            raw_bs, raw_dev, raw_tc = await pipe.execute()
             await client.aclose()
-            return raw_bs, raw_dev
+            return raw_bs, raw_dev, raw_tc
 
-        raw_bs, raw_dev = loop.run_until_complete(_read_meta())
+        raw_bs, raw_dev, raw_tc = loop.run_until_complete(_read_meta())
         loop.close()
 
         if raw_bs is None:
@@ -1880,7 +1945,7 @@ class TensorDictStore(TensorDictBase):
             dev_str = raw_dev.decode() if isinstance(raw_dev, bytes) else raw_dev
             device = torch.device(dev_str) if dev_str else None
 
-        return cls(
+        store = cls(
             backend=backend,
             host=host,
             port=port,
@@ -1892,6 +1957,13 @@ class TensorDictStore(TensorDictBase):
             td_id=td_id,
             **kwargs,
         )
+
+        # Resolve TensorClass wrapping
+        tc_type = _resolve_tensorclass(tensorclass_cls, raw_tc)
+        if tc_type is not None:
+            store._tensorclass_cls = f"{tc_type.__module__}.{tc_type.__qualname__}"
+            return tc_type._from_tensordict(store)
+        return store
 
     from_redis = from_store
 
@@ -2027,6 +2099,7 @@ class TensorDictStore(TensorDictBase):
             "_is_locked": self._is_locked,
             "_td_dim_names": self._td_dim_names,
             "_cache_metadata": self._cache_metadata,
+            "_tensorclass_cls": self._tensorclass_cls,
         }
         return state
 
@@ -2045,6 +2118,7 @@ class TensorDictStore(TensorDictBase):
         self._device = state["_device"]
         self._redis_kwargs = state["_redis_kwargs"]
         self._td_dim_names = state["_td_dim_names"]
+        self._tensorclass_cls = state.get("_tensorclass_cls")
 
         self._locked_tensordicts = []
         self._lock_id = set()
