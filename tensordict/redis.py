@@ -2282,6 +2282,530 @@ _register_tensor_class(RedisTensorDict)
 
 
 # ---------------------------------------------------------------------------
+# _RedisStackElementView — write-through view for a single stack element
+# ---------------------------------------------------------------------------
+
+
+class _RedisStackElementView(TensorDictBase):
+    """Write-through view of one element in a :class:`RedisLazyStackedTensorDict`.
+
+    Returned by ``redis_lazy_stack[int]``.  All reads and writes go through
+    the parent's Redis connection so that mutations propagate.  This class is
+    private — users interact with it via the normal ``TensorDictBase`` API.
+    """
+
+    _td_dim_names = None
+
+    def __init__(self, parent, element_idx: int):
+        self._parent = parent
+        self._element_idx = element_idx % parent._count
+
+        self._locked_tensordicts = []
+        self._lock_id = set()
+        self._is_shared = False
+        self._is_memmap = False
+
+        self._batch_size = parent._inner_batch_size
+        self._device = parent._device
+
+    # ---- helpers that delegate to the parent ----
+
+    def _run_sync(self, coro):
+        return self._parent._run_sync(coro)
+
+    def _get_all_keys(self) -> set[str]:
+        return self._parent._get_all_keys()
+
+    # ---- TensorDictBase interface ----
+
+    @property
+    def batch_size(self) -> torch.Size:
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value):
+        self._batch_size = torch.Size(value)
+
+    @property
+    def device(self) -> torch.device | None:
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        self._device = torch.device(value) if value is not None else None
+
+    _erase_names = TensorDict._erase_names
+    _has_names = TensorDict._has_names
+    _set_names = TensorDict._set_names
+    names = TensorDict.names
+
+    def _rename_subtds(self, names):
+        pass
+
+    # ---- reads ----
+
+    def _get_str(self, key, default=NO_DEFAULT, **kwargs):
+        all_keys = self._get_all_keys()
+        key_path = key
+
+        # Nested prefix
+        prefix_check = key_path + _KEY_SEP
+        nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
+        if nested_keys:
+            result = self._run_sync(
+                self._parent._abatch_get_element_keys(
+                    self._element_idx, nested_keys
+                )
+            )
+            source: dict = {}
+            for kp, tensor in result.items():
+                rel = kp[len(prefix_check) :]
+                parts = rel.split(_KEY_SEP)
+                d = source
+                for part in parts[:-1]:
+                    d = d.setdefault(part, {})
+                d[parts[-1]] = tensor
+            return TensorDict(
+                source, batch_size=self._batch_size, device=self._device
+            )
+
+        if key_path in all_keys:
+            result = self._run_sync(
+                self._parent._abatch_get_element_keys(
+                    self._element_idx, [key_path]
+                )
+            )
+            t = result.get(key_path)
+            if t is not None:
+                return t
+
+        if default is not NO_DEFAULT:
+            return default
+        raise KeyError(f"key {key} not found in {type(self).__name__}")
+
+    _get_tuple = TensorDict._get_tuple
+
+    def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
+        tensor = self._get_str(key, default=default, **kwargs)
+        if tensor is default:
+            return default
+        return tensor[idx]
+
+    def _get_at_tuple(self, key, idx, default=NO_DEFAULT, **kwargs):
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
+            return self._get_at_str(key[0], idx, default=default, **kwargs)
+        first = self._get_str(key[0], default, **kwargs)
+        if first is default:
+            return default
+        return first._get_at_tuple(key[1:], idx, default=default, **kwargs)
+
+    # ---- writes ----
+
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+        non_blocking: bool = False,
+    ):
+        if not validated:
+            value = self._validate_value(value, check_shape=True)
+        if self.is_locked and not ignore_lock and not inplace:
+            raise RuntimeError(_LOCK_ERROR)
+
+        if is_tensor_collection(value):
+            for sub_key in value.keys(include_nested=True, leaves_only=True):
+                sub_tuple = _unravel_key_to_tuple(sub_key)
+                full_kp = key + _KEY_SEP + _KEY_SEP.join(sub_tuple)
+                self._run_sync(
+                    self._parent._aset_element_key(
+                        self._element_idx, full_kp, value.get(sub_key)
+                    )
+                )
+            return self
+
+        if isinstance(value, torch.Tensor):
+            self._run_sync(
+                self._parent._aset_element_key(self._element_idx, key, value)
+            )
+            return self
+
+        try:
+            value = torch.as_tensor(value)
+            self._run_sync(
+                self._parent._aset_element_key(self._element_idx, key, value)
+            )
+        except (ValueError, TypeError):
+            raise TypeError(
+                f"{type(self).__name__} only supports tensor values, "
+                f"got {type(value)}"
+            )
+        return self
+
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking):
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
+            return self._set_str(
+                key[0],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
+        key_path = _KEY_SEP.join(key)
+        if not validated:
+            value = self._validate_value(value, check_shape=True)
+        if self.is_locked and not inplace:
+            raise RuntimeError(_LOCK_ERROR)
+        if isinstance(value, torch.Tensor):
+            self._run_sync(
+                self._parent._aset_element_key(
+                    self._element_idx, key_path, value
+                )
+            )
+        elif is_tensor_collection(value):
+            for sub_key in value.keys(include_nested=True, leaves_only=True):
+                sub_tuple = _unravel_key_to_tuple(sub_key)
+                full_kp = key_path + _KEY_SEP + _KEY_SEP.join(sub_tuple)
+                self._run_sync(
+                    self._parent._aset_element_key(
+                        self._element_idx, full_kp, value.get(sub_key)
+                    )
+                )
+        else:
+            self._run_sync(
+                self._parent._aset_element_key(
+                    self._element_idx, key_path, torch.as_tensor(value)
+                )
+            )
+        return self
+
+    def __setitem__(self, index, value):
+        index_unravel = _unravel_key_to_tuple(index)
+        if index_unravel:
+            return self.set(index_unravel, value, inplace=True)
+
+        if not isinstance(value, TensorDictBase):
+            value = TensorDict.from_dict(value, batch_size=[])
+
+        for key in value.keys(include_nested=True, leaves_only=True):
+            key_tuple = _unravel_key_to_tuple(key)
+            key_path = _KEY_SEP.join(key_tuple)
+            existing = self._get_str(key_tuple[0]) if len(key_tuple) == 1 else self.get(key)
+            existing[index] = value.get(key)
+            self._run_sync(
+                self._parent._aset_element_key(
+                    self._element_idx, key_path, existing
+                )
+            )
+
+    def _index_tensordict(self, index):
+        return self.to_tensordict()[index]
+
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking):
+        # Read full element tensor, patch locally, write back
+        tensor = self._get_str(key)
+        tensor[idx] = value
+        self._run_sync(
+            self._parent._aset_element_key(self._element_idx, key, tensor)
+        )
+        return self
+
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
+            return self._set_at_str(
+                key[0], value, idx, validated=validated, non_blocking=non_blocking
+            )
+        key_path = _KEY_SEP.join(key)
+        tensor = self._get_str(key[0])
+        if is_tensor_collection(tensor):
+            tensor._set_at_tuple(
+                key[1:], value, idx, validated=validated, non_blocking=non_blocking
+            )
+            return self
+        tensor[idx] = value
+        self._run_sync(
+            self._parent._aset_element_key(self._element_idx, key_path, tensor)
+        )
+        return self
+
+    def _convert_inplace(self, inplace, key):
+        if inplace is not False:
+            all_keys = self._get_all_keys()
+            has_key = key in all_keys or any(
+                k.startswith(key + _KEY_SEP) for k in all_keys
+            )
+            if inplace is True and not has_key:
+                raise KeyError(
+                    _KEY_ERROR.format(
+                        key, type(self).__name__, sorted(self.keys())
+                    )
+                )
+            inplace = has_key
+        return inplace
+
+    # ---- keys ----
+
+    def keys(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
+        *,
+        sort: bool = False,
+    ) -> _RedisLazyStackedKeysView:
+        return _RedisLazyStackedKeysView(
+            tensordict=self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
+            sort=sort,
+        )
+
+    @lock_blocked
+    def del_(self, key: NestedKey) -> _RedisStackElementView:
+        raise RuntimeError(
+            "Cannot delete keys from a stack element view. "
+            "Delete from the parent RedisLazyStackedTensorDict instead."
+        )
+
+    def rename_key_(self, old_key, new_key, safe=False):
+        raise RuntimeError(
+            "Cannot rename keys on a stack element view. "
+            "Rename on the parent RedisLazyStackedTensorDict instead."
+        )
+
+    def entry_class(self, key: NestedKey) -> type:
+        return self._parent.entry_class(key)
+
+    # ---- locking ----
+
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
+        self._is_locked = True
+
+    @erase_cache
+    def _propagate_unlock(self):
+        self._is_locked = False
+        self._is_shared = False
+        self._is_memmap = False
+        return []
+
+    # ---- materialization ----
+
+    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
+        result_map = self._run_sync(
+            self._parent._abatch_get_element(self._element_idx)
+        )
+        source: dict = {}
+        for kp, tensor in result_map.items():
+            parts = kp.split(_KEY_SEP)
+            d = source
+            for part in parts[:-1]:
+                d = d.setdefault(part, {})
+            d[parts[-1]] = tensor
+        return TensorDict(
+            source, batch_size=self._batch_size, device=self._device
+        )
+
+    def to_local(self) -> TensorDict:
+        return self.to_tensordict()
+
+    def contiguous(self) -> TensorDict:
+        return self.to_tensordict()
+
+    def is_contiguous(self) -> bool:
+        return False
+
+    def detach_(self) -> Self:
+        return self
+
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        raise RuntimeError(
+            "Cannot popitem from a stack element view."
+        )
+
+    def _change_batch_size(self, new_size: torch.Size) -> None:
+        self._batch_size = new_size
+
+    def zero_(self) -> Self:
+        for key in self.keys():
+            self.fill_(key, 0)
+        return self
+
+    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
+        existing = self.get(key)
+        if is_tensor_collection(existing):
+            for subkey in existing.keys():
+                existing.fill_(subkey, value)
+        else:
+            existing = existing.fill_(value)
+            self.set_(key, existing)
+        return self
+
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
+        return TensorDict(
+            {},
+            device=self.device if device is NO_DEFAULT else device,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            names=self.names if names is None and self._has_names() else names,
+        )
+
+    def masked_fill(self, mask, value):
+        return self.to_tensordict().masked_fill(mask, value)
+
+    def masked_fill_(self, mask, value):
+        for key in self.keys(include_nested=True, leaves_only=True):
+            tensor = self.get(key)
+            tensor = tensor.masked_fill(mask, value)
+            self.set_(key, tensor)
+        return self
+
+    def masked_select(self, mask):
+        return self.to_tensordict().masked_select(mask)
+
+    def where(self, condition, other, *, out=None, pad=None, update_batch_size=False):
+        return self.to_tensordict().where(
+            condition=condition,
+            other=other,
+            out=out,
+            pad=pad,
+            update_batch_size=update_batch_size,
+        )
+
+    # ---- pickling: materialize, don't try to serialize the view ----
+
+    def __reduce__(self):
+        return (TensorDict, (), self.to_tensordict().__getstate__())
+
+    def __repr__(self):
+        keys_str = list(self.keys())
+        return (
+            f"_RedisStackElementView(\n"
+            f"    parent_td_id={self._parent._td_id!r},\n"
+            f"    element_idx={self._element_idx},\n"
+            f"    keys={keys_str},\n"
+            f"    batch_size={self.batch_size},\n"
+            f"    device={self.device})"
+        )
+
+    # ---- not-supported stubs (same as parent) ----
+
+    @classmethod
+    def from_dict(cls, *args, **kwargs):
+        raise NotImplementedError(f"{cls.__name__} cannot be created from a dict.")
+
+    from_dict_instance = TensorDict.from_dict_instance
+
+    __eq__ = TensorDict.__eq__
+    __ne__ = TensorDict.__ne__
+    __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
+
+    _apply_nest = TensorDict._apply_nest
+    _cast_reduction = TensorDict._cast_reduction
+    _check_device = TensorDict._check_device
+    _check_is_shared = TensorDict._check_is_shared
+    _convert_to_tensordict = TensorDict._convert_to_tensordict
+    _get_names_idx = TensorDict._get_names_idx
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
+    _to_module = TensorDict._to_module
+    _unbind = TensorDict._unbind
+    all = TensorDict.all
+    any = TensorDict.any
+    expand = TensorDict.expand
+    _repeat = TensorDict._repeat
+    repeat_interleave = TensorDict.repeat_interleave
+    reshape = TensorDict.reshape
+    split = TensorDict.split
+
+    def _clone(self, recurse=True):
+        return self.to_tensordict()
+
+    def _view(self, *a, **kw):
+        raise RuntimeError(f"Cannot call `view` on a {type(self).__name__}.")
+
+    def _transpose(self, dim0, dim1):
+        raise RuntimeError(f"Cannot call `transpose` on a {type(self).__name__}.")
+
+    def _permute(self, *a, **kw):
+        raise RuntimeError(f"Cannot call `permute` on a {type(self).__name__}.")
+
+    def _squeeze(self, dim=None):
+        raise RuntimeError(f"Cannot call `squeeze` on a {type(self).__name__}.")
+
+    def _unsqueeze(self, dim):
+        raise RuntimeError(f"Cannot call `unsqueeze` on a {type(self).__name__}.")
+
+    def chunk(self, chunks, dim=0):
+        return self.to_tensordict().chunk(chunks, dim)
+
+    def share_memory_(self):
+        raise NotImplementedError(f"Cannot call share_memory_ on a {type(self).__name__}.")
+
+    def _memmap_(self, **kw):
+        raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
+
+    def make_memmap(self, key, shape, *, dtype=None, robust_key=None):
+        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
+
+    def make_memmap_from_storage(self, key, storage, shape, *, dtype=None, robust_key=None):
+        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
+
+    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=None):
+        raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
+
+    def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
+        raise RuntimeError(f"Cannot call memmap_ on a {type(self).__name__}.")
+
+    def pin_memory(self, *a, **kw):
+        raise RuntimeError(f"Cannot pin memory of a {type(self).__name__}.")
+
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        raise RuntimeError(f"{type(self).__name__} cannot be used with vmap.")
+
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim): ...
+
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim): ...
+
+    def _select(self, *keys, inplace=False, strict=True, set_shared=True):
+        raise NotImplementedError(f"Cannot call select on a {type(self).__name__}.")
+
+    def _exclude(self, *keys, inplace=False, set_shared=True):
+        raise NotImplementedError(f"Cannot call exclude on a {type(self).__name__}.")
+
+    @_as_context_manager()
+    def flatten_keys(self, separator=".", inplace=False):
+        return self.to_tensordict().flatten_keys(separator=separator)
+
+    @_as_context_manager()
+    def unflatten_keys(self, separator=".", inplace=False):
+        return self.to_tensordict().unflatten_keys(separator=separator)
+
+    _load_memmap = TensorDict._load_memmap
+
+    def _set_non_tensor(self, key, value):
+        raise NotImplementedError(
+            f"set_non_tensor is not compatible with {type(self).__name__}."
+        )
+
+    def _stack_onto_(self, list_item, dim):
+        raise RuntimeError(f"Cannot call _stack_onto_ on a {type(self).__name__}.")
+
+
+# ---------------------------------------------------------------------------
 # RedisLazyStackedTensorDict — lazy-stack storage in Redis
 # ---------------------------------------------------------------------------
 
@@ -2727,14 +3251,15 @@ class RedisLazyStackedTensorDict(TensorDictBase):
 
         results = await pipe.execute()
 
-        # Second pass for heterogeneous keys that needed offset lookup
+        # Second pass for heterogeneous keys that needed offset lookup.
+        # Reuse raw_metas from the first pipeline (no extra round-trip).
         hetero_kps: list[tuple[int, str, int, int, list[int]]] = []
         for ri, (kp, _elem_shape, _dtype, is_homo) in enumerate(key_info):
             if not is_homo:
                 off_data = results[ri]
                 start, end = struct.unpack("<2q", off_data)
-                raw_meta = _decode_meta(await self._client.hgetall(self._meta_key(kp)))
-                shapes = json.loads(raw_meta["shapes"])
+                meta = _decode_meta(raw_metas[ri])
+                shapes = json.loads(meta["shapes"])
                 hetero_kps.append((ri, kp, start, end, shapes[pos]))
 
         if hetero_kps:
@@ -2756,6 +3281,152 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             out[kp] = tensor
 
         return out
+
+    async def _abatch_get_element_keys(
+        self, element_idx: int, key_paths: list[str]
+    ) -> dict[str, torch.Tensor]:
+        """Pipelined fetch of *specific* keys for a single stack element."""
+        if not key_paths:
+            return {}
+
+        pos = element_idx % self._count
+
+        # Fetch metadata
+        pipe = self._client.pipeline()
+        for kp in key_paths:
+            pipe.hgetall(self._meta_key(kp))
+        raw_metas = await pipe.execute()
+
+        # Prepare data fetches
+        pipe = self._client.pipeline()
+        key_info: list[tuple[str, list[int], torch.dtype, bool]] = []
+
+        for kp, raw_meta in zip(key_paths, raw_metas):
+            meta = _decode_meta(raw_meta)
+            dtype = _str_to_dtype(meta["dtype"])
+            homogeneous = self._is_key_homogeneous(meta)
+
+            if homogeneous:
+                full_shape = json.loads(meta["shape"])
+                elem_shape = full_shape[1:]
+                row_bytes = self._row_bytes(elem_shape, dtype)
+                offset = pos * row_bytes
+                pipe.getrange(self._data_key(kp), offset, offset + row_bytes - 1)
+                key_info.append((kp, elem_shape, dtype, True))
+            else:
+                pipe.getrange(self._idx_key(kp), pos * 8, (pos + 2) * 8 - 1)
+                key_info.append((kp, [], dtype, False))
+
+        results = await pipe.execute()
+
+        # Second pass for heterogeneous keys (reuse raw_metas, no extra fetch)
+        hetero_kps: list[tuple[int, str, int, int, list[int]]] = []
+        for ri, (kp, _elem_shape, _dtype, is_homo) in enumerate(key_info):
+            if not is_homo:
+                off_data = results[ri]
+                _start, _end = struct.unpack("<2q", off_data)
+                meta = _decode_meta(raw_metas[ri])
+                shapes = json.loads(meta["shapes"])
+                hetero_kps.append((ri, kp, _start, _end, shapes[pos]))
+
+        if hetero_kps:
+            pipe = self._client.pipeline()
+            for _, kp, _start, _end, _ in hetero_kps:
+                pipe.getrange(self._data_key(kp), _start, _end - 1)
+            hetero_data = await pipe.execute()
+            for (ri, kp, _start, _end, shape), data in zip(hetero_kps, hetero_data):
+                results[ri] = data
+                key_info[ri] = (kp, shape, key_info[ri][2], True)
+
+        out: dict[str, torch.Tensor] = {}
+        for ri, (kp, elem_shape, dtype, _) in enumerate(key_info):
+            data = results[ri]
+            tensor = _bytes_to_tensor(data, elem_shape, dtype)
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            out[kp] = tensor
+
+        return out
+
+    async def _aset_element_key(
+        self, element_idx: int, key_path: str, value: torch.Tensor
+    ):
+        """Write a single key for one stack element via SETRANGE."""
+        pos = element_idx % self._count
+        raw_meta = _decode_meta(
+            await self._client.hgetall(self._meta_key(key_path))
+        )
+
+        # Key doesn't exist yet — need to register and upload
+        if not raw_meta:
+            await self._client.sadd(self._keys_registry_key, key_path)
+            # Create as homogeneous with this single element
+            value = value.contiguous().cpu()
+            raw_bytes = _tensor_to_bytes(value)
+            elem_shape = list(value.shape)
+            full_shape = [self._count] + elem_shape
+            row_bytes = len(raw_bytes)
+
+            pipe = self._client.pipeline()
+            # Write the element at the right offset (zero-fill for other elements)
+            pipe.setrange(self._data_key(key_path), pos * row_bytes, raw_bytes)
+            # Ensure the full blob is allocated
+            pipe.setrange(
+                self._data_key(key_path),
+                self._count * row_bytes - 1,
+                b"\x00",
+            )
+            pipe.hset(
+                self._meta_key(key_path),
+                mapping={
+                    "shape": json.dumps(full_shape),
+                    "dtype": str(value.dtype),
+                    "homogeneous": "1",
+                },
+            )
+            await pipe.execute()
+            if self._meta_cache is not None:
+                self._meta_cache[key_path] = (full_shape, value.dtype)
+            return
+
+        dtype = _str_to_dtype(raw_meta["dtype"])
+        homogeneous = self._is_key_homogeneous(raw_meta)
+
+        value = value.contiguous().cpu()
+        raw_bytes = _tensor_to_bytes(value)
+
+        if homogeneous:
+            full_shape = json.loads(raw_meta["shape"])
+            elem_shape = full_shape[1:]
+            row_bytes = self._row_bytes(elem_shape, dtype)
+            if len(raw_bytes) != row_bytes:
+                raise ValueError(
+                    f"Shape mismatch for homogeneous key {key_path!r}: "
+                    f"expected {row_bytes} bytes (shape {elem_shape}), "
+                    f"got {len(raw_bytes)} bytes (shape {list(value.shape)}). "
+                    f"To change the shape of a homogeneous key, reassign the "
+                    f"full stacked tensor via the parent."
+                )
+            offset = pos * row_bytes
+            await self._client.setrange(
+                self._data_key(key_path), offset, raw_bytes
+            )
+        else:
+            off_data = await self._client.getrange(
+                self._idx_key(key_path), pos * 8, (pos + 2) * 8 - 1
+            )
+            start, end = struct.unpack("<2q", off_data)
+            if len(raw_bytes) != end - start:
+                raise ValueError(
+                    f"Size mismatch for heterogeneous key {key_path!r} "
+                    f"element {pos}: expected {end - start} bytes, "
+                    f"got {len(raw_bytes)} bytes. "
+                    f"Shape changes on individual elements of a heterogeneous "
+                    f"key are not supported."
+                )
+            await self._client.setrange(
+                self._data_key(key_path), start, raw_bytes
+            )
 
     async def _abatch_get_at(
         self, key_paths: list[str], idx
@@ -2834,12 +3505,31 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         all_keys = sorted(await self._aget_all_keys())
         pos = element_idx % self._count
 
-        pipe = self._client.pipeline()
+        # Pipeline: fetch all metadata + offset tables in one round-trip
+        meta_pipe = self._client.pipeline()
         for kp in all_keys:
-            meta = _decode_meta(await self._client.hgetall(self._meta_key(kp)))
+            meta_pipe.hgetall(self._meta_key(kp))
+        raw_metas = await meta_pipe.execute()
+
+        # Classify keys and prepare offset fetches for heterogeneous keys
+        parsed_metas: list[tuple[str, dict, torch.dtype, bool]] = []
+        offset_pipe = self._client.pipeline()
+        hetero_indices: list[int] = []
+        for i, (kp, raw_meta) in enumerate(zip(all_keys, raw_metas)):
+            meta = _decode_meta(raw_meta)
             dtype = _str_to_dtype(meta["dtype"])
             homogeneous = self._is_key_homogeneous(meta)
+            parsed_metas.append((kp, meta, dtype, homogeneous))
+            if not homogeneous:
+                offset_pipe.getrange(self._idx_key(kp), pos * 8, (pos + 2) * 8 - 1)
+                hetero_indices.append(i)
 
+        hetero_offsets = await offset_pipe.execute() if hetero_indices else []
+
+        # Build the write pipeline
+        write_pipe = self._client.pipeline()
+        hi = 0
+        for kp, meta, dtype, homogeneous in parsed_metas:
             key_parts = kp.split(_KEY_SEP)
             raw_key = tuple(key_parts) if len(key_parts) > 1 else key_parts[0]
             value = value_td.get(raw_key)
@@ -2849,23 +3539,23 @@ class RedisLazyStackedTensorDict(TensorDictBase):
                 elem_shape = full_shape[1:]
                 row_bytes = self._row_bytes(elem_shape, dtype)
                 offset = pos * row_bytes
-                pipe.setrange(self._data_key(kp), offset, _tensor_to_bytes(value))
-            else:
-                # For heterogeneous: read current offsets, write in-place
-                # (only works if the new element has the same size)
-                off_data = await self._client.getrange(
-                    self._idx_key(kp), pos * 8, (pos + 2) * 8 - 1
+                write_pipe.setrange(
+                    self._data_key(kp), offset, _tensor_to_bytes(value)
                 )
+            else:
+                off_data = hetero_offsets[hi]
+                hi += 1
                 start, end = struct.unpack("<2q", off_data)
                 new_bytes = _tensor_to_bytes(value)
                 if len(new_bytes) != end - start:
                     raise ValueError(
                         f"Cannot write element {element_idx} for key {kp!r}: "
-                        f"new size {len(new_bytes)} != existing size {end - start}. "
-                        f"Resizing heterogeneous elements in-place is not supported."
+                        f"new size {len(new_bytes)} != existing size "
+                        f"{end - start}. Resizing heterogeneous elements "
+                        f"in-place is not supported."
                     )
-                pipe.setrange(self._data_key(kp), start, new_bytes)
-        await pipe.execute()
+                write_pipe.setrange(self._data_key(kp), start, new_bytes)
+        await write_pipe.execute()
 
     async def _abatch_set_at(self, items: dict[str, tuple[torch.Tensor, object]]):
         """Batch-write indexed slices using SETRANGE / Lua."""
@@ -3038,18 +3728,9 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         if index_unravel:
             return self._get_tuple(index_unravel, NO_DEFAULT)
 
-        # Integer index on the stack dim: return element as TensorDict
+        # Integer index on the stack dim: return write-through view
         if isinstance(index, int) and self._stack_dim == 0:
-            result_map = self._run_sync(self._abatch_get_element(index))
-            inner_bs = self._inner_batch_size
-            source: dict = {}
-            for kp, tensor in result_map.items():
-                parts = kp.split(_KEY_SEP)
-                d = source
-                for part in parts[:-1]:
-                    d = d.setdefault(part, {})
-                d[parts[-1]] = tensor
-            return TensorDict(source, batch_size=inner_bs, device=self._device)
+            return _RedisStackElementView(self, index)
 
         # General indexing via _index_tensordict
         return self._index_tensordict(index)

@@ -10,6 +10,7 @@ import pickle
 import pytest
 import torch
 from tensordict import lazy_stack, TensorDict
+from tensordict.base import TensorDictBase
 from tensordict.redis import RedisLazyStackedTensorDict, RedisTensorDict
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
@@ -770,7 +771,7 @@ class TestRedisLazyStackedTensorDict:
     def test_getitem_int(self, redis_stack):
         redis_td, tds, lazy_td = redis_stack
         elem = redis_td[0]
-        assert isinstance(elem, TensorDict)
+        assert isinstance(elem, TensorDictBase)
         assert elem.batch_size == torch.Size([4])
         assert torch.allclose(elem["a"], tds[0]["a"])
         assert torch.allclose(elem["b"], tds[0]["b"])
@@ -814,7 +815,7 @@ class TestRedisLazyStackedTensorDict:
     def test_getitem_slice(self, redis_stack):
         redis_td, tds, lazy_td = redis_stack
         sub = redis_td[1:3]
-        assert isinstance(sub, TensorDict)
+        assert isinstance(sub, TensorDictBase)
         assert sub.batch_size == torch.Size([2, 4])
         assert torch.allclose(sub["a"][0], tds[1]["a"])
         assert torch.allclose(sub["a"][1], tds[2]["a"])
@@ -833,7 +834,7 @@ class TestRedisLazyStackedTensorDict:
         redis_td, tds, lazy_td = redis_stack
         idx = torch.tensor([0, 3, 4])
         sub = redis_td[idx]
-        assert isinstance(sub, TensorDict)
+        assert isinstance(sub, TensorDictBase)
         assert sub.batch_size == torch.Size([3, 4])
         assert torch.allclose(sub["a"][0], tds[0]["a"])
         assert torch.allclose(sub["a"][1], tds[3]["a"])
@@ -975,6 +976,70 @@ class TestRedisLazyStackedTensorDict:
             elem = redis_td[0]
             assert torch.allclose(elem["obs"], tds[0]["obs"])
             assert torch.allclose(elem[("nested", "x")], tds[0]["nested", "x"])
+        finally:
+            redis_td.clear_redis()
+            redis_td.close()
+
+
+    # ---- Write-through view tests ----
+
+    def test_view_set_propagates(self, redis_stack):
+        """rltd[0].set('a', val) should propagate to Redis."""
+        redis_td, tds, lazy_td = redis_stack
+        new_a = torch.ones(4, 3) * 42.0
+        view = redis_td[0]
+        view.set("a", new_a, inplace=True)
+        # Re-read: should see the change
+        reread = redis_td[0]["a"]
+        assert torch.allclose(reread, new_a)
+        # Other elements unaffected
+        assert torch.allclose(redis_td[1]["a"], tds[1]["a"])
+
+    def test_view_setitem_key_propagates(self, redis_stack):
+        """rltd[0]['a'] = val should propagate to Redis."""
+        redis_td, tds, lazy_td = redis_stack
+        new_a = torch.ones(4, 3) * 99.0
+        view = redis_td[0]
+        view["a"] = new_a
+        reread = redis_td[0]["a"]
+        assert torch.allclose(reread, new_a)
+
+    def test_view_shape_change_raises(self, redis_stack):
+        """Changing element shape through the view should raise."""
+        redis_td, tds, lazy_td = redis_stack
+        view = redis_td[0]
+        with pytest.raises((ValueError, RuntimeError)):
+            view.set("a", torch.randn(10, 10), inplace=True)
+
+    def test_view_to_tensordict(self, redis_stack):
+        """view.to_tensordict() should return a regular TensorDict."""
+        redis_td, tds, lazy_td = redis_stack
+        view = redis_td[0]
+        local = view.to_tensordict()
+        assert isinstance(local, TensorDict)
+        assert local.batch_size == torch.Size([4])
+        assert torch.allclose(local["a"], tds[0]["a"])
+
+    def test_view_nested_set(self):
+        """Write-through on nested keys."""
+        tds = [
+            TensorDict(
+                {
+                    "obs": torch.randn(3),
+                    "nested": TensorDict({"x": torch.randn(3, 2)}, [3]),
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        lazy_td = lazy_stack(tds)
+        redis_td = RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, db=15)
+        try:
+            view = redis_td[0]
+            new_x = torch.ones(3, 2) * 7.0
+            view.set(("nested", "x"), new_x, inplace=True)
+            reread = redis_td[0][("nested", "x")]
+            assert torch.allclose(reread, new_x)
         finally:
             redis_td.clear_redis()
             redis_td.close()
