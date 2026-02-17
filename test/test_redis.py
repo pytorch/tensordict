@@ -980,7 +980,6 @@ class TestRedisLazyStackedTensorDict:
             redis_td.clear_redis()
             redis_td.close()
 
-
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, redis_stack):
