@@ -222,6 +222,23 @@ print(json.dumps(out))
         assert "dist_version" in info
 
 
+def test_pybind11_version_pin():
+    """Ensure pyproject.toml pins pybind11>=2.13 for Python 3.13 compatibility."""
+    import tomllib
+
+    pyproject = _ROOT / "pyproject.toml"
+    with open(pyproject, "rb") as f:
+        config = tomllib.load(f)
+
+    build_requires = config["build-system"]["requires"]
+    pybind_reqs = [r for r in build_requires if r.startswith("pybind11")]
+    assert pybind_reqs, "pybind11 not found in build-system.requires"
+    assert any(">=2.13" in r for r in pybind_reqs), (
+        f"pybind11 build requirement must pin >=2.13 for Python 3.13 support, "
+        f"got: {pybind_reqs}"
+    )
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
