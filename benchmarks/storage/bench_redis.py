@@ -59,7 +59,7 @@ def _make_local_td():
 
 
 def _make_redis_td():
-    from tensordict.redis import RedisTensorDict
+    from tensordict.store import TensorDictStore as RedisTensorDict
 
     td = RedisTensorDict(batch_size=[N], db=14)
     for i in range(N_KEYS):
