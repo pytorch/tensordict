@@ -14447,8 +14447,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             **kwargs,
         )
 
-    to_redis = to_store
-
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> Self:  # noqa: D417

@@ -1415,18 +1415,6 @@ class TensorClass:
         device: Incomplete | None = None,
         **kwargs,
     ) -> Any: ...
-    def to_redis(
-        self,
-        *,
-        backend: str = "redis",
-        host: str = "localhost",
-        port: int = 6379,
-        db: int = 0,
-        unix_socket_path: str | None = None,
-        prefix: str = "tensordict",
-        device: Incomplete | None = None,
-        **kwargs,
-    ) -> Any: ...
     def empty(
         self,
         recurse: bool = False,
