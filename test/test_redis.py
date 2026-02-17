@@ -1156,6 +1156,151 @@ class TestBackendAndCompat:
             rltd.close()
 
 
+from tensordict import tensorclass
+
+
+@tensorclass
+class _MyData:
+    obs: torch.Tensor
+    reward: torch.Tensor
+
+
+@tensorclass
+class _MyDataWithNonTensor:
+    obs: torch.Tensor
+    label: str
+
+
+@pytest.mark.skipif(
+    not _redis_available(), reason="Redis server not running on localhost:6379"
+)
+class TestTensorClassStore:
+    """Tests for TensorClass round-trip through TensorDictStore."""
+
+    def test_from_tensordict_stores_class_path(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        try:
+            assert store._tensorclass_cls is not None
+            assert "_MyData" in store._tensorclass_cls
+            assert torch.allclose(store["obs"], tc.obs)
+            assert torch.allclose(store["reward"], tc.reward)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_to_store_returns_tensorclass(self):
+        """tc.to_store() returns a TensorClass wrapping a TensorDictStore."""
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        result = tc.to_store(db=15)
+        try:
+            assert type(result).__name__ == "_MyData"
+            assert isinstance(result._tensordict, TensorDictStore)
+            assert torch.allclose(result.obs, tc.obs)
+            assert torch.allclose(result.reward, tc.reward)
+        finally:
+            result._tensordict.clear_redis()
+            result._tensordict.close()
+
+    def test_from_store_auto_import(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        td_id = store._td_id
+        try:
+            restored = TensorDictStore.from_store(td_id=td_id, db=15)
+            assert type(restored).__name__ == "_MyData"
+            assert isinstance(restored._tensordict, TensorDictStore)
+            assert torch.allclose(restored.obs, tc.obs)
+            assert torch.allclose(restored.reward, tc.reward)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_from_store_explicit_cls(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        td_id = store._td_id
+        try:
+            restored = TensorDictStore.from_store(
+                td_id=td_id, db=15, tensorclass_cls=_MyData
+            )
+            assert type(restored).__name__ == "_MyData"
+            assert torch.allclose(restored.obs, tc.obs)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_from_store_explicit_cls_string(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        td_id = store._td_id
+        cls_path = f"{_MyData.__module__}.{_MyData.__qualname__}"
+        try:
+            restored = TensorDictStore.from_store(
+                td_id=td_id, db=15, tensorclass_cls=cls_path
+            )
+            assert type(restored).__name__ == "_MyData"
+            assert torch.allclose(restored.obs, tc.obs)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_from_store_no_tensorclass_returns_store(self):
+        td = TensorDict({"x": torch.randn(5, 3)}, batch_size=[5])
+        store = TensorDictStore.from_tensordict(td, db=15)
+        td_id = store._td_id
+        try:
+            restored = TensorDictStore.from_store(td_id=td_id, db=15)
+            assert type(restored) is TensorDictStore
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_tensorclass_attribute_access_through_store(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        td_id = store._td_id
+        try:
+            restored = TensorDictStore.from_store(td_id=td_id, db=15)
+            # Attribute access should work and fetch from Redis
+            assert restored.obs.shape == torch.Size([5, 3])
+            assert restored.reward.shape == torch.Size([5])
+            # Write through attribute
+            new_obs = torch.zeros(5, 3)
+            restored.obs = new_obs
+            assert torch.allclose(restored.obs, new_obs)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_tensorclass_non_tensor_fields(self):
+        tc = _MyDataWithNonTensor(obs=torch.randn(5, 3), label="hello", batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        td_id = store._td_id
+        try:
+            restored = TensorDictStore.from_store(td_id=td_id, db=15)
+            assert type(restored).__name__ == "_MyDataWithNonTensor"
+            assert torch.allclose(restored.obs, tc.obs)
+            assert restored.label == "hello"
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_pickle_tensorclass_store(self):
+        tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
+        store = TensorDictStore.from_tensordict(tc, db=15)
+        try:
+            assert store._tensorclass_cls is not None
+            data = pickle.dumps(store)
+            restored = pickle.loads(data)
+            assert restored._tensorclass_cls == store._tensorclass_cls
+            assert torch.allclose(restored["obs"], store["obs"])
+            restored.close()
+        finally:
+            store.clear_redis()
+            store.close()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
