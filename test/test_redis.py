@@ -11,7 +11,12 @@ import pytest
 import torch
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
-from tensordict.redis import RedisLazyStackedTensorDict, RedisTensorDict
+from tensordict.store import (
+    LazyStackedTensorDictStore,
+    LazyStackedTensorDictStore as RedisLazyStackedTensorDict,
+    TensorDictStore,
+    TensorDictStore as RedisTensorDict,
+)
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
 
@@ -331,7 +336,7 @@ class TestRedisTensorDict:
         """Test string representation."""
         redis_td["obs"] = torch.randn(10, 3)
         s = repr(redis_td)
-        assert "RedisTensorDict" in s
+        assert "TensorDictStore" in s
         assert "obs" in s
 
     def test_empty(self, redis_td):
@@ -466,7 +471,7 @@ class TestRedisTensorDict:
     def test_from_redis_not_found(self):
         """from_redis should raise KeyError for unknown td_id."""
 
-        with pytest.raises(KeyError, match="No RedisTensorDict"):
+        with pytest.raises(KeyError, match="No TensorDictStore"):
             RedisTensorDict.from_redis(td_id="nonexistent-uuid", db=15)
 
     def test_from_redis_with_device_override(self):
@@ -748,7 +753,7 @@ class TestRedisLazyStackedTensorDict:
     def test_repr(self, redis_stack):
         redis_td, _, _ = redis_stack
         r = repr(redis_td)
-        assert "RedisLazyStackedTensorDict" in r
+        assert "LazyStackedTensorDictStore" in r
         assert "count=5" in r
 
     # ---- to_redis() convenience ----
@@ -758,7 +763,7 @@ class TestRedisLazyStackedTensorDict:
         lazy_td = lazy_stack(tds)
         redis_td = lazy_td.to_redis(db=15)
         try:
-            assert isinstance(redis_td, RedisLazyStackedTensorDict)
+            assert isinstance(redis_td, LazyStackedTensorDictStore)
             assert redis_td.batch_size == torch.Size([4, 3])
             result = redis_td["x"]
             assert result.shape == torch.Size([4, 3, 2])
@@ -980,7 +985,6 @@ class TestRedisLazyStackedTensorDict:
             redis_td.clear_redis()
             redis_td.close()
 
-
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, redis_stack):
@@ -1043,6 +1047,113 @@ class TestRedisLazyStackedTensorDict:
         finally:
             redis_td.clear_redis()
             redis_td.close()
+
+
+@_skip_no_redis_pkg
+@_skip_no_redis_server
+class TestBackendAndCompat:
+    """Tests for backend parameter and backward-compat aliases."""
+
+    def test_backend_default(self):
+        td = TensorDictStore(batch_size=[5], db=15)
+        try:
+            assert td._backend == "redis"
+            assert "backend='redis'" in repr(td)
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_dragonfly(self):
+        # Dragonfly uses the same wire protocol, so this connects to Redis
+        # but records the backend name for documentation purposes.
+        td = TensorDictStore(backend="dragonfly", batch_size=[5], db=15)
+        try:
+            assert td._backend == "dragonfly"
+            assert "backend='dragonfly'" in repr(td)
+            td["x"] = torch.randn(5, 3)
+            assert torch.allclose(td["x"], td["x"])
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_from_tensordict(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = TensorDictStore.from_tensordict(local, backend="dragonfly", db=15)
+        try:
+            assert td._backend == "dragonfly"
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_to_store(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = local.to_store(backend="dragonfly", db=15)
+        try:
+            assert td._backend == "dragonfly"
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_to_redis_alias(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = local.to_redis(db=15)
+        try:
+            assert td._backend == "redis"
+            assert isinstance(td, TensorDictStore)
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backward_compat_import_redis(self):
+        """Old import path ``from tensordict.redis import RedisTensorDict``."""
+        from tensordict.redis import RedisTensorDict as OldName
+
+        assert OldName is TensorDictStore
+
+    def test_backward_compat_import_lazy(self):
+        """Old ``from tensordict.redis import RedisLazyStackedTensorDict``."""
+        from tensordict.redis import RedisLazyStackedTensorDict as OldLazy
+
+        assert OldLazy is LazyStackedTensorDictStore
+
+    def test_from_redis_alias(self):
+        """from_redis should still work as an alias of from_store."""
+        td = TensorDictStore(batch_size=[5], db=15)
+        td["x"] = torch.randn(5, 3)
+        td_id = td._td_id
+        try:
+            restored = TensorDictStore.from_redis(td_id=td_id, db=15)
+            assert torch.allclose(restored["x"], td["x"])
+            restored.close()
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_pickle_preserves_backend(self):
+        td = TensorDictStore(backend="dragonfly", batch_size=[5], db=15)
+        td["x"] = torch.randn(5, 3)
+        try:
+            data = pickle.dumps(td)
+            restored = pickle.loads(data)
+            assert restored._backend == "dragonfly"
+            assert torch.allclose(restored["x"], td["x"])
+            restored.close()
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_lazy_stack_backend(self):
+        tds = [TensorDict({"a": torch.randn(4)}, batch_size=[4]) for _ in range(3)]
+        ltd = lazy_stack(tds)
+        rltd = LazyStackedTensorDictStore.from_lazy_stack(
+            ltd, backend="dragonfly", db=15
+        )
+        try:
+            assert rltd._backend == "dragonfly"
+            assert "backend='dragonfly'" in repr(rltd)
+        finally:
+            rltd.clear_redis()
+            rltd.close()
 
 
 if __name__ == "__main__":

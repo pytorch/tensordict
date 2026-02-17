@@ -14387,9 +14387,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             out.names = self.names
         return out
 
-    def to_redis(
+    def to_store(
         self,
         *,
+        backend: str = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -14398,39 +14399,46 @@ class TensorDictBase(MutableMapping, TensorCollection):
         device=None,
         **kwargs,
     ) -> Any:
-        """Upload this TensorDict to a Redis server.
+        """Upload this TensorDict to a key-value store (Redis, Dragonfly, etc.).
 
-        Returns a :class:`~tensordict.redis.RedisTensorDict` (or
-        :class:`~tensordict.redis.RedisLazyStackedTensorDict` for heterogeneous
+        Returns a :class:`~tensordict.store.TensorDictStore` (or
+        :class:`~tensordict.store.LazyStackedTensorDictStore` for
         lazy stacks) backed by the uploaded data.
 
         For :class:`LazyStackedTensorDict` inputs, data is streamed in chunks
         to avoid materialising the full stack in memory.
 
         Keyword Args:
-            host (str): Redis hostname.  Defaults to ``"localhost"``.
-            port (int): Redis port.  Defaults to ``6379``.
-            db (int): Redis database number.  Defaults to ``0``.
+            backend (str): Store backend — ``"redis"`` (default),
+                ``"dragonfly"``, ``"keydb"``, or any Redis-wire-compatible
+                server name.
+            host (str): Server hostname.  Defaults to ``"localhost"``.
+            port (int): Server port.  Defaults to ``6379``.
+            db (int): Database number.  Defaults to ``0``.
             unix_socket_path (str, optional): Unix domain socket path.
-            prefix (str): Redis key namespace.  Defaults to ``"tensordict"``.
+            prefix (str): Key namespace.  Defaults to ``"tensordict"``.
             device (torch.device, optional): Device override for retrieved
                 tensors.  If ``None``, uses this TensorDict's device.
-            **kwargs: Extra Redis connection keyword arguments.
+            **kwargs: Extra connection keyword arguments.
 
         Returns:
-            A Redis-backed TensorDict instance.
+            A store-backed TensorDict instance.
 
         Examples:
             >>> from tensordict import TensorDict
             >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> redis_td = td.to_redis(host="localhost")
-            >>> redis_td["obs"].shape
+            >>> store_td = td.to_store(host="localhost")
+            >>> store_td["obs"].shape
             torch.Size([10, 84])
+            >>>
+            >>> # Using Dragonfly instead of Redis
+            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")
         """
-        from tensordict.redis import RedisTensorDict
+        from tensordict.store import TensorDictStore
 
-        return RedisTensorDict.from_tensordict(
+        return TensorDictStore.from_tensordict(
             self,
+            backend=backend,
             host=host,
             port=port,
             db=db,
@@ -14439,6 +14447,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             device=device,
             **kwargs,
         )
+
+    to_redis = to_store
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None

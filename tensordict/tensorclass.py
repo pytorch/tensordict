@@ -558,6 +558,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "to_padded_tensor",
     "to_pytree",
     "to_redis",
+    "to_store",
     "transpose",
     "trunc",
     "trunc_",

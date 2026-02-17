@@ -46,7 +46,12 @@ from tensordict.functional import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
-from tensordict.redis import RedisLazyStackedTensorDict, RedisTensorDict
+from tensordict.store import (
+    LazyStackedTensorDictStore,
+    LazyStackedTensorDictStore as RedisLazyStackedTensorDict,
+    TensorDictStore,
+    TensorDictStore as RedisTensorDict,
+)
 from tensordict.tensorclass import (
     from_dataclass,
     MetaData,
@@ -105,6 +110,8 @@ __all__ = [
     "TensorClass",
     "MemoryMappedTensor",
     "PersistentTensorDict",
+    "TensorDictStore",
+    "LazyStackedTensorDictStore",
     "RedisLazyStackedTensorDict",
     "RedisTensorDict",
     "NestedKey",
