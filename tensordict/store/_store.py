@@ -15,7 +15,7 @@ import struct
 import threading
 import uuid
 import weakref
-from typing import Any, Callable, Sequence, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
 from tensordict._td import (
@@ -44,6 +44,8 @@ from tensordict.utils import (
 )
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
+
+STORE_BACKENDS = Literal["redis", "dragonfly"]
 
 if TYPE_CHECKING:
     from typing import Self
@@ -438,7 +440,7 @@ class TensorDictStore(TensorDictBase):
     def __init__(
         self,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1651,7 +1653,7 @@ class TensorDictStore(TensorDictBase):
         cls,
         input_dict,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1711,7 +1713,7 @@ class TensorDictStore(TensorDictBase):
         cls,
         td: TensorDictBase,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1790,7 +1792,7 @@ class TensorDictStore(TensorDictBase):
     def from_store(
         cls,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -2921,7 +2923,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def __init__(
         self,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -4070,7 +4072,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         cls,
         lazy_td,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -4133,7 +4135,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def from_store(
         cls,
         *,
-        backend: str = "redis",
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
