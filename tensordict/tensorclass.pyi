@@ -26,7 +26,6 @@ from typing import (
 )
 
 import numpy as np
-
 import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
@@ -889,6 +888,7 @@ class TensorClass:
     ) -> Self: ...
     def set_non_tensor(self, key: NestedKey, value: Any) -> Self: ...
     def get_non_tensor(self, key: NestedKey, default=...) -> CompatibleType: ...
+    def is_non_tensor(self, key: NestedKey) -> bool: ...
     def filter_non_tensor_data(self) -> Self: ...
     def filter_empty_(self) -> Self: ...
     def set_at_(
@@ -1404,6 +1404,18 @@ class TensorClass:
     ) -> Self: ...
     def to_struct_array(self) -> np.ndarray: ...
     def to_h5(self, filename: str, **kwargs) -> Any: ...
+    def to_store(
+        self,
+        *,
+        backend: str = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device: Incomplete | None = None,
+        **kwargs,
+    ) -> Any: ...
     def empty(
         self,
         recurse: bool = False,
