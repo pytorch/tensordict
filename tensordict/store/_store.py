@@ -1967,8 +1967,6 @@ class TensorDictStore(TensorDictBase):
             return tc_type._from_tensordict(store)
         return store
 
-    from_redis = from_store
-
     from_dict_instance = TensorDict.from_dict_instance
 
     # ---- Cloning ----
@@ -4275,8 +4273,6 @@ class LazyStackedTensorDictStore(TensorDictBase):
             **kwargs,
         )
 
-    from_redis = from_store
-
     @classmethod
     def from_dict(
         cls,
@@ -4674,7 +4670,3 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
 
 _register_tensor_class(LazyStackedTensorDictStore)
-
-# Backward-compatible aliases (deprecated names from when the module was redis.py)
-RedisTensorDict = TensorDictStore
-RedisLazyStackedTensorDict = LazyStackedTensorDictStore
