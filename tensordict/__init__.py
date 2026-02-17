@@ -24,7 +24,6 @@ from tensordict._td import (
     TensorDict,
 )
 from tensordict._unbatched import UnbatchedTensor
-
 from tensordict.base import (
     _default_is_leaf as default_is_leaf,
     _is_leaf_nontensor as is_leaf_nontensor,
@@ -47,7 +46,12 @@ from tensordict.functional import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
-from tensordict.redis import RedisTensorDict
+from tensordict.store import (
+    LazyStackedTensorDictStore,
+    LazyStackedTensorDictStore as RedisLazyStackedTensorDict,
+    TensorDictStore,
+    TensorDictStore as RedisTensorDict,
+)
 from tensordict.tensorclass import (
     from_dataclass,
     MetaData,
@@ -106,6 +110,9 @@ __all__ = [
     "TensorClass",
     "MemoryMappedTensor",
     "PersistentTensorDict",
+    "TensorDictStore",
+    "LazyStackedTensorDictStore",
+    "RedisLazyStackedTensorDict",
     "RedisTensorDict",
     "NestedKey",
     # Factory functions

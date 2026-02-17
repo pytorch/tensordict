@@ -9,8 +9,14 @@ import pickle
 
 import pytest
 import torch
-from tensordict import TensorDict
-from tensordict.redis import RedisTensorDict
+from tensordict import lazy_stack, TensorDict
+from tensordict.base import TensorDictBase
+from tensordict.store import (
+    LazyStackedTensorDictStore,
+    LazyStackedTensorDictStore as RedisLazyStackedTensorDict,
+    TensorDictStore,
+    TensorDictStore as RedisTensorDict,
+)
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
 
@@ -330,7 +336,7 @@ class TestRedisTensorDict:
         """Test string representation."""
         redis_td["obs"] = torch.randn(10, 3)
         s = repr(redis_td)
-        assert "RedisTensorDict" in s
+        assert "TensorDictStore" in s
         assert "obs" in s
 
     def test_empty(self, redis_td):
@@ -465,7 +471,7 @@ class TestRedisTensorDict:
     def test_from_redis_not_found(self):
         """from_redis should raise KeyError for unknown td_id."""
 
-        with pytest.raises(KeyError, match="No RedisTensorDict"):
+        with pytest.raises(KeyError, match="No TensorDictStore"):
             RedisTensorDict.from_redis(td_id="nonexistent-uuid", db=15)
 
     def test_from_redis_with_device_override(self):
@@ -711,6 +717,443 @@ class TestRedisTensorDict:
         assert key_path in redis_td._meta_cache
         redis_td.del_("obs")
         assert key_path not in redis_td._meta_cache
+
+
+@_skip_no_redis_pkg
+@_skip_no_redis_server
+class TestRedisLazyStackedTensorDict:
+    """Tests for RedisLazyStackedTensorDict requiring a running Redis server."""
+
+    @pytest.fixture(autouse=True)
+    def redis_stack(self):
+        """Create a RedisLazyStackedTensorDict from a homogeneous lazy stack."""
+        tds = [
+            TensorDict({"a": torch.randn(4, 3), "b": torch.randn(4)}, batch_size=[4])
+            for _ in range(5)
+        ]
+        lazy_td = lazy_stack(tds)
+        redis_td = RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, db=15)
+        yield redis_td, tds, lazy_td
+        redis_td.clear_redis()
+        redis_td.close()
+
+    # ---- Construction ----
+
+    def test_from_lazy_stack_batch_size(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        assert redis_td.batch_size == torch.Size([5, 4])
+        assert redis_td._count == 5
+        assert redis_td._stack_dim == 0
+        assert redis_td._inner_batch_size == torch.Size([4])
+
+    def test_from_lazy_stack_keys(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        assert set(redis_td.keys()) == {"a", "b"}
+
+    def test_repr(self, redis_stack):
+        redis_td, _, _ = redis_stack
+        r = repr(redis_td)
+        assert "LazyStackedTensorDictStore" in r
+        assert "count=5" in r
+
+    # ---- to_redis() convenience ----
+
+    def test_to_redis_from_lazy_stack(self):
+        tds = [TensorDict({"x": torch.randn(3, 2)}, batch_size=[3]) for _ in range(4)]
+        lazy_td = lazy_stack(tds)
+        redis_td = lazy_td.to_redis(db=15)
+        try:
+            assert isinstance(redis_td, LazyStackedTensorDictStore)
+            assert redis_td.batch_size == torch.Size([4, 3])
+            result = redis_td["x"]
+            assert result.shape == torch.Size([4, 3, 2])
+        finally:
+            redis_td.clear_redis()
+            redis_td.close()
+
+    # ---- Read: td[int] ----
+
+    def test_getitem_int(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        elem = redis_td[0]
+        assert isinstance(elem, TensorDictBase)
+        assert elem.batch_size == torch.Size([4])
+        assert torch.allclose(elem["a"], tds[0]["a"])
+        assert torch.allclose(elem["b"], tds[0]["b"])
+
+    def test_getitem_int_last(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        elem = redis_td[4]
+        assert torch.allclose(elem["a"], tds[4]["a"])
+
+    def test_getitem_int_negative(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        elem = redis_td[-1]
+        assert torch.allclose(elem["a"], tds[4]["a"])
+
+    # ---- Read: td[key] ----
+
+    def test_getitem_key(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        full_a = redis_td["a"]
+        assert full_a.shape == torch.Size([5, 4, 3])
+        for i in range(5):
+            assert torch.allclose(full_a[i], tds[i]["a"])
+
+    def test_getitem_key_1d(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        full_b = redis_td["b"]
+        assert full_b.shape == torch.Size([5, 4])
+        for i in range(5):
+            assert torch.allclose(full_b[i], tds[i]["b"])
+
+    # ---- Read: td[int][key] ----
+
+    def test_getitem_int_then_key(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        val = redis_td[0]["a"]
+        assert val.shape == torch.Size([4, 3])
+        assert torch.allclose(val, tds[0]["a"])
+
+    # ---- Read: td[slice] ----
+
+    def test_getitem_slice(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        sub = redis_td[1:3]
+        assert isinstance(sub, TensorDictBase)
+        assert sub.batch_size == torch.Size([2, 4])
+        assert torch.allclose(sub["a"][0], tds[1]["a"])
+        assert torch.allclose(sub["a"][1], tds[2]["a"])
+
+    def test_getitem_slice_step(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        sub = redis_td[::2]
+        assert sub.batch_size == torch.Size([3, 4])
+        assert torch.allclose(sub["a"][0], tds[0]["a"])
+        assert torch.allclose(sub["a"][1], tds[2]["a"])
+        assert torch.allclose(sub["a"][2], tds[4]["a"])
+
+    # ---- Read: td[tensor_index] ----
+
+    def test_getitem_tensor_index(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        idx = torch.tensor([0, 3, 4])
+        sub = redis_td[idx]
+        assert isinstance(sub, TensorDictBase)
+        assert sub.batch_size == torch.Size([3, 4])
+        assert torch.allclose(sub["a"][0], tds[0]["a"])
+        assert torch.allclose(sub["a"][1], tds[3]["a"])
+        assert torch.allclose(sub["a"][2], tds[4]["a"])
+
+    # ---- Write: td[int] = subtd ----
+
+    def test_setitem_int(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        new_a = torch.ones(4, 3)
+        new_b = torch.ones(4)
+        redis_td[0] = TensorDict({"a": new_a, "b": new_b}, batch_size=[4])
+        elem = redis_td[0]
+        assert torch.allclose(elem["a"], new_a)
+        assert torch.allclose(elem["b"], new_b)
+        # Other elements unchanged
+        assert torch.allclose(redis_td[1]["a"], tds[1]["a"])
+
+    # ---- Write: td[slice] = subtd ----
+
+    def test_setitem_slice(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        new_val = TensorDict(
+            {"a": torch.zeros(2, 4, 3), "b": torch.zeros(2, 4)},
+            batch_size=[2, 4],
+        )
+        redis_td[1:3] = new_val
+        assert torch.allclose(redis_td[1]["a"], torch.zeros(4, 3))
+        assert torch.allclose(redis_td[2]["a"], torch.zeros(4, 3))
+        # Unchanged
+        assert torch.allclose(redis_td[0]["a"], tds[0]["a"])
+
+    # ---- Write: td[tensor_index] = subtd ----
+
+    def test_setitem_tensor_index(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        idx = torch.tensor([0, 4])
+        new_val = TensorDict(
+            {"a": torch.ones(2, 4, 3), "b": torch.ones(2, 4)},
+            batch_size=[2, 4],
+        )
+        redis_td[idx] = new_val
+        assert torch.allclose(redis_td[0]["a"], torch.ones(4, 3))
+        assert torch.allclose(redis_td[4]["a"], torch.ones(4, 3))
+        # Middle element unchanged
+        assert torch.allclose(redis_td[2]["a"], tds[2]["a"])
+
+    # ---- to_tensordict / to_local ----
+
+    def test_to_tensordict(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        local = redis_td.to_tensordict()
+        assert isinstance(local, TensorDict)
+        assert local.batch_size == torch.Size([5, 4])
+        for i in range(5):
+            assert torch.allclose(local["a"][i], tds[i]["a"])
+            assert torch.allclose(local["b"][i], tds[i]["b"])
+
+    def test_to_local(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        local = redis_td.to_local()
+        assert isinstance(local, TensorDict)
+        assert local.batch_size == torch.Size([5, 4])
+
+    # ---- td[idx].to_tensordict() pattern ----
+
+    def test_indexed_to_tensordict(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        local = redis_td[1:3].to_tensordict()
+        assert local.batch_size == torch.Size([2, 4])
+        assert torch.allclose(local["a"][0], tds[1]["a"])
+
+    # ---- Heterogeneous shapes ----
+
+    def test_heterogeneous_shapes(self):
+        """Test lazy stack with different feature dims per element."""
+        td0 = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3])
+        td1 = TensorDict({"a": torch.randn(3, 8)}, batch_size=[3])
+        lazy_td = lazy_stack([td0, td1])
+        redis_td = RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, db=15)
+        try:
+            assert redis_td.batch_size == torch.Size([2, 3])
+            # Read element 0
+            elem0 = redis_td[0]
+            assert torch.allclose(elem0["a"], td0["a"])
+            # Read element 1
+            elem1 = redis_td[1]
+            assert torch.allclose(elem1["a"], td1["a"])
+        finally:
+            redis_td.clear_redis()
+            redis_td.close()
+
+    # ---- Pickling ----
+
+    def test_pickle_roundtrip(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        data = pickle.dumps(redis_td)
+        restored = pickle.loads(data)
+        try:
+            assert restored.batch_size == redis_td.batch_size
+            assert restored._count == redis_td._count
+            assert torch.allclose(restored[0]["a"], tds[0]["a"])
+        finally:
+            restored.close()
+
+    # ---- from_redis reconnect ----
+
+    def test_from_redis_reconnect(self, redis_stack):
+        redis_td, tds, lazy_td = redis_stack
+        td_id = redis_td._td_id
+        restored = RedisLazyStackedTensorDict.from_redis(td_id=td_id, db=15)
+        try:
+            assert restored.batch_size == redis_td.batch_size
+            assert restored._count == 5
+            assert torch.allclose(restored[0]["a"], tds[0]["a"])
+        finally:
+            restored.close()
+
+    # ---- Nested keys ----
+
+    def test_nested_keys(self):
+        """Test lazy stack with nested TensorDicts."""
+        tds = [
+            TensorDict(
+                {
+                    "obs": torch.randn(3),
+                    "nested": TensorDict({"x": torch.randn(3, 2)}, [3]),
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        lazy_td = lazy_stack(tds)
+        redis_td = RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, db=15)
+        try:
+            assert redis_td.batch_size == torch.Size([4, 3])
+            assert "obs" in redis_td.keys()
+            # Read element
+            elem = redis_td[0]
+            assert torch.allclose(elem["obs"], tds[0]["obs"])
+            assert torch.allclose(elem[("nested", "x")], tds[0]["nested", "x"])
+        finally:
+            redis_td.clear_redis()
+            redis_td.close()
+
+    # ---- Write-through view tests ----
+
+    def test_view_set_propagates(self, redis_stack):
+        """rltd[0].set('a', val) should propagate to Redis."""
+        redis_td, tds, lazy_td = redis_stack
+        new_a = torch.ones(4, 3) * 42.0
+        view = redis_td[0]
+        view.set("a", new_a, inplace=True)
+        # Re-read: should see the change
+        reread = redis_td[0]["a"]
+        assert torch.allclose(reread, new_a)
+        # Other elements unaffected
+        assert torch.allclose(redis_td[1]["a"], tds[1]["a"])
+
+    def test_view_setitem_key_propagates(self, redis_stack):
+        """rltd[0]['a'] = val should propagate to Redis."""
+        redis_td, tds, lazy_td = redis_stack
+        new_a = torch.ones(4, 3) * 99.0
+        view = redis_td[0]
+        view["a"] = new_a
+        reread = redis_td[0]["a"]
+        assert torch.allclose(reread, new_a)
+
+    def test_view_shape_change_raises(self, redis_stack):
+        """Changing element shape through the view should raise."""
+        redis_td, tds, lazy_td = redis_stack
+        view = redis_td[0]
+        with pytest.raises((ValueError, RuntimeError)):
+            view.set("a", torch.randn(10, 10), inplace=True)
+
+    def test_view_to_tensordict(self, redis_stack):
+        """view.to_tensordict() should return a regular TensorDict."""
+        redis_td, tds, lazy_td = redis_stack
+        view = redis_td[0]
+        local = view.to_tensordict()
+        assert isinstance(local, TensorDict)
+        assert local.batch_size == torch.Size([4])
+        assert torch.allclose(local["a"], tds[0]["a"])
+
+    def test_view_nested_set(self):
+        """Write-through on nested keys."""
+        tds = [
+            TensorDict(
+                {
+                    "obs": torch.randn(3),
+                    "nested": TensorDict({"x": torch.randn(3, 2)}, [3]),
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        lazy_td = lazy_stack(tds)
+        redis_td = RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, db=15)
+        try:
+            view = redis_td[0]
+            new_x = torch.ones(3, 2) * 7.0
+            view.set(("nested", "x"), new_x, inplace=True)
+            reread = redis_td[0][("nested", "x")]
+            assert torch.allclose(reread, new_x)
+        finally:
+            redis_td.clear_redis()
+            redis_td.close()
+
+
+@_skip_no_redis_pkg
+@_skip_no_redis_server
+class TestBackendAndCompat:
+    """Tests for backend parameter and backward-compat aliases."""
+
+    def test_backend_default(self):
+        td = TensorDictStore(batch_size=[5], db=15)
+        try:
+            assert td._backend == "redis"
+            assert "backend='redis'" in repr(td)
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_dragonfly(self):
+        # Dragonfly uses the same wire protocol, so this connects to Redis
+        # but records the backend name for documentation purposes.
+        td = TensorDictStore(backend="dragonfly", batch_size=[5], db=15)
+        try:
+            assert td._backend == "dragonfly"
+            assert "backend='dragonfly'" in repr(td)
+            td["x"] = torch.randn(5, 3)
+            assert torch.allclose(td["x"], td["x"])
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_from_tensordict(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = TensorDictStore.from_tensordict(local, backend="dragonfly", db=15)
+        try:
+            assert td._backend == "dragonfly"
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backend_to_store(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = local.to_store(backend="dragonfly", db=15)
+        try:
+            assert td._backend == "dragonfly"
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_to_redis_alias(self):
+        local = TensorDict({"a": torch.randn(5)}, [5])
+        td = local.to_redis(db=15)
+        try:
+            assert td._backend == "redis"
+            assert isinstance(td, TensorDictStore)
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_backward_compat_import_redis(self):
+        """Old import path ``from tensordict.redis import RedisTensorDict``."""
+        from tensordict.redis import RedisTensorDict as OldName
+
+        assert OldName is TensorDictStore
+
+    def test_backward_compat_import_lazy(self):
+        """Old ``from tensordict.redis import RedisLazyStackedTensorDict``."""
+        from tensordict.redis import RedisLazyStackedTensorDict as OldLazy
+
+        assert OldLazy is LazyStackedTensorDictStore
+
+    def test_from_redis_alias(self):
+        """from_redis should still work as an alias of from_store."""
+        td = TensorDictStore(batch_size=[5], db=15)
+        td["x"] = torch.randn(5, 3)
+        td_id = td._td_id
+        try:
+            restored = TensorDictStore.from_redis(td_id=td_id, db=15)
+            assert torch.allclose(restored["x"], td["x"])
+            restored.close()
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_pickle_preserves_backend(self):
+        td = TensorDictStore(backend="dragonfly", batch_size=[5], db=15)
+        td["x"] = torch.randn(5, 3)
+        try:
+            data = pickle.dumps(td)
+            restored = pickle.loads(data)
+            assert restored._backend == "dragonfly"
+            assert torch.allclose(restored["x"], td["x"])
+            restored.close()
+        finally:
+            td.clear_redis()
+            td.close()
+
+    def test_lazy_stack_backend(self):
+        tds = [TensorDict({"a": torch.randn(4)}, batch_size=[4]) for _ in range(3)]
+        ltd = lazy_stack(tds)
+        rltd = LazyStackedTensorDictStore.from_lazy_stack(
+            ltd, backend="dragonfly", db=15
+        )
+        try:
+            assert rltd._backend == "dragonfly"
+            assert "backend='dragonfly'" in repr(rltd)
+        finally:
+            rltd.clear_redis()
+            rltd.close()
 
 
 if __name__ == "__main__":

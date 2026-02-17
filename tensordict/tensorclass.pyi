@@ -26,7 +26,6 @@ from typing import (
 )
 
 import numpy as np
-
 import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
@@ -1404,6 +1403,30 @@ class TensorClass:
     ) -> Self: ...
     def to_struct_array(self) -> np.ndarray: ...
     def to_h5(self, filename: str, **kwargs) -> Any: ...
+    def to_store(
+        self,
+        *,
+        backend: str = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device: Incomplete | None = None,
+        **kwargs,
+    ) -> Any: ...
+    def to_redis(
+        self,
+        *,
+        backend: str = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device: Incomplete | None = None,
+        **kwargs,
+    ) -> Any: ...
     def empty(
         self,
         recurse: bool = False,
