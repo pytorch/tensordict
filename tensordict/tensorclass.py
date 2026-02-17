@@ -8,11 +8,9 @@ from __future__ import annotations
 import abc
 import concurrent
 import ctypes
-
 import dataclasses
 import functools
 import inspect
-
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -25,7 +23,6 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-
 from typing import (
     Any,
     Callable,
@@ -42,9 +39,7 @@ from typing import (
 )
 
 import numpy as np
-
 import tensordict as tensordict_lib
-
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -562,6 +557,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "to_namedtuple",
     "to_padded_tensor",
     "to_pytree",
+    "to_store",
     "transpose",
     "trunc",
     "trunc_",

@@ -59,7 +59,7 @@ def _make_local_td():
 
 
 def _make_redis_td():
-    from tensordict.redis import RedisTensorDict
+    from tensordict.store import TensorDictStore as RedisTensorDict  # noqa: E501
 
     td = RedisTensorDict(batch_size=[N], db=14)
     for i in range(N_KEYS):
@@ -86,48 +86,48 @@ def _timeit(fn, warmup=WARMUP, rounds=ROUNDS):
 # ---------------------------------------------------------------------------
 
 
-def bench_get_single_key(td):
+def test_get_single_key(td):
     return _timeit(lambda: td["key_0"])
 
 
-def bench_set_single_key(td):
+def test_set_single_key(td):
     v = torch.randn(N, FEAT)
     return _timeit(lambda: td.__setitem__("key_0", v))
 
 
-def bench_keys_iter(td):
+def test_keys_iter(td):
     return _timeit(lambda: list(td.keys()))
 
 
-def bench_values_iter(td):
+def test_values_iter(td):
     return _timeit(lambda: list(td.values()))
 
 
-def bench_items_iter(td):
+def test_items_iter(td):
     return _timeit(lambda: list(td.items()))
 
 
-def bench_read_int(td):
+def test_read_int(td):
     return _timeit(lambda: td[IDX_INT])
 
 
-def bench_read_slice(td):
+def test_read_slice(td):
     return _timeit(lambda: td[IDX_SLICE])
 
 
-def bench_read_step(td):
+def test_read_step(td):
     return _timeit(lambda: td[IDX_STEP])
 
 
-def bench_read_fancy(td):
+def test_read_fancy(td):
     return _timeit(lambda: td[IDX_FANCY])
 
 
-def bench_read_bool(td):
+def test_read_bool(td):
     return _timeit(lambda: td[IDX_BOOL])
 
 
-def bench_write_int(td):
+def test_write_int(td):
     sub = TensorDict({f"key_{i}": torch.randn(FEAT) for i in range(N_KEYS)}, [])
 
     def _write():
@@ -136,7 +136,7 @@ def bench_write_int(td):
     return _timeit(_write)
 
 
-def bench_write_slice(td):
+def test_write_slice(td):
     n = len(range(*IDX_SLICE.indices(N)))
     sub = TensorDict({f"key_{i}": torch.randn(n, FEAT) for i in range(N_KEYS)}, [n])
 
@@ -146,7 +146,7 @@ def bench_write_slice(td):
     return _timeit(_write)
 
 
-def bench_write_step(td):
+def test_write_step(td):
     n = len(range(*IDX_STEP.indices(N)))
     sub = TensorDict({f"key_{i}": torch.randn(n, FEAT) for i in range(N_KEYS)}, [n])
 
@@ -156,7 +156,7 @@ def bench_write_step(td):
     return _timeit(_write)
 
 
-def bench_write_fancy(td):
+def test_write_fancy(td):
     n = IDX_FANCY.numel()
     sub = TensorDict({f"key_{i}": torch.randn(n, FEAT) for i in range(N_KEYS)}, [n])
 
@@ -166,7 +166,7 @@ def bench_write_fancy(td):
     return _timeit(_write)
 
 
-def bench_write_bool(td):
+def test_write_bool(td):
     n = int(IDX_BOOL.sum().item())
     sub = TensorDict({f"key_{i}": torch.randn(n, FEAT) for i in range(N_KEYS)}, [n])
 
@@ -176,19 +176,19 @@ def bench_write_bool(td):
     return _timeit(_write)
 
 
-def bench_to_tensordict(td):
+def test_to_tensordict(td):
     return _timeit(lambda: td.to_tensordict())
 
 
-def bench_index_to_td_int(td):
+def test_index_to_td_int(td):
     return _timeit(lambda: td[IDX_INT].to_tensordict())
 
 
-def bench_index_to_td_slice(td):
+def test_index_to_td_slice(td):
     return _timeit(lambda: td[IDX_SLICE].to_tensordict())
 
 
-def bench_index_to_td_fancy(td):
+def test_index_to_td_fancy(td):
     return _timeit(lambda: td[IDX_FANCY].to_tensordict())
 
 
@@ -197,25 +197,25 @@ def bench_index_to_td_fancy(td):
 # ---------------------------------------------------------------------------
 
 BENCHMARKS = [
-    ("get single key", bench_get_single_key),
-    ("set single key", bench_set_single_key),
-    ("keys() iteration", bench_keys_iter),
-    ("values() iteration", bench_values_iter),
-    ("items() iteration", bench_items_iter),
-    ("read td[int]", bench_read_int),
-    ("read td[slice]", bench_read_slice),
-    ("read td[::3]", bench_read_step),
-    ("read td[fancy]", bench_read_fancy),
-    ("read td[bool]", bench_read_bool),
-    ("write td[int]=v", bench_write_int),
-    ("write td[slice]=v", bench_write_slice),
-    ("write td[::3]=v", bench_write_step),
-    ("write td[fancy]=v", bench_write_fancy),
-    ("write td[bool]=v", bench_write_bool),
-    ("to_tensordict()", bench_to_tensordict),
-    ("td[int].to_tensordict()", bench_index_to_td_int),
-    ("td[slice].to_tensordict()", bench_index_to_td_slice),
-    ("td[fancy].to_tensordict()", bench_index_to_td_fancy),
+    ("get single key", test_get_single_key),
+    ("set single key", test_set_single_key),
+    ("keys() iteration", test_keys_iter),
+    ("values() iteration", test_values_iter),
+    ("items() iteration", test_items_iter),
+    ("read td[int]", test_read_int),
+    ("read td[slice]", test_read_slice),
+    ("read td[::3]", test_read_step),
+    ("read td[fancy]", test_read_fancy),
+    ("read td[bool]", test_read_bool),
+    ("write td[int]=v", test_write_int),
+    ("write td[slice]=v", test_write_slice),
+    ("write td[::3]=v", test_write_step),
+    ("write td[fancy]=v", test_write_fancy),
+    ("write td[bool]=v", test_write_bool),
+    ("to_tensordict()", test_to_tensordict),
+    ("td[int].to_tensordict()", test_index_to_td_int),
+    ("td[slice].to_tensordict()", test_index_to_td_slice),
+    ("td[fancy].to_tensordict()", test_index_to_td_fancy),
 ]
 
 
