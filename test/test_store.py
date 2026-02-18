@@ -1416,6 +1416,39 @@ class TestNonTensorIndexing:
             store.clear_redis()
             store.close()
 
+    def test_setitem_tensor_index_non_tensor(self, store_kwargs):
+        """_aset_non_tensor_at must accept torch.Tensor indices.
+
+        When extend() is called, TorchRL computes indices as a torch.Tensor
+        (e.g. tensor([0, 1, 2, ...])) and passes them through __setitem__.
+        """
+        batch = 4
+        td = TensorDict({"obs": torch.randn(batch, 3)}, batch_size=[batch])
+        td.set_non_tensor("label", "init")
+
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            # Write with a tensor index
+            new_labels = TensorDict({"obs": torch.ones(2, 3)}, batch_size=[2])
+            new_labels.set_non_tensor("label", "updated")
+            idx = torch.tensor([1, 3])
+            store[idx] = new_labels
+
+            # Verify the indexed elements were updated
+            r1 = store[1]
+            assert r1.get_non_tensor("label") == "updated"
+            r3 = store[3]
+            assert r3.get_non_tensor("label") == "updated"
+
+            # Verify untouched elements are still "init"
+            r0 = store[0]
+            assert r0.get_non_tensor("label") == "init"
+            r2 = store[2]
+            assert r2.get_non_tensor("label") == "init"
+        finally:
+            store.clear_redis()
+            store.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -706,7 +706,12 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
-    async def _aset_non_tensor_at(self, key_path: str, value: Any, idx: int | slice):
+    async def _aset_non_tensor_at(
+        self,
+        key_path: str,
+        value: Any,
+        idx: int | slice | torch.Tensor | list | range,
+    ):
         """Read-modify-write a single element of a batched non-tensor key.
 
         On the first per-element write the storage format is promoted from a
@@ -740,9 +745,20 @@ class TensorDictStore(TensorDictBase):
                 value = [value] * len(indices)
             for i, v in zip(indices, value):
                 array[i] = v
+        elif isinstance(idx, torch.Tensor):
+            indices = idx.reshape(-1).tolist()
+            if not isinstance(value, (list, tuple)):
+                value = [value] * len(indices)
+            for i, v in zip(indices, value):
+                array[i] = v
+        elif isinstance(idx, (list, range)):
+            if not isinstance(value, (list, tuple)):
+                value = [value] * len(idx)
+            for i, v in zip(idx, value):
+                array[i] = v
         else:
             raise TypeError(
-                f"Non-tensor indexed write supports int/slice, got {type(idx)}"
+                f"Non-tensor indexed write supports int/slice/Tensor/list, got {type(idx)}"
             )
 
         serialized = json.dumps(array).encode("utf-8")
