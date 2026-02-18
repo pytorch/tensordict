@@ -9330,20 +9330,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def init_remote(
         self,
-        dst: int,
+        dst: int | None = None,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> None:
         """Initializes a remote tensordict by sending its metadata and content.
 
-        This method sends the metadata (shape, dtype, etc.) of the current tensordict to the specified destination rank (`dst`).
+        Two transport modes are available:
 
-        It then asynchronously sends the actual tensordict content.
+        - **Point-to-point** (default): uses ``send_object_list`` +
+          ``dist.send`` to transfer metadata and storage to a single
+          destination rank. Only the sender and receiver need to call the
+          pair ``init_remote`` / ``from_remote_init``.
+        - **Broadcast** (``use_broadcast=True``): delegates to
+          :meth:`~.broadcast`.  Metadata and storage are broadcast to
+          *every* rank in the group.  All ranks must participate (receivers
+          call ``from_remote_init(src=..., use_broadcast=True)``).  ``dst``
+          is ignored in this mode.
 
         Args:
-            dst (int): The rank of the destination process.
+            dst (int, optional): The rank of the destination process. Required
+                when ``use_broadcast=False`` (the default).  Ignored when
+                ``use_broadcast=True``.
             group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
             device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
+                of point-to-point send.  Defaults to ``False``.
 
         .. seealso::
             The receiving process should call `~.from_remote_init` or an equivalent method to receive and initialize a new tensordict based on the sent metadata.
@@ -9416,6 +9429,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...         main_worker.join(timeout=10)
             ...         secondary_worker.join(timeout=10)
         """
+        if use_broadcast:
+            rank = torch.distributed.get_rank(group=group)
+            self.broadcast(src=rank, group=group, device=device)
+            return
+
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
 
         td_c = self.consolidate(metadata=True)
@@ -9436,19 +9454,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> Self:
         """Creates a new tensordict instance initialized from remotely sent metadata.
 
         This class method receives consolidated metadata and a single storage buffer
         sent by :meth:`~.init_remote`, then reconstructs the full tensordict.
 
-        Only two messages are exchanged: one small metadata object (via pickle) and one
-        large contiguous tensor (RDMA-friendly).
+        Two transport modes are available (must match the sender's choice):
+
+        - **Point-to-point** (default): uses ``recv_object_list`` +
+          ``dist.recv``.  Only sender and receiver participate.
+        - **Broadcast** (``use_broadcast=True``): delegates to
+          :meth:`~.broadcast`.  All ranks must participate.
 
         Args:
             src (int): The rank of the source process that sent the metadata.
             group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
             device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
+                of point-to-point recv.  Must match the sender's setting.
+                Defaults to ``False``.
 
         Returns:
             TensorDict: A new tensordict instance initialized with the received metadata and content.
@@ -9456,6 +9482,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         .. seealso::
             The sending process should have called `~.init_remote` to send the metadata and content.
         """
+        if use_broadcast:
+            return cls({}).broadcast(src=src, group=group, device=device)
+
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
 
         meta = [None]
