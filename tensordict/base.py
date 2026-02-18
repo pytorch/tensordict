@@ -9775,6 +9775,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src: int,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
+        device: torch.device | str | None = None,
     ) -> Self:
         """Broadcasts a tensordict from ``src`` to all ranks.
 
@@ -9789,6 +9790,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): The process group
                 to use. Defaults to ``None`` (default group).
+            device (torch.device or str, optional): The device on which to
+                allocate the receive buffer.  If ``None``, the device is
+                inferred from the source's consolidated storage (transmitted
+                via metadata).  Useful when the backend is ``nccl`` and
+                buffers must live on CUDA.  Defaults to ``None``.
 
         Returns:
             TensorDict: the broadcast tensordict on all ranks (consolidated).
@@ -9799,10 +9805,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         rank = dist.get_rank(group=group)
         if rank == src:
-            td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
+            kwargs = {"metadata": True}
+            if device is not None:
+                kwargs["device"] = torch.device(device)
+            td_c = self if self.is_consolidated() else self.consolidate(**kwargs)
             storage = td_c._consolidated["storage"]
             metadata = td_c._consolidated["metadata"]
             metadata["_total_bytes"] = storage.numel()
+            metadata["_storage_device"] = str(storage.device)
             dist.broadcast_object_list([metadata], src=src, group=group)
             dist.broadcast(storage, src=src, group=group)
             return td_c
@@ -9811,7 +9821,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             dist.broadcast_object_list(meta, src=src, group=group)
             metadata = meta[0]
             total_bytes = metadata.pop("_total_bytes")
-            storage = torch.empty(total_bytes, dtype=torch.uint8)
+            storage_device = metadata.pop("_storage_device")
+            recv_device = device if device is not None else torch.device(storage_device)
+            storage = torch.empty(total_bytes, dtype=torch.uint8, device=recv_device)
             dist.broadcast(storage, src=src, group=group)
             return _rebuild_tensordict_files_consolidated(metadata, storage)
 
@@ -9892,9 +9904,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         all_sizes = [m["_total_bytes"] for m in all_meta]
         max_size = max(all_sizes)
-        padded = torch.zeros(max_size, dtype=torch.uint8)
+        padded = torch.zeros(max_size, dtype=torch.uint8, device=storage.device)
         padded[: storage.numel()] = storage
-        gathered = [torch.empty(max_size, dtype=torch.uint8) for _ in range(world_size)]
+        gathered = [torch.empty(max_size, dtype=torch.uint8, device=storage.device) for _ in range(world_size)]
         dist.all_gather(gathered, padded, group=group)
 
         result = []
@@ -9912,6 +9924,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         tensordicts: list | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
+        device: torch.device | str | None = None,
     ) -> Self:
         """Scatters a list of tensordicts from ``src`` to all ranks.
 
@@ -9927,6 +9940,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): The process group
                 to use. Defaults to ``None`` (default group).
+            device (torch.device or str, optional): The device on which to
+                allocate the receive buffer.  If ``None``, the device is
+                inferred from the source's consolidated storage (transmitted
+                via metadata).  Defaults to ``None``.
 
         Returns:
             TensorDict: The tensordict assigned to this rank.
@@ -9946,11 +9963,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             all_sizes = [td_c._consolidated["storage"].numel() for td_c in consolidated]
             max_size = max(all_sizes)
+            storage_device = consolidated[0]._consolidated["storage"].device
             all_meta = [
                 {
                     **td_c._consolidated["metadata"],
                     "_total_bytes": td_c._consolidated["storage"].numel(),
                     "_max_bytes": max_size,
+                    "_storage_device": str(storage_device),
                 }
                 for td_c in consolidated
             ]
@@ -9959,15 +9978,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             padded_list = []
             for td_c, sz in zip(consolidated, all_sizes):
-                buf = torch.zeros(max_size, dtype=torch.uint8)
+                buf = torch.zeros(max_size, dtype=torch.uint8, device=storage_device)
                 buf[:sz] = td_c._consolidated["storage"]
                 padded_list.append(buf)
-            recv_buf = torch.empty(max_size, dtype=torch.uint8)
+            recv_buf = torch.empty(max_size, dtype=torch.uint8, device=storage_device)
             dist.scatter(recv_buf, padded_list, src=src, group=group)
 
             metadata = scatter_meta[0]
             total_bytes = metadata.pop("_total_bytes")
             metadata.pop("_max_bytes")
+            metadata.pop("_storage_device")
             return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
         else:
             scatter_meta = [None]
@@ -9975,8 +9995,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             metadata = scatter_meta[0]
             total_bytes = metadata.pop("_total_bytes")
             max_size = metadata.pop("_max_bytes")
+            storage_device = metadata.pop("_storage_device")
+            recv_device = device if device is not None else torch.device(storage_device)
 
-            recv_buf = torch.empty(max_size, dtype=torch.uint8)
+            recv_buf = torch.empty(max_size, dtype=torch.uint8, device=recv_device)
             dist.scatter(recv_buf, None, src=src, group=group)
             return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
 
