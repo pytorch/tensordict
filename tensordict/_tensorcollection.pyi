@@ -1027,6 +1027,7 @@ class TensorCollection:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> None: ...
     def recv(
         self,
@@ -1035,6 +1036,7 @@ class TensorCollection:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> int: ...
     @classmethod
     def from_remote_init(
