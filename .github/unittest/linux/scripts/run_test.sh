@@ -26,19 +26,38 @@ export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
 export TD_GET_DEFAULTS_TO_NONE=1
 export LIST_TO_STACK=1
 
-# Start Redis server for test_redis.py (non-fatal if unavailable)
+# Start Redis server on port 6379 (non-fatal if unavailable)
 if command -v redis-server &> /dev/null; then
-    redis-server --daemonize yes --save "" --appendonly no || true
+    redis-server --daemonize yes --port 6379 --save "" --appendonly no || true
 else
     case "$(uname -s)" in
         Linux*)
-            apt update -y && apt install -y redis-server && redis-server --daemonize yes --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
+            apt update -y && apt install -y redis-server && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
             ;;
         Darwin*)
-            brew install redis 2>/dev/null && redis-server --daemonize yes --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
+            brew install redis 2>/dev/null && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
             ;;
         *)
             echo "Redis server not available on this platform, redis tests will be skipped"
+            ;;
+    esac
+fi
+
+# Start Dragonfly server on port 6380 (non-fatal if unavailable)
+if command -v dragonfly &> /dev/null; then
+    dragonfly --daemonize --port 6380 --dbfilename "" || true
+else
+    case "$(uname -s)" in
+        Linux*)
+            DRAGONFLY_VERSION="v1.27.1"
+            DRAGONFLY_URL="https://github.com/dragonflydb/dragonfly/releases/download/${DRAGONFLY_VERSION}/dragonfly-x86_64.tar.gz"
+            curl -fsSL "$DRAGONFLY_URL" -o /tmp/dragonfly.tar.gz && \
+              tar -xzf /tmp/dragonfly.tar.gz -C /tmp && \
+              /tmp/dragonfly-x86_64 --daemonize --port 6380 --dbfilename "" || \
+              echo "Dragonfly server not available, dragonfly tests will be skipped"
+            ;;
+        *)
+            echo "Dragonfly server not available on this platform, dragonfly tests will be skipped"
             ;;
     esac
 fi
