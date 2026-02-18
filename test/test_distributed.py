@@ -842,6 +842,7 @@ class TestInitRemote:
         td = TensorDict.from_remote_init(src=0)
         assert set(td.keys()) == {"a", "c", "d"}
         assert (td == 1).all()
+        assert td.is_consolidated()
         queue.put("yuppie")
 
     @classmethod
@@ -869,6 +870,64 @@ class TestInitRemote:
         td.init_remote(dst=1)
 
     def test_init_remote(self, set_context, tmp_path):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestInitRemoteNonTensor:
+    port = "29506"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        td = TensorDict.from_remote_init(src=0)
+        assert set(td.keys()) == {"a", "label", "c"}
+        assert (td["a"] == 1).all()
+        assert (td["c"] == 2).all()
+        assert td["label"] == "hello"
+        assert td.is_consolidated()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+        )
+
+        td = TensorDict(
+            {
+                "a": torch.ones(3),
+                "label": "hello",
+                "c": torch.full((3, 2), 2.0),
+            },
+            [3],
+        )
+        td.init_remote(dst=1)
+
+    def test_init_remote_non_tensor(self, set_context, tmp_path):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=type(self).server, args=(queue,))
         secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
