@@ -99,7 +99,7 @@ def _tensor_to_bytes(tensor: torch.Tensor) -> bytes:
     """Serialize a tensor to raw bytes.
 
     The tensor is made contiguous and moved to CPU before serialization.
-    Uses NumPy's buffer protocol for fast zero-overhead memcpy.
+    Uses NumPy's ``tobytes()`` which is an optimised C-level memcpy.
     """
     return tensor.detach().contiguous().cpu().numpy().tobytes()
 
@@ -111,10 +111,9 @@ def _bytes_to_tensor(
 ) -> torch.Tensor:
     """Deserialize raw bytes to a tensor using torch.frombuffer.
 
-    Returns a writable tensor (backed by a bytearray copy of the data).
+    Returns an owned, writable tensor backed by a ``bytearray`` copy.
     """
-    buf = bytearray(data)
-    return torch.frombuffer(buf, dtype=dtype).reshape(shape)
+    return torch.frombuffer(bytearray(data), dtype=dtype).reshape(shape)
 
 
 def _decode_meta(raw_meta: dict) -> dict[str, str]:
@@ -768,6 +767,81 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
+    async def _abatch_set_non_tensor_at(
+        self,
+        items: list[tuple[str, Any]],
+        idx: int | slice | torch.Tensor | list | range,
+    ):
+        """Batch read-modify-write for multiple non-tensor keys at once.
+
+        Equivalent to calling :meth:`_aset_non_tensor_at` for each item, but
+        uses a single pipeline for the reads and a single pipeline for the
+        writes, avoiding per-key ``_run_sync`` overhead.
+        """
+        if not items:
+            return
+
+        # Phase 1: pipeline GET all keys + metadata
+        pipe = self._client.pipeline()
+        for key_path, _ in items:
+            pipe.get(self._data_key(key_path))
+            pipe.hgetall(self._meta_key(key_path))
+        raw_results = await pipe.execute()
+
+        batch_dim = self._batch_size[0] if self._batch_size else 1
+
+        # Phase 2: patch arrays locally
+        write_pipe = self._client.pipeline()
+        for i, (key_path, value) in enumerate(items):
+            data = raw_results[2 * i]
+            raw_meta = raw_results[2 * i + 1]
+            meta = _decode_meta(raw_meta) if raw_meta else {}
+
+            if data is not None and meta.get("encoding") == "json_array":
+                text = data.decode() if isinstance(data, bytes) else data
+                array = json.loads(text)
+            elif data is not None:
+                blob_val = self._deserialize_non_tensor(data, meta)
+                array = [blob_val] * batch_dim
+            else:
+                array = [None] * batch_dim
+
+            if isinstance(idx, int):
+                array[idx] = value
+            elif isinstance(idx, slice):
+                indices = range(*idx.indices(len(array)))
+                if not isinstance(value, (list, tuple)):
+                    value = [value] * len(indices)
+                for j, v in zip(indices, value):
+                    array[j] = v
+            elif isinstance(idx, torch.Tensor):
+                indices = idx.reshape(-1).tolist()
+                if not isinstance(value, (list, tuple)):
+                    value = [value] * len(indices)
+                for j, v in zip(indices, value):
+                    array[j] = v
+            elif isinstance(idx, (list, range)):
+                if not isinstance(value, (list, tuple)):
+                    value = [value] * len(idx)
+                for j, v in zip(idx, value):
+                    array[j] = v
+            else:
+                raise TypeError(
+                    f"Non-tensor indexed write supports int/slice/Tensor/list, got {type(idx)}"
+                )
+
+            serialized = json.dumps(array).encode("utf-8")
+            new_meta = {"is_non_tensor": "1", "encoding": "json_array"}
+            write_pipe.set(self._data_key(key_path), serialized)
+            write_pipe.hset(self._meta_key(key_path), mapping=new_meta)
+            write_pipe.sadd(self._keys_registry_key, key_path)
+
+        # Phase 3: single write pipeline
+        await write_pipe.execute()
+        if self._keys_cache[0] is not None:
+            for key_path, _ in items:
+                self._keys_cache[0].add(key_path)
+
     async def _aget_tensor(self, key_path: str) -> torch.Tensor | None:
         """Retrieve a tensor from Redis. Returns None if not found.
 
@@ -1200,15 +1274,41 @@ class TensorDictStore(TensorDictBase):
         key_paths = list(items.keys())
 
         # Create new keys that have no metadata yet (first indexed write).
+        # Instead of creating a full zero tensor and sending it over the wire,
+        # we pre-extend the Redis string to the right length using SETRANGE
+        # with a single null byte at the end (Redis auto-fills with \0) and
+        # only write metadata.  The actual data is written by the normal
+        # SETRANGE / Lua path below.
         all_keys = await self._aget_all_keys()
         new_kps = [kp for kp in key_paths if kp not in all_keys]
         if new_kps:
             batch_dim = self._batch_size[0] if self._batch_size else 0
+            pipe = self._client.pipeline()
             for kp in new_kps:
-                value, _ = items[kp]
-                full_shape = [batch_dim] + list(value.shape)
-                full_tensor = torch.zeros(full_shape, dtype=value.dtype)
-                await self._aset_tensor(kp, full_tensor)
+                value, idx = items[kp]
+                # For int index value is one element (shape = elem_shape);
+                # for slice/tensor/list the first dim is the indexed dim.
+                if isinstance(idx, int):
+                    elem_shape = list(value.shape)
+                else:
+                    elem_shape = list(value.shape[1:]) if value.ndim > 0 else []
+                full_shape = [batch_dim] + elem_shape
+                elem_size = value.element_size()
+                numel = batch_dim * (int(torch.tensor(elem_shape).prod().item()) if elem_shape else 1)
+                total_bytes = numel * elem_size
+                if total_bytes > 0:
+                    pipe.setrange(self._data_key(kp), total_bytes - 1, b"\x00")
+                meta = {
+                    "shape": json.dumps(full_shape),
+                    "dtype": _dtype_to_str(value.dtype),
+                }
+                pipe.hset(self._meta_key(kp), mapping=meta)
+                pipe.sadd(self._keys_registry_key, kp)
+                if self._meta_cache is not None:
+                    self._meta_cache[kp] = (full_shape, value.dtype)
+                if self._keys_cache[0] is not None:
+                    self._keys_cache[0].add(kp)
+            await pipe.execute()
 
         meta_map = await self._aget_metadata_batch(key_paths)
 
@@ -1518,8 +1618,8 @@ class TensorDictStore(TensorDictBase):
 
         if tensor_items:
             self._run_sync(self._abatch_set_at(tensor_items))
-        for key_path, raw_val in non_tensor_items:
-            self._run_sync(self._aset_non_tensor_at(key_path, raw_val, index))
+        if non_tensor_items:
+            self._run_sync(self._abatch_set_non_tensor_at(non_tensor_items, index))
 
     def _get_str(self, key, default=NO_DEFAULT, **kwargs):
         key_path = self._full_key_path(key)
