@@ -706,9 +706,7 @@ class TensorDictStore(TensorDictBase):
         if self._keys_cache[0] is not None:
             self._keys_cache[0].add(key_path)
 
-    async def _aset_non_tensor_at(
-        self, key_path: str, value: Any, idx: int | slice
-    ):
+    async def _aset_non_tensor_at(self, key_path: str, value: Any, idx: int | slice):
         """Read-modify-write a single element of a batched non-tensor key.
 
         On the first per-element write the storage format is promoted from a
@@ -763,7 +761,9 @@ class TensorDictStore(TensorDictBase):
         When the metadata cache already contains ``(shape, dtype)`` for this
         key, only a single ``GET`` is issued (no ``HGETALL``).
         """
-        cached = self._meta_cache.get(key_path) if self._meta_cache is not None else None
+        cached = (
+            self._meta_cache.get(key_path) if self._meta_cache is not None else None
+        )
         if cached is not None:
             # Fast path: metadata cached — single GET
             data = await self._client.get(self._data_key(key_path))
@@ -1722,7 +1722,9 @@ class TensorDictStore(TensorDictBase):
         elif is_non_tensor(value):
             from tensordict.tensorclass import NonTensorData
 
-            raw_value = value.data if isinstance(value, NonTensorData) else value.tolist()
+            raw_value = (
+                value.data if isinstance(value, NonTensorData) else value.tolist()
+            )
             self._run_sync(self._aset_non_tensor(key_path, raw_value))
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
@@ -1921,16 +1923,12 @@ class TensorDictStore(TensorDictBase):
         # Filter to keys under our prefix
         if self._prefix:
             prefix_check = self._prefix + _KEY_SEP
-            leaf_kps = sorted(
-                k for k in all_keys if k.startswith(prefix_check)
-            )
+            leaf_kps = sorted(k for k in all_keys if k.startswith(prefix_check))
         else:
             leaf_kps = sorted(all_keys)
 
         if not leaf_kps:
-            return TensorDict(
-                {}, batch_size=self.batch_size, device=self.device
-            )
+            return TensorDict({}, batch_size=self.batch_size, device=self.device)
 
         result_map = self._run_sync(self._aget_batch_tensors(leaf_kps))
 
