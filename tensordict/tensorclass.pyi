@@ -1073,6 +1073,7 @@ class TensorClass:
         src: int,
         *,
         group: dist.ProcessGroup | None = None,
+        device: torch.device | str | None = None,
     ) -> Self: ...
     def all_reduce(
         self,
