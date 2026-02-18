@@ -1498,6 +1498,8 @@ class TensorDictStore(TensorDictBase):
             val = value.get(key)
             if isinstance(val, NonTensorData):
                 non_tensor_items.append((key_path, val.data))
+            elif is_non_tensor(val):
+                non_tensor_items.append((key_path, val.tolist()))
             elif isinstance(val, torch.Tensor):
                 tensor_items[key_path] = (val, index)
             elif not is_tensor_collection(val):
@@ -1661,7 +1663,7 @@ class TensorDictStore(TensorDictBase):
             if isinstance(value, NonTensorData):
                 raw_value = value.data
             else:
-                raw_value = value
+                raw_value = value.tolist()
             self._run_sync(self._aset_non_tensor(key_path, raw_value))
             return self
 
@@ -1720,7 +1722,9 @@ class TensorDictStore(TensorDictBase):
         elif is_non_tensor(value):
             from tensordict.tensorclass import NonTensorData
 
-            raw_value = value.data if isinstance(value, NonTensorData) else value
+            raw_value = (
+                value.data if isinstance(value, NonTensorData) else value.tolist()
+            )
             self._run_sync(self._aset_non_tensor(key_path, raw_value))
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))

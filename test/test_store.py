@@ -1368,6 +1368,54 @@ class TestNonTensorIndexing:
             store.clear_redis()
             store.close()
 
+    def test_setitem_with_nontensorstack(self, store_kwargs):
+        """NonTensorStack leaves must not be silently dropped on write.
+
+        NonTensorStack inherits from LazyStackedTensorDict (a TensorDictBase),
+        so it passes the is_tensor_collection check and was silently skipped.
+        """
+        from tensordict import set_list_to_stack
+
+        with set_list_to_stack(True):
+            td = TensorDict(
+                {
+                    "reward": torch.tensor([1.0]),
+                    "chat": TensorDict(
+                        {
+                            "prompt": TensorDict(
+                                {
+                                    "role": ["user"],
+                                    "content": ["hello"],
+                                },
+                                batch_size=[1],
+                            ),
+                        },
+                        batch_size=[],
+                    ),
+                },
+                batch_size=[],
+            )
+
+        store_td = TensorDict({"reward": torch.zeros(5)}, batch_size=[5])
+        store_td["chat"] = TensorDict(
+            {"prompt": TensorDict({}, batch_size=[5, 1])}, batch_size=[5]
+        )
+        store_td["chat", "prompt"].set_non_tensor("role", "init")
+        store_td["chat", "prompt"].set_non_tensor("content", "init")
+
+        store = TensorDictStore.from_tensordict(store_td, **store_kwargs)
+        try:
+            store[0] = td
+            result = store[0]
+            assert torch.allclose(result["reward"], torch.tensor([1.0]))
+            role = result.get_non_tensor(("chat", "prompt", "role"))
+            content = result.get_non_tensor(("chat", "prompt", "content"))
+            assert role is not None, "NonTensorStack 'role' was silently dropped"
+            assert content is not None, "NonTensorStack 'content' was silently dropped"
+        finally:
+            store.clear_redis()
+            store.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
