@@ -1073,6 +1073,7 @@ class TensorClass:
         src: int,
         *,
         group: dist.ProcessGroup | None = None,
+        device: torch.device | str | None = None,
     ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
