@@ -9770,6 +9770,51 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 future.wait()
             return
 
+    def broadcast(
+        self,
+        src: int,
+        *,
+        group: "torch.distributed.ProcessGroup" | None = None,
+    ) -> Self:
+        """Broadcasts a tensordict from ``src`` to all ranks.
+
+        Uses consolidated transport: the source rank consolidates the tensordict
+        and broadcasts metadata (via ``broadcast_object_list``) followed by the
+        contiguous storage tensor (via ``dist.broadcast``). Receiving ranks
+        allocate a buffer and reconstruct the full tensordict.
+
+        Args:
+            src (int): The rank of the source process.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): The process group
+                to use. Defaults to ``None`` (default group).
+
+        Returns:
+            TensorDict: the broadcast tensordict on all ranks (consolidated).
+        """
+        from torch import distributed as dist
+
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
+
+        rank = dist.get_rank(group=group)
+        if rank == src:
+            td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
+            storage = td_c._consolidated["storage"]
+            metadata = td_c._consolidated["metadata"]
+            metadata["_total_bytes"] = storage.numel()
+            dist.broadcast_object_list([metadata], src=src, group=group)
+            dist.broadcast(storage, src=src, group=group)
+            return td_c
+        else:
+            meta = [None]
+            dist.broadcast_object_list(meta, src=src, group=group)
+            metadata = meta[0]
+            total_bytes = metadata.pop("_total_bytes")
+            storage = torch.empty(total_bytes, dtype=torch.uint8)
+            dist.broadcast(storage, src=src, group=group)
+            return _rebuild_tensordict_files_consolidated(metadata, storage)
+
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
