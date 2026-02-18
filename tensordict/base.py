@@ -13279,7 +13279,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     # Clone, select, exclude, empty
     def select(
-        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
+        self,
+        *keys: NestedKey,
+        inplace: bool = False,
+        strict: bool = True,
+        as_tensordict: bool = False,
     ) -> Self:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
@@ -13293,6 +13297,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Default is ``False``.
             strict (bool, optional): whether selecting a key that is not present
                 will return an error or not. Default: :obj:`True`.
+            as_tensordict (bool, optional): if ``True``, the result will be a
+                plain :class:`~tensordict.TensorDict` even when called on a
+                :class:`~tensordict.TensorClass` instance. This avoids the
+                TensorClass wrapper that fills unselected fields with ``None``.
+                For :class:`~tensordict.TensorDictBase` subclasses, this is a
+                no-op. Default: ``False``.
 
         Returns:
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.

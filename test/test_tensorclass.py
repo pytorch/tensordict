@@ -1588,6 +1588,39 @@ class TestTensorClass:
         assert nested_td.is_non_tensor(("a", "x"))
         assert not nested_td.is_non_tensor(("a", "y"))
 
+    def test_select_as_tensordict(self):
+        @tensorclass
+        class Transition:
+            obs: torch.Tensor
+            action: torch.Tensor
+            label: str
+
+        t = Transition(
+            obs=torch.randn(4),
+            action=torch.tensor([1.0]),
+            label="cat",
+            batch_size=[],
+        )
+
+        # Default: returns TensorClass with unselected fields as None
+        result_tc = t.select("obs", "action")
+        assert type(result_tc).__name__ == "Transition"
+        assert result_tc.label is None
+
+        # as_tensordict=True: returns plain TensorDict without unselected fields
+        result_td = t.select("obs", "action", as_tensordict=True)
+        assert type(result_td) is TensorDict
+        assert set(result_td.keys()) == {"obs", "action"}
+        assert "label" not in result_td.keys()
+        assert (result_td["obs"] == t.obs).all()
+        assert (result_td["action"] == t.action).all()
+
+        # as_tensordict on a plain TensorDict is a no-op
+        td = TensorDict({"a": torch.zeros(3), "b": torch.ones(3)}, [])
+        td_sel = td.select("a", as_tensordict=True)
+        assert type(td_sel) is TensorDict
+        assert set(td_sel.keys()) == {"a"}
+
     @set_list_to_stack(True)
     def test_set_list_in_constructor(self):
         obj = MyTensorClass(
