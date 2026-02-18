@@ -1298,9 +1298,7 @@ class TestNonTensorIndexing:
         td = TensorDict({"obs": torch.zeros(5, 4), "label": "a"}, [5])
         store = TensorDictStore.from_tensordict(td, **store_kwargs)
         try:
-            store[1:3] = TensorDict(
-                {"obs": torch.ones(2, 4), "label": "b"}, [2]
-            )
+            store[1:3] = TensorDict({"obs": torch.ones(2, 4), "label": "b"}, [2])
             assert store[0]["label"] == "a"
             assert store[1]["label"] == "b"
             assert store[2]["label"] == "b"
@@ -1327,9 +1325,7 @@ class TestNonTensorIndexing:
         an index must work."""
         store = TensorDictStore(batch_size=[4], **store_kwargs)
         try:
-            store[0] = TensorDict(
-                {"obs": torch.randn(3), "label": "hello"}, []
-            )
+            store[0] = TensorDict({"obs": torch.randn(3), "label": "hello"}, [])
             assert store[0]["obs"].shape == torch.Size([3])
             assert store[0]["label"] == "hello"
             assert store[1]["label"] is None  # uninitialised slot
