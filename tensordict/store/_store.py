@@ -508,6 +508,13 @@ class TensorDictStore(TensorDictBase):
             {} if cache_metadata else None
         )
 
+        # Keys cache: shared mutable container ``[set | None]`` holding the set
+        # of all registered leaf key paths.  The list wrapper ensures that
+        # nested views (which share the same list object) observe invalidation
+        # (``_keys_cache[0] = None``) immediately without needing their own
+        # attribute reassignment.
+        self._keys_cache: list[set[str] | None] = [None]
+
         # Unique identifier for this TensorDict instance in the store
         self._td_id = td_id or str(uuid.uuid4())
 
@@ -573,6 +580,7 @@ class TensorDictStore(TensorDictBase):
         obj._namespace = parent._namespace
         obj._cache_metadata = parent._cache_metadata
         obj._meta_cache = parent._meta_cache
+        obj._keys_cache = parent._keys_cache
 
         obj._host = parent._host
         obj._port = parent._port
@@ -670,6 +678,8 @@ class TensorDictStore(TensorDictBase):
         await pipe.execute()
         if self._meta_cache is not None:
             self._meta_cache[key_path] = (shape, dtype)
+        if self._keys_cache[0] is not None:
+            self._keys_cache[0].add(key_path)
 
     async def _aset_non_tensor(self, key_path: str, value: Any):
         """Store a non-tensor value in Redis."""
@@ -693,9 +703,79 @@ class TensorDictStore(TensorDictBase):
         pipe.hset(self._meta_key(key_path), mapping=meta)
         pipe.sadd(self._keys_registry_key, key_path)
         await pipe.execute()
+        if self._keys_cache[0] is not None:
+            self._keys_cache[0].add(key_path)
+
+    async def _aset_non_tensor_at(self, key_path: str, value: Any, idx: int | slice):
+        """Read-modify-write a single element of a batched non-tensor key.
+
+        On the first per-element write the storage format is promoted from a
+        single-blob (``json`` / ``pickle``) to a ``json_array`` of length
+        ``batch_size[0]``, enabling future per-element reads and writes.
+        """
+        pipe = self._client.pipeline()
+        pipe.get(self._data_key(key_path))
+        pipe.hgetall(self._meta_key(key_path))
+        data, raw_meta = await pipe.execute()
+
+        meta = _decode_meta(raw_meta) if raw_meta else {}
+        batch_dim = self._batch_size[0] if self._batch_size else 1
+
+        if data is not None and meta.get("encoding") == "json_array":
+            text = data.decode() if isinstance(data, bytes) else data
+            array = json.loads(text)
+        elif data is not None:
+            # Promote single-blob → json_array by broadcasting
+            blob_val = self._deserialize_non_tensor(data, meta)
+            array = [blob_val] * batch_dim
+        else:
+            # Key doesn't exist yet — create one filled with None
+            array = [None] * batch_dim
+
+        if isinstance(idx, int):
+            array[idx] = value
+        elif isinstance(idx, slice):
+            indices = range(*idx.indices(len(array)))
+            if not isinstance(value, (list, tuple)):
+                value = [value] * len(indices)
+            for i, v in zip(indices, value):
+                array[i] = v
+        else:
+            raise TypeError(
+                f"Non-tensor indexed write supports int/slice, got {type(idx)}"
+            )
+
+        serialized = json.dumps(array).encode("utf-8")
+        new_meta = {"is_non_tensor": "1", "encoding": "json_array"}
+        pipe = self._client.pipeline()
+        pipe.set(self._data_key(key_path), serialized)
+        pipe.hset(self._meta_key(key_path), mapping=new_meta)
+        pipe.sadd(self._keys_registry_key, key_path)
+        await pipe.execute()
+        if self._keys_cache[0] is not None:
+            self._keys_cache[0].add(key_path)
 
     async def _aget_tensor(self, key_path: str) -> torch.Tensor | None:
-        """Retrieve a tensor from Redis. Returns None if not found."""
+        """Retrieve a tensor from Redis. Returns None if not found.
+
+        When the metadata cache already contains ``(shape, dtype)`` for this
+        key, only a single ``GET`` is issued (no ``HGETALL``).
+        """
+        cached = (
+            self._meta_cache.get(key_path) if self._meta_cache is not None else None
+        )
+        if cached is not None:
+            # Fast path: metadata cached — single GET
+            data = await self._client.get(self._data_key(key_path))
+            if data is None:
+                return None
+            shape, dtype = cached
+            tensor = _bytes_to_tensor(data, shape, dtype)
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            return tensor
+
+        # Slow path: pipeline GET + HGETALL
         pipe = self._client.pipeline()
         pipe.get(self._data_key(key_path))
         pipe.hgetall(self._meta_key(key_path))
@@ -711,6 +791,8 @@ class TensorDictStore(TensorDictBase):
 
         shape = json.loads(meta["shape"])
         dtype = _str_to_dtype(meta["dtype"])
+        if self._meta_cache is not None:
+            self._meta_cache[key_path] = (shape, dtype)
         tensor = _bytes_to_tensor(data, shape, dtype)
         if self._device is not None:
             tensor = tensor.to(self._device)
@@ -730,6 +812,8 @@ class TensorDictStore(TensorDictBase):
         await pipe.execute()
         if self._meta_cache is not None:
             self._meta_cache.pop(key_path, None)
+        if self._keys_cache[0] is not None:
+            self._keys_cache[0].discard(key_path)
 
     async def _aget_all_keys(self) -> set[str]:
         """Get all registered key paths from Redis."""
@@ -770,36 +854,60 @@ class TensorDictStore(TensorDictBase):
     async def _aget_batch_tensors(
         self, key_paths: list[str]
     ) -> dict[str, torch.Tensor]:
-        """Batch-fetch multiple tensors using a Redis pipeline."""
+        """Batch-fetch multiple tensors using a Redis pipeline.
+
+        Metadata is looked up from ``_meta_cache`` when available; only
+        cache-missing keys trigger an ``HGETALL`` pipeline.  Data is always
+        fetched via a single ``GET`` pipeline.
+        """
         if not key_paths:
             return {}
 
-        # Batch get data
+        # -- split cached / uncached metadata --
+        cached_meta: dict[str, tuple[list[int], torch.dtype]] = {}
+        uncached_kps: list[str] = []
+        for kp in key_paths:
+            if self._meta_cache is not None and kp in self._meta_cache:
+                cached_meta[kp] = self._meta_cache[kp]
+            else:
+                uncached_kps.append(kp)
+
+        # -- single pipeline: data GETs + metadata HGETALLs for uncached --
         pipe = self._client.pipeline()
         for kp in key_paths:
             pipe.get(self._data_key(kp))
-        data_list = await pipe.execute()
-
-        # Batch get metadata
-        pipe = self._client.pipeline()
-        for kp in key_paths:
+        for kp in uncached_kps:
             pipe.hgetall(self._meta_key(kp))
-        meta_list = await pipe.execute()
+        raw = await pipe.execute()
 
-        result = {}
-        for kp, data, raw_meta in zip(key_paths, data_list, meta_list):
+        data_list = raw[: len(key_paths)]
+        meta_list = raw[len(key_paths) :]
+
+        # parse uncached metadata
+        uncached_meta: dict[str, dict] = {}
+        for kp, raw_meta in zip(uncached_kps, meta_list):
+            uncached_meta[kp] = _decode_meta(raw_meta)
+
+        result: dict[str, torch.Tensor] = {}
+        for kp, data in zip(key_paths, data_list):
             if data is None:
                 continue
-            meta = _decode_meta(raw_meta)
-            if meta.get("is_non_tensor") == "1":
-                result[kp] = self._deserialize_non_tensor(data, meta)
+            if kp in cached_meta:
+                shape, dtype = cached_meta[kp]
+                tensor = _bytes_to_tensor(data, shape, dtype)
             else:
+                meta = uncached_meta[kp]
+                if meta.get("is_non_tensor") == "1":
+                    result[kp] = self._deserialize_non_tensor(data, meta)
+                    continue
                 shape = json.loads(meta["shape"])
                 dtype = _str_to_dtype(meta["dtype"])
+                if self._meta_cache is not None:
+                    self._meta_cache[kp] = (shape, dtype)
                 tensor = _bytes_to_tensor(data, shape, dtype)
-                if self._device is not None:
-                    tensor = tensor.to(self._device)
-                result[kp] = tensor
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            result[kp] = tensor
         return result
 
     # ---- Byte-range batch operations ----
@@ -1047,11 +1155,11 @@ class TensorDictStore(TensorDictBase):
                 tensor = tensor.to(self._device)
             result[kp] = tensor[idx]
 
-        # Non-tensor results (not indexable, returned as-is)
+        # Non-tensor results — index into json_array when applicable
         for kp in non_tensor_kps:
             data = all_results[flat_idx]
             flat_idx += 1
-            result[kp] = self._deserialize_non_tensor(data, raw_metas[kp])
+            result[kp] = self._deserialize_non_tensor(data, raw_metas[kp], idx=idx)
 
         return result
 
@@ -1070,11 +1178,27 @@ class TensorDictStore(TensorDictBase):
            range, patch locally, write back.  Two commands per key but avoids
            sending thousands of Lua arguments.
         4. **Full RMW** fallback for unsupported indices.
+
+        If a key has no metadata yet (first write to an empty store via
+        index), a zero-initialised tensor is created with shape
+        ``[batch_size[0], *value.shape]`` before proceeding.
         """
         if not items:
             return
 
         key_paths = list(items.keys())
+
+        # Create new keys that have no metadata yet (first indexed write).
+        all_keys = await self._aget_all_keys()
+        new_kps = [kp for kp in key_paths if kp not in all_keys]
+        if new_kps:
+            batch_dim = self._batch_size[0] if self._batch_size else 0
+            for kp in new_kps:
+                value, _ = items[kp]
+                full_shape = [batch_dim] + list(value.shape)
+                full_tensor = torch.zeros(full_shape, dtype=value.dtype)
+                await self._aset_tensor(kp, full_tensor)
+
         meta_map = await self._aget_metadata_batch(key_paths)
 
         # ---- Phase 1: classify each key --------------------------------
@@ -1210,15 +1334,53 @@ class TensorDictStore(TensorDictBase):
     # ---- Sync helpers ----
 
     def _get_all_keys(self) -> set[str]:
-        """Get all registered key paths (sync wrapper)."""
-        return self._run_sync(self._aget_all_keys())
+        """Get all registered key paths (sync wrapper).
+
+        Uses the local ``_keys_cache`` when available, falling back to a
+        Redis ``SMEMBERS`` round-trip and populating the cache for next time.
+        """
+        if self._keys_cache[0] is not None:
+            return self._keys_cache[0]
+        keys = self._run_sync(self._aget_all_keys())
+        if self._cache_metadata:
+            self._keys_cache[0] = keys
+        return keys
 
     @staticmethod
-    def _deserialize_non_tensor(data: bytes, meta: dict) -> Any:
-        """Deserialize a non-tensor value from Redis."""
+    def _deserialize_non_tensor(data: bytes, meta: dict, idx=None) -> Any:
+        """Deserialize a non-tensor value from Redis.
+
+        When *idx* is provided the element(s) at *idx* are returned.
+        For ``json_array`` encoding this indexes directly into the stored
+        array.  For scalar encodings (``json`` / ``pickle``) the single
+        stored value is returned as-is (broadcast semantics).
+        """
         encoding = meta.get("encoding", "json")
+        text = data.decode() if isinstance(data, bytes) else data
+
+        if encoding == "json_array":
+            array = json.loads(text)
+            if idx is not None:
+                if isinstance(idx, int):
+                    return array[idx]
+                if isinstance(idx, slice):
+                    return array[idx]
+                if isinstance(idx, (list, torch.Tensor)):
+                    indices = idx
+                    if isinstance(indices, torch.Tensor):
+                        indices = indices.tolist()
+                    return [array[i] for i in indices]
+            # Full-batch read: wrap in NonTensorStack for TensorClass compat
+            from tensordict._lazy import LazyStackedTensorDict
+            from tensordict.tensorclass import NonTensorData
+
+            return LazyStackedTensorDict(
+                *[NonTensorData(data=v, batch_size=[]) for v in array]
+            )
+
+        # Scalar encoding — return the single stored value (broadcast).
         if encoding == "json":
-            return json.loads(data.decode() if isinstance(data, bytes) else data)
+            return json.loads(text)
         return pickle.loads(data)
 
     # ---- TensorDictBase interface: batch_size / device / names ----
@@ -1322,14 +1484,29 @@ class TensorDictStore(TensorDictBase):
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])
 
-        # Collect all leaf items
-        items: dict[str, tuple[torch.Tensor, object]] = {}
-        for key in value.keys(include_nested=True, leaves_only=True):
+        # Collect all leaf items, separating tensors from non-tensors.
+        # ``leaves_only=True`` hides non-tensor keys (NonTensorData is a
+        # TensorDictBase subclass), so we iterate with ``leaves_only=False``
+        # and classify each value ourselves.
+        from tensordict.tensorclass import NonTensorData
+
+        tensor_items: dict[str, tuple[torch.Tensor, object]] = {}
+        non_tensor_items: list[tuple[str, Any]] = []
+        for key in value.keys(include_nested=True, leaves_only=False):
             key_tuple = _unravel_key_to_tuple(key)
             key_path = self._full_key_path(_KEY_SEP.join(key_tuple))
-            items[key_path] = (value.get(key), index)
+            val = value.get(key)
+            if isinstance(val, NonTensorData):
+                non_tensor_items.append((key_path, val.data))
+            elif isinstance(val, torch.Tensor):
+                tensor_items[key_path] = (val, index)
+            elif not isinstance(val, TensorDictBase):
+                non_tensor_items.append((key_path, val))
 
-        self._run_sync(self._abatch_set_at(items))
+        if tensor_items:
+            self._run_sync(self._abatch_set_at(tensor_items))
+        for key_path, raw_val in non_tensor_items:
+            self._run_sync(self._aset_non_tensor_at(key_path, raw_val, index))
 
     def _get_str(self, key, default=NO_DEFAULT, **kwargs):
         key_path = self._full_key_path(key)
@@ -1359,7 +1536,40 @@ class TensorDictStore(TensorDictBase):
             return default
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
-    _get_tuple = TensorDict._get_tuple
+    def _get_tuple(self, key, default=NO_DEFAULT, **kwargs):
+        """Resolve a nested key tuple directly without intermediate views.
+
+        For ``td["obs", "deep", "z"]``, join to ``"obs.deep.z"`` and check
+        the keys set in one shot, avoiding per-level ``_get_str`` calls and
+        intermediate ``TensorDictStore`` creation.
+        """
+        if len(key) == 1:
+            return self._get_str(key[0], default, **kwargs)
+
+        full_path = self._full_key_path(_KEY_SEP.join(key))
+        all_keys = self._get_all_keys()
+
+        # Direct leaf hit — single fetch
+        if full_path in all_keys:
+            result = self._run_sync(self._aget_tensor(full_path))
+            if result is not None:
+                return result
+
+        # Check if it's a nested prefix (e.g. ("obs",) when keys contain "obs.x")
+        prefix_check = full_path + _KEY_SEP
+        if any(k.startswith(prefix_check) for k in all_keys):
+            nested = self._nested_tensordicts.get(key[0])
+            if nested is None:
+                nested = TensorDictStore._new_nested(
+                    parent=self,
+                    key_prefix=self._full_key_path(key[0]),
+                )
+                self._nested_tensordicts[key[0]] = nested
+            return nested._get_tuple(key[1:], default, **kwargs)
+
+        if default is not NO_DEFAULT:
+            return default
+        raise KeyError(f"key {key} not found in {type(self).__name__}")
 
     def _get_at_str(self, key, idx, default=NO_DEFAULT, **kwargs):
         """Retrieve an indexed slice of a single tensor via ``GETRANGE``."""
@@ -1392,6 +1602,18 @@ class TensorDictStore(TensorDictBase):
         key = _unravel_key_to_tuple(key)
         if len(key) == 1:
             return self._get_at_str(key[0], idx, default=default, **kwargs)
+
+        # Direct resolution: join tuple to full path and check for leaf key
+        full_path = self._full_key_path(_KEY_SEP.join(key))
+        all_keys = self._get_all_keys()
+
+        if full_path in all_keys:
+            result = self._run_sync(self._abatch_get_at([full_path], idx))
+            tensor = result.get(full_path)
+            if tensor is not None:
+                return tensor
+
+        # Fall back to per-level navigation (nested prefix case)
         first = self._get_str(key[0], default, **kwargs)
         if first is default:
             return default
@@ -1514,6 +1736,10 @@ class TensorDictStore(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated, non_blocking):
         key_path = self._full_key_path(key)
+        if not isinstance(value, torch.Tensor):
+            # Non-tensor indexed write: RMW on the JSON array
+            self._run_sync(self._aset_non_tensor_at(key_path, value, idx))
+            return self
         items = {key_path: (value, idx)}
         self._run_sync(self._abatch_set_at(items))
         return self
@@ -1614,6 +1840,13 @@ class TensorDictStore(TensorDictBase):
                 await pipe.execute()
 
         self._run_sync(_arename(old_path, new_path))
+        # Invalidate keys cache — rename changes the set of keys
+        self._keys_cache[0] = None
+        if self._meta_cache is not None:
+            # Transfer cached metadata from old to new path
+            old_meta = self._meta_cache.pop(old_path, None)
+            if old_meta is not None:
+                self._meta_cache[new_path] = old_meta
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -1675,6 +1908,45 @@ class TensorDictStore(TensorDictBase):
         return sub_tds
 
     # ---- Materialization ----
+
+    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
+        """Materialize all leaf tensors into a local ``TensorDict``.
+
+        Uses a single Redis pipeline to fetch all data in one round-trip,
+        avoiding per-key ``_get_str`` overhead.
+        """
+        all_keys = self._get_all_keys()
+        # Filter to keys under our prefix
+        if self._prefix:
+            prefix_check = self._prefix + _KEY_SEP
+            leaf_kps = sorted(k for k in all_keys if k.startswith(prefix_check))
+        else:
+            leaf_kps = sorted(all_keys)
+
+        if not leaf_kps:
+            return TensorDict({}, batch_size=self.batch_size, device=self.device)
+
+        result_map = self._run_sync(self._aget_batch_tensors(leaf_kps))
+
+        # Build nested dict structure
+        strip = len(self._prefix) + len(_KEY_SEP) if self._prefix else 0
+        source: dict = {}
+        for kp in leaf_kps:
+            value = result_map.get(kp)
+            if value is None:
+                continue
+            rel = kp[strip:]
+            parts = rel.split(_KEY_SEP)
+            d = source
+            for part in parts[:-1]:
+                d = d.setdefault(part, {})
+            d[parts[-1]] = value
+        return TensorDict(
+            source,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self._maybe_names(),
+        )
 
     def to_local(self) -> TensorDict:
         """Pull the entire Redis-backed dict into local RAM.
@@ -2127,6 +2399,7 @@ class TensorDictStore(TensorDictBase):
         self._nested_tensordicts = {}
         self._cache_metadata = state.get("_cache_metadata", True)
         self._meta_cache = {} if self._cache_metadata else None
+        self._keys_cache = [None]
 
         # Recreate event loop and client
         self._loop = asyncio.new_event_loop()
@@ -2196,6 +2469,9 @@ class TensorDictStore(TensorDictBase):
             await pipe.execute()
 
         self._run_sync(_aclear())
+        if self._meta_cache is not None:
+            self._meta_cache.clear()
+        self._keys_cache[0] = None
 
     def __del__(self):
         try:

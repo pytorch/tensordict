@@ -1249,6 +1249,91 @@ class TestTensorClassStore:
             store.close()
 
 
+class TestNonTensorIndexing:
+    """Tests for per-element non-tensor indexing (ISSUE #1) and writing
+    to empty stores at an index (ISSUE #2)."""
+
+    def test_write_to_empty_store_at_index(self, store_kwargs):
+        """ISSUE #2: ``store[i] = td`` must work even when the store has no
+        keys yet (first indexed write)."""
+        store = TensorDictStore(batch_size=[5], **store_kwargs)
+        try:
+            store[0] = TensorDict({"obs": torch.randn(4)}, [])
+            assert store[0]["obs"].shape == torch.Size([4])
+            # Other elements should be zero-initialised
+            assert (store[1]["obs"] == 0).all()
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_per_element_read(self, store_kwargs):
+        """ISSUE #1: ``store[i]["label"]`` must return the i-th element,
+        not the whole blob."""
+        td = TensorDict({"obs": torch.zeros(5, 4), "label": "placeholder"}, [5])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            # Before any per-element write, all elements should be the same
+            assert store[0]["label"] == "placeholder"
+            assert store[3]["label"] == "placeholder"
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_per_element_write(self, store_kwargs):
+        """ISSUE #1: ``store[i] = td`` must update the non-tensor field
+        at index *i* only."""
+        td = TensorDict({"obs": torch.zeros(5, 4), "label": "placeholder"}, [5])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[3] = TensorDict({"obs": torch.ones(4), "label": "cat"}, [])
+            assert store[3]["label"] == "cat"
+            assert store[0]["label"] == "placeholder"
+            assert store[4]["label"] == "placeholder"
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_slice_write(self, store_kwargs):
+        """Per-element write with a slice index."""
+        td = TensorDict({"obs": torch.zeros(5, 4), "label": "a"}, [5])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[1:3] = TensorDict({"obs": torch.ones(2, 4), "label": "b"}, [2])
+            assert store[0]["label"] == "a"
+            assert store[1]["label"] == "b"
+            assert store[2]["label"] == "b"
+            assert store[3]["label"] == "a"
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_non_tensor_to_tensordict_after_write(self, store_kwargs):
+        """``to_tensordict()`` must reflect per-element non-tensor writes."""
+        td = TensorDict({"val": torch.randn(3, 2), "tag": "x"}, [3])
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            store[1] = TensorDict({"val": torch.zeros(2), "tag": "y"}, [])
+            local = store.to_tensordict()
+            tags = [local[i]["tag"] for i in range(3)]
+            assert tags == ["x", "y", "x"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_write_non_tensor_to_empty_store_at_index(self, store_kwargs):
+        """ISSUE #2 + non-tensor: writing non-tensor to a fresh store at
+        an index must work."""
+        store = TensorDictStore(batch_size=[4], **store_kwargs)
+        try:
+            store[0] = TensorDict({"obs": torch.randn(3), "label": "hello"}, [])
+            assert store[0]["obs"].shape == torch.Size([3])
+            assert store[0]["label"] == "hello"
+            assert store[1]["label"] is None  # uninitialised slot
+        finally:
+            store.clear_redis()
+            store.close()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
