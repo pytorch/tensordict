@@ -7632,7 +7632,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td.is_non_tensor("obs")
             False
 
-        See also:
+        See Also:
             :meth:`~tensordict.TensorDictBase.set_non_tensor`,
             :meth:`~tensordict.TensorDictBase.get_non_tensor`.
         """
