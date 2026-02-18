@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -220,6 +219,16 @@ print(json.dumps(out))
         # If torch isn't available in the environment, importing tensordict can fail.
         # The packaging version should still be correct.
         assert "dist_version" in info
+
+
+def test_pybind11_version_pin():
+    """Ensure pyproject.toml pins pybind11>=2.13 for Python 3.13 compatibility."""
+    pyproject = _ROOT / "pyproject.toml"
+    text = pyproject.read_text()
+    assert "pybind11" in text, "pybind11 not found in pyproject.toml"
+    assert (
+        "pybind11[global]>=2.13" in text or "pybind11>=2.13" in text
+    ), "pybind11 build requirement must pin >=2.13 for Python 3.13 support"
 
 
 if __name__ == "__main__":

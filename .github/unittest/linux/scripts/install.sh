@@ -53,6 +53,7 @@ printf "* Installing tensordict\n"
 # then install tensordict without resolving dependencies to avoid any solver changing
 # the PyTorch build (stable vs nightly).
 python -m pip install -U packaging pyvers importlib_metadata
+python -m pip install redis
 python -m pip install -e . --no-deps
 
 # smoke test
