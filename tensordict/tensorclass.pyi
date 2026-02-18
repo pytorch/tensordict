@@ -1403,9 +1403,10 @@ class TensorClass:
     ) -> Self: ...
     def to_struct_array(self) -> np.ndarray: ...
     def to_h5(self, filename: str, **kwargs) -> Any: ...
-    def to_redis(
+    def to_store(
         self,
         *,
+        backend: str = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,

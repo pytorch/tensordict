@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Redis-backed TensorDict implementation for out-of-core tensor storage."""
+"""Key-value store backed TensorDict implementations (Redis, Dragonfly, etc.)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import struct
 import threading
 import uuid
 import weakref
-from typing import Any, Callable, Sequence, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, Literal, Sequence, Tuple, Type, TYPE_CHECKING
 
 import torch
 from tensordict._td import (
@@ -44,6 +44,8 @@ from tensordict.utils import (
 )
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
+
+STORE_BACKENDS = Literal["redis", "dragonfly"]
 
 if TYPE_CHECKING:
     from typing import Self
@@ -301,8 +303,8 @@ def _getitem_result_shape(
     return list(torch.zeros(shape)[idx].shape)
 
 
-class _RedisTDKeysView(_TensorDictKeysView):
-    """Keys view for RedisTensorDict backed by a Redis key registry."""
+class _StoreTDKeysView(_TensorDictKeysView):
+    """Keys view for TensorDictStore backed by a Redis key registry."""
 
     def __iter__(self):
         td = self.tensordict
@@ -373,25 +375,32 @@ class _RedisTDKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class RedisTensorDict(TensorDictBase):
-    """A TensorDict backed by a Redis instance for out-of-core storage.
+class TensorDictStore(TensorDictBase):
+    """A TensorDict backed by an in-memory key-value store for out-of-core storage.
 
-    Tensors are stored as raw bytes in Redis using ``torch.frombuffer``-compatible
-    serialization. Metadata (shape, dtype) is stored in Redis Hashes for fast
-    introspection without downloading tensor data.
+    Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
+    `KeyDB <https://docs.keydb.dev>`_, and any other Redis-wire-compatible server.
 
-    All Redis I/O is performed via an async ``redis.asyncio.Redis`` client
-    running on a dedicated background event loop, ensuring non-blocking
-    operation from the caller's perspective.
+    Tensors are stored as raw bytes using ``torch.frombuffer``-compatible
+    serialization.  Metadata (shape, dtype) is stored in server-side Hashes
+    for fast introspection without downloading tensor data.
+
+    All I/O is performed via an async ``redis.asyncio.Redis`` client running on
+    a dedicated background event loop, ensuring non-blocking operation from the
+    caller's perspective.
 
     Keyword Args:
-        host (str): Redis server hostname. Defaults to ``"localhost"``.
-        port (int): Redis server port. Defaults to ``6379``.
-        db (int): Redis database number. Defaults to ``0``.
+        backend (str): Name of the server backend.  Accepted values include
+            ``"redis"`` (default), ``"dragonfly"``, ``"keydb"``, or any
+            other string (stored for documentation; all use the same wire
+            protocol).
+        host (str): Server hostname. Defaults to ``"localhost"``.
+        port (int): Server port. Defaults to ``6379``.
+        db (int): Database number. Defaults to ``0``.
         unix_socket_path (str, optional): Path to a Unix domain socket for
             local high-performance connections. Mutually exclusive with
             ``host``/``port``.
-        prefix (str, optional): A namespace prefix for all Redis keys.
+        prefix (str, optional): A namespace prefix for all keys.
             Defaults to ``"tensordict"``.
         batch_size (torch.Size or compatible): The TensorDict batch size.
             Defaults to ``torch.Size(())``.
@@ -399,24 +408,30 @@ class RedisTensorDict(TensorDictBase):
             retrieved tensors. Defaults to ``None`` (CPU).
         client: An existing ``redis.asyncio.Redis`` client instance. If
             provided, ``host``/``port``/``db``/``unix_socket_path`` are ignored.
-        td_id (str, optional): A unique identifier for this TensorDict in Redis.
-            Defaults to a new UUID. Pass an existing ID to reconnect to
-            previously stored data.
+        td_id (str, optional): A unique identifier for this TensorDict in the
+            store.  Defaults to a new UUID.  Pass an existing ID to reconnect
+            to previously stored data.
+        cache_metadata (bool): If ``True`` (default), cache tensor metadata
+            locally to reduce round-trips.
         **redis_kwargs: Additional keyword arguments passed to
             ``redis.asyncio.Redis``.
 
     Examples:
-        >>> from tensordict.redis import RedisTensorDict
-        >>> td = RedisTensorDict(batch_size=[100])
+        >>> from tensordict.store import TensorDictStore
+        >>> # Redis backend (default)
+        >>> td = TensorDictStore(batch_size=[100])
         >>> td["obs"] = torch.randn(100, 84)
-        >>> td["obs"]  # fetched from Redis
-        >>> local_td = td.to_local()  # materialize everything into RAM
+        >>> td["obs"]  # fetched from the store
+        >>> local_td = td.to_local()
+        >>>
+        >>> # Dragonfly backend (same wire protocol, up to 25x faster)
+        >>> td = TensorDictStore(backend="dragonfly", host="dragonfly-host", batch_size=[100])
 
     .. note::
         Requires ``redis`` package: ``pip install redis``.
 
     .. note::
-        Tensors are stored as CPU contiguous bytes. The ``device`` attribute
+        Tensors are stored as CPU contiguous bytes.  The ``device`` attribute
         controls the device tensors are cast to upon retrieval.
     """
 
@@ -425,6 +440,7 @@ class RedisTensorDict(TensorDictBase):
     def __init__(
         self,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -451,8 +467,10 @@ class RedisTensorDict(TensorDictBase):
         self._is_shared = False
         self._is_memmap = False
 
+        self._backend = backend
+
         # Nested TensorDict cache
-        self._nested_tensordicts: dict[str, RedisTensorDict] = {}
+        self._nested_tensordicts: dict[str, TensorDictStore] = {}
 
         # Metadata cache: (shape, dtype) per key_path, shared with nested views
         self._cache_metadata = cache_metadata
@@ -460,13 +478,13 @@ class RedisTensorDict(TensorDictBase):
             {} if cache_metadata else None
         )
 
-        # Unique identifier for this TensorDict instance in Redis
+        # Unique identifier for this TensorDict instance in the store
         self._td_id = td_id or str(uuid.uuid4())
 
         # Key prefix within this tensordict (for nested views)
         self._prefix = ""
 
-        # Namespace prefix for Redis keys
+        # Namespace prefix for store keys
         self._namespace = prefix
 
         # Connection parameters (for pickling/reconnection)
@@ -497,11 +515,11 @@ class RedisTensorDict(TensorDictBase):
         self._batch_size = torch.Size(batch_size)
         self._device = torch.device(device) if device is not None else None
 
-        # Persist batch_size and device to Redis
+        # Persist batch_size and device to the store
         self._run_sync(self._apersist_metadata())
 
     @classmethod
-    def _new_nested(cls, *, parent: RedisTensorDict, key_prefix: str, batch_size=None):
+    def _new_nested(cls, *, parent: TensorDictStore, key_prefix: str, batch_size=None):
         """Create a nested view sharing the parent's Redis client and event loop.
 
         This is an internal factory used for nested TensorDict access. The
@@ -516,6 +534,7 @@ class RedisTensorDict(TensorDictBase):
         obj._nested_tensordicts = {}
         obj._td_dim_names = None
 
+        obj._backend = parent._backend
         obj._td_id = parent._td_id
         obj._prefix = key_prefix
         obj._namespace = parent._namespace
@@ -1279,10 +1298,10 @@ class RedisTensorDict(TensorDictBase):
         prefix_check = key_path + _KEY_SEP
         nested_keys = [k for k in all_keys if k.startswith(prefix_check)]
         if nested_keys:
-            # Return a nested RedisTensorDict view
+            # Return a nested TensorDictStore view
             nested = self._nested_tensordicts.get(key)
             if nested is None:
-                nested = RedisTensorDict._new_nested(
+                nested = TensorDictStore._new_nested(
                     parent=self,
                     key_prefix=key_path,
                 )
@@ -1387,7 +1406,7 @@ class RedisTensorDict(TensorDictBase):
             # Create nested tensordict and populate it
             target_td = self._nested_tensordicts.get(key)
             if target_td is None:
-                target_td = RedisTensorDict._new_nested(
+                target_td = TensorDictStore._new_nested(
                     parent=self,
                     key_prefix=key_path,
                     batch_size=value.batch_size,
@@ -1442,7 +1461,7 @@ class RedisTensorDict(TensorDictBase):
             self._run_sync(self._aset_non_tensor(key_path, raw_value))
         elif is_tensor_collection(value):
             nested_prefix = self._full_key_path(_KEY_SEP.join(key))
-            nested = RedisTensorDict._new_nested(
+            nested = TensorDictStore._new_nested(
                 parent=self,
                 key_prefix=nested_prefix,
                 batch_size=value.batch_size,
@@ -1478,8 +1497,8 @@ class RedisTensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
         *,
         sort: bool = False,
-    ) -> _RedisTDKeysView:
-        return _RedisTDKeysView(
+    ) -> _StoreTDKeysView:
+        return _StoreTDKeysView(
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
@@ -1488,7 +1507,7 @@ class RedisTensorDict(TensorDictBase):
         )
 
     @lock_blocked
-    def del_(self, key: NestedKey) -> RedisTensorDict:
+    def del_(self, key: NestedKey) -> TensorDictStore:
         if isinstance(key, str):
             key_path = self._full_key_path(key)
         else:
@@ -1514,7 +1533,7 @@ class RedisTensorDict(TensorDictBase):
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> RedisTensorDict:
+    ) -> TensorDictStore:
         if isinstance(old_key, str):
             old_path = self._full_key_path(old_key)
         else:
@@ -1576,7 +1595,7 @@ class RedisTensorDict(TensorDictBase):
         # Nested TD
         prefix_check = key_path + _KEY_SEP
         if any(k.startswith(prefix_check) for k in all_keys):
-            return RedisTensorDict
+            return TensorDictStore
 
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
@@ -1634,6 +1653,7 @@ class RedisTensorDict(TensorDictBase):
         cls,
         input_dict,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1644,20 +1664,21 @@ class RedisTensorDict(TensorDictBase):
         device=None,
         **kwargs,
     ):
-        """Create a RedisTensorDict from a dictionary or TensorDict.
+        """Create a TensorDictStore from a dictionary or TensorDict.
 
         Args:
-            input_dict: A dictionary or TensorDict to store in Redis.
+            input_dict: A dictionary or TensorDict to store.
 
         Keyword Args:
-            host, port, db, unix_socket_path, prefix: Redis connection params.
+            backend: Store backend (``"redis"``, ``"dragonfly"``, etc.).
+            host, port, db, unix_socket_path, prefix: Connection params.
             auto_batch_size: If True, infer batch_size from data.
             batch_size: Explicit batch_size.
             device: Target device for tensor retrieval.
-            **kwargs: Additional Redis connection kwargs.
+            **kwargs: Additional connection kwargs.
 
         Returns:
-            A new RedisTensorDict.
+            A new TensorDictStore.
         """
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -1674,6 +1695,7 @@ class RedisTensorDict(TensorDictBase):
         connect_kwargs["db"] = db
 
         out = cls(
+            backend=backend,
             batch_size=batch_size,
             device=device,
             prefix=prefix,
@@ -1691,6 +1713,7 @@ class RedisTensorDict(TensorDictBase):
         cls,
         td: TensorDictBase,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1698,32 +1721,33 @@ class RedisTensorDict(TensorDictBase):
         prefix: str = "tensordict",
         device=None,
         **kwargs,
-    ) -> RedisTensorDict:
-        """Upload a TensorDict to Redis.
+    ) -> TensorDictStore:
+        """Upload a TensorDict to a key-value store.
 
-        Creates a new :class:`RedisTensorDict` and copies all tensor data from
-        the provided TensorDict into Redis.
+        Creates a new :class:`TensorDictStore` and copies all tensor data from
+        the provided TensorDict into the store.
 
         Args:
             td (TensorDictBase): The source TensorDict whose data will be
-                stored in Redis.
+                stored.
 
         Keyword Args:
-            host (str): Redis hostname. Defaults to ``"localhost"``.
-            port (int): Redis port. Defaults to ``6379``.
-            db (int): Redis database. Defaults to ``0``.
+            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
+            host (str): Server hostname. Defaults to ``"localhost"``.
+            port (int): Server port. Defaults to ``6379``.
+            db (int): Database number. Defaults to ``0``.
             unix_socket_path (str, optional): Unix socket path.
-            prefix (str): Redis key namespace. Defaults to ``"tensordict"``.
+            prefix (str): Key namespace. Defaults to ``"tensordict"``.
             device (torch.device, optional): Device override for retrieved
                 tensors. If ``None``, uses the source TensorDict's device.
-            **kwargs: Extra Redis connection kwargs.
+            **kwargs: Extra connection kwargs.
 
         Returns:
-            A new RedisTensorDict backed by the uploaded data.
+            A new TensorDictStore backed by the uploaded data.
 
         Examples:
             >>> local = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> remote = RedisTensorDict.from_tensordict(local, host="my-redis")
+            >>> remote = TensorDictStore.from_tensordict(local, host="my-server")
             >>> remote["obs"].shape
             torch.Size([10, 84])
         """
@@ -1741,8 +1765,9 @@ class RedisTensorDict(TensorDictBase):
         from tensordict._lazy import LazyStackedTensorDict
 
         if isinstance(td, LazyStackedTensorDict):
-            return RedisLazyStackedTensorDict.from_lazy_stack(
+            return LazyStackedTensorDictStore.from_lazy_stack(
                 td,
+                backend=backend,
                 host=host,
                 port=port,
                 db=db,
@@ -1753,6 +1778,7 @@ class RedisTensorDict(TensorDictBase):
             )
 
         out = cls(
+            backend=backend,
             batch_size=td.batch_size,
             device=device,
             prefix=prefix,
@@ -1763,9 +1789,10 @@ class RedisTensorDict(TensorDictBase):
         return out
 
     @classmethod
-    def from_redis(
+    def from_store(
         cls,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -1774,47 +1801,48 @@ class RedisTensorDict(TensorDictBase):
         td_id: str,
         device=None,
         **kwargs,
-    ) -> RedisTensorDict:
-        """Connect to an existing RedisTensorDict stored on a Redis server.
+    ) -> TensorDictStore:
+        """Connect to an existing TensorDictStore on a remote server.
 
         This is the cross-node entry point: one process stores data with
         :meth:`from_tensordict` (or regular ``__setitem__``), and another
-        process on any machine that can reach the same Redis server
-        reconstructs the handle by passing the same ``td_id``.
+        process on any machine that can reach the same server reconstructs
+        the handle by passing the same ``td_id``.
 
         Batch size and device are read from the metadata already persisted
-        in Redis by the original writer.
+        in the store by the original writer.
 
         Keyword Args:
-            host (str): Redis hostname. Defaults to ``"localhost"``.
-            port (int): Redis port. Defaults to ``6379``.
-            db (int): Redis database. Defaults to ``0``.
+            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
+            host (str): Server hostname. Defaults to ``"localhost"``.
+            port (int): Server port. Defaults to ``6379``.
+            db (int): Database number. Defaults to ``0``.
             unix_socket_path (str, optional): Unix socket path.
-            prefix (str): Redis key namespace. Defaults to ``"tensordict"``.
+            prefix (str): Key namespace. Defaults to ``"tensordict"``.
             td_id (str): The unique identifier of the TensorDict to reconnect
                 to. Obtain this from a previously created instance via
                 ``td._td_id``.
             device (torch.device, optional): Device override for retrieved
-                tensors. If ``None``, uses the device stored in Redis.
-            **kwargs: Extra Redis connection kwargs.
+                tensors. If ``None``, uses the device stored in the server.
+            **kwargs: Extra connection kwargs.
 
         Returns:
-            A RedisTensorDict connected to the existing data.
+            A TensorDictStore connected to the existing data.
 
         Examples:
             On node A (writer)::
 
-                td = RedisTensorDict(host="shared-redis", batch_size=[100])
+                td = TensorDictStore(host="my-server", batch_size=[100])
                 td["obs"] = torch.randn(100, 84)
                 print(td._td_id)  # e.g. "a1b2c3d4-..."
 
             On node B (reader)::
 
-                td = RedisTensorDict.from_redis(
-                    host="shared-redis",
+                td = TensorDictStore.from_store(
+                    host="my-server",
                     td_id="a1b2c3d4-...",
                 )
-                td["obs"]  # fetched from the shared Redis
+                td["obs"]  # fetched from the shared store
         """
         import redis.asyncio as aioredis
 
@@ -1845,7 +1873,7 @@ class RedisTensorDict(TensorDictBase):
 
         if raw_bs is None:
             raise KeyError(
-                f"No RedisTensorDict with td_id={td_id!r} found at "
+                f"No TensorDictStore with td_id={td_id!r} found at "
                 f"{host}:{port} db={db} (prefix={prefix!r})."
             )
 
@@ -1855,6 +1883,7 @@ class RedisTensorDict(TensorDictBase):
             device = torch.device(dev_str) if dev_str else None
 
         return cls(
+            backend=backend,
             host=host,
             port=port,
             db=db,
@@ -1870,10 +1899,11 @@ class RedisTensorDict(TensorDictBase):
 
     # ---- Cloning ----
 
-    def _clone(self, recurse: bool = True) -> RedisTensorDict:
+    def _clone(self, recurse: bool = True) -> TensorDictStore:
         if recurse:
             # Deep clone: new UUID, copies all data
-            new_td = RedisTensorDict(
+            new_td = TensorDictStore(
+                backend=self._backend,
                 host=self._host,
                 port=self._port,
                 db=self._db,
@@ -1886,7 +1916,7 @@ class RedisTensorDict(TensorDictBase):
             return new_td
         else:
             # Shallow clone: same Redis data, new Python wrapper
-            return RedisTensorDict._new_nested(
+            return TensorDictStore._new_nested(
                 parent=self,
                 key_prefix=self._prefix,
             )
@@ -1983,6 +2013,7 @@ class RedisTensorDict(TensorDictBase):
 
     def __getstate__(self):
         state = {
+            "_backend": self._backend,
             "_host": self._host,
             "_port": self._port,
             "_db": self._db,
@@ -2002,6 +2033,7 @@ class RedisTensorDict(TensorDictBase):
     def __setstate__(self, state):
         import redis.asyncio as aioredis
 
+        self._backend = state.get("_backend", "redis")
         self._host = state["_host"]
         self._port = state["_port"]
         self._db = state["_db"]
@@ -2102,10 +2134,11 @@ class RedisTensorDict(TensorDictBase):
         device = self.device
         batch_size = self.batch_size
         return (
-            f"RedisTensorDict(\n"
+            f"TensorDictStore(\n"
             f"    keys={keys_str},\n"
             f"    batch_size={batch_size},\n"
             f"    device={device},\n"
+            f"    backend={self._backend!r},\n"
             f"    td_id={self._td_id!r})"
         )
 
@@ -2278,16 +2311,16 @@ class RedisTensorDict(TensorDictBase):
         )
 
 
-_register_tensor_class(RedisTensorDict)
+_register_tensor_class(TensorDictStore)
 
 
 # ---------------------------------------------------------------------------
-# _RedisStackElementView — write-through view for a single stack element
+# _StoreStackElementView — write-through view for a single stack element
 # ---------------------------------------------------------------------------
 
 
-class _RedisStackElementView(TensorDictBase):
-    """Write-through view of one element in a :class:`RedisLazyStackedTensorDict`.
+class _StoreStackElementView(TensorDictBase):
+    """Write-through view of one element in a :class:`LazyStackedTensorDictStore`.
 
     Returned by ``redis_lazy_stack[int]``.  All reads and writes go through
     the parent's Redis connection so that mutations propagate.  This class is
@@ -2546,8 +2579,8 @@ class _RedisStackElementView(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
         *,
         sort: bool = False,
-    ) -> _RedisLazyStackedKeysView:
-        return _RedisLazyStackedKeysView(
+    ) -> _LazyStackedStoreKeysView:
+        return _LazyStackedStoreKeysView(
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
@@ -2556,16 +2589,16 @@ class _RedisStackElementView(TensorDictBase):
         )
 
     @lock_blocked
-    def del_(self, key: NestedKey) -> _RedisStackElementView:
+    def del_(self, key: NestedKey) -> _StoreStackElementView:
         raise RuntimeError(
             "Cannot delete keys from a stack element view. "
-            "Delete from the parent RedisLazyStackedTensorDict instead."
+            "Delete from the parent LazyStackedTensorDictStore instead."
         )
 
     def rename_key_(self, old_key, new_key, safe=False):
         raise RuntimeError(
             "Cannot rename keys on a stack element view. "
-            "Rename on the parent RedisLazyStackedTensorDict instead."
+            "Rename on the parent LazyStackedTensorDictStore instead."
         )
 
     def entry_class(self, key: NestedKey) -> type:
@@ -2670,7 +2703,7 @@ class _RedisStackElementView(TensorDictBase):
     def __repr__(self):
         keys_str = list(self.keys())
         return (
-            f"_RedisStackElementView(\n"
+            f"_StoreStackElementView(\n"
             f"    parent_td_id={self._parent._td_id!r},\n"
             f"    element_idx={self._element_idx},\n"
             f"    keys={keys_str},\n"
@@ -2792,15 +2825,15 @@ class _RedisStackElementView(TensorDictBase):
 
 
 # ---------------------------------------------------------------------------
-# RedisLazyStackedTensorDict — lazy-stack storage in Redis
+# LazyStackedTensorDictStore — lazy-stack storage in Redis
 # ---------------------------------------------------------------------------
 
 # Upload chunk size: number of stack elements processed per pipeline command.
 _UPLOAD_CHUNK = 10_000
 
 
-class _RedisLazyStackedKeysView(_TensorDictKeysView):
-    """Keys view for RedisLazyStackedTensorDict."""
+class _LazyStackedStoreKeysView(_TensorDictKeysView):
+    """Keys view for LazyStackedTensorDictStore."""
 
     def __iter__(self):
         td = self.tensordict
@@ -2845,12 +2878,16 @@ class _RedisLazyStackedKeysView(_TensorDictKeysView):
         return sum(1 for _ in self)
 
 
-class RedisLazyStackedTensorDict(TensorDictBase):
-    """A LazyStackedTensorDict backed by Redis.
+class LazyStackedTensorDictStore(TensorDictBase):
+    """A LazyStackedTensorDict backed by a key-value store.
 
-    Stores each leaf key as a **single concatenated blob** in Redis,
+    Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
+    `KeyDB <https://docs.keydb.dev>`_, and any other Redis-wire-compatible
+    server.
+
+    Stores each leaf key as a **single concatenated blob** in the store,
     regardless of how many stack elements there are.  For *N* elements and
-    *K* leaf keys this uses only *O(K)* Redis keys (plus offset tables for
+    *K* leaf keys this uses only *O(K)* keys (plus offset tables for
     heterogeneous shapes).
 
     Two storage modes are supported:
@@ -2863,11 +2900,12 @@ class RedisLazyStackedTensorDict(TensorDictBase):
       hash.
 
     Keyword Args:
-        host (str): Redis hostname.  Defaults to ``"localhost"``.
-        port (int): Redis port.  Defaults to ``6379``.
-        db (int): Redis database.  Defaults to ``0``.
+        backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
+        host (str): Server hostname.  Defaults to ``"localhost"``.
+        port (int): Server port.  Defaults to ``6379``.
+        db (int): Database number.  Defaults to ``0``.
         unix_socket_path (str, optional): Unix domain socket path.
-        prefix (str): Redis key namespace.  Defaults to ``"tensordict"``.
+        prefix (str): Key namespace.  Defaults to ``"tensordict"``.
         count (int): Number of stack elements (*N*).
         stack_dim (int): Dimension along which the stack was performed.
         inner_batch_size (Sequence[int]): Batch size of each element.
@@ -2875,7 +2913,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         client: Existing ``redis.asyncio.Redis`` client.
         td_id (str, optional): UUID for reconnecting to existing data.
         cache_metadata (bool): Cache (shape, dtype) locally.
-        **redis_kwargs: Extra Redis connection keyword arguments.
+        **redis_kwargs: Extra connection keyword arguments.
     """
 
     _td_dim_names = None
@@ -2883,6 +2921,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
     def __init__(
         self,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -2907,6 +2946,8 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         self._lock_id = set()
         self._is_shared = False
         self._is_memmap = False
+
+        self._backend = backend
 
         self._cache_metadata = cache_metadata
         self._meta_cache: dict[str, tuple[list[int], torch.dtype]] | None = (
@@ -3708,7 +3749,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
 
         # Integer index on the stack dim: return write-through view
         if isinstance(index, int) and self._stack_dim == 0:
-            return _RedisStackElementView(self, index)
+            return _StoreStackElementView(self, index)
 
         # General indexing via _index_tensordict
         return self._index_tensordict(index)
@@ -3805,7 +3846,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             self._run_sync(self._aset_full_tensor(key_path, value))
         except (ValueError, TypeError):
             raise TypeError(
-                f"RedisLazyStackedTensorDict only supports tensor values, got {type(value)}"
+                f"LazyStackedTensorDictStore only supports tensor values, got {type(value)}"
             )
         return self
 
@@ -3911,8 +3952,8 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
         *,
         sort: bool = False,
-    ) -> _RedisLazyStackedKeysView:
-        return _RedisLazyStackedKeysView(
+    ) -> _LazyStackedStoreKeysView:
+        return _LazyStackedStoreKeysView(
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
@@ -3921,7 +3962,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         )
 
     @lock_blocked
-    def del_(self, key: NestedKey) -> RedisLazyStackedTensorDict:
+    def del_(self, key: NestedKey) -> LazyStackedTensorDictStore:
         if isinstance(key, str):
             key_path = key
         else:
@@ -3949,7 +3990,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
-    ) -> RedisLazyStackedTensorDict:
+    ) -> LazyStackedTensorDictStore:
         if isinstance(old_key, str):
             old_path = old_key
         else:
@@ -3990,7 +4031,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             return torch.Tensor
         prefix_check = key_path + _KEY_SEP
         if any(k.startswith(prefix_check) for k in all_keys):
-            return RedisLazyStackedTensorDict
+            return LazyStackedTensorDictStore
         raise KeyError(f"key {key} not found in {type(self).__name__}")
 
     # ---- Locking ----
@@ -4029,6 +4070,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         cls,
         lazy_td,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -4036,8 +4078,8 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         prefix: str = "tensordict",
         device=None,
         **kwargs,
-    ) -> RedisLazyStackedTensorDict:
-        """Upload a :class:`LazyStackedTensorDict` to Redis with streaming.
+    ) -> LazyStackedTensorDictStore:
+        """Upload a :class:`LazyStackedTensorDict` to a key-value store.
 
         Data is streamed in chunks of ``_UPLOAD_CHUNK`` elements to avoid
         materialising the full stack in memory.
@@ -4046,12 +4088,13 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             lazy_td (LazyStackedTensorDict): The source lazy stack.
 
         Keyword Args:
-            host, port, db, unix_socket_path, prefix: Redis connection params.
+            backend: Store backend (``"redis"``, ``"dragonfly"``, etc.).
+            host, port, db, unix_socket_path, prefix: Connection params.
             device: Device override for retrieved tensors.
-            **kwargs: Extra Redis connection keyword arguments.
+            **kwargs: Extra connection keyword arguments.
 
         Returns:
-            A :class:`RedisLazyStackedTensorDict` backed by the uploaded data.
+            A :class:`LazyStackedTensorDictStore` backed by the uploaded data.
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -4074,6 +4117,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         connect_kwargs["db"] = db
 
         out = cls(
+            backend=backend,
             count=count,
             stack_dim=stack_dim,
             inner_batch_size=inner_batch_size,
@@ -4086,9 +4130,10 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         return out
 
     @classmethod
-    def from_redis(
+    def from_store(
         cls,
         *,
+        backend: STORE_BACKENDS = "redis",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -4097,8 +4142,8 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         td_id: str,
         device=None,
         **kwargs,
-    ) -> RedisLazyStackedTensorDict:
-        """Reconnect to an existing RedisLazyStackedTensorDict on a Redis server."""
+    ) -> LazyStackedTensorDictStore:
+        """Reconnect to an existing LazyStackedTensorDictStore on a server."""
         import redis.asyncio as aioredis
 
         connect_kwargs = dict(kwargs)
@@ -4129,7 +4174,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         loop.close()
 
         if raw_type is None:
-            raise KeyError(f"No RedisLazyStackedTensorDict with td_id={td_id!r} found.")
+            raise KeyError(f"No LazyStackedTensorDictStore with td_id={td_id!r} found.")
 
         count = int(raw_count)
         stack_dim = int(raw_sd)
@@ -4140,6 +4185,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             device = torch.device(dev_str) if dev_str else None
 
         return cls(
+            backend=backend,
             host=host,
             port=port,
             db=db,
@@ -4166,16 +4212,16 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         """Not directly supported — use :meth:`from_lazy_stack` instead."""
         raise NotImplementedError(
             f"{cls.__name__}.from_dict is not supported. "
-            "Use RedisLazyStackedTensorDict.from_lazy_stack(lazy_td, ...) instead."
+            "Use LazyStackedTensorDictStore.from_lazy_stack(lazy_td, ...) instead."
         )
 
     from_dict_instance = TensorDict.from_dict_instance
 
     # ---- Cloning ----
 
-    def _clone(self, recurse: bool = True) -> RedisLazyStackedTensorDict:
+    def _clone(self, recurse: bool = True) -> LazyStackedTensorDictStore:
         if recurse:
-            new_td = RedisLazyStackedTensorDict(
+            new_td = LazyStackedTensorDictStore(
                 host=self._host,
                 port=self._port,
                 db=self._db,
@@ -4189,7 +4235,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
             new_td.update(self.to_tensordict())
             return new_td
         # Shallow: same data, new wrapper
-        return RedisLazyStackedTensorDict(
+        return LazyStackedTensorDictStore(
             host=self._host,
             port=self._port,
             db=self._db,
@@ -4274,6 +4320,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
 
     def __getstate__(self):
         return {
+            "_backend": self._backend,
             "_host": self._host,
             "_port": self._port,
             "_db": self._db,
@@ -4294,6 +4341,7 @@ class RedisLazyStackedTensorDict(TensorDictBase):
     def __setstate__(self, state):
         import redis.asyncio as aioredis
 
+        self._backend = state.get("_backend", "redis")
         self._host = state["_host"]
         self._port = state["_port"]
         self._db = state["_db"]
@@ -4385,12 +4433,13 @@ class RedisLazyStackedTensorDict(TensorDictBase):
     def __repr__(self):
         keys_str = list(self.keys())
         return (
-            f"RedisLazyStackedTensorDict(\n"
+            f"LazyStackedTensorDictStore(\n"
             f"    keys={keys_str},\n"
             f"    batch_size={self.batch_size},\n"
             f"    count={self._count},\n"
             f"    stack_dim={self._stack_dim},\n"
             f"    device={self.device},\n"
+            f"    backend={self._backend!r},\n"
             f"    td_id={self._td_id!r})"
         )
 
@@ -4546,4 +4595,4 @@ class RedisLazyStackedTensorDict(TensorDictBase):
         raise RuntimeError(f"Cannot call _stack_onto_ on a {type(self).__name__}.")
 
 
-_register_tensor_class(RedisLazyStackedTensorDict)
+_register_tensor_class(LazyStackedTensorDictStore)
