@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11[global]", "setuptools_scm"]
+requires = ["setuptools", "wheel", "pybind11[global]>=2.13", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.usort]
@@ -55,7 +55,7 @@ tests = [
     "pytest-benchmark"
 ]
 h5 = ["h5py>=3.8"]
-dev = ["pybind11", "ninja"]
+dev = ["pybind11>=2.13", "ninja"]
 typecheck = ["mypy>=1.0.0"]
 onnx = ["onnx", "onnxscript", "onnxruntime"]
 
