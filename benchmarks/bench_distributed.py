@@ -22,7 +22,10 @@ from tensordict import TensorDict
 
 def make_td(num_tensors, tensor_size=1024, dtype=torch.float32, device="cuda"):
     """Create a TensorDict with `num_tensors` tensors of `tensor_size` elements."""
-    d = {f"t{i}": torch.randn(tensor_size, dtype=dtype, device=device) for i in range(num_tensors)}
+    d = {
+        f"t{i}": torch.randn(tensor_size, dtype=dtype, device=device)
+        for i in range(num_tensors)
+    }
     return TensorDict(d, batch_size=[], device=device)
 
 
@@ -146,9 +149,11 @@ def main():
 
     if rank == 0:
         print(f"Backend: nccl | Device: cuda:{local_rank}")
-        print(f"{'num_tensors':>12} {'tensor_size':>12} {'total_MB':>10} "
-              f"{'leaf_ms':>10} {'consol_ms':>10} {'speedup':>8} "
-              f"{'bcast_ms':>10} {'allred_ms':>10} {'initrem_ms':>10}")
+        print(
+            f"{'num_tensors':>12} {'tensor_size':>12} {'total_MB':>10} "
+            f"{'leaf_ms':>10} {'consol_ms':>10} {'speedup':>8} "
+            f"{'bcast_ms':>10} {'allred_ms':>10} {'initrem_ms':>10}"
+        )
         print("-" * 112)
 
     for num_tensors, tensor_size in configs:
@@ -172,18 +177,25 @@ def main():
         consol_time = bench_consolidated_send_recv(
             td_c if rank == 0 else None,
             td_c if rank == 1 else None,
-            n_iters, rank,
+            n_iters,
+            rank,
         )
 
-        bcast_time = bench_broadcast(td if rank == 0 else TensorDict({}, device=f"cuda:{local_rank}"), n_iters, rank)
+        bcast_time = bench_broadcast(
+            td if rank == 0 else TensorDict({}, device=f"cuda:{local_rank}"),
+            n_iters,
+            rank,
+        )
         allred_time = bench_all_reduce(td.clone(), n_iters, rank)
         initrem_time = bench_init_remote(td, n_iters, rank)
 
         if rank == 0:
             speedup = leaf_time / consol_time if consol_time > 0 else float("inf")
-            print(f"{num_tensors:>12} {tensor_size:>12} {mb:>10.2f} "
-                  f"{leaf_time * 1000:>10.2f} {consol_time * 1000:>10.2f} {speedup:>8.1f}x "
-                  f"{bcast_time * 1000:>10.2f} {allred_time * 1000:>10.2f} {initrem_time * 1000:>10.2f}")
+            print(
+                f"{num_tensors:>12} {tensor_size:>12} {mb:>10.2f} "
+                f"{leaf_time * 1000:>10.2f} {consol_time * 1000:>10.2f} {speedup:>8.1f}x "
+                f"{bcast_time * 1000:>10.2f} {allred_time * 1000:>10.2f} {initrem_time * 1000:>10.2f}"
+            )
 
     dist.destroy_process_group()
 

@@ -87,7 +87,6 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _split_tensordict,
-    _STR_DTYPE_TO_DTYPE,
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
@@ -9434,8 +9433,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self.broadcast(src=rank, group=group, device=device)
             return
 
-        from tensordict._reductions import _rebuild_tensordict_files_consolidated
-
         td_c = self.consolidate(metadata=True)
         storage = td_c._consolidated["storage"]
         metadata = td_c._consolidated["metadata"]
@@ -9828,9 +9825,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             TensorDict: the broadcast tensordict on all ranks (consolidated).
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         rank = dist.get_rank(group=group)
         if rank == src:
@@ -9918,9 +9914,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             list[TensorDict]: A list of tensordicts from all ranks.
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         world_size = dist.get_world_size(group=group)
         td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
@@ -9935,16 +9930,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         max_size = max(all_sizes)
         padded = torch.zeros(max_size, dtype=torch.uint8, device=storage.device)
         padded[: storage.numel()] = storage
-        gathered = [torch.empty(max_size, dtype=torch.uint8, device=storage.device) for _ in range(world_size)]
+        gathered = [
+            torch.empty(max_size, dtype=torch.uint8, device=storage.device)
+            for _ in range(world_size)
+        ]
         dist.all_gather(gathered, padded, group=group)
 
         result = []
         for i in range(world_size):
             m = all_meta[i]
             sz = m.pop("_total_bytes")
-            result.append(
-                _rebuild_tensordict_files_consolidated(m, gathered[i][:sz])
-            )
+            result.append(_rebuild_tensordict_files_consolidated(m, gathered[i][:sz]))
         return result
 
     def scatter(
@@ -9977,9 +9973,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             TensorDict: The tensordict assigned to this rank.
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         rank = dist.get_rank(group=group)
         world_size = dist.get_world_size(group=group)
@@ -10017,7 +10012,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             total_bytes = metadata.pop("_total_bytes")
             metadata.pop("_max_bytes")
             metadata.pop("_storage_device")
-            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+            return _rebuild_tensordict_files_consolidated(
+                metadata, recv_buf[:total_bytes]
+            )
         else:
             scatter_meta = [None]
             dist.scatter_object_list(scatter_meta, None, src=src, group=group)
@@ -10029,7 +10026,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             recv_buf = torch.empty(max_size, dtype=torch.uint8, device=recv_device)
             dist.scatter(recv_buf, None, src=src, group=group)
-            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+            return _rebuild_tensordict_files_consolidated(
+                metadata, recv_buf[:total_bytes]
+            )
 
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
