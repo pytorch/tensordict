@@ -236,6 +236,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "is_locked",
     "is_memmap",
     "is_meta",
+    "is_non_tensor",
     "is_shared",
     "isend",
     "items",
