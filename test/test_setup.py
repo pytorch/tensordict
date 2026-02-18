@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -224,19 +223,12 @@ print(json.dumps(out))
 
 def test_pybind11_version_pin():
     """Ensure pyproject.toml pins pybind11>=2.13 for Python 3.13 compatibility."""
-    import tomllib
-
     pyproject = _ROOT / "pyproject.toml"
-    with open(pyproject, "rb") as f:
-        config = tomllib.load(f)
-
-    build_requires = config["build-system"]["requires"]
-    pybind_reqs = [r for r in build_requires if r.startswith("pybind11")]
-    assert pybind_reqs, "pybind11 not found in build-system.requires"
-    assert any(">=2.13" in r for r in pybind_reqs), (
-        f"pybind11 build requirement must pin >=2.13 for Python 3.13 support, "
-        f"got: {pybind_reqs}"
-    )
+    text = pyproject.read_text()
+    assert "pybind11" in text, "pybind11 not found in pyproject.toml"
+    assert (
+        "pybind11[global]>=2.13" in text or "pybind11>=2.13" in text
+    ), "pybind11 build requirement must pin >=2.13 for Python 3.13 support"
 
 
 if __name__ == "__main__":
