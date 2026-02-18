@@ -1019,6 +1019,7 @@ class TensorClass:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> None: ...
     def recv(
         self,
@@ -1027,6 +1028,7 @@ class TensorClass:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> int: ...
     @classmethod
     def from_remote_init(
@@ -1066,6 +1068,19 @@ class TensorClass:
         return_premature: bool = False,
         group: Incomplete | None = None,
     ) -> Self: ...
+    def broadcast(
+        self,
+        src: int,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> Self: ...
+    def all_reduce(
+        self,
+        op: Incomplete | None = None,
+        *,
+        group: dist.ProcessGroup | None = None,
+        async_op: bool = False,
+    ) -> None: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
         self,

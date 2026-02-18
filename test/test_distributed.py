@@ -842,6 +842,7 @@ class TestInitRemote:
         td = TensorDict.from_remote_init(src=0)
         assert set(td.keys()) == {"a", "c", "d"}
         assert (td == 1).all()
+        assert td.is_consolidated()
         queue.put("yuppie")
 
     @classmethod
@@ -869,6 +870,223 @@ class TestInitRemote:
         td.init_remote(dst=1)
 
     def test_init_remote(self, set_context, tmp_path):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestInitRemoteNonTensor:
+    port = "29506"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        td = TensorDict.from_remote_init(src=0)
+        assert set(td.keys()) == {"a", "label", "c"}
+        assert (td["a"] == 1).all()
+        assert (td["c"] == 2).all()
+        assert td["label"] == "hello"
+        assert td.is_consolidated()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+        )
+
+        td = TensorDict(
+            {
+                "a": torch.ones(3),
+                "label": "hello",
+                "c": torch.full((3, 2), 2.0),
+            },
+            [3],
+        )
+        td.init_remote(dst=1)
+
+    def test_init_remote_non_tensor(self, set_context, tmp_path):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestAllReduce:
+    port = "29509"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+        )
+
+        td = TensorDict(
+            {
+                ("a", "b"): torch.ones(2),
+                "c": torch.ones(2, 3),
+            },
+            [2],
+        )
+        td.all_reduce(op=dist.ReduceOp.SUM)
+        assert (td["a", "b"] == 3).all()
+        assert (td["c"] == 3).all()
+        if rank == 0:
+            queue.put("yuppie")
+
+    @pytest.mark.parametrize("op", [dist.ReduceOp.SUM, dist.ReduceOp.PRODUCT])
+    def test_all_reduce(self, set_context, op):
+        queue = mp.Queue(1)
+        workers = []
+        for rank in range(3):
+            w = mp.Process(target=type(self).worker, args=(queue, rank))
+            workers.append(w)
+            w.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestBroadcast:
+    port = "29508"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        if rank == 0:
+            td = TensorDict(
+                {
+                    ("a", "b"): torch.ones(2),
+                    "c": torch.ones(2, 3),
+                    ("d", "e", "f"): torch.ones(2, 2),
+                },
+                [2],
+            )
+        else:
+            td = TensorDict({}, [])
+
+        result = td.broadcast(src=0)
+        assert set(result.keys()) == {"a", "c", "d"}
+        assert (result == 1).all()
+        assert result.is_consolidated()
+        if rank == 1:
+            queue.put("yuppie")
+
+    def test_broadcast(self, set_context, tmp_path):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).worker, args=(queue, 0))
+        secondary_worker = mp.Process(target=type(self).worker, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestSendConsolidated:
+    port = "29507"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        # Setup phase: receive schema + first payload
+        td_recv = TensorDict.from_remote_init(src=0)
+        assert td_recv.is_consolidated()
+
+        # Steady-state: receive updated data into existing buffer
+        td_recv.recv(src=0, consolidated=True)
+        assert (td_recv["a", "b"] == 2).all()
+        assert (td_recv["c"] == 2).all()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+        )
+
+        td = TensorDict(
+            {
+                ("a", "b"): torch.ones(2),
+                "c": torch.ones(2, 3),
+            },
+            [2],
+        )
+
+        # Setup phase: send schema + first payload
+        td.init_remote(dst=1)
+
+        # Update values and send again via consolidated path
+        td["a", "b"] = torch.full((2,), 2.0)
+        td["c"] = torch.full((2, 3), 2.0)
+        td.send(dst=1, consolidated=True)
+
+    def test_send_consolidated(self, set_context, tmp_path):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=type(self).server, args=(queue,))
         secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
