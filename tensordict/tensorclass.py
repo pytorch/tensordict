@@ -8,11 +8,9 @@ from __future__ import annotations
 import abc
 import concurrent
 import ctypes
-
 import dataclasses
 import functools
 import inspect
-
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -25,7 +23,6 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-
 from typing import (
     Any,
     Callable,
@@ -42,9 +39,7 @@ from typing import (
 )
 
 import numpy as np
-
 import tensordict as tensordict_lib
-
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -244,6 +239,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "is_locked",
     "is_memmap",
     "is_meta",
+    "is_non_tensor",
     "is_shared",
     "isend",
     "items",
@@ -525,7 +521,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "round",
     "round_",
     "rsub",
-    "select",
     "separates",
     "set_",
     "set_non_tensor",
@@ -566,6 +561,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "to_namedtuple",
     "to_padded_tensor",
     "to_pytree",
+    "to_store",
     "transpose",
     "trunc",
     "trunc_",
@@ -1132,6 +1128,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
+    if not hasattr(cls, "select") and "select" not in expected_keys:
+        cls.select = _tc_select
     if not hasattr(cls, "to_tensordict") and "to_tensordict" not in expected_keys:
         cls.to_tensordict = _to_tensordict
     if not hasattr(cls, "device") and "device" not in expected_keys:
@@ -2377,6 +2375,20 @@ def _to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
                 continue
         td.set_non_tensor(key, val)
     return td
+
+
+def _tc_select(
+    self, *keys, inplace: bool = False, strict: bool = True, as_tensordict: bool = False
+):
+    """TensorClass-specific select that supports ``as_tensordict``."""
+    td = self._tensordict
+    result = td.select(*keys, inplace=inplace, strict=strict)
+    if as_tensordict:
+        return result
+    if result is td:
+        return self
+    non_tensordict = dict(self._non_tensordict)
+    return type(self)._from_tensordict(result, non_tensordict, safe=False)
 
 
 def _device(self) -> torch.device:
