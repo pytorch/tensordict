@@ -25,7 +25,6 @@ import warnings
 import weakref
 from collections import UserDict
 from collections.abc import MutableMapping
-
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import wraps
@@ -52,9 +51,7 @@ from typing import (
 )
 
 import numpy as np
-
 import torch
-
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
@@ -117,7 +114,6 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import multiprocessing as mp, nn, Tensor
-
 from torch.nn.parameter import Parameter, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -7605,6 +7601,53 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return data
         return value
 
+    def is_non_tensor(self, key: NestedKey) -> bool:
+        """Checks if the value associated with a key is a non-tensor (:class:`~tensordict.NonTensorData`).
+
+        Unlike the standalone :func:`~tensordict.is_non_tensor` function which checks
+        a value directly, this method checks the **internal representation** of the
+        stored value, making it reliable for both :class:`~tensordict.TensorDict` and
+        :class:`~tensordict.TensorClass` instances.
+
+        This is useful because :class:`~tensordict.TensorClass` ``get()`` unwraps
+        :class:`~tensordict.NonTensorData` to plain values, so calling
+        ``is_non_tensor(tc.get(key))`` on the result would return ``False``.
+        This method always checks the wrapped storage.
+
+        Args:
+            key (NestedKey): the key to check.
+
+        Returns:
+            ``True`` if the value stored at ``key`` is a
+            :class:`~tensordict.NonTensorData` or :class:`~tensordict.NonTensorStack`,
+            ``False`` otherwise.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict({"obs": torch.randn(4)}, [])
+            >>> td.set_non_tensor("label", "cat")
+            >>> td.is_non_tensor("label")
+            True
+            >>> td.is_non_tensor("obs")
+            False
+
+        See Also:
+            :meth:`~tensordict.TensorDictBase.set_non_tensor`,
+            :meth:`~tensordict.TensorDictBase.get_non_tensor`.
+        """
+        key = unravel_key(key)
+        return self._is_non_tensor_leaf(key)
+
+    def _is_non_tensor_leaf(self, key: NestedKey):
+        if isinstance(key, tuple):
+            if len(key) == 1:
+                return self._is_non_tensor_leaf(key[0])
+            subtd = self._get_str(key[0], NO_DEFAULT)
+            return subtd._is_non_tensor_leaf(key[1:])
+        val = self._get_str(key, NO_DEFAULT)
+        return _is_non_tensor(type(val))
+
     def filter_non_tensor_data(self) -> Self:
         """Filters out all non-tensor-data."""
 
@@ -13348,7 +13391,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     # Clone, select, exclude, empty
     def select(
-        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
+        self,
+        *keys: NestedKey,
+        inplace: bool = False,
+        strict: bool = True,
+        as_tensordict: bool = False,
     ) -> Self:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
@@ -13362,6 +13409,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Default is ``False``.
             strict (bool, optional): whether selecting a key that is not present
                 will return an error or not. Default: :obj:`True`.
+            as_tensordict (bool, optional): if ``True``, the result will be a
+                plain :class:`~tensordict.TensorDict` even when called on a
+                :class:`~tensordict.TensorClass` instance. This avoids the
+                TensorClass wrapper that fills unselected fields with ``None``.
+                For :class:`~tensordict.TensorDictBase` subclasses, this is a
+                no-op. Default: ``False``.
 
         Returns:
             A new tensordict (or the same if ``inplace=True``) with the selected keys only.
@@ -14502,6 +14555,66 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if self._has_names():
             out.names = self.names
         return out
+
+    def to_store(
+        self,
+        *,
+        backend: str = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device=None,
+        **kwargs,
+    ) -> Any:
+        """Upload this TensorDict to a key-value store (Redis, Dragonfly, etc.).
+
+        Returns a :class:`~tensordict.store.TensorDictStore` (or
+        :class:`~tensordict.store.LazyStackedTensorDictStore` for
+        lazy stacks) backed by the uploaded data.
+
+        For :class:`LazyStackedTensorDict` inputs, data is streamed in chunks
+        to avoid materialising the full stack in memory.
+
+        Keyword Args:
+            backend (STORE_BACKENDS): Store backend — ``"redis"`` (default)
+                or ``"dragonfly"``.
+            host (str): Server hostname.  Defaults to ``"localhost"``.
+            port (int): Server port.  Defaults to ``6379``.
+            db (int): Database number.  Defaults to ``0``.
+            unix_socket_path (str, optional): Unix domain socket path.
+            prefix (str): Key namespace.  Defaults to ``"tensordict"``.
+            device (torch.device, optional): Device override for retrieved
+                tensors.  If ``None``, uses this TensorDict's device.
+            **kwargs: Extra connection keyword arguments.
+
+        Returns:
+            A store-backed TensorDict instance.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"obs": torch.randn(10, 84)}, [10])
+            >>> store_td = td.to_store(host="localhost")
+            >>> store_td["obs"].shape
+            torch.Size([10, 84])
+            >>>
+            >>> # Using Dragonfly instead of Redis
+            >>> store_td = td.to_store(backend="dragonfly", host="dragonfly-host")
+        """
+        from tensordict.store._store import TensorDictStore
+
+        return TensorDictStore.from_tensordict(
+            self,
+            backend=backend,
+            host=host,
+            port=port,
+            db=db,
+            unix_socket_path=unix_socket_path,
+            prefix=prefix,
+            device=device,
+            **kwargs,
+        )
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
