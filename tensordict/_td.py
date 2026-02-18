@@ -2497,6 +2497,9 @@ class TensorDict(TensorDictBase):
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
+            # Check if adding a new key violates frozen schema
+            if key not in self._tensordict:
+                self._check_schema_key_allowed(key)
             self._tensordict[key] = value
         else:
             try:
@@ -2683,6 +2686,8 @@ class TensorDict(TensorDictBase):
             td.del_(subkey)
             return self
 
+        # Check if deletion violates frozen schema
+        self._check_schema_delete_allowed(key[0])
         del self._tensordict[key[0]]
         return self
 
@@ -2701,6 +2706,14 @@ class TensorDict(TensorDictBase):
             raise TypeError(
                 f"Expected new_name to be a string or a tuple of strings but found {type(new_key)}"
             )
+
+        # Check if rename violates frozen schema (renaming changes key structure)
+        if self._frozen_schema is not None:
+            raise RuntimeError(
+                f"Cannot rename key '{old_key}' to '{new_key}' in TensorDict with frozen schema. "
+                f"Call unfreeze_schema_() first if you need to modify the structure."
+            )
+
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
         if old_key == new_key:
@@ -3778,6 +3791,9 @@ class _SubTensorDict(TensorDictBase):
             )
             validated = True
         if not inplace:
+            # Check if adding a new key violates frozen schema on parent
+            if key not in parent.keys():
+                parent._check_schema_key_allowed(key)
             if _is_tensor_collection(type(value)):
                 # value has the shape of subtd[idx], so we want an expanded
                 #  version value_expand such that value_expand[idx] has the

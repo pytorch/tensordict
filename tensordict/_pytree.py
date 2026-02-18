@@ -91,7 +91,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     else:
         keys = []
         values = []
-    return values, {
+    context = {
         "keys": keys,
         "batch_size": d.batch_size,
         "names": d.names if d._has_names() else None,
@@ -100,6 +100,12 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "non_tensor_data": d.non_tensor_items(),
         "cls": type(d),
     }
+    # If schema is frozen, add hash for Dynamo to potentially use as a single guard
+    # instead of per-key guards. This enables more efficient compilation when the
+    # TensorDict structure is known to be stable.
+    if d._frozen_schema_hash is not None:
+        context["schema_hash"] = d._frozen_schema_hash
+    return values, context
 
 
 def _lazy_tensordict_flatten(d: LazyStackedTensorDict) -> Tuple[List[Any], Context]:
@@ -158,7 +164,7 @@ def _td_flatten_with_keys(
     else:
         keys = []
         values = []
-    return [(MappingKey(k), v) for k, v in zip(keys, values)], {
+    context = {
         "keys": keys,
         "batch_size": d.batch_size,
         "names": d._maybe_names(),
@@ -167,6 +173,10 @@ def _td_flatten_with_keys(
         "non_tensor_data": d.non_tensor_items(),
         "cls": type(d),
     }
+    # If schema is frozen, add hash for Dynamo to potentially use as a single guard
+    if d._frozen_schema_hash is not None:
+        context["schema_hash"] = d._frozen_schema_hash
+    return [(MappingKey(k), v) for k, v in zip(keys, values)], context
 
 
 def _lazy_td_flatten_with_keys(
