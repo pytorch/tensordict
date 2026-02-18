@@ -9859,6 +9859,127 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return futures
         return
 
+    def all_gather(
+        self,
+        *,
+        group: "torch.distributed.ProcessGroup" | None = None,
+    ) -> list:
+        """All-gathers tensordicts from every rank.
+
+        Each rank consolidates its tensordict, then metadata is gathered via
+        ``all_gather_object`` and storage via ``dist.all_gather``. Returns a
+        list of tensordicts, one per rank.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): The process group
+                to use. Defaults to ``None`` (default group).
+
+        Returns:
+            list[TensorDict]: A list of tensordicts from all ranks.
+        """
+        from torch import distributed as dist
+
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
+
+        world_size = dist.get_world_size(group=group)
+        td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
+        storage = td_c._consolidated["storage"]
+        metadata = td_c._consolidated["metadata"]
+        metadata["_total_bytes"] = storage.numel()
+
+        all_meta = [None] * world_size
+        dist.all_gather_object(all_meta, metadata, group=group)
+
+        all_sizes = [m["_total_bytes"] for m in all_meta]
+        max_size = max(all_sizes)
+        padded = torch.zeros(max_size, dtype=torch.uint8)
+        padded[: storage.numel()] = storage
+        gathered = [torch.empty(max_size, dtype=torch.uint8) for _ in range(world_size)]
+        dist.all_gather(gathered, padded, group=group)
+
+        result = []
+        for i in range(world_size):
+            m = all_meta[i]
+            sz = m.pop("_total_bytes")
+            result.append(
+                _rebuild_tensordict_files_consolidated(m, gathered[i][:sz])
+            )
+        return result
+
+    def scatter(
+        self,
+        src: int,
+        tensordicts: list | None = None,
+        *,
+        group: "torch.distributed.ProcessGroup" | None = None,
+    ) -> Self:
+        """Scatters a list of tensordicts from ``src`` to all ranks.
+
+        On the source rank, ``tensordicts`` must be a list of tensordicts with
+        one element per rank. Each is consolidated, and its metadata + storage
+        are scattered. Non-source ranks receive and reconstruct their tensordict.
+
+        Args:
+            src (int): The rank of the source process.
+            tensordicts (list[TensorDict] | None): On the source rank, a list
+                of tensordicts to scatter (one per rank). Ignored on other ranks.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): The process group
+                to use. Defaults to ``None`` (default group).
+
+        Returns:
+            TensorDict: The tensordict assigned to this rank.
+        """
+        from torch import distributed as dist
+
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
+
+        rank = dist.get_rank(group=group)
+        world_size = dist.get_world_size(group=group)
+
+        if rank == src:
+            consolidated = []
+            for td in tensordicts:
+                td_c = td if td.is_consolidated() else td.consolidate(metadata=True)
+                consolidated.append(td_c)
+
+            all_sizes = [td_c._consolidated["storage"].numel() for td_c in consolidated]
+            max_size = max(all_sizes)
+            all_meta = [
+                {
+                    **td_c._consolidated["metadata"],
+                    "_total_bytes": td_c._consolidated["storage"].numel(),
+                    "_max_bytes": max_size,
+                }
+                for td_c in consolidated
+            ]
+            scatter_meta = [None] * world_size
+            dist.scatter_object_list(scatter_meta, all_meta, src=src, group=group)
+
+            padded_list = []
+            for td_c, sz in zip(consolidated, all_sizes):
+                buf = torch.zeros(max_size, dtype=torch.uint8)
+                buf[:sz] = td_c._consolidated["storage"]
+                padded_list.append(buf)
+            recv_buf = torch.empty(max_size, dtype=torch.uint8)
+            dist.scatter(recv_buf, padded_list, src=src, group=group)
+
+            metadata = scatter_meta[0]
+            total_bytes = metadata.pop("_total_bytes")
+            metadata.pop("_max_bytes")
+            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+        else:
+            scatter_meta = [None]
+            dist.scatter_object_list(scatter_meta, None, src=src, group=group)
+            metadata = scatter_meta[0]
+            total_bytes = metadata.pop("_total_bytes")
+            max_size = metadata.pop("_max_bytes")
+
+            recv_buf = torch.empty(max_size, dtype=torch.uint8)
+            dist.scatter(recv_buf, None, src=src, group=group)
+            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
