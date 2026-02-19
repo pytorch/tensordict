@@ -1,16 +1,31 @@
 # Automatically add a label to PRs based on the [Label] prefix in the title
 #
 # Usage:
-#  - PR title must start with [Label] where Label is the desired label
-#  - Example: "[Bug] Fix memory leak" will add the "Bug" label
-#  - Fails if no [Label] prefix is found
+#   - PR title must start with a [Label] prefix in brackets
+#   - Example: "[BugFix] Fix memory leak" will add the "BugFix" label
+#   - Fails if no valid prefix is found
+#   - Labels are ONLY ADDED, never removed (preserves manual labels)
+#
+# Supported prefixes (supports common variations):
+#   - [BugFix], [Bugfix], [bugfix] -> BugFix
+#   - [Feature], [Features] -> Feature
+#   - [Doc], [Docs], [Documentation] -> Documentation
+#   - [Refactor], [Refactoring] -> Refactor
+#   - [CI], [ci] -> CI
+#   - [Test], [Tests] -> Test
+#   - [Compile], [compile] -> Compile
+#   - [Performance], [Perf] -> Perf
+#   - [Deprecation], [Deprecated] -> Deprecation
+#   - [Setup], [setup] -> Setup
 #------------------------------------------------------------
 
 name: PR Label
 
 on:
-  pull_request:
-    types: [opened, edited]
+  # Using pull_request_target to have write access for PRs from forks
+  # This is safe because we only read PR metadata (title), not code from the fork
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   add-label:
@@ -27,41 +42,97 @@ jobs:
         run: |
           set -euo pipefail
 
+          post_help_comment() {
+            local reason="$1"
+            local current_title="$2"
+            cat > /tmp/pr_comment.md << 'COMMENT_EOF'
+          ## PR Title Label Error
+
+          REASON_PLACEHOLDER
+
+          **Current title:** `TITLE_PLACEHOLDER`
+
+          ### Supported Prefixes
+
+          Your PR title must start with **exactly** one of these prefixes:
+
+          | Prefix | Label Applied | Example |
+          |--------|---------------|---------|
+          | `[BugFix]` | BugFix | `[BugFix] Fix memory leak in TensorDict` |
+          | `[Feature]` | Feature | `[Feature] Add new storage backend` |
+          | `[Doc]` or `[Docs]` | Documentation | `[Doc] Update installation guide` |
+          | `[Refactor]` | Refactor | `[Refactor] Clean up module imports` |
+          | `[CI]` | CI | `[CI] Fix workflow permissions` |
+          | `[Test]` or `[Tests]` | Test | `[Test] Add unit tests for nn module` |
+          | `[Compile]` | Compile | `[Compile] Fix torch.compile issue` |
+          | `[Performance]` or `[Perf]` | Perf | `[Perf] Optimize tensor operations` |
+          | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
+          | `[Setup]` | Setup | `[Setup] Update build configuration` |
+
+          **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
+          COMMENT_EOF
+            sed -i 's/^ *//' /tmp/pr_comment.md
+            sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
+            sed -i "s|TITLE_PLACEHOLDER|$current_title|" /tmp/pr_comment.md
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+          }
+
           echo "PR Title: $PR_TITLE"
 
           # Check if title starts with [...]
           if [[ ! "$PR_TITLE" =~ ^\[([^\]]+)\] ]]; then
             echo "::error::PR title must start with [Label]. Got: '$PR_TITLE'"
+            post_help_comment "PR title must start with a label prefix in brackets (e.g., \`[BugFix]\`)." "$PR_TITLE"
             exit 1
           fi
 
-          # Extract the label
-          LABEL="${BASH_REMATCH[1]}"
+          # Extract the prefix
+          PREFIX="${BASH_REMATCH[1]}"
 
-          # Check if label is empty
-          if [[ -z "$LABEL" ]]; then
-            echo "::error::Label inside brackets cannot be empty"
-            exit 1
-          fi
+          echo "Extracted prefix: $PREFIX"
 
-          echo "Extracted label: $LABEL"
+          # Map prefixes to GitHub label names (supports common variations)
+          case "$PREFIX" in
+            BugFix|Bugfix|bugfix)
+              LABEL="BugFix"
+              ;;
+            Feature|Features|feature|features)
+              LABEL="Feature"
+              ;;
+            Doc|Docs|Documentation|doc|docs)
+              LABEL="Documentation"
+              ;;
+            Refactor|Refactoring|refactor|refactoring)
+              LABEL="Refactor"
+              ;;
+            CI|ci)
+              LABEL="CI"
+              ;;
+            Test|Tests|test|tests)
+              LABEL="Test"
+              ;;
+            Compile|compile)
+              LABEL="Compile"
+              ;;
+            Performance|Perf|performance|perf)
+              LABEL="Perf"
+              ;;
+            Deprecation|Deprecated|deprecation|deprecated)
+              LABEL="Deprecation"
+              ;;
+            Setup|setup)
+              LABEL="Setup"
+              ;;
+            *)
+              echo "::error::Unknown or invalid prefix '[$PREFIX]'."
+              post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`." "$PR_TITLE"
+              exit 1
+              ;;
+          esac
 
-          # Validate against accepted labels
-          ACCEPTED_LABELS="BugFix CI Compile Deprecation Docs Feature Perf Refactor Setup Test"
-          FOUND=0
-          for ACCEPTED in $ACCEPTED_LABELS; do
-            if [[ "$LABEL" == "$ACCEPTED" ]]; then
-              FOUND=1
-              break
-            fi
-          done
+          echo "Mapped to label: $LABEL"
 
-          if [[ "$FOUND" -eq 0 ]]; then
-            echo "::error::Label '$LABEL' is not in the accepted list: $ACCEPTED_LABELS"
-            exit 1
-          fi
-
-          # Add the label to the PR
+          # Add the label to the PR (never remove existing labels)
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
 
           echo "Successfully added label '$LABEL' to PR #$PR_NUMBER"
