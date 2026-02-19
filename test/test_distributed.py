@@ -1083,6 +1083,48 @@ class TestBroadcast:
             assert out == "yuppie"
 
 
+class TestScatter:
+    port = "29511"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        tds = None
+        if rank == 0:
+            tds = [
+                TensorDict({"a": torch.zeros(3), "b": torch.zeros(3, 2)}, [3]),
+                TensorDict({"a": torch.ones(3), "b": torch.ones(3, 2)}, [3]),
+            ]
+        td = TensorDict({}, []).scatter(src=0, tensordicts=tds)
+        assert (td["a"] == float(rank)).all()
+        assert (td["b"] == float(rank)).all()
+        if rank == 1:
+            queue.put("yuppie")
+
+    def test_scatter(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).worker, args=(queue, 0))
+        secondary_worker = mp.Process(target=type(self).worker, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
 class TestSendConsolidated:
     port = "29507"
 
