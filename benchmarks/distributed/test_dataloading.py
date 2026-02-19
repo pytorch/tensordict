@@ -3,101 +3,57 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Distributed data-loading with tensorclass
-=========================================
+"""Distributed data-loading benchmark with tensorclass.
+
+Requires ImageNet, multiple GPUs, and several optional packages
+(tenacity, torchvision, wandb).  Skipped automatically when any
+requirement is missing.
+
+Manual run::
+
+    python -m pytest benchmarks/distributed/test_dataloading.py -v -s \
+        --world_size=5
 """
 
-##############################################################################
-# This file provides an example of distributed dataloading with tensorclass.
-# It can be run by simply calling `python dataloading.py --world_size=5` (optionally
-# adding the wandb entity and key if logging is required).
-#
-# The longest part of this script is by far the data construction.
-
-import argparse
 import collections
-
+import importlib
 import logging
 import os
 import time
 from functools import wraps
 from pathlib import Path
 
-import tenacity
+import pytest
 import torch
-import tqdm
 
 from tensordict import MemoryMappedTensor, tensorclass
 from torch import multiprocessing as mp, nn
-from torch.distributed import rpc
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torchvision.prototype import transforms
 
-parser = argparse.ArgumentParser(
-    description="RPC Replay Buffer Example",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-)
+_has_tenacity = importlib.util.find_spec("tenacity") is not None
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
+_has_rpc = hasattr(torch.distributed, "rpc")
+_has_cuda = torch.cuda.is_available()
 
-parser.add_argument(
-    "--world_size",
-    type=int,
-    default=2,
+pytestmark = pytest.mark.skipif(
+    not (_has_tenacity and _has_torchvision and _has_rpc and _has_cuda),
+    reason=(
+        "Requires tenacity, torchvision, torch.distributed.rpc and CUDA. "
+        "Also needs ImageNet on disk."
+    ),
 )
-parser.add_argument(
-    "--single_gpu",
-    action="store_true",
-    help="if True, a single GPU is used for all the data collection nodes.",
-)
-parser.add_argument(
-    "--trainer_transform",
-    action="store_true",
-    help="if True, the transforms are applied on the trainer node. "
-    "Otherwise, they are done by the workers on the assigned GPU.",
-)
-parser.add_argument(
-    "--wandb_entity",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--wandb_key",
-    type=str,
-    default="",
-)
-
-parser.add_argument(
-    "--save_path",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--load_path",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--fraction",
-    type=int,
-    default=1,
-)
-
-torch.cuda.set_device(0)
 
 RETRY_LIMIT = 2
 NUM_WORKERS = 8
 RETRY_DELAY_SECS = 3
-
 DATA_NODE = "Data"
 TRAINER_NODE = "Trainer"
 BATCH_SIZE = 128
 NUM_COLLECTION = 5
 
 
-##############################################################################
-# Out tensorclass: contains images and target.
-#
+# ---------------------------------------------------------------------------
+# tensorclass
+# ---------------------------------------------------------------------------
 
 
 @tensorclass
@@ -107,20 +63,18 @@ class ImageNetData:
 
     @classmethod
     def from_dataset(cls, dataset):
+        import tqdm
+        from torch.utils.data import DataLoader
+
         data = cls(
             images=MemoryMappedTensor.empty(
-                (
-                    len(dataset),
-                    *dataset[0][0].squeeze().shape,
-                ),
+                (len(dataset), *dataset[0][0].squeeze().shape),
                 dtype=torch.uint8,
             ),
             targets=MemoryMappedTensor.empty(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
-        # locks the tensorclass and ensures that is_memmap will return True.
         data.memmap_()
-
         batch = 64
         dl = DataLoader(dataset, batch_size=batch, num_workers=NUM_WORKERS)
         i = 0
@@ -132,7 +86,6 @@ class ImageNetData:
                 images=image, targets=target, batch_size=[_batch]
             )
             i += _batch
-
         return data
 
     @classmethod
@@ -141,19 +94,15 @@ class ImageNetData:
 
         data = cls(
             images=MemoryMappedTensor.empty(
-                (
-                    len(dataset),
-                    *dataset[0][0].squeeze().shape,
-                ),
+                (len(dataset), *dataset[0][0].squeeze().shape),
                 dtype=torch.uint8,
             ),
             targets=MemoryMappedTensor(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
-        # locks the tensorclass and ensures that is_memmap will return True.
         data.memmap_()
         t0 = time.time()
-        logging.info("loading...", end="\t")
+        logging.info("loading...")
         snapshot = torchsnapshot.Snapshot(path=path)
         sd = dict(data.state_dict())
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
@@ -169,14 +118,12 @@ class ImageNetData:
         torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
 
-##############################################################################
-# Utils: allow to query a method of an object through RPC.
-#
+# ---------------------------------------------------------------------------
+# RPC helpers
+# ---------------------------------------------------------------------------
 
 
 def accept_remote_rref_invocation(func):
-    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
-
     @wraps(func)
     def unpack_rref_and_invoke_function(self, *args, **kwargs):
         if isinstance(self, torch._C._distributed_rpc.PyRRef):
@@ -187,8 +134,6 @@ def accept_remote_rref_invocation(func):
 
 
 def accept_remote_rref_udf_invocation(decorated_class):
-    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
-    # ignores private methods
     for name in dir(decorated_class):
         method = getattr(decorated_class, name)
         if callable(method) and not name.startswith("_"):
@@ -196,16 +141,12 @@ def accept_remote_rref_udf_invocation(decorated_class):
     return decorated_class
 
 
-##############################################################################
-# On-device, random transforms. Notice that these transforms can easily be
-# plugged onto a model as the first layer, making them fully compatible
-# with production pipelines.
-#
+# ---------------------------------------------------------------------------
+# Transforms
+# ---------------------------------------------------------------------------
 
 
 class InvAffine(nn.Module):
-    """A custom normalization layer."""
-
     def __init__(self, loc, scale):
         super().__init__()
         self.loc = loc
@@ -227,7 +168,7 @@ class RandomHFlip(nn.Module):
 
 class RandomCrop(nn.Module):
     def __init__(self, w, h):
-        super(RandomCrop, self).__init__()
+        super().__init__()
         self.w = w
         self.h = h
 
@@ -252,27 +193,22 @@ class Collate(nn.Module):
 
     @torch.inference_mode()
     def __call__(self, x: ImageNetData):
-        # move data to cuda: we first assign the devie to the memmap tensors,
-        # then call contiguous() to effectively move them to the right device
         out = x.apply(lambda _tensor: _tensor.as_tensor()).pin_memory().to(self.device)
         if self.transform:
-            # apply transforms on gpu
             out.images = self.transform(out.images)
         return out
 
 
-##############################################################################
-# "Trainer" node (even though there is not real training).
-# The train method will query data from each data node and collect them on the
-# trainer node.
-#
+# ---------------------------------------------------------------------------
+# Trainer / Data nodes
+# ---------------------------------------------------------------------------
 
 
 @accept_remote_rref_udf_invocation
 class DummyTrainerNode:
-    def __init__(
-        self, world_size: int, single_gpu: bool, local_transform: bool = True
-    ) -> None:
+    def __init__(self, world_size, single_gpu, local_transform=True):
+        from torch.distributed import rpc
+
         self.id = rpc.get_worker_info().id
         self.datanodes = []
         self.world_size = world_size
@@ -286,15 +222,14 @@ class DummyTrainerNode:
                 torch.tensor([0.229, 0.224, 0.225], device="cuda:0").view(3, 1, 1) * 255
             )
             self.collate_transform = nn.Sequential(
-                InvAffine(
-                    loc=loc,
-                    scale=scale,
-                ),
+                InvAffine(loc=loc, scale=scale),
                 RandomCrop(224, 224),
                 RandomHFlip(),
             )
 
     def init(self, train_data_tc):
+        from torch.distributed import rpc
+
         self.data = train_data_tc
         for i in range(self.world_size - 1):
             rpc.rpc_sync(
@@ -303,7 +238,10 @@ class DummyTrainerNode:
                 args=(self.datanodes[i], self.data),
             )
 
-    def train(self) -> None:
+    def train(self):
+        import tqdm
+        from torch.distributed import rpc
+
         logging.info("train")
         len_data = self.data.shape[0]
         pbar = tqdm.tqdm(total=len_data)
@@ -328,13 +266,11 @@ class DummyTrainerNode:
             batch = _prefetch_queue.popleft().wait()
             if not self.local_transform:
                 batch.images = self.collate_transform(batch.images)
-
             i = iteration % (self.world_size - 1)
             iteration += 1
             if iteration == self.world_size:
                 t0 = time.time()
                 total = 0
-
             if _next != _last:
                 _prefetch_queue.append(
                     rpc.rpc_async(
@@ -357,57 +293,46 @@ class DummyTrainerNode:
             self.create_data_node(dest_rank, local_transform=self.local_transform)
         self.init(data)
 
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(RETRY_LIMIT),
-        wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
-        reraise=True,
-    )
-    def create_data_node(self, node, local_transform) -> rpc.RRef:
-        logging.info(f"Creating DataNode object on remote node {node}")
-        data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
-        data_rref = rpc.remote(
-            data_info,
-            DataNode,
-            args=(node, BATCH_SIZE, self.single_gpu, local_transform),
+    def create_data_node(self, node, local_transform):
+        import tenacity
+        from torch.distributed import rpc
+
+        @tenacity.retry(
+            stop=tenacity.stop_after_attempt(RETRY_LIMIT),
+            wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
+            reraise=True,
         )
-        logging.info(f"Connected to data node {data_info}")
-        time.sleep(5)
-        self.datanodes.append(data_rref)
+        def _create(node, local_transform):
+            logging.info(f"Creating DataNode object on remote node {node}")
+            data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
+            data_rref = rpc.remote(
+                data_info,
+                DataNode,
+                args=(node, BATCH_SIZE, self.single_gpu, local_transform),
+            )
+            logging.info(f"Connected to data node {data_info}")
+            time.sleep(5)
+            self.datanodes.append(data_rref)
+
+        _create(node, local_transform)
 
     def get_data(self):
         return self.data
 
 
-##############################################################################
-# Data nodes.
-# The data nodes hold a reference to the data stored on disk, execute indexing
-# and return the transformed tensorclass to the training node.
-#
-
-
 @accept_remote_rref_udf_invocation
 class DataNode:
     def __init__(
-        self,
-        rank,
-        batch_size: int = BATCH_SIZE,
-        single_gpu: bool = False,
-        make_transform: bool = True,
+        self, rank, batch_size=BATCH_SIZE, single_gpu=False, make_transform=True
     ):
         logging.info("Creating DataNode object")
         self.rank = rank
+        from torch.distributed import rpc
+
         self.id = rpc.get_worker_info().id
         self.single_gpu = single_gpu
-        # train_ref = rpc.get_worker_info(f"{TRAINER_NODE}")
-        # self.train_ref = rpc.remote(
-        #     train_ref,
-        #     get_trainer,
-        # )
         self.batch_size = batch_size
-        if self.single_gpu:
-            device = "cuda:1"
-        else:
-            device = f"cuda:{rank}"
+        device = "cuda:1" if self.single_gpu else f"cuda:{rank}"
         self.make_transform = make_transform
         if self.make_transform:
             loc = torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1) * 255
@@ -415,10 +340,7 @@ class DataNode:
                 torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1) * 255
             )
             self.collate_transform = nn.Sequential(
-                InvAffine(
-                    loc=loc,
-                    scale=scale,
-                ),
+                InvAffine(loc=loc, scale=scale),
                 RandomCrop(224, 224),
                 RandomHFlip(),
             )
@@ -435,149 +357,119 @@ class DataNode:
         self.data: ImageNetData = data
 
     def sample(self, idx):
-        # if not self.initialized:
-        #     self._init()
         self.count += 1
         return self.collate(self.data[idx])
 
 
-##############################################################################
-# Some RPC functions responsible for the control flow.
-#
+# ---------------------------------------------------------------------------
+# RPC bootstrap
+# ---------------------------------------------------------------------------
 
 
-def init_rpc(
-    rank,
-    name,
-    world_size,
-    single_gpu,
-):
+def init_rpc(rank, name, world_size, single_gpu):
+    from torch.distributed import rpc
+
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     str_init_method = "tcp://localhost:10003"
-
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         init_method=str_init_method,
         _transports=["uv"],
     )
     if rank == 0:
-        # All data must be sent to cuda:0
         for dest_rank in range(1, world_size):
             options.set_device_map(
-                f"{DATA_NODE}_{dest_rank}", {0: dest_rank if not single_gpu else 1}
+                f"{DATA_NODE}_{dest_rank}",
+                {0: dest_rank if not single_gpu else 1},
             )
-
     rpc.init_rpc(
         name,
         rank=rank,
         backend=rpc.BackendType.TENSORPIPE,
         rpc_backend_options=options,
     )
-
     logging.info(f"Initialised {name}")
 
 
-def shutdown():
-    rpc.shutdown()
-
-
-def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
-    global trainer
-    # access GPU
+def _worker(rank, world_size, train_data_tc, single_gpu, trainer_transform):
     torch.randn(1, device="cuda:0")
     if rank == 0:
         trainer = DummyTrainerNode(
-            world_size, single_gpu, local_transform=not trainer_transform
+            world_size,
+            single_gpu,
+            local_transform=not trainer_transform,
         )
         trainer.create_data_nodes(train_data_tc)
-
-        import wandb
-
-        if not args.wandb_key:
-            logging.info("no wandb key provided, using it offline")
-            mode = "offline"
-        else:
-            mode = "online"
-            wandb.login(key=str(args.wandb_key))
-            if not args.wandb_entity:
-                raise ValueError("Please indicate the wandb entity.")
-        with wandb.init(
-            project="dataloading",
-            name=f"distributed_w-{args.world_size}_f-{args.fraction}_g-{args.single_gpu}_t-{args.trainer_transform}",
-            entity=args.wandb_entity,
-            mode=mode,
-        ):
-            min_time = 10**10
-            for i in range(NUM_COLLECTION):
-                stats = trainer.train()
-                if stats["time"] < min_time:
-                    min_time = stats["time"]
-                    rate = stats["rate"]
-                wandb.log(stats, step=i)
-            wandb.log({"min time": min_time, "max_rate": rate})
-            logging.info(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
+        min_time = float("inf")
+        rate = 0.0
+        for _ in range(NUM_COLLECTION):
+            stats = trainer.train()
+            if stats["time"] < min_time:
+                min_time = stats["time"]
+                rate = stats["rate"]
+        logging.info(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# pytest entry point
+# ---------------------------------------------------------------------------
+
+_IMAGENET_DIR = Path("/datasets01_ontap/imagenet_full_size/061417/")
+
+
+def pytest_addoption(parser):
+    parser.addoption("--world_size", type=int, default=2)
+    parser.addoption("--single_gpu", action="store_true", default=False)
+    parser.addoption("--trainer_transform", action="store_true", default=False)
+    parser.addoption("--fraction", type=int, default=1)
+
+
+@pytest.mark.skipif(
+    not _IMAGENET_DIR.exists(),
+    reason=f"ImageNet not found at {_IMAGENET_DIR}",
+)
+@pytest.mark.skipif(
+    not _has_cuda or torch.cuda.device_count() < 2,
+    reason="Requires at least 2 CUDA devices",
+)
+def test_distributed_dataloading(pytestconfig):
+    from torchvision import datasets
+    from torchvision.prototype import transforms
+
+    world_size = pytestconfig.getoption("--world_size", default=2)
+    single_gpu = pytestconfig.getoption("--single_gpu", default=False)
+    trainer_transform = pytestconfig.getoption("--trainer_transform", default=False)
+    fraction = pytestconfig.getoption("--fraction", default=1)
+
     try:
         mp.set_start_method("spawn")
-    except Exception as err:
-        logging.info(f"Could not start mp with spawn method. Error: {err}")
+    except RuntimeError:
+        pass
 
-    args = parser.parse_args()
-    world_size = args.world_size
-    single_gpu = args.single_gpu
-    trainer_transform = args.trainer_transform
-    save_path = args.save_path
-    load_path = args.load_path
-    if save_path and load_path:
-        raise ValueError("Cannot specify a save_path and a load_path at the same time.")
-
-    names = [TRAINER_NODE, *[f"{DATA_NODE}_{rank}" for rank in range(1, world_size)]]
-
-    logging.info("preparing data")
-    data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
     train_data_raw = datasets.ImageFolder(
-        root=data_dir / "train",
+        root=_IMAGENET_DIR / "train",
         transform=transforms.Compose(
             [transforms.Resize((256, 256)), transforms.PILToTensor()]
         ),
     )
-    train_data_raw.samples = train_data_raw.samples[
-        : len(train_data_raw) // args.fraction
-    ]
-
-    if load_path:
-        logging.info("loading...", end="\t")
-        train_data_tc = ImageNetData.load(train_data_raw, load_path)
-        logging.info("done")
-    else:
-        train_data_tc = ImageNetData.from_dataset(train_data_raw)
-        if save_path:
-            logging.info("saving...", end="\t")
-            train_data_tc.save(save_path)
-            logging.info("done")
+    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // fraction]
+    train_data_tc = ImageNetData.from_dataset(train_data_raw)
+    names = [TRAINER_NODE, *[f"{DATA_NODE}_{r}" for r in range(1, world_size)]]
 
     with mp.Pool(world_size) as pool:
         pool.starmap(
             init_rpc,
-            (
-                (
-                    rank,
-                    name,
-                    world_size,
-                    single_gpu,
-                )
-                for rank, name in enumerate(names)
-            ),
+            ((rank, name, world_size, single_gpu) for rank, name in enumerate(names)),
         )
         pool.starmap(
-            func,
+            _worker,
             (
-                (rank, world_size, args, train_data_tc, single_gpu, trainer_transform)
-                for rank, name in enumerate(names)
+                (rank, world_size, train_data_tc, single_gpu, trainer_transform)
+                for rank, _ in enumerate(names)
             ),
         )
-        pool.apply_async(shutdown)
+        from torch.distributed import rpc
+
+        pool.apply_async(rpc.shutdown)
