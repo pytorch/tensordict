@@ -1068,6 +1068,13 @@ class TensorClass:
         return_premature: bool = False,
         group: Incomplete | None = None,
     ) -> Self: ...
+    def broadcast(
+        self,
+        src: int,
+        *,
+        group: dist.ProcessGroup | None = None,
+        device: torch.device | str | None = None,
+    ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
         self,
