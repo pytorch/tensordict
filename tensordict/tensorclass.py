@@ -217,7 +217,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "all_reduce",
     "batch_dims",
     "batch_size",
-    "broadcast",
+    # "broadcast" is handled separately (tensorclass type injection)
     "bytes",
     "cat_tensors",
     "clear_refs_for_compile_",
@@ -228,7 +228,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "entry_class",
     "get_item_shape",
     "get_non_tensor",
-    "init_remote",
+    # "init_remote" is handled separately (tensorclass type injection)
     "irecv",
     "is_consolidated",
     "is_contiguous",
@@ -427,7 +427,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "from_modules",
     "from_namedtuple",
     "from_pytree",
-    "from_remote_init",
+    # "from_remote_init" is handled separately (tensorclass type recovery)
     "from_struct_array",
     "from_tuple",
     "fromkeys",
@@ -1101,6 +1101,18 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 _wrap_td_method(method_name, copy_non_tensor=True),
             )
 
+    # Distributed methods that need tensorclass type injection
+    if not hasattr(cls, "init_remote") and "init_remote" not in expected_keys:
+        cls.init_remote = _tc_init_remote
+    if not hasattr(cls, "broadcast") and "broadcast" not in expected_keys:
+        cls.broadcast = _tc_broadcast
+    if not hasattr(cls, "from_remote_init") and "from_remote_init" not in expected_keys:
+        cls.from_remote_init = classmethod(
+            lambda cls_inner, *args, **kwargs: TensorDictBase.from_remote_init(
+                *args, **kwargs
+            )
+        )
+
     # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
     #     cls.batch_size = property(_batch_size, _batch_size_setter)
 
@@ -1184,6 +1196,33 @@ def _arg_to_tensordict(arg):
     ):
         return type(arg)(item._tensordict for item in arg)
     return arg
+
+
+def _tc_tensorclass_type_str(obj):
+    """Return the fully qualified name of a tensorclass, e.g. ``'my.module.MyData'``."""
+    cls = type(obj)
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _tc_init_remote(self, dst=None, group=None, device=None, use_broadcast=False):
+    tc_type = _tc_tensorclass_type_str(self)
+    self._tensordict.init_remote(
+        dst=dst,
+        group=group,
+        device=device,
+        use_broadcast=use_broadcast,
+        _tensorclass_type=tc_type,
+    )
+
+
+def _tc_broadcast(self, src, *, group=None, device=None):
+    tc_type = _tc_tensorclass_type_str(self)
+    result = self._tensordict.broadcast(
+        src, group=group, device=device, _tensorclass_type=tc_type
+    )
+    if not isinstance(result, type(self)):
+        return type(self)._from_tensordict(result)
+    return result
 
 
 def _from_tensordict_with_copy(tc, tensordict):
@@ -3131,6 +3170,16 @@ def _patch_tc(cls):
             method_name,
             _wrap_td_method(method_name, copy_non_tensor=True),
         )
+
+    # Distributed methods that need tensorclass type injection
+    cls.init_remote = _tc_init_remote
+    cls.broadcast = _tc_broadcast
+    cls.from_remote_init = classmethod(
+        lambda cls_inner, *args, **kwargs: TensorDictBase.from_remote_init(
+            *args, **kwargs
+        )
+    )
+
     return cls
     # _set_methods(TensorClass)
 

@@ -9376,6 +9376,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
         use_broadcast: bool = False,
+        _tensorclass_type: str | None = None,
     ) -> None:
         """Initializes a remote tensordict by sending its metadata and content.
 
@@ -9473,13 +9474,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         if use_broadcast:
             rank = torch.distributed.get_rank(group=group)
-            self.broadcast(src=rank, group=group, device=device)
+            self.broadcast(
+                src=rank,
+                group=group,
+                device=device,
+                _tensorclass_type=_tensorclass_type,
+            )
             return
 
         td_c = self.consolidate(metadata=True)
         storage = td_c._consolidated["storage"]
         metadata = td_c._consolidated["metadata"]
         metadata["_total_bytes"] = storage.numel()
+        if _tensorclass_type is not None:
+            metadata["_tensorclass_type"] = _tensorclass_type
         torch.distributed.send_object_list(
             [metadata],
             dst=dst,
@@ -9536,9 +9544,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         metadata = meta[0]
         total_bytes = metadata.pop("_total_bytes")
+        tc_type_str = metadata.pop("_tensorclass_type", None)
         storage = torch.empty(total_bytes, dtype=torch.uint8, device=device or "cpu")
         torch.distributed.recv(storage, src=src, group=group)
-        return _rebuild_tensordict_files_consolidated(metadata, storage)
+        result = _rebuild_tensordict_files_consolidated(metadata, storage)
+        if tc_type_str is not None:
+            tc_cls = _resolve_tensorclass_type(tc_type_str)
+            result = tc_cls._from_tensordict(result)
+        return result
 
     def isend(
         self,
@@ -9845,6 +9858,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         device: torch.device | str | None = None,
+        _tensorclass_type: str | None = None,
     ) -> Self:
         """Broadcasts a tensordict from ``src`` to all ranks.
 
@@ -9881,6 +9895,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             metadata = td_c._consolidated["metadata"]
             metadata["_total_bytes"] = storage.numel()
             metadata["_storage_device"] = str(storage.device)
+            if _tensorclass_type is not None:
+                metadata["_tensorclass_type"] = _tensorclass_type
             dist.broadcast_object_list([metadata], src=src, group=group)
             dist.broadcast(storage, src=src, group=group)
             return td_c
@@ -9890,10 +9906,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
             metadata = meta[0]
             total_bytes = metadata.pop("_total_bytes")
             storage_device = metadata.pop("_storage_device")
+            tc_type_str = metadata.pop("_tensorclass_type", None)
             recv_device = device if device is not None else torch.device(storage_device)
             storage = torch.empty(total_bytes, dtype=torch.uint8, device=recv_device)
             dist.broadcast(storage, src=src, group=group)
-            return _rebuild_tensordict_files_consolidated(metadata, storage)
+            result = _rebuild_tensordict_files_consolidated(metadata, storage)
+            if tc_type_str is not None:
+                tc_cls = _resolve_tensorclass_type(tc_type_str)
+                result = tc_cls._from_tensordict(result)
+            return result
 
     def all_reduce(
         self,
@@ -16132,6 +16153,19 @@ _ACCEPTED_CLASSES = (
     Tensor,
     TensorDictBase,
 )
+
+
+def _resolve_tensorclass_type(type_str: str):
+    """Import and return a tensorclass from its fully qualified name.
+
+    Args:
+        type_str: A dotted path like ``"tensordict.testing.MyData"``.
+    """
+    import importlib
+
+    module_path, class_name = type_str.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
 
 
 def _register_tensor_class(cls):
