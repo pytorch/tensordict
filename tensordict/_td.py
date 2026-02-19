@@ -2606,7 +2606,7 @@ class TensorDict(TensorDictBase):
                     ignore_lock=True,
                 )
             is_diff = dest[idx].tolist() != value.tolist()
-            if is_diff:
+            if is_diff.any():
                 dest_val = dest.maybe_to_stack()
                 dest_val[idx] = value
                 if dest_val is not dest:
