@@ -284,8 +284,8 @@ DASHBOARD_HTML = """\
         <a href="flaky-tests.md">Markdown Report</a>
       </p>
       <p>
-        Flaky tests are identified by analyzing failure patterns across recent CI runs.
-        A test is considered flaky if it fails intermittently (5-95% failure rate) with at least 2 failures.
+        Flaky tests are identified by parsing per-test JUnit XML results from recent CI runs.
+        A test is considered flaky if it fails intermittently (5-80% failure rate) with at least 2 failures.
       </p>
     </footer>
   </div>
@@ -344,7 +344,7 @@ DASHBOARD_HTML = """\
           : 'N/A';
 
         return '<tr>' +
-          '<td class="test-name">' + escapeHtml(test.nodeid) + '</td>' +
+          '<td class="test-name">' + escapeHtml(test.nodeid || test.name || '') + '</td>' +
           '<td>' + failureRate + '% (' + test.failures + '/' + test.executions + ')' +
           '<div class="progress-bar"><div class="progress-fill ' + badgeClass + '" style="width:' + failureRate + '%"></div></div></td>' +
           '<td>' + test.flaky_score.toFixed(2) + '</td>' +
