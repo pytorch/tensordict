@@ -211,9 +211,7 @@ def collect_test_data(
             "conclusion": run["conclusion"],
         }
 
-    print(
-        f"  Collected {len(all_tests)} test records from {len(run_metadata)} runs"
-    )
+    print(f"  Collected {len(all_tests)} test records from {len(run_metadata)} runs")
     return all_tests, run_metadata
 
 
@@ -315,9 +313,7 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
                 pass
 
         avg_duration = (
-            stats["total_duration"] / stats["executions"]
-            if stats["executions"]
-            else 0
+            stats["total_duration"] / stats["executions"] if stats["executions"] else 0
         )
 
         flaky.append(
@@ -435,9 +431,7 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             )
             score_str = f"{test['flaky_score']:.2f}"
             last_failed = (
-                test["recent_failures"][-1][:10]
-                if test["recent_failures"]
-                else "N/A"
+                test["recent_failures"][-1][:10] if test["recent_failures"] else "N/A"
             )
             new_marker = " **NEW**" if test.get("is_new") else ""
 
