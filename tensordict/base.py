@@ -9177,6 +9177,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> None:  # noqa: D417
         """Sends the content of a tensordict to a distant worker.
 
@@ -9197,6 +9198,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 without overlap. Notice that the generation of these pseudo-random
                 numbers is expensive (1e-5 sec/number), meaning that it could
                 slow down the runtime of your algorithm.
+                Defaults to ``False``.
+            consolidated (bool): if True, sends the consolidated storage as a
+                single tensor (1 message). The tensordict is consolidated first
+                if needed. The receiver must use ``recv(consolidated=True)`` and
+                must already hold a consolidated tensordict with matching schema.
                 Defaults to ``False``.
 
         Example:
@@ -9257,6 +9263,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     secondary_worker.join()
 
         """
+        if consolidated:
+            from torch import distributed as dist
+
+            td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
+            dist.send(td_c._consolidated["storage"], dst=dst, group=group)
+            return
         self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
     def _send(
@@ -9292,6 +9304,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> int:  # noqa: D417
         """Receives the content of a tensordict and updates content with it.
 
@@ -9313,7 +9326,19 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 slow down the runtime of your algorithm.
                 This value must match the one passed to :func:`send`.
                 Defaults to ``False``.
+            consolidated (bool): if True, receives a single consolidated storage
+                tensor directly into ``self._consolidated["storage"]``. The
+                tensordict must already be consolidated (e.g. from a prior
+                :meth:`~.from_remote_init` call). All leaf tensor views update
+                in-place automatically.
+                Defaults to ``False``.
         """
+        if consolidated:
+            from torch import distributed as dist
+
+            storage = self._consolidated["storage"]
+            dist.recv(storage, src=src, group=group)
+            return
         return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
     def _recv(
