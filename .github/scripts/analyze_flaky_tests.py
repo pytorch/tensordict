@@ -4,119 +4,102 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Analyze test results from recent CI runs to identify flaky tests.
+"""Analyze per-test results from recent CI runs to identify flaky tests.
 
 This script:
-1. Fetches workflow run artifacts via GitHub API
-2. Parses test result JSON files
-3. Aggregates per-test statistics
-4. Identifies flaky tests based on failure patterns
-5. Generates JSON and Markdown reports
+1. Fetches workflow run data via the GitHub API
+2. Downloads JUnit XML test-result artifacts from each run
+3. Parses per-test pass/fail outcomes from the XML
+4. Aggregates statistics across runs
+5. Identifies flaky tests based on intermittent failure patterns
+6. Generates JSON and Markdown reports
+
+Requires that CI jobs produce JUnit XML (via ``pytest --junitxml``)
+and upload it as an artifact through the ``upload-artifact`` parameter
+of the pytorch/test-infra reusable workflow.
 """
 
 import argparse
-import io
 import json
 import os
-import sys
-import zipfile
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import requests
-
 # =============================================================================
-# Configuration - Thresholds for flaky test detection
+# Configuration
 # =============================================================================
 
-# Minimum failure rate to be considered flaky (below this = probably just fixed)
 FLAKY_THRESHOLD_MIN = 0.05  # 5%
-
-# Maximum failure rate to be considered flaky (above this = broken, not flaky)
-FLAKY_THRESHOLD_MAX = 0.95  # 95%
-
-# Minimum number of failures required to flag as flaky
+FLAKY_THRESHOLD_MAX = 0.80  # 80%
 MIN_FAILURES_FOR_FLAKY = 2
-
-# Minimum number of executions required for analysis
 MIN_EXECUTIONS = 3
-
-# Days to consider a test "newly flaky"
 NEW_FLAKY_DAYS = 7
 
 
 # =============================================================================
-# GitHub API Helpers
+# GitHub API / CLI helpers
 # =============================================================================
 
 
-def get_github_token() -> str:
-    """Get GitHub token from environment."""
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("Error: GH_TOKEN or GITHUB_TOKEN environment variable required")
-        sys.exit(1)
-    return token
+def gh_api(endpoint: str) -> dict | list | None:
+    """Call the GitHub API via ``gh api`` and return parsed JSON."""
+    try:
+        result = subprocess.run(
+            ["gh", "api", endpoint],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return json.loads(result.stdout)
+    except subprocess.CalledProcessError as exc:
+        print(f"Warning: gh api failed for {endpoint}: {exc.stderr.strip()}")
+        return None
+    except json.JSONDecodeError:
+        return None
+
+
+def gh_run_download(repo: str, run_id: int, pattern: str, dest: str) -> bool:
+    """Download artifacts from a workflow run matching *pattern*."""
+    try:
+        subprocess.run(
+            [
+                "gh",
+                "run",
+                "download",
+                str(run_id),
+                "--repo",
+                repo,
+                "--pattern",
+                pattern,
+                "--dir",
+                dest,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
 def get_repo() -> str:
-    """Get repository from environment."""
     return os.environ.get("GITHUB_REPOSITORY", "pytorch/tensordict")
 
 
-def github_api_request(endpoint: str, token: str) -> dict | list | None:
-    """Make a GitHub API request."""
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    url = f"https://api.github.com{endpoint}"
-
-    response = requests.get(url, headers=headers, timeout=30)
-
-    if response.status_code == 404:
-        return None
-    elif response.status_code == 403:
-        print(f"Warning: API request failed (403): {endpoint}")
-        return None
-    elif response.status_code != 200:
-        print(f"Warning: API request failed ({response.status_code}): {endpoint}")
-        return None
-
-    return response.json()
-
-
-def download_artifact(artifact_url: str, token: str) -> bytes | None:
-    """Download an artifact zip file."""
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-    response = requests.get(
-        artifact_url, headers=headers, timeout=120, allow_redirects=True
-    )
-
-    if response.status_code != 200:
-        print(f"Warning: Failed to download artifact ({response.status_code})")
-        return None
-
-    return response.content
-
-
 # =============================================================================
-# Data Collection
+# Data collection
 # =============================================================================
 
 
 def list_workflow_runs(
-    repo: str, workflow_name: str, branch: str, num_runs: int, token: str
+    repo: str, workflow_name: str, branch: str, num_runs: int
 ) -> list[dict]:
-    """List recent workflow runs for a specific workflow on a branch."""
-    runs = []
+    runs: list[dict] = []
     page = 1
     per_page = min(100, num_runs)
 
@@ -125,94 +108,102 @@ def list_workflow_runs(
             f"/repos/{repo}/actions/workflows/{workflow_name}/runs"
             f"?branch={branch}&status=completed&per_page={per_page}&page={page}"
         )
-        data = github_api_request(endpoint, token)
-
+        data = gh_api(endpoint)
         if not data or "workflow_runs" not in data:
             break
-
-        workflow_runs = data["workflow_runs"]
-        if not workflow_runs:
+        batch = data["workflow_runs"]
+        if not batch:
             break
-
-        runs.extend(workflow_runs)
+        runs.extend(batch)
         page += 1
-
-        if len(workflow_runs) < per_page:
+        if len(batch) < per_page:
             break
 
     return runs[:num_runs]
 
 
-def get_run_artifacts(repo: str, run_id: int, token: str) -> list[dict]:
-    """Get artifacts for a specific workflow run."""
-    endpoint = f"/repos/{repo}/actions/runs/{run_id}/artifacts"
-    data = github_api_request(endpoint, token)
-
-    if not data or "artifacts" not in data:
-        return []
-
-    return data["artifacts"]
-
-
-def extract_test_results(artifact_content: bytes) -> list[dict]:
-    """Extract test results from a downloaded artifact zip."""
-    results = []
-
+def parse_junit_xml(xml_path: Path) -> list[dict]:
+    """Parse a JUnit XML file and return a list of per-test records."""
+    tests: list[dict] = []
     try:
-        with zipfile.ZipFile(io.BytesIO(artifact_content)) as zf:
-            for filename in zf.namelist():
-                if "test-results" in filename and filename.endswith(".json"):
-                    try:
-                        content = zf.read(filename)
-                        data = json.loads(content)
-                        results.append(data)
-                    except (json.JSONDecodeError, KeyError) as e:
-                        print(f"Warning: Failed to parse {filename}: {e}")
-    except zipfile.BadZipFile:
-        print("Warning: Invalid zip file")
+        tree = ET.parse(xml_path)
+    except ET.ParseError as exc:
+        print(f"Warning: could not parse {xml_path}: {exc}")
+        return tests
 
-    return results
+    root = tree.getroot()
+    testcases = root.iter("testcase")
+
+    for tc in testcases:
+        classname = tc.get("classname", "")
+        name = tc.get("name", "")
+        if not name:
+            continue
+
+        nodeid = f"{classname}::{name}" if classname else name
+        duration = float(tc.get("time", "0") or "0")
+
+        failure = tc.find("failure")
+        error = tc.find("error")
+        skipped = tc.find("skipped")
+
+        if failure is not None:
+            outcome = "failed"
+        elif error is not None:
+            outcome = "error"
+        elif skipped is not None:
+            outcome = "skipped"
+        else:
+            outcome = "passed"
+
+        tests.append(
+            {
+                "nodeid": nodeid,
+                "outcome": outcome,
+                "duration": duration,
+            }
+        )
+
+    return tests
 
 
 def collect_test_data(
-    repo: str, workflow_name: str, num_runs: int, token: str
+    repo: str, workflow_name: str, num_runs: int
 ) -> tuple[list[dict], dict]:
-    """Collect test data from recent workflow runs."""
+    """Download artifacts and parse JUnit XML from recent runs."""
     print(f"Fetching last {num_runs} runs of {workflow_name} on main...")
-
-    runs = list_workflow_runs(repo, workflow_name, "main", num_runs, token)
+    runs = list_workflow_runs(repo, workflow_name, "main", num_runs)
     print(f"  Found {len(runs)} completed runs")
 
-    all_test_data = []
-    run_metadata = {}
+    all_tests: list[dict] = []
+    run_metadata: dict = {}
 
     for run in runs:
         run_id = run["id"]
         run_date = run["created_at"]
         commit_sha = run["head_sha"]
 
-        artifacts = get_run_artifacts(repo, run_id, token)
-
-        test_artifacts = [
-            a
-            for a in artifacts
-            if "test" in a["name"].lower() or "result" in a["name"].lower()
-        ]
-
-        if not test_artifacts:
-            test_artifacts = artifacts
-
-        for artifact in test_artifacts:
-            content = download_artifact(artifact["archive_download_url"], token)
-            if not content:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ok = gh_run_download(repo, run_id, "test-results-*", tmpdir)
+            if not ok:
+                run_metadata[run_id] = {
+                    "date": run_date,
+                    "sha": commit_sha,
+                    "conclusion": run["conclusion"],
+                }
                 continue
 
-            results = extract_test_results(content)
-            for result in results:
-                result["_run_id"] = run_id
-                result["_run_date"] = run_date
-                result["_commit_sha"] = commit_sha
-                all_test_data.append(result)
+            xml_files = list(Path(tmpdir).rglob("*.xml"))
+            for xml_file in xml_files:
+                artifact_dir = xml_file.parent.name
+                tests = parse_junit_xml(xml_file)
+                for t in tests:
+                    t["_run_id"] = run_id
+                    t["_run_date"] = run_date
+                    t["_commit_sha"] = commit_sha
+                    t["_artifact"] = artifact_dir
+                    t["_xml_file"] = xml_file.name
+                all_tests.extend(tests)
 
         run_metadata[run_id] = {
             "date": run_date,
@@ -220,11 +211,8 @@ def collect_test_data(
             "conclusion": run["conclusion"],
         }
 
-    print(
-        f"  Collected {len(all_test_data)} test result files "
-        f"from {len(run_metadata)} runs"
-    )
-    return all_test_data, run_metadata
+    print(f"  Collected {len(all_tests)} test records from {len(run_metadata)} runs")
+    return all_tests, run_metadata
 
 
 # =============================================================================
@@ -232,79 +220,50 @@ def collect_test_data(
 # =============================================================================
 
 
-def aggregate_test_stats(test_data: list[dict]) -> dict[str, dict]:
-    """Aggregate statistics per test across all runs."""
-    test_stats = defaultdict(
+def aggregate_test_stats(tests: list[dict]) -> dict[str, dict]:
+    """Aggregate statistics per test nodeid across all runs."""
+    stats_map: dict[str, dict] = defaultdict(
         lambda: {
             "executions": 0,
             "passed": 0,
             "failed": 0,
             "error": 0,
             "skipped": 0,
-            "xfailed": 0,
-            "xpassed": 0,
-            "reruns": 0,
             "total_duration": 0.0,
             "failure_dates": [],
             "run_ids": set(),
         }
     )
 
-    for result in test_data:
-        run_id = result.get("_run_id", "unknown")
-        run_date = result.get("_run_date", "")
+    for t in tests:
+        nodeid = t["nodeid"]
+        outcome = t["outcome"]
+        if outcome == "skipped":
+            continue
 
-        tests = result.get("tests", [])
+        stats = stats_map[nodeid]
+        stats["executions"] += 1
+        stats["run_ids"].add(t["_run_id"])
+        stats["total_duration"] += t.get("duration", 0.0)
 
-        for test in tests:
-            nodeid = test.get("nodeid", "")
-            if not nodeid:
-                continue
+        if outcome == "passed":
+            stats["passed"] += 1
+        elif outcome == "failed":
+            stats["failed"] += 1
+            if t.get("_run_date"):
+                stats["failure_dates"].append(t["_run_date"])
+        elif outcome == "error":
+            stats["error"] += 1
+            if t.get("_run_date"):
+                stats["failure_dates"].append(t["_run_date"])
 
-            outcome = test.get("outcome", "unknown")
-            duration = test.get("duration", 0) or test.get("call_duration", 0) or 0
+    for _nodeid, s in stats_map.items():
+        s["run_ids"] = list(s["run_ids"])
 
-            stats = test_stats[nodeid]
-            stats["executions"] += 1
-            stats["run_ids"].add(run_id)
-            stats["total_duration"] += duration
-
-            if outcome == "passed":
-                stats["passed"] += 1
-            elif outcome == "failed":
-                stats["failed"] += 1
-                if run_date:
-                    stats["failure_dates"].append(run_date)
-            elif outcome == "error":
-                stats["error"] += 1
-                if run_date:
-                    stats["failure_dates"].append(run_date)
-            elif outcome == "skipped":
-                stats["skipped"] += 1
-            elif outcome == "xfailed":
-                stats["xfailed"] += 1
-            elif outcome == "xpassed":
-                stats["xpassed"] += 1
-
-            if test.get("reruns", 0) > 0:
-                stats["reruns"] += test["reruns"]
-
-    for _nodeid, stats in test_stats.items():
-        stats["run_ids"] = list(stats["run_ids"])
-
-    return dict(test_stats)
+    return dict(stats_map)
 
 
 def calculate_flaky_score(stats: dict) -> float:
-    """Calculate a flaky score for a test.
-
-    Score is based on:
-    - Failure rate (higher = more flaky, but capped at 50%)
-    - Number of failures (more failures = more confident)
-    - Presence of reruns (indicates retry failures)
-
-    Returns a score between 0 and 1, where higher = more flaky.
-    """
     if stats["executions"] < MIN_EXECUTIONS:
         return 0.0
 
@@ -314,34 +273,27 @@ def calculate_flaky_score(stats: dict) -> float:
     if failure_rate >= FLAKY_THRESHOLD_MAX or failure_rate <= FLAKY_THRESHOLD_MIN:
         return 0.0
 
-    # Base score from failure rate (peak at 50%)
     if failure_rate <= 0.5:
         base_score = failure_rate * 2
     else:
         base_score = (1 - failure_rate) * 2
 
     confidence = min(1.0, total_failures / 5)
-
-    rerun_bonus = min(0.2, stats["reruns"] * 0.05)
-
-    return min(1.0, (base_score * confidence) + rerun_bonus)
+    return min(1.0, base_score * confidence)
 
 
 def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
-    """Identify flaky tests based on statistics."""
-    flaky_tests = []
+    flaky: list[dict] = []
 
     for nodeid, stats in test_stats.items():
         if stats["executions"] < MIN_EXECUTIONS:
             continue
 
         total_failures = stats["failed"] + stats["error"]
-
         if total_failures < MIN_FAILURES_FOR_FLAKY:
             continue
 
         failure_rate = total_failures / stats["executions"]
-
         if failure_rate <= FLAKY_THRESHOLD_MIN or failure_rate >= FLAKY_THRESHOLD_MAX:
             continue
 
@@ -350,22 +302,21 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
             continue
 
         first_failure = None
-        if stats["failure_dates"]:
-            failure_dates = sorted(stats["failure_dates"])
-            first_failure = failure_dates[0]
-
         is_new = False
-        if first_failure:
+        if stats["failure_dates"]:
+            first_failure = sorted(stats["failure_dates"])[0]
             try:
-                first_failure_dt = datetime.fromisoformat(
-                    first_failure.replace("Z", "+00:00")
-                )
+                first_dt = datetime.fromisoformat(first_failure.replace("Z", "+00:00"))
                 cutoff = datetime.now(timezone.utc) - timedelta(days=NEW_FLAKY_DAYS)
-                is_new = first_failure_dt > cutoff
+                is_new = first_dt > cutoff
             except ValueError:
                 pass
 
-        flaky_tests.append(
+        avg_duration = (
+            stats["total_duration"] / stats["executions"] if stats["executions"] else 0
+        )
+
+        flaky.append(
             {
                 "nodeid": nodeid,
                 "executions": stats["executions"],
@@ -375,8 +326,7 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
                 "passed": stats["passed"],
                 "failed": stats["failed"],
                 "error": stats["error"],
-                "reruns": stats["reruns"],
-                "avg_duration": round(stats["total_duration"] / stats["executions"], 3),
+                "avg_duration_s": round(avg_duration, 3),
                 "recent_failures": (
                     sorted(stats["failure_dates"])[-5:]
                     if stats["failure_dates"]
@@ -387,13 +337,12 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
             }
         )
 
-    flaky_tests.sort(key=lambda x: x["flaky_score"], reverse=True)
-
-    return flaky_tests
+    flaky.sort(key=lambda x: x["flaky_score"], reverse=True)
+    return flaky
 
 
 # =============================================================================
-# Report Generation
+# Report generation
 # =============================================================================
 
 
@@ -403,7 +352,6 @@ def generate_json_report(
     run_metadata: dict,
     output_path: Path,
 ) -> dict:
-    """Generate JSON report."""
     now = datetime.now(timezone.utc)
 
     if run_metadata:
@@ -413,7 +361,7 @@ def generate_json_report(
     else:
         start_date = end_date = now.strftime("%Y-%m-%d")
 
-    new_flaky_count = sum(1 for t in flaky_tests if t.get("is_new", False))
+    new_flaky_count = sum(1 for t in flaky_tests if t.get("is_new"))
 
     report = {
         "generated_at": now.isoformat(),
@@ -444,7 +392,6 @@ def generate_json_report(
 
 
 def generate_markdown_report(report: dict, output_path: Path) -> None:
-    """Generate Markdown report."""
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary = report["summary"]
     flaky_tests = report["flaky_tests"]
@@ -456,7 +403,6 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
         "",
         f"- **Flaky tests**: {summary['flaky_count']}",
         f"- **Newly flaky** (last 7 days): {summary['new_flaky_count']}",
-        f"- **Resolved**: {summary['resolved_count']}",
         f"- **Total tests analyzed**: {summary['total_tests']}",
         f"- **CI runs analyzed**: {report['analysis_period']['runs_analyzed']}",
         "",
@@ -474,18 +420,20 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             ]
         )
 
-        for test in flaky_tests[:20]:
+        for test in flaky_tests[:30]:
             nodeid = test["nodeid"]
-            if len(nodeid) > 60:
-                nodeid = "..." + nodeid[-57:]
+            if len(nodeid) > 80:
+                nodeid = "..." + nodeid[-77:]
 
-            rate_str = f"{test['failure_rate'] * 100:.1f}% ({test['failures']}/{test['executions']})"
+            rate_str = (
+                f"{test['failure_rate'] * 100:.1f}%"
+                f" ({test['failures']}/{test['executions']})"
+            )
             score_str = f"{test['flaky_score']:.2f}"
             last_failed = (
                 test["recent_failures"][-1][:10] if test["recent_failures"] else "N/A"
             )
-
-            new_marker = " NEW" if test.get("is_new") else ""
+            new_marker = " **NEW**" if test.get("is_new") else ""
 
             lines.append(
                 f"| `{nodeid}`{new_marker} | {rate_str} | "
@@ -495,17 +443,17 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
         lines.extend(["", ""])
 
         if summary["new_flaky_count"] > 0:
-            lines.extend(["### Newly Flaky Tests", ""])
-            new_tests = [t for t in flaky_tests if t.get("is_new")]
-            for test in new_tests:
-                lines.append(f"- `{test['nodeid']}`")
+            lines.extend(["### Newly Flaky", ""])
+            for t in flaky_tests:
+                if t.get("is_new"):
+                    lines.append(f"- `{t['nodeid']}`")
             lines.append("")
     else:
         lines.extend(
             [
                 "## No Flaky Tests Detected!",
                 "",
-                "All tests are passing consistently.",
+                "All tests are passing consistently across recent CI runs.",
                 "",
             ]
         )
@@ -532,7 +480,6 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
 
 
 def generate_badge_json(flaky_count: int, output_path: Path) -> None:
-    """Generate shields.io endpoint badge JSON."""
     if flaky_count == 0:
         color = "brightgreen"
     elif flaky_count <= 5:
@@ -559,14 +506,14 @@ def generate_badge_json(flaky_count: int, output_path: Path) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze flaky tests from CI runs")
-    parser.add_argument(
-        "--runs", type=int, default=30, help="Number of runs to analyze per workflow"
+    parser = argparse.ArgumentParser(
+        description="Analyze flaky tests from JUnit XML artifacts"
     )
     parser.add_argument(
-        "--workflow",
-        default=None,
-        help="Single workflow file name (deprecated, use --workflows)",
+        "--runs",
+        type=int,
+        default=30,
+        help="Number of runs to analyze per workflow",
     )
     parser.add_argument(
         "--workflows",
@@ -574,46 +521,47 @@ def main():
         help="Comma-separated list of workflow file names",
     )
     parser.add_argument(
-        "--output-dir", default="flaky-reports", help="Output directory"
+        "--output-dir",
+        default="flaky-reports",
+        help="Output directory",
     )
     args = parser.parse_args()
 
-    token = get_github_token()
     repo = get_repo()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.workflow:
-        workflows = [args.workflow]
-    else:
-        workflows = [w.strip() for w in args.workflows.split(",") if w.strip()]
+    workflows = [w.strip() for w in args.workflows.split(",") if w.strip()]
 
     print(f"Analyzing flaky tests for {repo}")
     print(f"  Workflows: {', '.join(workflows)}")
     print(f"  Runs to analyze per workflow: {args.runs}")
     print()
 
-    all_test_data = []
-    all_run_metadata = {}
+    all_tests: list[dict] = []
+    all_run_metadata: dict = {}
 
     for workflow in workflows:
         print(f"\n{'=' * 60}")
         print(f"Processing workflow: {workflow}")
         print("=" * 60)
 
-        test_data, run_metadata = collect_test_data(repo, workflow, args.runs, token)
-        all_test_data.extend(test_data)
+        tests, run_metadata = collect_test_data(repo, workflow, args.runs)
+        all_tests.extend(tests)
         all_run_metadata.update(run_metadata)
 
-    if not all_test_data:
-        print("\nNo test data collected from any workflow. Generating empty report.")
-        test_stats = {}
-        flaky_tests = []
+    if not all_tests:
+        print(
+            "\nNo test-level data collected (artifacts may not exist yet)."
+            "\nGenerating empty report."
+        )
+        test_stats: dict[str, dict] = {}
+        flaky_tests: list[dict] = []
     else:
         print("\n" + "=" * 60)
-        print("Aggregating test statistics across all workflows...")
+        print("Aggregating per-test statistics...")
         print("=" * 60)
-        test_stats = aggregate_test_stats(all_test_data)
+        test_stats = aggregate_test_stats(all_tests)
         print(f"  Analyzed {len(test_stats)} unique tests")
 
         print("  Identifying flaky tests...")
@@ -627,7 +575,6 @@ def main():
     )
 
     json_report["workflows_analyzed"] = workflows
-
     with open(output_dir / "flaky-tests.json", "w", encoding="utf-8") as f:
         json.dump(json_report, f, indent=2)
 
