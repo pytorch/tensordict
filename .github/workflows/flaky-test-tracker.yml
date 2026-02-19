@@ -40,11 +40,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
-
       - name: Analyze flaky tests
         id: analyze
         env:
@@ -150,7 +145,8 @@ jobs:
   notify:
     needs: analyze-flaky-tests
     runs-on: ubuntu-latest
-    if: needs.analyze-flaky-tests.outputs.flaky_count != '0' || needs.analyze-flaky-tests.outputs.new_flaky_count != '0'
+    # Always run so we can close issues when flaky tests are resolved
+    if: always() && needs.analyze-flaky-tests.result == 'success'
 
     steps:
       - name: Download reports
@@ -159,7 +155,7 @@ jobs:
           name: flaky-test-reports
           path: flaky-reports/
 
-      - name: Create or update flaky test tracking issue
+      - name: Create, update, or close flaky test tracking issue
         uses: actions/github-script@v7
         with:
           script: |
@@ -172,6 +168,7 @@ jobs:
             const newFlakyCount = jsonReport.summary.new_flaky_count || 0;
             const resolvedCount = jsonReport.summary.resolved_count || 0;
 
+            // Look for existing open tracking issue
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -180,22 +177,42 @@ jobs:
               per_page: 1
             });
 
+            if (flakyCount === 0) {
+              // No flaky tests: close existing issue if any
+              if (issues.data.length > 0) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issues.data[0].number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                  body: `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}\n\nAll CI jobs are passing consistently. No flaky tests detected.\n\n*This issue was automatically closed.*`
+                });
+                console.log(`Closed issue #${issues.data[0].number} - no flaky tests`);
+              } else {
+                console.log('No flaky tests and no open tracking issue. Nothing to do.');
+              }
+              return;
+            }
+
+            // There are flaky tests: create or update issue
             const title = `[Flaky Tests] ${flakyCount} flaky test(s) detected`;
-            const body = `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}
-
-            **Summary:**
-            - Flaky tests: **${flakyCount}**
-            - Newly flaky (last 7 days): **${newFlakyCount}**
-            - Resolved: **${resolvedCount}**
-
-            ---
-
-            ${report}
-
-            ---
-
-            *This issue is automatically updated daily. See the [full dashboard](https://pytorch.github.io/tensordict/flaky/) for more details.*
-            `;
+            const body = [
+              `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}`,
+              '',
+              '**Summary:**',
+              `- Flaky tests: **${flakyCount}**`,
+              `- Newly flaky (last 7 days): **${newFlakyCount}**`,
+              `- Resolved: **${resolvedCount}**`,
+              '',
+              '---',
+              '',
+              report,
+              '',
+              '---',
+              '',
+              '*This issue is automatically updated daily. See the [full dashboard](https://pytorch.github.io/tensordict/flaky/) for more details.*',
+            ].join('\n');
 
             if (issues.data.length > 0) {
               await github.rest.issues.update({
@@ -206,13 +223,13 @@ jobs:
                 body: body
               });
               console.log(`Updated issue #${issues.data[0].number}`);
-            } else if (flakyCount > 0) {
+            } else {
               const newIssue = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: ['flaky-test-tracker', 'ci']
+                labels: ['flaky-test-tracker', 'CI']
               });
               console.log(`Created issue #${newIssue.data.number}`);
             }
