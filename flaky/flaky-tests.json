@@ -1,172 +1,17 @@
 {
-  "generated_at": "2026-02-19T11:41:17.070794+00:00",
+  "generated_at": "2026-02-19T14:11:30.000788+00:00",
   "analysis_period": {
     "start": "2026-01-23",
     "end": "2026-02-19",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_jobs": 10,
-    "total_tests": 10,
-    "flaky_count": 10,
-    "new_flaky_count": 10,
+    "total_tests": 0,
+    "flaky_count": 0,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
-  "flaky_tests": [
-    {
-      "name": "test-cpu (3.14t) / linux-job",
-      "executions": 8,
-      "failures": 4,
-      "failure_rate": 0.5,
-      "flaky_score": 0.8,
-      "passed": 4,
-      "avg_duration_s": 1202.8,
-      "recent_failures": [
-        "2026-02-13T00:27:34Z",
-        "2026-02-13T19:02:16Z",
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-13T00:27:34Z",
-      "is_new": true
-    },
-    {
-      "name": "test-cpu (3.11) / linux-job",
-      "executions": 26,
-      "failures": 3,
-      "failure_rate": 0.1154,
-      "flaky_score": 0.1385,
-      "passed": 23,
-      "avg_duration_s": 1702.3,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z",
-        "2026-02-16T15:36:35Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-stable-cpu (3.10) / linux-job",
-      "executions": 26,
-      "failures": 2,
-      "failure_rate": 0.0769,
-      "flaky_score": 0.0615,
-      "passed": 24,
-      "avg_duration_s": 1716.3,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-gpu (3.10, 12.8) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 2037.8,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-stable-gpu (3.10, 12.6) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 2025.9,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-cpu (3.14) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 1391.7,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-cpu (3.13) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 1671.6,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-cpu (3.12) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 1704.4,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-cpu (3.10) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 1716.0,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    },
-    {
-      "name": "test-stable-cpu (3.14) / linux-job",
-      "executions": 27,
-      "failures": 2,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.0593,
-      "passed": 25,
-      "avg_duration_s": 1389.9,
-      "recent_failures": [
-        "2026-02-14T01:00:27Z",
-        "2026-02-16T10:26:17Z"
-      ],
-      "first_seen_flaky": "2026-02-14T01:00:27Z",
-      "is_new": true
-    }
-  ],
+  "flaky_tests": [],
   "thresholds": {
     "min_failure_rate": 0.05,
     "max_failure_rate": 0.8,
