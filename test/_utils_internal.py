@@ -17,6 +17,7 @@ from tensordict import (
     PersistentTensorDict,
     tensorclass,
     TensorDict,
+    UnbatchedTensor,
 )
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._torch_func import _stack as stack_td
@@ -378,6 +379,23 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["td_with_non_tensor_and_metadata", device]]
         TYPES_DEVICES_NOLAZY += [["td_with_non_tensor_and_metadata", device]]
+
+    @classmethod
+    def td_with_unbatched(cls, device):
+        return TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+                "unbatched": UnbatchedTensor(torch.randn(7, 11)),
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_with_unbatched", device]]
+        TYPES_DEVICES_NOLAZY += [["td_with_unbatched", device]]
 
 
 def expand_list(list_of_tensors, *dims):

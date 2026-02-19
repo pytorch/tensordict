@@ -8576,7 +8576,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     if not leaves_only or is_leaf(cls):
                         yield k, val
                     if _is_tensor_collection(cls):
-                        if not is_non_tensor(cls):
+                        # Don't recurse into pass-through values (e.g., UnbatchedTensor)
+                        if not is_non_tensor(cls) and not _pass_through(val):
                             yield from (
                                 (_unravel_key_to_tuple((k, _key)), _val)
                                 for _key, _val in val.items(
@@ -8658,7 +8659,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     if not leaves_only or is_leaf(cls):
                         yield val
                     if include_nested and _is_tensor_collection(cls):
-                        if not is_non_tensor(cls):
+                        # Don't recurse into pass-through values (e.g., UnbatchedTensor)
+                        if not is_non_tensor(cls) and not _pass_through(val):
                             yield from val.values(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
@@ -11275,6 +11277,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def neg(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict."""
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            return self.apply(lambda x: -x)
         vals = torch._foreach_neg(vals)
         items = dict(zip(keys, vals))
 
@@ -11291,7 +11299,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def neg_(self) -> Self:
         """Computes the :meth:`~torch.neg` value of each element of the TensorDict in-place."""
-        torch._foreach_neg_(self._values_list(True, True))
+        vals = self._values_list(True, True)
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            self.apply_(lambda x: x.neg_())
+            return self
+        torch._foreach_neg_(vals)
         return self
 
     def reciprocal(self) -> Self:
@@ -12179,6 +12195,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check once if any pass-through values exist - if so, fallback to apply
+        # to avoid foreach ops stripping wrappers like UnbatchedTensor
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                if alpha is not None:
+                    return self.apply(lambda x, y: x.add(y, alpha=alpha), other)
+                return self.apply(lambda x, y: x + y, other)
+            else:
+                if alpha is not None:
+                    return self.apply(lambda x: x.add(other, alpha=alpha))
+                return self.apply(lambda x: x + other)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12229,6 +12259,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                if alpha is not None:
+                    self.apply_(lambda x, y: x.add_(y, alpha=alpha), other)
+                else:
+                    self.apply_(lambda x, y: x.add_(y), other)
+            else:
+                if alpha is not None:
+                    self.apply_(lambda x: x.add_(other, alpha=alpha))
+                else:
+                    self.apply_(lambda x: x.add_(other))
+            return self
         if alpha is not None:
             torch._foreach_add_(vals, other_val, alpha=alpha)
         else:
@@ -12623,6 +12669,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                self.apply_(lambda x, y: x.mul_(y), other)
+            else:
+                self.apply_(lambda x: x.mul_(other))
+            return self
         torch._foreach_mul_(vals, other_val)
         return self
 
@@ -12653,6 +12709,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                return self.apply(lambda x, y: x * y, other)
+            else:
+                return self.apply(lambda x: x * other)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12695,6 +12760,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                self.apply_(lambda x, y: x.maximum_(y), other)
+            else:
+                self.apply_(lambda x: x.maximum_(other))
+            return self
         torch._foreach_maximum_(vals, other_val)
         return self
 
@@ -12720,6 +12795,30 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+
+            def _maximum_passthrough(x, y=None):
+                if y is None:
+                    y = other
+                # Unwrap pass-through values
+                x_data = x.data if _pass_through(x) else x
+                y_data = y.data if _pass_through(y) else y
+                result_data = torch.maximum(x_data, y_data)
+                # Re-wrap if x was pass-through
+                if _pass_through(x):
+                    result = type(x)(result_data)
+                    result.batch_size = x.batch_size
+                    return result
+                return result_data
+
+            if _is_tensor_collection(type(other)):
+                return self.apply(_maximum_passthrough, other)
+            else:
+                return self.apply(_maximum_passthrough)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12762,6 +12861,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                self.apply_(lambda x, y: x.minimum_(y), other)
+            else:
+                self.apply_(lambda x: x.minimum_(other))
+            return self
         torch._foreach_minimum_(vals, other_val)
         return self
 
@@ -12787,6 +12896,30 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+
+            def _minimum_passthrough(x, y=None):
+                if y is None:
+                    y = other
+                # Unwrap pass-through values
+                x_data = x.data if _pass_through(x) else x
+                y_data = y.data if _pass_through(y) else y
+                result_data = torch.minimum(x_data, y_data)
+                # Re-wrap if x was pass-through
+                if _pass_through(x):
+                    result = type(x)(result_data)
+                    result.batch_size = x.batch_size
+                    return result
+                return result_data
+
+            if _is_tensor_collection(type(other)):
+                return self.apply(_minimum_passthrough, other)
+            else:
+                return self.apply(_minimum_passthrough)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12829,6 +12962,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                self.apply_(lambda x, y: x.clamp_max_(y), other)
+            else:
+                self.apply_(lambda x: x.clamp_max_(other))
+            return self
         try:
             torch._foreach_clamp_max_(vals, other_val)
         except RuntimeError as err:
@@ -12861,6 +13004,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                return self.apply(lambda x, y: x.clamp_max(y), other)
+            else:
+                return self.apply(lambda x: x.clamp_max(other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12910,6 +13062,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             vals = self._values_list(True, True)
             other_val = other
+        # Empty tensordict (no tensors) - nothing to do
+        if not vals:
+            return self
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                self.apply_(lambda x, y: x.clamp_min_(y), other)
+            else:
+                self.apply_(lambda x: x.clamp_min_(other))
+            return self
         try:
             torch._foreach_clamp_min_(vals, other_val)
         except RuntimeError as err:
@@ -12942,6 +13104,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         """
         keys, vals = self._items_list(True, True)
+        # Empty tensordict (no tensors) - return a copy unchanged
+        if not vals:
+            return self.copy()
+        # Check for pass-through values to avoid foreach ops stripping wrappers
+        if any(_pass_through(v) for v in vals):
+            if _is_tensor_collection(type(other)):
+                return self.apply(lambda x, y: x.clamp_min(y), other)
+            else:
+                return self.apply(lambda x: x.clamp_min(other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -13298,6 +13469,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         batch_dims = len(new_size)
         for key, tensor in self.items():
+            # Skip pass-through values (e.g., UnbatchedTensor) as they don't need to conform to batch dimensions
+            if _pass_through(tensor):
+                continue
             if _shape(tensor)[:batch_dims] != new_size and not (
                 _is_tensor_collection(type(tensor)) and tensor.is_empty()
             ):
@@ -13360,6 +13534,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
             is_tc = _is_tensor_collection(cls)
+        # Handle pass-through values: skip batch dimension validation, update batch_size
+        if _pass_through(value):
+            value_copy = value.copy()
+            value_copy.batch_size = self.batch_size
+            return value_copy
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -13451,6 +13630,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
             is_tc = _is_tensor_collection(cls)
+        # Handle pass-through values: skip batch dimension validation, update batch_size
+        if _pass_through(value):
+            value_copy = value.copy()
+            value_copy.batch_size = self.batch_size
+            return value_copy
 
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:
@@ -13744,7 +13928,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     else (
                         value
                         if is_non_tensor(value)
-                        else value.to_tensordict(retain_none=retain_none)
+                        else (
+                            value.clone()
+                            if _pass_through(value)
+                            else value.to_tensordict(retain_none=retain_none)
+                        )
                     )
                 )
                 for key, value in self.items(is_leaf=_is_leaf_nontensor)
@@ -16216,7 +16404,13 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
 
 def _default_is_leaf(cls: Type) -> bool:
-    """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass).
+    """Returns ``True`` if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type.
+
+    Pass-through types (like UnbatchedTensor) have ``_pass_through=True`` and are considered leaves
+    because their shape doesn't conform to batch dimensions.
+
+    Note: NonTensorData types are NOT considered leaves here (they have ``_is_non_tensor=True``
+    but not ``_pass_through=True``), so they are excluded from leaves when ``leaves_only=True``.
 
     Examples:
         >>> from tensordict import TensorDict, default_is_leaf
@@ -16229,7 +16423,10 @@ def _default_is_leaf(cls: Type) -> bool:
 
     .. seealso:: :meth:`~tensordict.is_leaf_nontensor`.
     """
-    return not _is_tensor_collection(cls)
+    # Only check for _pass_through attribute, not _is_non_tensor
+    # This ensures NonTensorData is NOT considered a leaf (preserving original behavior)
+    # while UnbatchedTensor IS considered a leaf
+    return not _is_tensor_collection(cls) or getattr(cls, "_pass_through", False)
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
