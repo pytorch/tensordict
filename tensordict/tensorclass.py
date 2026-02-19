@@ -1204,9 +1204,7 @@ def _tc_tensorclass_type_str(obj):
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def _tc_init_remote(
-    self, dst=None, group=None, device=None, use_broadcast=False
-):
+def _tc_init_remote(self, dst=None, group=None, device=None, use_broadcast=False):
     tc_type = _tc_tensorclass_type_str(self)
     self._tensordict.init_remote(
         dst=dst,
