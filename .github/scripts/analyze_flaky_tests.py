@@ -376,12 +376,12 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
                 "failed": stats["failed"],
                 "error": stats["error"],
                 "reruns": stats["reruns"],
-                "avg_duration": round(
-                    stats["total_duration"] / stats["executions"], 3
+                "avg_duration": round(stats["total_duration"] / stats["executions"], 3),
+                "recent_failures": (
+                    sorted(stats["failure_dates"])[-5:]
+                    if stats["failure_dates"]
+                    else []
                 ),
-                "recent_failures": sorted(stats["failure_dates"])[-5:]
-                if stats["failure_dates"]
-                else [],
                 "first_seen_flaky": first_failure,
                 "is_new": is_new,
             }
@@ -482,9 +482,7 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             rate_str = f"{test['failure_rate'] * 100:.1f}% ({test['failures']}/{test['executions']})"
             score_str = f"{test['flaky_score']:.2f}"
             last_failed = (
-                test["recent_failures"][-1][:10]
-                if test["recent_failures"]
-                else "N/A"
+                test["recent_failures"][-1][:10] if test["recent_failures"] else "N/A"
             )
 
             new_marker = " NEW" if test.get("is_new") else ""
