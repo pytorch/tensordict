@@ -37,6 +37,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
+      upload-artifact: test-results-gpu-${{ matrix.python_version }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -71,6 +72,7 @@ jobs:
       docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       timeout: 90
+      upload-artifact: test-results-cpu-${{ matrix.python_version }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -104,6 +106,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
+      upload-artifact: test-results-stable-gpu-${{ matrix.python_version }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -138,6 +141,7 @@ jobs:
       docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
       timeout: 90
+      upload-artifact: test-results-stable-cpu-${{ matrix.python_version }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
