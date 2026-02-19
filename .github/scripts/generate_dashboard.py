@@ -344,7 +344,7 @@ DASHBOARD_HTML = """\
           : 'N/A';
 
         return '<tr>' +
-          '<td class="test-name">' + escapeHtml(test.nodeid) + '</td>' +
+          '<td class="test-name">' + escapeHtml(test.name || test.nodeid || '') + '</td>' +
           '<td>' + failureRate + '% (' + test.failures + '/' + test.executions + ')' +
           '<div class="progress-bar"><div class="progress-fill ' + badgeClass + '" style="width:' + failureRate + '%"></div></div></td>' +
           '<td>' + test.flaky_score.toFixed(2) + '</td>' +
