@@ -1028,6 +1028,7 @@ class TensorCollection:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> None: ...
     def recv(
         self,
@@ -1036,6 +1037,7 @@ class TensorCollection:
         group: dist.ProcessGroup | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> int: ...
     @classmethod
     def from_remote_init(
@@ -1043,12 +1045,14 @@ class TensorCollection:
         src: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> Self: ...
     def init_remote(
         self,
-        dst: int,
+        dst: int | None = None,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ): ...
     def isend(
         self,
@@ -1075,6 +1079,33 @@ class TensorCollection:
         return_premature: bool = False,
         group: Incomplete | None = None,
     ): ...
+    def broadcast(
+        self,
+        src: int,
+        *,
+        group: dist.ProcessGroup | None = None,
+        device: torch.device | str | None = None,
+    ) -> Self: ...
+    def all_reduce(
+        self,
+        op: Incomplete | None = None,
+        *,
+        group: dist.ProcessGroup | None = None,
+        async_op: bool = False,
+    ) -> None: ...
+    def all_gather(
+        self,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> list: ...
+    def scatter(
+        self,
+        src: int,
+        tensordicts: list | None = None,
+        *,
+        group: dist.ProcessGroup | None = None,
+        device: torch.device | str | None = None,
+    ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
         self,
