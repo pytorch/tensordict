@@ -1251,6 +1251,264 @@ class TestSendConsolidated:
             assert out == "yuppie"
 
 
+# ========================================================================
+# Tensorclass distributed tests
+# ========================================================================
+
+from tensordict import tensorclass
+
+
+@tensorclass
+class MyData:
+    a: torch.Tensor
+    b: torch.Tensor
+
+
+class TestTensorclassBroadcast:
+    port = "29513"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        if rank == 0:
+            tc = MyData(
+                a=torch.ones(3),
+                b=torch.ones(3, 2),
+                batch_size=[3],
+            )
+        else:
+            tc = MyData(
+                a=torch.zeros(1),
+                b=torch.zeros(1),
+                batch_size=[],
+            )
+
+        result = tc.broadcast(src=0)
+        assert (result["a"] == 1).all()
+        assert (result["b"] == 1).all()
+        assert result.is_consolidated()
+        if rank == 1:
+            queue.put("yuppie")
+
+    def test_broadcast(self, set_context):
+        queue = mp.Queue(1)
+        w0 = mp.Process(target=type(self).worker, args=(queue, 0))
+        w1 = mp.Process(target=type(self).worker, args=(queue, 1))
+        w0.start()
+        w1.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            w0.join(timeout=TIMEOUT)
+            w1.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestTensorclassAllReduce:
+    port = "29514"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        tc = MyData(
+            a=torch.ones(3),
+            b=torch.ones(3, 2),
+            batch_size=[3],
+        )
+        tc.all_reduce(op=dist.ReduceOp.SUM)
+        assert (tc.a == 2).all()
+        assert (tc.b == 2).all()
+        if rank == 0:
+            queue.put("yuppie")
+
+    def test_all_reduce(self, set_context):
+        queue = mp.Queue(1)
+        w0 = mp.Process(target=type(self).worker, args=(queue, 0))
+        w1 = mp.Process(target=type(self).worker, args=(queue, 1))
+        w0.start()
+        w1.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            w0.join(timeout=TIMEOUT)
+            w1.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestTensorclassAllGather:
+    port = "29515"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        tc = MyData(
+            a=torch.full((3,), float(rank)),
+            b=torch.full((3, 2), float(rank + 10)),
+            batch_size=[3],
+        )
+        result = tc.all_gather()
+        assert len(result) == 2
+        assert (result[0]["a"] == 0).all()
+        assert (result[0]["b"] == 10).all()
+        assert (result[1]["a"] == 1).all()
+        assert (result[1]["b"] == 11).all()
+        if rank == 0:
+            queue.put("yuppie")
+
+    def test_all_gather(self, set_context):
+        queue = mp.Queue(1)
+        w0 = mp.Process(target=type(self).worker, args=(queue, 0))
+        w1 = mp.Process(target=type(self).worker, args=(queue, 1))
+        w0.start()
+        w1.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            w0.join(timeout=TIMEOUT)
+            w1.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestTensorclassScatter:
+    port = "29516"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        tds = None
+        if rank == 0:
+            tds = [
+                MyData(a=torch.zeros(3), b=torch.zeros(3, 2), batch_size=[3]),
+                MyData(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3]),
+            ]
+        tc = MyData(a=torch.empty(0), b=torch.empty(0), batch_size=[])
+        td = tc.scatter(src=0, tensordicts=tds)
+        assert (td["a"] == float(rank)).all()
+        assert (td["b"] == float(rank)).all()
+        if rank == 1:
+            queue.put("yuppie")
+
+    def test_scatter(self, set_context):
+        queue = mp.Queue(1)
+        w0 = mp.Process(target=type(self).worker, args=(queue, 0))
+        w1 = mp.Process(target=type(self).worker, args=(queue, 1))
+        w0.start()
+        w1.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            w0.join(timeout=TIMEOUT)
+            w1.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestTensorclassInitRemote:
+    port = "29517"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        td = TensorDict.from_remote_init(src=0)
+        assert set(td.keys()) == {"a", "b"}
+        assert (td["a"] == 1).all()
+        assert (td["b"] == 1).all()
+        assert td.is_consolidated()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=0, world_size=2)
+
+        tc = MyData(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
+        tc.init_remote(dst=1)
+
+    def test_init_remote(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
+class TestTensorclassSendConsolidated:
+    port = "29518"
+
+    @classmethod
+    def client(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        td_recv = TensorDict.from_remote_init(src=0)
+        assert td_recv.is_consolidated()
+
+        td_recv.recv(src=0, consolidated=True)
+        assert (td_recv["a"] == 42).all()
+        assert (td_recv["b"] == 99).all()
+        queue.put("yuppie")
+
+    @classmethod
+    def server(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group("gloo", rank=0, world_size=2)
+
+        tc = MyData(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
+        tc.init_remote(dst=1)
+
+        tc.a = torch.full((3,), 42.0)
+        tc.b = torch.full((3, 2), 99.0)
+        tc.send(dst=1, consolidated=True)
+
+    def test_send_consolidated(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client, args=(queue, 1))
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
