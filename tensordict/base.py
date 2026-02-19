@@ -9870,6 +9870,50 @@ class TensorDictBase(MutableMapping, TensorCollection):
             dist.broadcast(storage, src=src, group=group)
             return _rebuild_tensordict_files_consolidated(metadata, storage)
 
+    def all_reduce(
+        self,
+        op=None,
+        *,
+        group: "torch.distributed.ProcessGroup" | None = None,
+        async_op: bool = False,
+    ) -> None:
+        """All-reduces the tensordict across all ranks in-place.
+
+        Each leaf tensor is reduced individually via ``dist.all_reduce``.
+        After the call, every rank holds the reduced values.
+
+        Args:
+            op (dist.ReduceOp, optional): The reduce operation (e.g.
+                ``ReduceOp.SUM``). Defaults to ``ReduceOp.SUM``.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): The process group
+                to use. Defaults to ``None`` (default group).
+            async_op (bool): if ``True``, returns a list of futures.
+                Defaults to ``False``.
+
+        Returns:
+            None, or a list of futures if ``async_op=True``.
+        """
+        from torch import distributed as dist
+
+        if op is None:
+            op = dist.ReduceOp.SUM
+        futures = []
+
+        def _all_reduce(value):
+            futures.append(
+                dist.all_reduce(value, op=op, group=group, async_op=async_op)
+            )
+
+        self._fast_apply(
+            _all_reduce,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+        if async_op:
+            return futures
+        return
+
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.

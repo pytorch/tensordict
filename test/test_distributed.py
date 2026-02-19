@@ -944,6 +944,50 @@ class TestInitRemoteNonTensor:
             assert out == "yuppie"
 
 
+class TestAllReduce:
+    port = "29509"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+        )
+
+        td = TensorDict(
+            {
+                ("a", "b"): torch.ones(2),
+                "c": torch.ones(2, 3),
+            },
+            [2],
+        )
+        td.all_reduce(op=dist.ReduceOp.SUM)
+        assert (td["a", "b"] == 3).all()
+        assert (td["c"] == 3).all()
+        if rank == 0:
+            queue.put("yuppie")
+
+    @pytest.mark.parametrize("op", [dist.ReduceOp.SUM, dist.ReduceOp.PRODUCT])
+    def test_all_reduce(self, set_context, op):
+        queue = mp.Queue(1)
+        workers = []
+        for rank in range(3):
+            w = mp.Process(target=type(self).worker, args=(queue, rank))
+            workers.append(w)
+            w.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
 class TestBroadcast:
     port = "29508"
 

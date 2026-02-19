@@ -1075,6 +1075,13 @@ class TensorClass:
         group: dist.ProcessGroup | None = None,
         device: torch.device | str | None = None,
     ) -> Self: ...
+    def all_reduce(
+        self,
+        op: Incomplete | None = None,
+        *,
+        group: dist.ProcessGroup | None = None,
+        async_op: bool = False,
+    ) -> None: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
         self,
