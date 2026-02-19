@@ -186,7 +186,7 @@ jobs:
                   issue_number: issues.data[0].number,
                   state: 'closed',
                   state_reason: 'completed',
-                  body: `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}\n\nAll CI jobs are passing consistently. No flaky tests detected.\n\n*This issue was automatically closed.*`
+                  body: `## Flaky Test Report - ${new Date().toISOString().split('T')[0]}\n\nAll tests are passing consistently across recent CI runs. No flaky tests detected.\n\n*This issue was automatically closed.*`
                 });
                 console.log(`Closed issue #${issues.data[0].number} - no flaky tests`);
               } else {

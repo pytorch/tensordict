@@ -62,7 +62,14 @@ else
     esac
 fi
 
-coverage run -m pytest test/smoke_test.py -v --durations 20
-coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120
-coverage run -m pytest ./benchmarks --instafail -v --durations 20
+JUNIT_DIR="${RUNNER_ARTIFACT_DIR:-.}"
+mkdir -p "$JUNIT_DIR"
+
+coverage run -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
+coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120 --junitxml="$JUNIT_DIR/junit-tests.xml"
+coverage run -m pytest ./benchmarks --instafail -v --durations 20 --junitxml="$JUNIT_DIR/junit-benchmarks.xml"
 coverage xml -i
+
+if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
+    cp "$JUNIT_DIR"/junit-*.xml "$RUNNER_TEST_RESULTS_DIR/" 2>/dev/null || true
+fi
