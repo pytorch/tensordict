@@ -1045,12 +1045,14 @@ class TensorCollection:
         src: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> Self: ...
     def init_remote(
         self,
-        dst: int,
+        dst: int | None = None,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ): ...
     def isend(
         self,

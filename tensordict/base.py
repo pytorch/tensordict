@@ -84,7 +84,6 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _split_tensordict,
-    _STR_DTYPE_TO_DTYPE,
     _td_fields,
     _unravel_key_to_tuple,
     _zip_strict,
@@ -9373,20 +9372,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def init_remote(
         self,
-        dst: int,
+        dst: int | None = None,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> None:
         """Initializes a remote tensordict by sending its metadata and content.
 
-        This method sends the metadata (shape, dtype, etc.) of the current tensordict to the specified destination rank (`dst`).
+        Two transport modes are available:
 
-        It then asynchronously sends the actual tensordict content.
+        - **Point-to-point** (default): uses ``send_object_list`` +
+          ``dist.send`` to transfer metadata and storage to a single
+          destination rank. Only the sender and receiver need to call the
+          pair ``init_remote`` / ``from_remote_init``.
+        - **Broadcast** (``use_broadcast=True``): delegates to
+          :meth:`~.broadcast`.  Metadata and storage are broadcast to
+          *every* rank in the group.  All ranks must participate (receivers
+          call ``from_remote_init(src=..., use_broadcast=True)``).  ``dst``
+          is ignored in this mode.
 
         Args:
-            dst (int): The rank of the destination process.
+            dst (int, optional): The rank of the destination process. Required
+                when ``use_broadcast=False`` (the default).  Ignored when
+                ``use_broadcast=True``.
             group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
             device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
+                of point-to-point send.  Defaults to ``False``.
 
         .. seealso::
             The receiving process should call `~.from_remote_init` or an equivalent method to receive and initialize a new tensordict based on the sent metadata.
@@ -9459,7 +9471,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...         main_worker.join(timeout=10)
             ...         secondary_worker.join(timeout=10)
         """
-        from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        if use_broadcast:
+            rank = torch.distributed.get_rank(group=group)
+            self.broadcast(src=rank, group=group, device=device)
+            return
 
         td_c = self.consolidate(metadata=True)
         storage = td_c._consolidated["storage"]
@@ -9479,19 +9494,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src: int,
         group: "ProcessGroup" | None = None,  # noqa: F821
         device: torch.device | None = None,
+        use_broadcast: bool = False,
     ) -> Self:
         """Creates a new tensordict instance initialized from remotely sent metadata.
 
         This class method receives consolidated metadata and a single storage buffer
         sent by :meth:`~.init_remote`, then reconstructs the full tensordict.
 
-        Only two messages are exchanged: one small metadata object (via pickle) and one
-        large contiguous tensor (RDMA-friendly).
+        Two transport modes are available (must match the sender's choice):
+
+        - **Point-to-point** (default): uses ``recv_object_list`` +
+          ``dist.recv``.  Only sender and receiver participate.
+        - **Broadcast** (``use_broadcast=True``): delegates to
+          :meth:`~.broadcast`.  All ranks must participate.
 
         Args:
             src (int): The rank of the source process that sent the metadata.
             group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
             device (torch.device, optional): The device to use for tensor operations. Defaults to None.
+            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
+                of point-to-point recv.  Must match the sender's setting.
+                Defaults to ``False``.
 
         Returns:
             TensorDict: A new tensordict instance initialized with the received metadata and content.
@@ -9499,6 +9522,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         .. seealso::
             The sending process should have called `~.init_remote` to send the metadata and content.
         """
+        if use_broadcast:
+            return cls({}).broadcast(src=src, group=group, device=device)
+
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
 
         meta = [None]
@@ -9842,9 +9868,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             TensorDict: the broadcast tensordict on all ranks (consolidated).
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         rank = dist.get_rank(group=group)
         if rank == src:
@@ -9932,9 +9957,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             list[TensorDict]: A list of tensordicts from all ranks.
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         world_size = dist.get_world_size(group=group)
         td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
@@ -9949,16 +9973,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         max_size = max(all_sizes)
         padded = torch.zeros(max_size, dtype=torch.uint8, device=storage.device)
         padded[: storage.numel()] = storage
-        gathered = [torch.empty(max_size, dtype=torch.uint8, device=storage.device) for _ in range(world_size)]
+        gathered = [
+            torch.empty(max_size, dtype=torch.uint8, device=storage.device)
+            for _ in range(world_size)
+        ]
         dist.all_gather(gathered, padded, group=group)
 
         result = []
         for i in range(world_size):
             m = all_meta[i]
             sz = m.pop("_total_bytes")
-            result.append(
-                _rebuild_tensordict_files_consolidated(m, gathered[i][:sz])
-            )
+            result.append(_rebuild_tensordict_files_consolidated(m, gathered[i][:sz]))
         return result
 
     def scatter(
@@ -9991,9 +10016,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Returns:
             TensorDict: The tensordict assigned to this rank.
         """
-        from torch import distributed as dist
-
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
+        from torch import distributed as dist
 
         rank = dist.get_rank(group=group)
         world_size = dist.get_world_size(group=group)
@@ -10031,7 +10055,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             total_bytes = metadata.pop("_total_bytes")
             metadata.pop("_max_bytes")
             metadata.pop("_storage_device")
-            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+            return _rebuild_tensordict_files_consolidated(
+                metadata, recv_buf[:total_bytes]
+            )
         else:
             scatter_meta = [None]
             dist.scatter_object_list(scatter_meta, None, src=src, group=group)
@@ -10043,7 +10069,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
             recv_buf = torch.empty(max_size, dtype=torch.uint8, device=recv_device)
             dist.scatter(recv_buf, None, src=src, group=group)
-            return _rebuild_tensordict_files_consolidated(metadata, recv_buf[:total_bytes])
+            return _rebuild_tensordict_files_consolidated(
+                metadata, recv_buf[:total_bytes]
+            )
 
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
