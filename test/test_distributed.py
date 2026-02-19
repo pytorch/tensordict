@@ -944,6 +944,52 @@ class TestInitRemoteNonTensor:
             assert out == "yuppie"
 
 
+class TestAllGather:
+    port = "29510"
+
+    @classmethod
+    def worker(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+        )
+
+        td = TensorDict(
+            {
+                "a": torch.full((3,), float(rank)),
+                "b": torch.full((3, 2), float(rank + 10)),
+            },
+            [3],
+        )
+        result = td.all_gather()
+        assert len(result) == 2
+        assert (result[0]["a"] == 0).all()
+        assert (result[0]["b"] == 10).all()
+        assert (result[1]["a"] == 1).all()
+        assert (result[1]["b"] == 11).all()
+        if rank == 0:
+            queue.put("yuppie")
+
+    def test_all_gather(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).worker, args=(queue, 0))
+        secondary_worker = mp.Process(target=type(self).worker, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
+
 class TestAllReduce:
     port = "29509"
 

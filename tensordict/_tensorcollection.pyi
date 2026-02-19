@@ -1091,6 +1091,18 @@ class TensorCollection:
         group: dist.ProcessGroup | None = None,
         async_op: bool = False,
     ) -> None: ...
+    def all_gather(
+        self,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> list: ...
+    def scatter(
+        self,
+        src: int,
+        tensordicts: list | None = None,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
     def apply(
         self,
