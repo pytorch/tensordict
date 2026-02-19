@@ -17,6 +17,7 @@
 [![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
 [![Nightly](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml)
 [![Nightly Dashboard](https://img.shields.io/badge/Nightly-Dashboard-blue)](https://pytorch.github.io/tensordict/nightly-status/)
+[![Flaky Tests](https://img.shields.io/endpoint?url=https://pytorch.github.io/tensordict/flaky/badge.json)](https://pytorch.github.io/tensordict/flaky/)
 
 [#docs-package]: https://pytorch.github.io/tensordict/
 [#docs-package-benchmark]: https://pytorch.github.io/tensordict/dev/bench/
