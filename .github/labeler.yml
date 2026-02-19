@@ -1,0 +1,73 @@
+# File-based auto-labeling configuration
+# Works with actions/labeler@v5
+# This complements pr-label.yml (title-based labeling) by detecting which files changed
+
+# =============================================================================
+# Core Module Labels
+# =============================================================================
+"nn":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/nn/**'
+      - 'test/test_nn.py'
+
+"store":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/store/**'
+      - 'test/test_store.py'
+
+"prototype":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/prototype/**'
+
+"tensorclass":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/tensorclass.py'
+      - 'tensordict/tensorclass.pyi'
+      - 'test/test_tensorclass.py'
+
+"memmap":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/memmap.py'
+      - 'test/test_memmap.py'
+
+"persistent":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/persistent.py'
+      - 'test/test_h5.py'
+
+"functional":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tensordict/functional.py'
+      - 'test/test_functorch.py'
+
+# =============================================================================
+# Documentation & CI
+# =============================================================================
+"Documentation":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**'
+      - '*.md'
+      - '*.rst'
+
+"CI":
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+
+"Benchmarks":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'benchmarks/**'
+
+"Test":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'test/**'
