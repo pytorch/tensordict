@@ -459,3 +459,22 @@ def _reverse_to(self, args, kwargs, out):
 
 
 LAST_OP_MAPS["to"] = _reverse_to
+
+
+def _reverse_to_torchbind(self, args, kwargs, out):
+    """Reverse the to_torchbind() operation by converting back to TensorDict.
+    
+    Uses from_torchbind to convert the TorchBind object back to a Python TensorDict,
+    then updates the original tensordict with the potentially modified values.
+    """
+    if out is None:
+        return self
+    # Convert the TorchBind object back to TensorDict
+    from tensordict._td import TensorDict
+    
+    td_from_tb = TensorDict.from_torchbind(out)
+    # Update self with the values from the TorchBind object
+    return self.update(td_from_tb, inplace=False)
+
+
+LAST_OP_MAPS["to_torchbind"] = _reverse_to_torchbind

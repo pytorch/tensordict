@@ -68,6 +68,21 @@ class CMakeBuild(build_ext):
         else:
             # For regular installs, place the extension in the build directory
             extdir = os.path.abspath(os.path.join(self.build_lib, "tensordict"))
+
+        # Try to import torch to obtain its CMake prefix for find_package(Torch)
+        cmake_prefix = os.environ.get("CMAKE_PREFIX_PATH", "")
+        try:
+            import torch  # noqa: F401
+            from torch.utils import cmake_prefix_path as torch_cmake_prefix_path  # type: ignore
+
+            # Prepend Torch's cmake prefix so CMake can find Torch
+            cmake_prefix = (
+                f"{torch_cmake_prefix_path}:{cmake_prefix}" if cmake_prefix else torch_cmake_prefix_path
+            )
+        except Exception:
+            # Torch not importable at build time; rely on environment CMAKE_PREFIX_PATH
+            pass
+
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
@@ -76,6 +91,8 @@ class CMakeBuild(build_ext):
             # for windows
             "-DCMAKE_BUILD_TYPE=Release",
         ]
+        if cmake_prefix:
+            cmake_args.append(f"-DCMAKE_PREFIX_PATH={cmake_prefix}")
 
         build_args = []
         if not os.path.exists(self.build_temp):
