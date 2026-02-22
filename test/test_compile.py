@@ -786,6 +786,42 @@ class TestTC:
         compiled_result = step_c(s)
         assert_close(eager_result, compiled_result)
 
+    def test_td_replace_no_recompile(self, mode):
+        """replace() with many distinct kwarg patterns must not recompile."""
+
+        class State(TensorClass["nocast"]):
+            x: torch.Tensor
+            y: torch.Tensor
+            z: torch.Tensor
+            w: torch.Tensor
+            v: torch.Tensor
+
+        def step(s: State) -> State:
+            s = s.replace(x=s.x + 1)
+            s = s.replace(y=s.y + 2)
+            s = s.replace(z=s.z + 3)
+            s = s.replace(x=s.x * 0.9, y=s.y * 0.9)
+            s = s.replace(w=s.w + s.x)
+            s = s.replace(v=s.v - 1, w=s.w + 1)
+            s = s.replace(x=s.x + s.v, y=s.y + s.w, z=s.z + 0.1)
+            s = s.replace(v=torch.zeros_like(s.v))
+            s = s.replace(w=torch.ones_like(s.w))
+            s = s.replace(x=s.x + s.y + s.z)
+            return s
+
+        s = State(
+            x=torch.randn(4),
+            y=torch.randn(4),
+            z=torch.randn(4),
+            w=torch.randn(4),
+            v=torch.randn(4),
+            batch_size=[4],
+        )
+        step_c = torch.compile(step, fullgraph=True, mode=mode)
+        eager_result = step(s)
+        compiled_result = step_c(s)
+        assert_close(eager_result, compiled_result)
+
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="while_loop requires torch>=2.6",

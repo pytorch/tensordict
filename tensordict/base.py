@@ -8381,6 +8381,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
             and the kwargs are empty, ``self`` is returned.
 
         """
+        if is_compiling() and not args:
+            if not kwargs:
+                return self
+            result = self.copy()
+            for k, v in kwargs.items():
+                result[k] = v
+            return result
         if args:
             if len(args) > 1:
                 raise RuntimeError(
