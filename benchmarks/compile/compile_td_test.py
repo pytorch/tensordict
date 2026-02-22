@@ -345,6 +345,61 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
     benchmark(func, td, idx)
 
 
+@tensorclass
+class ReplaceState:
+    x: torch.Tensor
+    y: torch.Tensor
+    z: torch.Tensor
+    w: torch.Tensor
+    v: torch.Tensor
+
+
+def replace_single(s):
+    return s.replace(x=s.x + 1)
+
+
+def replace_multi(s):
+    s = s.replace(x=s.x + 1)
+    s = s.replace(y=s.y + 2)
+    s = s.replace(z=s.z + 3)
+    s = s.replace(x=s.x * 0.9, y=s.y * 0.9)
+    s = s.replace(w=s.w + s.x)
+    s = s.replace(v=s.v - 1, w=s.w + 1)
+    s = s.replace(x=s.x + s.v, y=s.y + s.w, z=s.z + 0.1)
+    s = s.replace(v=torch.zeros_like(s.v))
+    s = s.replace(w=torch.ones_like(s.w))
+    s = s.replace(x=s.x + s.y + s.z)
+    return s
+
+
+def _get_replace_state():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    return ReplaceState(
+        x=torch.randn(4, device=device),
+        y=torch.randn(4, device=device),
+        z=torch.randn(4, device=device),
+        w=torch.randn(4, device=device),
+        v=torch.randn(4, device=device),
+        batch_size=[4],
+        device=device,
+    )
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("variant", ["single", "multi"])
+def test_compile_replace(mode, variant, benchmark):
+    func = replace_single if variant == "single" else replace_multi
+    if mode == "compile":
+        func = torch.compile(func, fullgraph=True, mode="reduce-overhead")
+    s = _get_replace_state()
+    func(s)
+    func(s)
+    benchmark(func, s)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
