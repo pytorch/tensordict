@@ -11490,6 +11490,89 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    @pytest.mark.parametrize(
+        "inputs,grad_outputs",
+        [
+            (
+                TensorDict(a=torch.randn(2, 3, requires_grad=True)),
+                LazyStackedTensorDict(
+                    TensorDict(a=torch.ones(3)),
+                    TensorDict(a=torch.ones(3)),
+                    stack_dim=0,
+                ),
+            ),
+            (
+                LazyStackedTensorDict(
+                    TensorDict(a=torch.randn(3, requires_grad=True)),
+                    TensorDict(a=torch.randn(3, requires_grad=True)),
+                    stack_dim=0,
+                ),
+                TensorDict(a=torch.ones(2, 3)),
+            ),
+            (
+                LazyStackedTensorDict(
+                    TensorDict(a=torch.randn(3, requires_grad=True)),
+                    TensorDict(a=torch.randn(3, requires_grad=True)),
+                    stack_dim=0,
+                ),
+                LazyStackedTensorDict(
+                    TensorDict(a=torch.ones(2)),
+                    TensorDict(a=torch.ones(2)),
+                    TensorDict(a=torch.ones(2)),
+                    stack_dim=1,
+                ),
+            ),
+        ],
+    )
+    def test_autograd_grad_mixed_types(self, inputs, grad_outputs):
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, grad_outputs)
+        assert (grads == 1).all()
+
+    def test_autograd_grad_non_stackable(self):
+        inputs = LazyStackedTensorDict(
+            TensorDict(a=torch.randn(3, requires_grad=True)),
+            TensorDict(a=torch.randn(2, requires_grad=True)),
+            stack_dim=0,
+        )
+        grad_outputs = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(3)), TensorDict(a=torch.ones(2)), stack_dim=0
+        )
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, grad_outputs)
+        assert (grads == 1).all()
+
+    def test_autograd_grad_key_order(self):
+        inputs = LazyStackedTensorDict(
+            TensorDict(a=torch.randn(3, requires_grad=True)),
+            TensorDict(a=torch.randn(2, requires_grad=True)),
+            stack_dim=0,
+        )
+        inputs["b"] = [
+            torch.randn(3, requires_grad=True),
+            torch.randn(2, requires_grad=True),
+        ]
+        grad_outputs = LazyStackedTensorDict(
+            TensorDict(b=torch.ones(3)), TensorDict(b=torch.ones(2)), stack_dim=0
+        )
+        grad_outputs["a"] = [torch.ones(3), torch.ones(2)]
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, grad_outputs)
+        assert (grads == 1).all()
+
+    def test_autograd_grad_exclusive_keys(self):
+        inputs = LazyStackedTensorDict(
+            TensorDict(a=torch.randn(3, requires_grad=True)),
+            TensorDict(b=torch.randn(2, requires_grad=True)),
+            stack_dim=0,
+        )
+        grad_outputs = LazyStackedTensorDict(
+            TensorDict(a=torch.ones(3)), TensorDict(b=torch.ones(2)), stack_dim=0
+        )
+        outputs = inputs + 1
+        grads = torch.autograd.grad(outputs, inputs, grad_outputs)
+        assert (grads == 1).all()
+
 
 class TestErrorMessage:
     @staticmethod
