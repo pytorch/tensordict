@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3743+g1f1686cb3.d20260222)
+                  main (0.11.0.dev3748+g097d7b489.d20260224)
                 </div>
               
             
@@ -469,20 +469,71 @@ For example, to place all of the contents onto a particular device one can simpl
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a> and many more.</p>
 <p>If an operation is not present, the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> method will usually provide the solution
 that was needed.</p>
-<section id="escaping-shape-operations">
-<h3>Escaping shape operations<a class="headerlink" href="#escaping-shape-operations" title="Permalink to this heading">¶</a></h3>
+<section id="escaping-shape-operations-unbatchedtensor">
+<h3>Escaping shape operations: UnbatchedTensor<a class="headerlink" href="#escaping-shape-operations-unbatchedtensor" title="Permalink to this heading">¶</a></h3>
 <p>In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
-shape operations.</p>
-<p>This can be achieved by wrapping the tensor in an <code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> instance.</p>
-<p>An <code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> ignores its shape during shape operations on the TensorDict, allowing for
-flexible storage and manipulation of tensors with arbitrary shapes.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnbatchedTensor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;zeros&quot;</span><span class="p">:</span> <span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">))},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped_td</span><span class="p">[</span><span class="s2">&quot;zeros&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;zeros&quot;</span><span class="p">]</span>
+shape operations. A common example is a configuration tensor, a mask, or a set of parameters that is shared across
+all elements in a batch.</p>
+<p>This can be achieved by wrapping the tensor in an <a class="reference internal" href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> instance.</p>
+<section id="contract">
+<h4>Contract<a class="headerlink" href="#contract" title="Permalink to this heading">¶</a></h4>
+<p><a class="reference internal" href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> follows a simple contract:</p>
+<ul class="simple">
+<li><p><strong>Behaves like a tensor</strong>: the underlying data is a real <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> and can be used as such.</p></li>
+<li><p><strong>Shape operations pass through</strong>: when placed in a TensorDict, operations that only affect shape
+(<code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">view</span></code>, <code class="docutils literal notranslate"><span class="pre">unbind</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>, <code class="docutils literal notranslate"><span class="pre">permute</span></code>, <code class="docutils literal notranslate"><span class="pre">transpose</span></code>,
+<code class="docutils literal notranslate"><span class="pre">flatten</span></code>, <code class="docutils literal notranslate"><span class="pre">unflatten</span></code>, <code class="docutils literal notranslate"><span class="pre">chunk</span></code>, <code class="docutils literal notranslate"><span class="pre">cat</span></code>, <code class="docutils literal notranslate"><span class="pre">stack</span></code>) return copies of the same underlying tensor
+without modifying it.</p></li>
+<li><p><strong>Other operations work normally</strong>: device transfers (<code class="docutils literal notranslate"><span class="pre">to</span></code>), pointwise arithmetic (<code class="docutils literal notranslate"><span class="pre">+</span></code>, <code class="docutils literal notranslate"><span class="pre">-</span></code>, <code class="docutils literal notranslate"><span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">/</span></code>),
+<code class="docutils literal notranslate"><span class="pre">clone</span></code>, gradient computation, and key-based access all behave as expected.</p></li>
+</ul>
+</section>
+<section id="usage">
+<h4>Usage<a class="headerlink" href="#usage" title="Permalink to this heading">¶</a></h4>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">UnbatchedTensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">config</span><span class="o">=</span><span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Shape operations on the TensorDict leave the <code class="docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> unchanged:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reshaped</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">parts</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;config&quot;</span><span class="p">]</span>
 <span class="go">True</span>
 </pre></div>
 </div>
+<p>Pointwise arithmetic is applied to the underlying data:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">td</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;config&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">tensor([2., 4., 6.])</span>
+</pre></div>
+</div>
+</section>
+<section id="accessing-values">
+<h4>Accessing values<a class="headerlink" href="#accessing-values" title="Permalink to this heading">¶</a></h4>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">get()</span></code> returns the <a class="reference internal" href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> wrapper, while <code class="docutils literal notranslate"><span class="pre">__getitem__()</span></code> (bracket
+syntax) returns the underlying tensor data:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;config&quot;</span><span class="p">))</span>  <span class="c1"># UnbatchedTensor</span>
+<span class="go">&lt;class &#39;tensordict._unbatched.UnbatchedTensor&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">])</span>      <span class="c1"># plain Tensor</span>
+<span class="go">&lt;class &#39;torch.Tensor&#39;&gt;</span>
+</pre></div>
+</div>
+</section>
+<section id="limitations">
+<h4>Limitations<a class="headerlink" href="#limitations" title="Permalink to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>Memory-mapped serialization</strong> is not currently supported for <code class="docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code>.</p></li>
+<li><p><strong>Stacking with different data</strong>: when stacking TensorDicts that contain <code class="docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> entries with
+different underlying data, only the first element’s data is kept. A warning is emitted when this is detected.</p></li>
+</ul>
+</section>
 </section>
 </section>
 <section id="non-tensor-data">
@@ -844,7 +895,13 @@ capabilities.</p>
 <li><a class="reference internal" href="#">Overview</a><ul>
 <li><a class="reference internal" href="#motivation">Motivation</a></li>
 <li><a class="reference internal" href="#features">Features</a><ul>
-<li><a class="reference internal" href="#escaping-shape-operations">Escaping shape operations</a></li>
+<li><a class="reference internal" href="#escaping-shape-operations-unbatchedtensor">Escaping shape operations: UnbatchedTensor</a><ul>
+<li><a class="reference internal" href="#contract">Contract</a></li>
+<li><a class="reference internal" href="#usage">Usage</a></li>
+<li><a class="reference internal" href="#accessing-values">Accessing values</a></li>
+<li><a class="reference internal" href="#limitations">Limitations</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a class="reference internal" href="#non-tensor-data">Non-tensor data</a><ul>

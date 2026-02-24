@@ -283,6 +283,7 @@ Here is an example:
     NonTensorData
     MetaData
     NonTensorStack
+    UnbatchedTensor
     from_dataclass
 
 Auto-casting
