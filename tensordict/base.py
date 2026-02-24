@@ -74,6 +74,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _lock_warn,
     _make_dtype_promotion,
+    _is_unbatched,
     _maybe_correct_neg_dim,
     _parse_to,
     _pass_through,
@@ -10931,8 +10932,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             return self.apply(lambda x: -x)
         vals = torch._foreach_neg(vals)
         items = dict(zip(keys, vals))
@@ -10954,8 +10954,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             self.apply_(lambda x: x.neg_())
             return self
         torch._foreach_neg_(vals)
@@ -11849,9 +11848,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check once if any pass-through values exist - if so, fallback to apply
-        # to avoid foreach ops stripping wrappers like UnbatchedTensor
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 if alpha is not None:
                     return self.apply(lambda x, y: x.add(y, alpha=alpha), other)
@@ -11913,8 +11910,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 if alpha is not None:
                     self.apply_(lambda x, y: x.add_(y, alpha=alpha), other)
@@ -12323,8 +12319,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 self.apply_(lambda x, y: x.mul_(y), other)
             else:
@@ -12363,8 +12358,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 return self.apply(lambda x, y: x * y, other)
             else:
@@ -12414,8 +12408,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 self.apply_(lambda x, y: x.maximum_(y), other)
             else:
@@ -12449,18 +12442,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
 
             def _maximum_passthrough(x, y=None):
                 if y is None:
                     y = other
-                # Unwrap pass-through values
-                x_data = x.data if _pass_through(x) else x
-                y_data = y.data if _pass_through(y) else y
+                x_data = x.data if _is_unbatched(x) else x
+                y_data = y.data if _is_unbatched(y) else y
                 result_data = torch.maximum(x_data, y_data)
-                # Re-wrap if x was pass-through
-                if _pass_through(x):
+                if _is_unbatched(x):
                     result = type(x)(result_data)
                     result.batch_size = x.batch_size
                     return result
@@ -12515,8 +12505,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 self.apply_(lambda x, y: x.minimum_(y), other)
             else:
@@ -12550,18 +12539,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
 
             def _minimum_passthrough(x, y=None):
                 if y is None:
                     y = other
-                # Unwrap pass-through values
-                x_data = x.data if _pass_through(x) else x
-                y_data = y.data if _pass_through(y) else y
+                x_data = x.data if _is_unbatched(x) else x
+                y_data = y.data if _is_unbatched(y) else y
                 result_data = torch.minimum(x_data, y_data)
-                # Re-wrap if x was pass-through
-                if _pass_through(x):
+                if _is_unbatched(x):
                     result = type(x)(result_data)
                     result.batch_size = x.batch_size
                     return result
@@ -12616,8 +12602,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 self.apply_(lambda x, y: x.clamp_max_(y), other)
             else:
@@ -12658,8 +12643,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 return self.apply(lambda x, y: x.clamp_max(y), other)
             else:
@@ -12716,8 +12700,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
             return self
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 self.apply_(lambda x, y: x.clamp_min_(y), other)
             else:
@@ -12758,8 +12741,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
             return self.copy()
-        # Check for pass-through values to avoid foreach ops stripping wrappers
-        if any(_pass_through(v) for v in vals):
+        if any(_is_unbatched(v) for v in vals):
             if _is_tensor_collection(type(other)):
                 return self.apply(lambda x, y: x.clamp_min(y), other)
             else:
@@ -13120,8 +13102,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         batch_dims = len(new_size)
         for key, tensor in self.items():
-            # Skip pass-through values (e.g., UnbatchedTensor) as they don't need to conform to batch dimensions
-            if _pass_through(tensor):
+            if _is_unbatched(tensor):
                 continue
             if _shape(tensor)[:batch_dims] != new_size and not (
                 _is_tensor_collection(type(tensor)) and tensor.is_empty()
@@ -13185,8 +13166,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
             is_tc = _is_tensor_collection(cls)
-        # Handle pass-through values: skip batch dimension validation, update batch_size
-        if _pass_through(value):
+        if _is_unbatched(value):
             value_copy = value.copy()
             value_copy.batch_size = self.batch_size
             return value_copy
@@ -13281,8 +13261,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
             is_tc = _is_tensor_collection(cls)
-        # Handle pass-through values: skip batch dimension validation, update batch_size
-        if _pass_through(value):
+        if _is_unbatched(value):
             value_copy = value.copy()
             value_copy.batch_size = self.batch_size
             return value_copy
@@ -13571,7 +13550,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                         if is_non_tensor(value)
                         else (
                             value.clone()
-                            if _pass_through(value)
+                            if _is_unbatched(value)
                             else value.to_tensordict(retain_none=retain_none)
                         )
                     )

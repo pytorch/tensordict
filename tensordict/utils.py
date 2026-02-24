@@ -2407,6 +2407,27 @@ def _pass_through(data) -> bool:
     return _pass_through_cls(type(data))
 
 
+_UNBATCHED_MEMO = {}
+
+
+def _is_unbatched(data) -> bool:
+    """Returns True only for values with ``_pass_through = True`` (e.g., UnbatchedTensor).
+
+    Unlike ``_pass_through`` which also matches ``_is_non_tensor`` (NonTensorData, MetaData),
+    this only matches types that explicitly set ``_pass_through = True``.
+    """
+    cls = type(data)
+    is_dynamo = is_compiling()
+    if not is_dynamo:
+        out = _UNBATCHED_MEMO.get(cls)
+        if out is not None:
+            return out
+    out = bool(getattr(cls, "_pass_through", False))
+    if not is_dynamo:
+        _UNBATCHED_MEMO[cls] = out
+    return out
+
+
 _NON_TENSOR_MEMO = {}
 
 

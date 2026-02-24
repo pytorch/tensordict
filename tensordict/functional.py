@@ -20,7 +20,7 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _check_keys,
-    _pass_through,
+    _is_unbatched,
     _shape,
     DeviceType,
     is_non_tensor,
@@ -83,8 +83,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
         device=tensordict.device,
     )
     for key, tensor in tensordict.items():
-        # Handle pass-through values (UnbatchedTensor, etc.) - copy and update batch_size
-        if _pass_through(tensor):
+        if _is_unbatched(tensor):
             tensor_copy = tensor.copy()
             tensor_copy.batch_size = torch.Size(new_batch_size)
             out._set_str(key, tensor_copy, validated=True, inplace=False)

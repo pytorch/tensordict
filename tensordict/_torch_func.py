@@ -25,6 +25,7 @@ from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
     _is_tensorclass,
+    _is_unbatched,
     _pass_through,
     _shape,
     _zip_strict,
@@ -207,7 +208,7 @@ def _gather(
         return out
 
     def _process_gather_value(value, index_shape=index.shape):
-        if _pass_through(value):
+        if _is_unbatched(value):
             value_copy = value.copy()
             value_copy.batch_size = index_shape
             return value_copy
@@ -229,7 +230,7 @@ def _gather(
             device=device,
         )
     for key, value in input.items(is_leaf=_is_leaf_nontensor):
-        if _pass_through(value):
+        if _is_unbatched(value):
             value_copy = value.copy()
             value_copy.batch_size = index.shape
             out._set_str(
@@ -457,8 +458,7 @@ def _cat(
         out = {}
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
-            if _pass_through(items[0]):
-                # Copy first and update batch_size to concatenated size
+            if _is_unbatched(items[0]):
                 copy = items[0].copy()
                 copy.batch_size = batch_size
                 out[key] = copy
@@ -497,8 +497,7 @@ def _cat(
 
         for key in keys:
             first_item = list_of_tensordicts[0]._get_str(key, NO_DEFAULT)
-            if _pass_through(first_item):
-                # Copy first and update batch_size
+            if _is_unbatched(first_item):
                 copy = first_item.copy()
                 copy.batch_size = batch_size
                 out._set_str(
@@ -1037,9 +1036,8 @@ def _grad(
             "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
         )
 
-    # Helper to unwrap pass-through values (e.g., UnbatchedTensor) to their .data
     def _unwrap_pass_through(val):
-        if _pass_through(val):
+        if _is_unbatched(val):
             return val.data
         return val
 
@@ -1068,8 +1066,7 @@ def _grad(
     # Wrap gradients back into pass-through wrappers if the original input was pass-through
     pairs = {}
     for key, grad, orig_input in _zip_strict(keys, all_grads, all_inputs_raw):
-        if _pass_through(orig_input):
-            # Wrap the gradient in the same type as the original input
+        if _is_unbatched(orig_input):
             wrapped_grad = type(orig_input)(grad)
             wrapped_grad.batch_size = orig_input.batch_size
             pairs[key] = wrapped_grad

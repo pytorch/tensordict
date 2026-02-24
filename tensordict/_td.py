@@ -77,6 +77,7 @@ from tensordict.utils import (
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
+    _is_unbatched,
     _pass_through,
     _prune_selected_keys,
     _set_item,
@@ -1491,7 +1492,7 @@ class TensorDict(TensorDictBase):
                 # (indicated by batch_size being set) should be copied with updated batch_size
                 # but not have the function applied. For other ops (data ops like zero_),
                 # apply the function normally.
-                if _pass_through(item) and batch_size is not None:
+                if _is_unbatched(item) and batch_size is not None:
                     item_trsf = item.copy() if hasattr(item, "copy") else item
                     if hasattr(item_trsf, "batch_size"):
                         item_trsf.batch_size = batch_size
@@ -1610,8 +1611,7 @@ class TensorDict(TensorDictBase):
             new_names = None
 
         def _process_value(value):
-            # Pass-through values should be copied with updated batch_size, not recursed into
-            if _pass_through(value):
+            if _is_unbatched(value):
                 copy = value.copy() if hasattr(value, "copy") else value
                 if hasattr(copy, "batch_size"):
                     copy.batch_size = torch.Size(new_batch_size)
@@ -1786,8 +1786,7 @@ class TensorDict(TensorDictBase):
         tds = tuple(empty() for _ in range(self.batch_size[dim]))
 
         def unbind(key, val, tds=tds):
-            # Pass-through values (e.g., UnbatchedTensor) are replicated to all unbound TensorDicts
-            if _pass_through(val):
+            if _is_unbatched(val):
                 for td in tds:
                     td._set_str(
                         key, val, validated=True, inplace=False, non_blocking=False
@@ -1826,7 +1825,7 @@ class TensorDict(TensorDictBase):
             splits_list = [end - start for start, end in segments]
             num_splits = len(splits_list)
             splits = {
-                k: (v,) * num_splits if _pass_through(v) else v.split(splits_list, dim)
+                k: (v,) * num_splits if _is_unbatched(v) else v.split(splits_list, dim)
                 for k, v in self.items()
             }
         elif isinstance(split_size, (list, tuple)):
@@ -1836,7 +1835,7 @@ class TensorDict(TensorDictBase):
                 raise TypeError(WRONG_TYPE)
             num_splits = len(split_size)
             splits = {
-                k: (v,) * num_splits if _pass_through(v) else v.split(split_size, dim)
+                k: (v,) * num_splits if _is_unbatched(v) else v.split(split_size, dim)
                 for k, v in self.items()
             }
             segments = _create_segments_from_list(split_size, max_size)
@@ -1851,8 +1850,7 @@ class TensorDict(TensorDictBase):
         ]
 
         def _update_batch_size_for_split(value, new_batch_size):
-            """Create a copy of pass-through value with updated batch_size."""
-            if _pass_through(value) and hasattr(value, "batch_size"):
+            if _is_unbatched(value) and hasattr(value, "batch_size"):
                 copy = value.copy() if hasattr(value, "copy") else value
                 copy.batch_size = new_batch_size
                 return copy
