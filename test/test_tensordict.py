@@ -6370,7 +6370,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_memmap_(self, td_name, device, use_dir, tmpdir, num_threads):
         if td_name == "td_with_unbatched":
-            pytest.xfail("UnbatchedTensor memmap support not yet implemented")
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
@@ -6409,7 +6409,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("copy_existing", [False, True])
     def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
         if td_name == "td_with_unbatched":
-            pytest.xfail("UnbatchedTensor memmap support not yet implemented")
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -6484,7 +6484,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_memmap_like(self, td_name, device, use_dir, tmpdir, num_threads):
         if td_name == "td_with_unbatched":
-            pytest.xfail("UnbatchedTensor memmap support not yet implemented")
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         td = getattr(self, td_name)(device)
         tdmemmap = td.memmap_like(
             prefix=tmpdir if use_dir else None,
@@ -6510,7 +6510,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "td_with_unbatched":
-            pytest.xfail("UnbatchedTensor memmap support not yet implemented")
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -7480,7 +7480,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_save_load_memmap(self, td_name, device, tmpdir):
         if td_name == "td_with_unbatched":
-            pytest.xfail("UnbatchedTensor memmap support not yet implemented")
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         if td_name in ("sub_td2",):
             pytest.skip("sub_td2 is not supported")
         td = getattr(self, td_name)(device)
