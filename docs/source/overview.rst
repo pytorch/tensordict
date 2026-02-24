@@ -127,22 +127,71 @@ The class supports many other operations, including :func:`~torch.squeeze`, :fun
 If an operation is not present, the :meth:`~tensordict.TensorDict.apply` method will usually provide the solution
 that was needed.
 
-Escaping shape operations
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Escaping shape operations: UnbatchedTensor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
-shape operations.
+shape operations. A common example is a configuration tensor, a mask, or a set of parameters that is shared across
+all elements in a batch.
 
 This can be achieved by wrapping the tensor in an :class:`~tensordict.UnbatchedTensor` instance.
 
-An :class:`~tensordict.UnbatchedTensor` ignores its shape during shape operations on the TensorDict, allowing for
-flexible storage and manipulation of tensors with arbitrary shapes.
+Contract
+^^^^^^^^
 
-    >>> from tensordict import UnbatchedTensor
-    >>> tensordict = TensorDict({"zeros": UnbatchedTensor(torch.zeros(10))}, batch_size=[2, 3])
-    >>> reshaped_td = tensordict.reshape(6)
-    >>> reshaped_td["zeros"] is tensordict["zeros"]
+:class:`~tensordict.UnbatchedTensor` follows a simple contract:
+
+- **Behaves like a tensor**: the underlying data is a real ``torch.Tensor`` and can be used as such.
+- **Shape operations pass through**: when placed in a TensorDict, operations that only affect shape
+  (``reshape``, ``view``, ``unbind``, ``split``, ``squeeze``, ``unsqueeze``, ``permute``, ``transpose``,
+  ``flatten``, ``unflatten``, ``chunk``, ``cat``, ``stack``) return copies of the same underlying tensor
+  without modifying it.
+- **Other operations work normally**: device transfers (``to``), pointwise arithmetic (``+``, ``-``, ``*``, ``/``),
+  ``clone``, gradient computation, and key-based access all behave as expected.
+
+Usage
+^^^^^
+
+    >>> from tensordict import TensorDict, UnbatchedTensor
+    >>> import torch
+    >>> td = TensorDict(
+    ...     a=torch.randn(2, 3),
+    ...     config=UnbatchedTensor(torch.tensor([1.0, 2.0, 3.0])),
+    ...     batch_size=[2, 3],
+    ... )
+
+Shape operations on the TensorDict leave the ``UnbatchedTensor`` unchanged:
+
+    >>> reshaped = td.reshape(6)
+    >>> reshaped["config"] is td["config"]
     True
+    >>> parts = td.unbind(0)
+    >>> parts[0]["config"] is parts[1]["config"]
+    True
+
+Pointwise arithmetic is applied to the underlying data:
+
+    >>> td2 = td * 2
+    >>> td2.get("config").data
+    tensor([2., 4., 6.])
+
+Accessing values
+^^^^^^^^^^^^^^^^
+
+Note that ``get()`` returns the :class:`~tensordict.UnbatchedTensor` wrapper, while ``__getitem__()`` (bracket
+syntax) returns the underlying tensor data:
+
+    >>> type(td.get("config"))  # UnbatchedTensor
+    <class 'tensordict._unbatched.UnbatchedTensor'>
+    >>> type(td["config"])      # plain Tensor
+    <class 'torch.Tensor'>
+
+Limitations
+^^^^^^^^^^^
+
+- **Memory-mapped serialization** is not currently supported for ``UnbatchedTensor``.
+- **Stacking with different data**: when stacking TensorDicts that contain ``UnbatchedTensor`` entries with
+  different underlying data, only the first element's data is kept. A warning is emitted when this is detected.
 
 Non-tensor data
 ---------------
