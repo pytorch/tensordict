@@ -7859,6 +7859,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
         result = self._get_tuple(key, default, **kwargs)
+        if _is_unbatched(result):
+            return result.data
         if _pass_through(result):
             # Only lazy stacks of non tensors are actually tensordict instances
             if isinstance(result, TensorDictBase):

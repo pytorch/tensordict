@@ -14157,6 +14157,37 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
+    def test_unbatched_getitem_returns_data(self):
+        data = torch.randn(7, 11)
+        td = TensorDict(
+            a=UnbatchedTensor(data),
+            b=torch.randn(3, 4),
+            batch_size=(3, 4),
+        )
+        result = td["a"]
+        assert isinstance(result, torch.Tensor)
+        assert not isinstance(result, UnbatchedTensor)
+        assert result is data
+
+    def test_unbatched_stack_same_data_no_warning(self):
+        data = torch.randn(5)
+        td1 = TensorDict(a=torch.ones(3), ub=UnbatchedTensor(data), batch_size=[3])
+        td2 = TensorDict(a=torch.ones(3), ub=UnbatchedTensor(data), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            stacked = torch.stack([td1, td2])
+        assert stacked["ub"] is data
+
+    def test_unbatched_stack_different_data_warns(self):
+        td1 = TensorDict(
+            a=torch.ones(3), ub=UnbatchedTensor(torch.zeros(5)), batch_size=[3]
+        )
+        td2 = TensorDict(
+            a=torch.ones(3), ub=UnbatchedTensor(torch.ones(5)), batch_size=[3]
+        )
+        with pytest.warns(UserWarning, match="different data storage"):
+            torch.stack([td1, td2])
+
 
 def _to_float(td, td_name, tmpdir):
     if hasattr(td, "_source"):
