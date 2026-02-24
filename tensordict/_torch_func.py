@@ -25,6 +25,7 @@ from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
     _is_tensorclass,
+    _is_unbatched,
     _pass_through,
     _shape,
     _zip_strict,
@@ -206,6 +207,13 @@ def _gather(
         out = torch.gather(tensor, dim, index_expand, out=dest)
         return out
 
+    def _process_gather_value(value, index_shape=index.shape):
+        if _is_unbatched(value):
+            value_copy = value.copy()
+            value_copy.batch_size = index_shape
+            return value_copy
+        return _gather_tensor(value)
+
     if out is None:
         if len(index.shape) == input.ndim:
             names = input._maybe_names()
@@ -214,7 +222,7 @@ def _gather(
         device = input.device
         return type(input)._new_unsafe(
             {
-                key: _gather_tensor(value)
+                key: _process_gather_value(value)
                 for key, value in input.items(is_leaf=_is_leaf_nontensor)
             },
             batch_size=index.shape,
@@ -222,7 +230,14 @@ def _gather(
             device=device,
         )
     for key, value in input.items(is_leaf=_is_leaf_nontensor):
-        _gather_tensor(value, out, key)
+        if _is_unbatched(value):
+            value_copy = value.copy()
+            value_copy.batch_size = index.shape
+            out._set_str(
+                key, value_copy, validated=True, inplace=False, non_blocking=False
+            )
+        else:
+            _gather_tensor(value, out, key)
     return out
 
 
@@ -443,7 +458,11 @@ def _cat(
         out = {}
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
-            if not is_compiling():
+            if _is_unbatched(items[0]):
+                copy = items[0].copy()
+                copy.batch_size = batch_size
+                out[key] = copy
+            elif not is_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 ):
@@ -477,23 +496,33 @@ def _cat(
             )
 
         for key in keys:
-            with (
-                _ErrorInteceptor(
-                    key, "Attempted to concatenate tensors on different devices at key"
+            first_item = list_of_tensordicts[0]._get_str(key, NO_DEFAULT)
+            if _is_unbatched(first_item):
+                copy = first_item.copy()
+                copy.batch_size = batch_size
+                out._set_str(
+                    key, copy, validated=True, inplace=False, non_blocking=False
                 )
-                if not is_compiling()
-                else contextlib.nullcontext()
-            ):
-                if isinstance(out, TensorDict):
-                    torch.cat(
-                        [td.get(key) for td in list_of_tensordicts],
-                        dim,
-                        out=out.get(key),
+            else:
+                with (
+                    _ErrorInteceptor(
+                        key,
+                        "Attempted to concatenate tensors on different devices at key",
                     )
-                else:
-                    out.set_(
-                        key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-                    )
+                    if not is_compiling()
+                    else contextlib.nullcontext()
+                ):
+                    if isinstance(out, TensorDict):
+                        torch.cat(
+                            [td.get(key) for td in list_of_tensordicts],
+                            dim,
+                            out=out.get(key),
+                        )
+                    else:
+                        out.set_(
+                            key,
+                            torch.cat([td.get(key) for td in list_of_tensordicts], dim),
+                        )
         return out
 
 
@@ -1007,22 +1036,42 @@ def _grad(
             "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
         )
 
+    def _unwrap_pass_through(val):
+        if _is_unbatched(val):
+            return val.data
+        return val
+
     if grad_outputs is not None:
         tup_grad_outputs = tuple(
-            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            _unwrap_pass_through(v)
+            for v in grad_outputs._values_list(
+                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
         )
     else:
         tup_grad_outputs = None
 
     tup_outputs = tuple(
-        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        _unwrap_pass_through(v)
+        for v in outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
     )
 
-    keys, all_inputs = inputs._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+    keys, all_inputs_raw = inputs._items_list(
+        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+    )
+    all_inputs = [_unwrap_pass_through(v) for v in all_inputs_raw]
 
     all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)
 
-    pairs = dict(_zip_strict(keys, all_grads))
+    # Wrap gradients back into pass-through wrappers if the original input was pass-through
+    pairs = {}
+    for key, grad, orig_input in _zip_strict(keys, all_grads, all_inputs_raw):
+        if _is_unbatched(orig_input):
+            wrapped_grad = type(orig_input)(grad)
+            wrapped_grad.batch_size = orig_input.batch_size
+            pairs[key] = wrapped_grad
+        else:
+            pairs[key] = grad
 
     def pop(name, val):
         return pairs.pop(name, None)

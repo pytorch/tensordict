@@ -77,6 +77,7 @@ from tensordict.utils import (
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
+    _is_unbatched,
     _pass_through,
     _prune_selected_keys,
     _set_item,
@@ -1501,16 +1502,27 @@ class TensorDict(TensorDictBase):
                     **constructor_kwargs,
                 )
             else:
-                _others = [_other._get_str(key, default=default) for _other in others]
-                if named:
-                    if nested_keys:
-                        item_trsf = fn(
-                            prefix + (key,) if prefix != () else key, item, *_others
-                        )
-                    else:
-                        item_trsf = fn(key, item, *_others)
+                # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
+                # (indicated by batch_size being set) should be copied with updated batch_size
+                # but not have the function applied. For other ops (data ops like zero_),
+                # apply the function normally.
+                if _is_unbatched(item) and batch_size is not None:
+                    item_trsf = item.copy() if hasattr(item, "copy") else item
+                    if hasattr(item_trsf, "batch_size"):
+                        item_trsf.batch_size = batch_size
                 else:
-                    item_trsf = fn(item, *_others)
+                    _others = [
+                        _other._get_str(key, default=default) for _other in others
+                    ]
+                    if named:
+                        if nested_keys:
+                            item_trsf = fn(
+                                prefix + (key,) if prefix != () else key, item, *_others
+                            )
+                        else:
+                            item_trsf = fn(key, item, *_others)
+                    else:
+                        item_trsf = fn(item, *_others)
             if item_trsf is not None:
                 if not any_set:
                     if result is None:
@@ -1611,22 +1623,26 @@ class TensorDict(TensorDictBase):
             new_names.insert(out_dim, None)
         else:
             new_names = None
-        out = TensorDict(
-            {
-                key: (
-                    value._maybe_remove_batch_dim(
-                        funcname=funcname,
-                        vmap_level=vmap_level,
-                        batch_size=batch_size,
-                        out_dim=out_dim,
-                    )
-                    if is_tensor_collection(value)
-                    else _maybe_remove_batch_dim(
-                        funcname, value, vmap_level, batch_size, out_dim
-                    )
+
+        def _process_value(value):
+            if _is_unbatched(value):
+                copy = value.copy() if hasattr(value, "copy") else value
+                if hasattr(copy, "batch_size"):
+                    copy.batch_size = torch.Size(new_batch_size)
+                return copy
+            if is_tensor_collection(value):
+                return value._maybe_remove_batch_dim(
+                    funcname=funcname,
+                    vmap_level=vmap_level,
+                    batch_size=batch_size,
+                    out_dim=out_dim,
                 )
-                for key, value in self.items()
-            },
+            return _maybe_remove_batch_dim(
+                funcname, value, vmap_level, batch_size, out_dim
+            )
+
+        out = TensorDict(
+            {key: _process_value(value) for key, value in self.items()},
             batch_size=new_batch_size,
             names=new_names,
             lock=self.is_locked,
@@ -1784,6 +1800,12 @@ class TensorDict(TensorDictBase):
         tds = tuple(empty() for _ in range(self.batch_size[dim]))
 
         def unbind(key, val, tds=tds):
+            if _is_unbatched(val):
+                for td in tds:
+                    td._set_str(
+                        key, val, validated=True, inplace=False, non_blocking=False
+                    )
+                return
             unbound = (
                 val.unbind(dim)
                 if not isinstance(val, TensorDictBase)
@@ -1814,14 +1836,22 @@ class TensorDict(TensorDictBase):
                 )
             split_size = min(split_size, max_size)
             segments = _create_segments_from_int(split_size, max_size)
-            splits = [end - start for start, end in segments]
-            splits = {k: v.split(splits, dim) for k, v in self.items()}
+            splits_list = [end - start for start, end in segments]
+            num_splits = len(splits_list)
+            splits = {
+                k: (v,) * num_splits if _is_unbatched(v) else v.split(splits_list, dim)
+                for k, v in self.items()
+            }
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
             if not all(isinstance(x, int) for x in split_size):
                 raise TypeError(WRONG_TYPE)
-            splits = {k: v.split(split_size, dim) for k, v in self.items()}
+            num_splits = len(split_size)
+            splits = {
+                k: (v,) * num_splits if _is_unbatched(v) else v.split(split_size, dim)
+                for k, v in self.items()
+            }
             segments = _create_segments_from_list(split_size, max_size)
         else:
             raise TypeError(WRONG_TYPE)
@@ -1832,8 +1862,20 @@ class TensorDict(TensorDictBase):
             )
             for start, end in segments
         ]
+
+        def _update_batch_size_for_split(value, new_batch_size):
+            if _is_unbatched(value) and hasattr(value, "batch_size"):
+                copy = value.copy() if hasattr(value, "copy") else value
+                copy.batch_size = new_batch_size
+                return copy
+            return value
+
         splits = [
-            {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
+            {
+                k: _update_batch_size_for_split(v[ss], batch_sizes[ss])
+                for k, v in splits.items()
+            }
+            for ss in range(len(batch_sizes))
         ]
         device = self.device
         is_shared = self._is_shared
@@ -4665,7 +4707,8 @@ class _TensorDictKeysView:
                 cls = type(value)
             is_tc = _is_tensor_collection(cls)
             if self.include_nested and is_tc:
-                if not is_non_tensor(cls):
+                # Don't recurse into non-tensor or pass-through values
+                if not is_non_tensor(cls) and not _pass_through(value):
                     yield from self._iter_helper(value, prefix=full_key)
             is_leaf = self.is_leaf(cls)
             if not self.leaves_only or is_leaf:

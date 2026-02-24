@@ -101,6 +101,30 @@ class UnbatchedTensor(TensorClass):
         >>> td["a"]
         tensor([[...]])
 
+    **Indexed Assignment Behavior:**
+
+    UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
+    Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
+    will skip the UnbatchedTensor entries entirely.
+
+    Example:
+        >>> td = TensorDict(a=torch.ones(4, 3), unbatched=UnbatchedTensor(torch.ones(7, 11)), batch_size=(4, 3))
+        >>> td[:, :2] = TensorDict(a=torch.zeros(4, 2), batch_size=(4, 2))
+        >>> td["a"][:, :2]  # Regular tensor is modified
+        tensor([[0., 0.], ...])
+        >>> td["unbatched"]  # UnbatchedTensor is unchanged
+        tensor([[1., 1., ...], ...])
+
+    **Batch Size Computation:**
+
+    UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
+    solely by regular tensors, and UnbatchedTensor simply adopts the resulting batch size.
+
+    .. note::
+        Pointwise arithmetic (``+``, ``-``, ``*``, ``/``) on TensorDicts containing UnbatchedTensor
+        is supported. The operation is applied to the UnbatchedTensor's data while preserving its
+        batch_size property.
+
     """
 
     data: torch.Tensor | TensorDictBase
@@ -128,7 +152,13 @@ class UnbatchedTensor(TensorClass):
         else:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
         if isinstance(tensorclass_instance, (tuple, list)):
-            tensorclass_instance = tensorclass_instance[0]
+            # Find the first UnbatchedTensor in the list
+            for item in tensorclass_instance:
+                if isinstance(item, cls):
+                    tensorclass_instance = item
+                    break
+            else:
+                tensorclass_instance = tensorclass_instance[0]
 
         if func not in _TORCH_SHAPE_OPS:
             args = tuple(_arg_to_tensordict(arg) for arg in args)
@@ -151,12 +181,21 @@ class UnbatchedTensor(TensorClass):
             result.batch_size = example_td.batch_size
             return result
 
+        # Preserve batch_size for non-shape operations
+        source_batch_size = tensorclass_instance.batch_size
+
         if isinstance(result, (list, tuple)):
-            return type(result)(
-                _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
-                for tensordict_result in result
-            )
-        return _from_tensordict_with_copy(tensorclass_instance, result)
+            out = []
+            for tensordict_result in result:
+                item = _from_tensordict_with_copy(
+                    tensorclass_instance, tensordict_result
+                )
+                item.batch_size = source_batch_size
+                out.append(item)
+            return type(result)(out)
+        out = _from_tensordict_with_copy(tensorclass_instance, result)
+        out.batch_size = source_batch_size
+        return out
 
     def chunk(self, chunks: int, dim: int | None = None):
         self_copy = self.copy()
@@ -204,7 +243,9 @@ class UnbatchedTensor(TensorClass):
     def batch_size(self, batch_size):
         self.__dict__["_batch_size"] = torch.Size(batch_size)
 
-    shape = batch_size
+    @property
+    def shape(self):
+        return self.data.shape
 
     def unbind(self, dim: int):
         return tuple(
@@ -240,6 +281,103 @@ class UnbatchedTensor(TensorClass):
         self_copy.batch_size = batch_size
         return self_copy
 
+    def _wrap_result(self, result):
+        """Wrap a tensor result back into UnbatchedTensor preserving batch_size."""
+        if isinstance(result, torch.Tensor) and not isinstance(result, UnbatchedTensor):
+            out = UnbatchedTensor(result)
+            out.batch_size = self.batch_size
+            return out
+        return result
+
+    def __add__(self, other):
+        return self._wrap_result(
+            self.data + (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __radd__(self, other):
+        return self._wrap_result(other + self.data)
+
+    def __sub__(self, other):
+        return self._wrap_result(
+            self.data - (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __rsub__(self, other):
+        return self._wrap_result(other - self.data)
+
+    def __mul__(self, other):
+        return self._wrap_result(
+            self.data * (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __rmul__(self, other):
+        return self._wrap_result(other * self.data)
+
+    def __truediv__(self, other):
+        return self._wrap_result(
+            self.data / (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __rtruediv__(self, other):
+        return self._wrap_result(other / self.data)
+
+    def __floordiv__(self, other):
+        return self._wrap_result(
+            self.data // (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __rfloordiv__(self, other):
+        return self._wrap_result(other // self.data)
+
+    def __pow__(self, other):
+        return self._wrap_result(
+            self.data ** (other.data if isinstance(other, UnbatchedTensor) else other)
+        )
+
+    def __rpow__(self, other):
+        return self._wrap_result(other**self.data)
+
+    def __neg__(self):
+        return self._wrap_result(-self.data)
+
+    def __pos__(self):
+        return self._wrap_result(+self.data)
+
+    def __abs__(self):
+        return self._wrap_result(abs(self.data))
+
+    def add(self, other, *, alpha=None):
+        if alpha is not None:
+            return self._wrap_result(
+                self.data.add(
+                    other.data if isinstance(other, UnbatchedTensor) else other,
+                    alpha=alpha,
+                )
+            )
+        return self + other
+
+    def sub(self, other, *, alpha=None):
+        if alpha is not None:
+            return self._wrap_result(
+                self.data.sub(
+                    other.data if isinstance(other, UnbatchedTensor) else other,
+                    alpha=alpha,
+                )
+            )
+        return self - other
+
+    def mul(self, other):
+        return self * other
+
+    def div(self, other):
+        return self / other
+
+    def to(self, *args, **kwargs):
+        """Casts the UnbatchedTensor to the specified device/dtype, preserving batch_size."""
+        result = UnbatchedTensor(self.data.to(*args, **kwargs))
+        result.batch_size = self.batch_size
+        return result
+
     @classmethod
     def _stack_non_tensor(
         cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
@@ -255,3 +393,93 @@ class UnbatchedTensor(TensorClass):
 
     @_bypass
     def flatten(self, start_dim: int = 0, end_dim=-1): ...
+
+    def clone(self, recurse: bool = True):
+        """Clones the UnbatchedTensor, preserving the batch_size."""
+        if recurse:
+            result = type(self)(self.data.clone())
+        else:
+            result = type(self)(self.data)
+        result.batch_size = self.batch_size
+        return result
+
+    def _clone(self, recurse: bool = True):
+        """Internal clone method, preserving the batch_size."""
+        return self.clone(recurse=recurse)
+
+    def backward(self, *args, **kwargs):
+        """Delegates backward to the underlying data tensor."""
+        return self.data.backward(*args, **kwargs)
+
+    @property
+    def grad(self):
+        """Returns the gradient of the underlying data tensor, wrapped in UnbatchedTensor."""
+        data_grad = self.data.grad
+        if data_grad is None:
+            return None
+        result = UnbatchedTensor(data_grad)
+        result.batch_size = self.batch_size
+        return result
+
+    @grad.setter
+    def grad(self, value):
+        """Sets the gradient of the underlying data tensor."""
+        if isinstance(value, UnbatchedTensor):
+            self.data.grad = value.data
+        else:
+            self.data.grad = value
+
+    def untyped_storage(self):
+        """Returns the untyped storage of the underlying data tensor."""
+        return self.data.untyped_storage()
+
+    def data_ptr(self):
+        """Returns the data pointer of the underlying data tensor."""
+        return self.data.data_ptr()
+
+    @property
+    def device(self):
+        """Returns the device of the underlying data tensor."""
+        return self.data.device
+
+    @property
+    def dtype(self):
+        """Returns the dtype of the underlying data tensor."""
+        return self.data.dtype
+
+    def state_dict(self, destination=None, prefix="", keep_vars=False):
+        """Returns a state dict containing the data and batch_size."""
+        import collections
+
+        out = collections.OrderedDict()
+        if not keep_vars:
+            out[prefix + "data"] = self.data.detach().clone()
+        else:
+            out[prefix + "data"] = self.data
+        out[prefix + "__batch_size"] = self.batch_size
+        out[prefix + "__is_unbatched"] = True
+        if destination is not None:
+            destination.update(out)
+            return destination
+        return out
+
+    @classmethod
+    def from_state_dict(cls, state_dict, prefix=""):
+        """Creates an UnbatchedTensor from a state dict."""
+        data = state_dict[prefix + "data"]
+        batch_size = state_dict[prefix + "__batch_size"]
+        result = cls(data)
+        result.batch_size = batch_size
+        return result
+
+    def load_state_dict(self, state_dict, strict=True, assign=False):
+        """Loads a state dict into the UnbatchedTensor."""
+        data = state_dict.get("data")
+        batch_size = state_dict.get("__batch_size", self.batch_size)
+        if data is not None:
+            if assign:
+                self._tensordict.set("data", data)
+            else:
+                self.data.copy_(data)
+        self.batch_size = batch_size
+        return self

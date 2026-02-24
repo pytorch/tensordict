@@ -20,6 +20,7 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _check_keys,
+    _is_unbatched,
     _shape,
     DeviceType,
     is_non_tensor,
@@ -82,6 +83,12 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
         device=tensordict.device,
     )
     for key, tensor in tensordict.items():
+        if _is_unbatched(tensor):
+            tensor_copy = tensor.copy()
+            tensor_copy.batch_size = torch.Size(new_batch_size)
+            out._set_str(key, tensor_copy, validated=True, inplace=False)
+            continue
+
         cur_pad = reverse_pad
         if len(pad_size) < len(_shape(tensor)) * 2:
             cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
