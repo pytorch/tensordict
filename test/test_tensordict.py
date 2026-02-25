@@ -14157,6 +14157,15 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
+    def test_auto_batch_size_nontensor_not_excluded(self):
+        td = TensorDict.from_dict(
+            {"query": ["str1", "str2", "str3", "str4"]},
+            auto_batch_size=True,
+            batch_dims=1,
+        )
+        assert td.batch_size == torch.Size([4])
+        assert "query" in td.keys()
+
 
 def _to_float(td, td_name, tmpdir):
     if hasattr(td, "_source"):
