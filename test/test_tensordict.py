@@ -31,6 +31,7 @@ import pytest
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
+from torch.func import jacfwd, jacrev, hessian
 
 from tensordict import (
     capture_non_tensor_stack,
@@ -9394,6 +9395,200 @@ class TestTensorDicts(TestTensorDictsBase):
         outputs = inputs + 1
         grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
         assert (grads == 1).all()
+
+
+@pytest.mark.parametrize(
+    "batch_size,feature_size",
+    [
+        ([], 2),
+        ([2], 2),
+        ([2, 3], 2),
+        ([2, 3, 4], 2),
+    ],
+    ids=["nobatch", "batch_1d", "batch_2d", "batch_3d"],
+)
+class TestJacobians:
+    """Tests for torch.func.jacrev, jacfwd, and hessian with TensorDict.
+
+    Tensors must have at least one feature dim beyond batch_size,
+    otherwise the Jacobian basis leading dim is ambiguous with the batch dim.
+    """
+
+    @staticmethod
+    def _make_td(batch_size, feature_size):
+        return TensorDict(
+            {
+                "a": torch.randn(*batch_size, feature_size),
+                "b": torch.randn(*batch_size, feature_size),
+            },
+            batch_size=list(batch_size),
+        )
+
+    def test_jacrev(self, batch_size, feature_size):
+        td = self._make_td(batch_size, feature_size)
+
+        def f(td):
+            return TensorDict(
+                {"x": td["a"] ** 2, "y": td["b"] ** 3}, batch_size=td.batch_size
+            )
+
+        J = jacrev(f)(td)
+        assert J.batch_size == td.batch_size
+        a_shape = td["a"].shape
+        b_shape = td["b"].shape
+        assert J["x", "a"].shape == (*a_shape, *a_shape)
+        assert J["x", "b"].shape == (*a_shape, *b_shape)
+        assert J["y", "a"].shape == (*b_shape, *a_shape)
+        assert J["y", "b"].shape == (*b_shape, *b_shape)
+        a_flat = td["a"].flatten()
+        b_flat = td["b"].flatten()
+        assert torch.allclose(
+            J["x", "a"].flatten(-len(a_shape)).flatten(end_dim=-2),
+            torch.diag(2 * a_flat),
+        )
+        assert torch.allclose(
+            J["x", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
+            torch.zeros(a_flat.numel(), b_flat.numel()),
+        )
+
+    def test_jacrev_different_shapes(self, batch_size, feature_size):
+        td = TensorDict(
+            {
+                "a": torch.randn(*batch_size, 2),
+                "b": torch.randn(*batch_size, 5),
+            },
+            batch_size=list(batch_size),
+        )
+
+        def f(td):
+            return TensorDict(
+                {"x": td["a"] ** 2, "y": td["b"] ** 3}, batch_size=td.batch_size
+            )
+
+        J = jacrev(f)(td)
+        assert J.batch_size == td.batch_size
+        assert J["x", "a"].shape == (*batch_size, 2, *batch_size, 2)
+        assert J["x", "b"].shape == (*batch_size, 2, *batch_size, 5)
+        assert J["y", "a"].shape == (*batch_size, 5, *batch_size, 2)
+        assert J["y", "b"].shape == (*batch_size, 5, *batch_size, 5)
+
+    def test_jacrev_chunk_size(self, batch_size, feature_size):
+        td = self._make_td(batch_size, feature_size)
+
+        def f(td):
+            return TensorDict(
+                {"x": td["a"] ** 2, "y": td["b"] ** 3}, batch_size=td.batch_size
+            )
+
+        J = jacrev(f, chunk_size=1)(td)
+        assert J.batch_size == td.batch_size
+        a_flat = td["a"].flatten()
+        b_flat = td["b"].flatten()
+        a_shape = td["a"].shape
+        b_shape = td["b"].shape
+        assert torch.allclose(
+            J["x", "a"].flatten(-len(a_shape)).flatten(end_dim=-2),
+            torch.diag(2 * a_flat),
+        )
+        assert torch.allclose(
+            J["y", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
+            torch.diag(3 * b_flat ** 2),
+        )
+
+    def test_jacfwd(self, batch_size, feature_size):
+        td = self._make_td(batch_size, feature_size)
+
+        def f(td):
+            return TensorDict(
+                {"x": td["a"] ** 2, "y": td["b"] ** 3}, batch_size=td.batch_size
+            )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            J = jacfwd(f)(td)
+        assert J.batch_size == td.batch_size
+        a_flat = td["a"].flatten()
+        b_flat = td["b"].flatten()
+        a_shape = td["a"].shape
+        b_shape = td["b"].shape
+        assert torch.allclose(
+            J["x", "a"].flatten(-len(a_shape)).flatten(end_dim=-2),
+            torch.diag(2 * a_flat),
+        )
+        assert torch.allclose(
+            J["x", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
+            torch.zeros(a_flat.numel(), b_flat.numel()),
+        )
+
+    def test_hessian(self, batch_size, feature_size):
+        td = self._make_td(batch_size, feature_size)
+
+        def f(td):
+            return (td["a"] ** 3).sum() + (td["b"] ** 2).sum()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            H = hessian(f)(td)
+        assert H.batch_size == td.batch_size
+        a_shape = td["a"].shape
+        b_shape = td["b"].shape
+        a_flat = td["a"].flatten()
+        assert H["a", "a"].shape == (*a_shape, *a_shape)
+        assert torch.allclose(
+            H["a", "a"].flatten(-len(a_shape)).flatten(end_dim=-2),
+            torch.diag(6 * a_flat),
+        )
+        assert torch.allclose(
+            H["b", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
+            2 * torch.eye(td["b"].numel()),
+        )
+        assert torch.allclose(
+            H["a", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
+            torch.zeros(td["a"].numel(), td["b"].numel()),
+        )
+
+    def test_jacrev_has_aux(self, batch_size, feature_size):
+        td = self._make_td(batch_size, feature_size)
+
+        def f(td):
+            out = TensorDict({"x": td["a"] ** 2}, batch_size=td.batch_size)
+            return out, td["a"].sum()
+
+        J, aux = jacrev(f, has_aux=True)(td)
+        assert J.batch_size == td.batch_size
+        a_flat = td["a"].flatten()
+        a_shape = td["a"].shape
+        assert torch.allclose(
+            J["x", "a"].flatten(-len(a_shape)).flatten(end_dim=-2),
+            torch.diag(2 * a_flat),
+        )
+        assert torch.allclose(aux, td["a"].sum())
+
+    def test_jacrev_argnums_tuple(self, batch_size, feature_size):
+        td1 = TensorDict(
+            {"a": torch.randn(*batch_size, feature_size)}, batch_size=list(batch_size)
+        )
+        td2 = TensorDict(
+            {"b": torch.randn(*batch_size, feature_size)}, batch_size=list(batch_size)
+        )
+
+        def f(td1, td2):
+            return TensorDict(
+                {"x": td1["a"] + td2["b"] ** 2}, batch_size=td1.batch_size
+            )
+
+        J = jacrev(f, argnums=(0, 1))(td1, td2)
+        J_x = J["x"]
+        assert isinstance(J_x, tuple)
+        n = td1["a"].numel()
+        assert torch.allclose(
+            J_x[0]["a"].flatten(-len(td1["a"].shape)).flatten(end_dim=-2),
+            torch.eye(n),
+        )
+        assert torch.allclose(
+            J_x[1]["b"].flatten(-len(td2["b"].shape)).flatten(end_dim=-2),
+            torch.diag(2 * td2["b"].flatten()),
+        )
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
