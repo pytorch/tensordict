@@ -31,7 +31,6 @@ import pytest
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
-from torch.func import jacfwd, jacrev, hessian
 
 from tensordict import (
     capture_non_tensor_stack,
@@ -78,6 +77,7 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp, nn
 from torch._subclasses import FakeTensor, FakeTensorMode
+from torch.func import hessian, jacfwd, jacrev
 from torch.nn.parameter import UninitializedTensorMixin
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -9492,7 +9492,7 @@ class TestJacobians:
         )
         assert torch.allclose(
             J["y", "b"].flatten(-len(b_shape)).flatten(end_dim=-2),
-            torch.diag(3 * b_flat ** 2),
+            torch.diag(3 * b_flat**2),
         )
 
     def test_jacfwd(self, batch_size, feature_size):
