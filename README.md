@@ -1,13 +1,13 @@
 [![Docs](https://img.shields.io/static/v1?logo=github&style=flat&color=pink&label=docs&message=tensordict)][#docs-package]
-[![Discord](https://dcbadge.vercel.app/api/server/tz3TgTAe3D)](https://discord.gg/tz3TgTAe3D)
+[![Discord](https://img.shields.io/badge/Discord-blue?logo=discord&logoColor=white)](https://discord.gg/tz3TgTAe3D)
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)][#github-license]
 <a href="https://pypi.org/project/tensordict"><img src="https://img.shields.io/pypi/v/tensordict" alt="pypi version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)][#pepy-package]
 [![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
 
-[#docs-package]: https://pytorch.github.io/tensordict/
-[#docs-package-benchmark]: https://pytorch.github.io/tensordict/dev/bench/
+[#docs-package]: https://docs.pytorch.org/tensordict/stable/
+[#docs-package-benchmark]: https://docs.pytorch.org/tensordict/stable/dev/bench/
 [#github-license]: https://github.com/pytorch/tensordict/blob/main/LICENSE
 [#pepy-package]: https://pepy.tech/project/tensordict
 [#conda-forge-package]: https://anaconda.org/conda-forge/tensordict
@@ -16,8 +16,8 @@
 
 TensorDict is a dictionary-like class that inherits properties from tensors,
 such as indexing, shape operations, casting to device or storage and many more.
-The code-base consists of two main components: [`TensorDict`](https://pytorch.github.io/tensordict/reference/generated/tensordict.TensorDict.html),
-a specialized dictionary for PyTorch tensors, and [`tensorclass`](https://pytorch.github.io/tensordict/reference/generated/tensordict.tensorclass.html),
+The code-base consists of two main components: [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html),
+a specialized dictionary for PyTorch tensors, and [`tensorclass`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.tensorclass.html),
 a dataclass for tensors.
 
 ```python
@@ -48,14 +48,23 @@ TensorDict makes your code-bases more _readable_, _compact_, _modular_ and _fast
 It abstracts away tailored operations, dispatching them on the leaves for you.
 
 - **Composability**: `TensorDict` generalizes `torch.Tensor` operations to collections of tensors.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_shapes.html)
 - **Speed**: asynchronous transfer to device, fast node-to-node communication through `consolidate`, compatible with `torch.compile`.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_memory.html)
 - **Shape operations**: indexing, slicing, concatenation, reshaping -- everything you can do with a tensor.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_slicing.html)
 - **Distributed / multiprocessed**: distribute TensorDict instances across workers, devices and machines.
+  [[doc]](https://docs.pytorch.org/tensordict/stable/distributed.html)
 - **Serialization** and memory-mapping for efficient checkpointing.
+  [[doc]](https://docs.pytorch.org/tensordict/stable/saving.html)
 - **Functional programming** and compatibility with `torch.vmap`.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/functional.html)
 - **Nesting**: nest TensorDict instances to create hierarchical structures.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.html)
 - **Lazy preallocation**: preallocate memory without initializing tensors.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_preallocation.html)
 - **`@tensorclass`**: a specialized dataclass for `torch.Tensor`.
+  [[tutorial]](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_fashion.html)
 
 ## Examples
 

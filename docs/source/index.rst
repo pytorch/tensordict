@@ -85,6 +85,7 @@ tensordict.nn
    :maxdepth: 1
 
    tutorials/tensordict_module
+   tutorials/functional
    tutorials/export
 
 Dataloading
