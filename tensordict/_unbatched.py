@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 from functools import wraps
 from typing import Any, Callable, TYPE_CHECKING
 
@@ -382,7 +383,17 @@ class UnbatchedTensor(TensorClass):
     def _stack_non_tensor(
         cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
     ):
-        result = list_of_non_tensor[0].copy()
+        first = list_of_non_tensor[0]
+        ptr = first.data.data_ptr()
+        if any(other.data.data_ptr() != ptr for other in list_of_non_tensor[1:]):
+            warnings.warn(
+                "Stacking UnbatchedTensors with different data storage. "
+                "Only the first element's data will be kept. "
+                "UnbatchedTensor is shape-invariant; if you need different data "
+                "per batch element, consider using a regular tensor.",
+                stacklevel=2,
+            )
+        result = first.copy()
         batch_size = list(result.batch_size)
         batch_size.insert(dim, len(list_of_non_tensor))
         result.batch_size = torch.Size(batch_size)
