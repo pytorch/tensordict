@@ -275,7 +275,7 @@ def main():
         for name, _ in available:
             m, s = bench_fn(store_tds[name])
             means[name] = m
-            ratio = m / m_local if m_local > 0 else float("inf")
+            # ratio = m / m_local if m_local > 0 else float("inf")
             row += f" | {_fmt(m, s):>28s}"
 
         if len(available) >= 2:
@@ -289,7 +289,7 @@ def main():
     print()  # noqa: T201
 
     # Cleanup
-    for name, td in store_tds.items():
+    for td in store_tds.values():
         td.clear_redis()
         td.close()
 
