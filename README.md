@@ -14,11 +14,11 @@
 
 # TensorDict
 
-**Tensors. Organized. Fast.**
-
-TensorDict is a composable data structure for PyTorch that lets you manipulate
-collections of tensors as if they were a single tensor -- indexing, reshaping,
-moving to device, stacking, and more, all applied across every leaf at once.
+TensorDict is a dictionary-like class that inherits properties from tensors,
+such as indexing, shape operations, casting to device or storage and many more.
+The code-base consists of two main components: [`TensorDict`](https://pytorch.github.io/tensordict/reference/generated/tensordict.TensorDict.html),
+a specialized dictionary for PyTorch tensors, and [`tensorclass`](https://pytorch.github.io/tensordict/reference/generated/tensordict.tensorclass.html),
+a dataclass for tensors.
 
 ```python
 from tensordict import TensorDict
@@ -155,15 +155,11 @@ TensorDict is used across a range of domains:
 
 | Domain | Projects |
 |--------|----------|
-| **Reinforcement Learning** | [TorchRL](https://github.com/pytorch/rl) (PyTorch), [DreamerV3-torch](https://github.com/NM512/dreamerv3-torch), [SkyRL](https://github.com/NovaSky-AI/SkyRL) |
-| **LLM Post-Training** | [verl](https://github.com/verl-project/verl), [ROLL](https://github.com/alibaba/ROLL) (Alibaba), [LMFlow](https://github.com/OptimalScale/LMFlow) |
+| **Reinforcement Learning** | [TorchRL](https://github.com/pytorch/rl) (PyTorch), [DreamerV3-torch](https://github.com/NM512/dreamerv3-torch), [Dreamer4](https://github.com/nicklashansen/dreamer4), [SkyRL](https://github.com/NovaSky-AI/SkyRL) |
+| **LLM Post-Training** | [verl](https://github.com/verl-project/verl), [ROLL](https://github.com/alibaba/ROLL) (Alibaba), [LMFlow](https://github.com/OptimalScale/LMFlow), [LoongFlow](https://github.com/baidu-baige/LoongFlow) (Baidu) |
 | **Robotics & Simulation** | [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground) (Google DeepMind), [ProtoMotions](https://github.com/NVlabs/ProtoMotions) (NVIDIA), [holosoma](https://github.com/amazon-far/holosoma) (Amazon) |
 | **Physics & Scientific ML** | [PhysicsNeMo](https://github.com/NVIDIA/physicsnemo) (NVIDIA) |
-| **Drug Discovery** | [Lobster](https://github.com/prescient-design/lobster) (Genentech / Prescient Design) |
-| **Agents** | [cua](https://github.com/trycua/cua), [OpenManus-RL](https://github.com/OpenManus/OpenManus-RL), [Simia](https://github.com/microsoft/Simia-Agent-Training) (Microsoft) |
 | **Genomics** | [Medaka](https://github.com/nanoporetech/medaka) (Oxford Nanopore) |
-
-See the full list of [1,600+ dependent repositories](https://github.com/pytorch/tensordict/network/dependents).
 
 ## Installation
 

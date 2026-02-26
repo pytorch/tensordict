@@ -1,4 +1,10 @@
 # Contributing to tensordict
+
+[![codecov](https://codecov.io/gh/pytorch/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch/tensordict)
+[![Nightly](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml)
+[![Nightly Dashboard](https://img.shields.io/badge/Nightly-Dashboard-blue)](https://pytorch.github.io/tensordict/nightly-status/)
+[![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/tensordict/dev/bench/)
+
 We want to make contributing to this project as easy and transparent as
 possible.
 
