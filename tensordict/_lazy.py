@@ -1614,6 +1614,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim = td.stack_dim
 
             def addbatchdim(_arg):
+                if _is_tensor_collection(type(_arg)):
+                    return _arg._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
                 return _add_batch_dim(_arg, in_dim, vmap_level)
 
             tds = [

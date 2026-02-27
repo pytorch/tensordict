@@ -399,6 +399,23 @@ class UnbatchedTensor(TensorClass):
         result.batch_size = torch.Size(batch_size)
         return result
 
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        copy = self.copy()
+        copy.batch_size = torch.Size(
+            [b for i, b in enumerate(self.batch_size) if i != in_dim]
+        )
+        return copy
+
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        copy = self.copy()
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        copy.batch_size = torch.Size(new_batch_size)
+        return copy
+
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+        return self._remove_batch_dim(vmap_level, batch_size, out_dim)
+
     @_bypass
     def unflatten(self, dim, unflattened_size): ...
 
