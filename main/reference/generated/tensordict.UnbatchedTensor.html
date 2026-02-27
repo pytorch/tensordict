@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3779+ga67f7f390.d20260227)
+                  main (0.11.0.dev3781+gdd669e4cc.d20260227)
                 </div>
               
             
@@ -1044,7 +1044,7 @@ as a fake tensor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.load_state_dict">
-<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assign</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.load_state_dict" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assign</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">from_flatten</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a state dict into the UnbatchedTensor.</p>
 </dd></dl>
 
@@ -1283,8 +1283,11 @@ the value will be simply written at its destination.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.state_dict">
-<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.state_dict" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flatten</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a state dict containing the data and batch_size.</p>
+<p>Metadata is stored in the <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> attribute on the returned
+OrderedDict, following the same convention as
+<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictBase.state_dict()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">

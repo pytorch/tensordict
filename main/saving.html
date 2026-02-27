@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3779+ga67f7f390.d20260227)
+                  main (0.11.0.dev3781+gdd669e4cc.d20260227)
                 </div>
               
             
@@ -519,6 +519,56 @@ tensors from one location to another.</p>
 </ul>
 </section>
 </section>
+<section id="state-dict-load-state-dict">
+<h2>state_dict / load_state_dict<a class="headerlink" href="#state-dict-load-state-dict" title="Permalink to this heading">¶</a></h2>
+<p>TensorDict and tensorclass support <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a>, following the same conventions as
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.10)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>.</p>
+<p>By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a <strong>flat</strong> <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedDict</span></code></a> with
+dot-separated keys, just like <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sd</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span>
+<span class="go">OrderedDict([(&#39;a&#39;, tensor(1)), (&#39;b.c&#39;, tensor(2))])</span>
+</pre></div>
+</div>
+<p>Metadata (<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>) is stored in an <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> attribute on the
+returned <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>, keyed by dot-separated prefix (<code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> for root, <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> for a
+nested tensordict at key <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code>). This mirrors <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>’s metadata convention
+and replaces the legacy <code class="docutils literal notranslate"><span class="pre">__batch_size</span></code> / <code class="docutils literal notranslate"><span class="pre">__device</span></code> sentinel keys.</p>
+<p>A nested format can be obtained by passing <code class="docutils literal notranslate"><span class="pre">flatten=False</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sd_nested</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">flatten</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sd_nested</span><span class="p">)</span>
+<span class="go">OrderedDict([(&#39;a&#39;, tensor(1)), (&#39;b&#39;, OrderedDict([(&#39;c&#39;, tensor(2))]))])</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a> <strong>auto-detects</strong> the format of the
+incoming state-dict: flat (with <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> and dot-separated keys), nested (with
+per-level <code class="docutils literal notranslate"><span class="pre">_metadata</span></code>), and the legacy format (with <code class="docutils literal notranslate"><span class="pre">__batch_size</span></code> / <code class="docutils literal notranslate"><span class="pre">__device</span></code>
+sentinel keys) are all supported transparently:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_zero</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zero</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span>       <span class="c1"># flat format</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td_zero</span> <span class="o">==</span> <span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zero</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zero</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">sd_nested</span><span class="p">)</span>  <span class="c1"># nested format</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td_zero</span> <span class="o">==</span> <span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>For tensorclass objects, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> exposes the logical field names as keys.
+Non-tensor fields are stored in <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> rather than appearing as data keys:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tc</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;hello&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sd</span> <span class="o">=</span> <span class="n">tc</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">sd</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>          <span class="c1"># only tensor fields</span>
+<span class="go">[&#39;x&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sd</span><span class="o">.</span><span class="n">_metadata</span><span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">][</span><span class="s2">&quot;_non_tensor&quot;</span><span class="p">])</span>  <span class="c1"># non-tensor fields</span>
+<span class="go">{&#39;label&#39;: &#39;hello&#39;}</span>
+</pre></div>
+</div>
+</section>
 <section id="torchsnapshot-compatibility">
 <h2>TorchSnapshot compatibility<a class="headerlink" href="#torchsnapshot-compatibility" title="Permalink to this heading">¶</a></h2>
 <div class="admonition warning">
@@ -734,6 +784,7 @@ key in the destination tensordict will go unnoticed.</p></li>
 <li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
 <li><a class="reference internal" href="#torchsnapshot-compatibility">TorchSnapshot compatibility</a><ul>
 <li><a class="reference internal" href="#general-use-case-in-memory-loading">General use case: in-memory loading</a></li>
 <li><a class="reference internal" href="#saving-and-loading-big-datasets">Saving and loading big-datasets</a></li>
