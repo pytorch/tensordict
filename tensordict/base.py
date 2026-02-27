@@ -5951,19 +5951,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
         destination=None,
         prefix="",
         keep_vars=False,
-        flatten=False,
+        flatten=True,
     ) -> OrderedDict[str, Any]:
         """Produces a state_dict from the tensordict.
 
-        The structure of the state-dict will still be nested, unless ``flatten`` is set to ``True``.
-
-        A tensordict state-dict contains all the tensors and meta-data needed
-        to rebuild the tensordict (names are currently not supported).
+        The state-dict is flat by default (dot-separated keys), following the
+        convention of :meth:`torch.nn.Module.state_dict`. Set ``flatten=False``
+        for a nested structure.
 
         Metadata (batch_size, device) is stored in a ``_metadata`` attribute on
         the returned OrderedDict, following the same convention as
-        :meth:`torch.nn.Module.state_dict`. Each nested level stores its
-        metadata under key ``""`` in its own ``_metadata`` dict.
+        :meth:`torch.nn.Module.state_dict`. In flat mode, metadata for each
+        nesting level is stored under its dot-separated prefix (``""`` for root,
+        ``"sub"`` for a nested tensordict at key ``"sub"``, etc.). In nested
+        mode, each nested OrderedDict carries its own ``_metadata``.
 
         Args:
             destination (dict, optional): If provided, the state of tensordict will
@@ -5978,57 +5979,67 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Default: ``False``.
             flatten (bool, optional): whether the structure should be flattened
                 with the ``"."`` character or not.
-                Defaults to ``False``.
+                Defaults to ``True``.
 
         Examples:
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> sd = data.state_dict()
             >>> print(sd)
-            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3', OrderedDict([('3', tensor(3))]))])
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3))])
             >>> print(sd._metadata)
-            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None})])
-            >>> sd["3"]._metadata
-            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None})])
+            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None}), ('3', {'batch_size': torch.Size([]), 'device': None})])
 
         """
-        out = collections.OrderedDict()
-        out._metadata = collections.OrderedDict()
-        source = self
-        if flatten:
-            source = source.flatten_keys(".")
-        for key, item in source.items():
+        if destination is None:
+            destination = collections.OrderedDict()
+            destination._metadata = collections.OrderedDict()
+        elif not hasattr(destination, "_metadata"):
+            destination._metadata = collections.OrderedDict()
+
+        metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+        destination._metadata[metadata_key] = {
+            "batch_size": self.batch_size,
+            "device": self.device,
+        }
+
+        for key, item in self.items():
             if not _is_tensor_collection(type(item)):
                 if not keep_vars:
-                    out[prefix + key] = item.detach()
+                    destination[prefix + key] = item.detach()
                 else:
-                    out[prefix + key] = item
-            else:
-                out[prefix + key] = item.state_dict(
-                    keep_vars=keep_vars, flatten=flatten
+                    destination[prefix + key] = item
+            elif flatten:
+                item.state_dict(
+                    destination=destination,
+                    prefix=prefix + key + ".",
+                    keep_vars=keep_vars,
+                    flatten=True,
                 )
-        out._metadata[""] = {
-            "batch_size": source.batch_size,
-            "device": source.device,
-        }
-        if destination is not None:
-            destination.update(out)
-            if not hasattr(destination, "_metadata"):
-                destination._metadata = collections.OrderedDict()
-            destination._metadata.update(out._metadata)
-            return destination
-        return out
+            else:
+                destination[prefix + key] = item.state_dict(
+                    keep_vars=keep_vars, flatten=False
+                )
+
+        return destination
 
     def load_state_dict(
         self,
         state_dict: OrderedDict[str, Any],
         strict=True,
         assign=False,
-        from_flatten=False,
+        from_flatten=None,
     ) -> Self:
         """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
 
-        Supports both the new format (metadata in ``_metadata`` attribute) and
-        the legacy format (``__batch_size``/``__device`` as data keys).
+        Supports the flat format (with ``_metadata``, the default output of
+        :meth:`state_dict`), the nested format (with per-level ``_metadata``),
+        and the legacy format (with ``__batch_size``/``__device`` sentinel
+        keys).
+
+        When ``from_flatten`` is ``None`` (the default), the format is
+        auto-detected: if ``_metadata`` is present and the state_dict keys
+        don't match this tensordict's keys, the state_dict is unflattened
+        before loading.
 
         Args:
             state_dict (OrderedDict): the state_dict of to be copied.
@@ -6043,8 +6054,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Tensors in the state dict are preserved.
                 Default: ``False``
             from_flatten (bool, optional): if ``True``, the input state_dict is
-                assumed to be flattened.
-                Defaults to ``False``.
+                assumed to be flattened and will be unflattened before loading.
+                If ``None`` (default), auto-detects based on ``_metadata`` and
+                key comparison.
 
         Examples:
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
@@ -6053,29 +6065,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> data_zeroed.load_state_dict(sd)
             >>> print(data_zeroed["3", "3"])
             tensor(3)
-            >>> # with flattening
-            >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
-            >>> data_zeroed.load_state_dict(data.state_dict(flatten=True), from_flatten=True)
-            >>> print(data_zeroed["3", "3"])
-            tensor(3)
-
 
         """
-        if from_flatten:
-            self_flatten = self.flatten_keys(".")
-            self_flatten.load_state_dict(state_dict, strict=strict, assign=assign)
-            if not assign:
-                return self
+        if from_flatten is None:
+            _metadata = getattr(state_dict, "_metadata", None)
+            if _metadata is not None:
+                sd_keys = set(state_dict.keys())
+                self_keys = set(self.keys())
+                from_flatten = sd_keys != self_keys
             else:
-                DOT_ERROR = "Cannot use load_state_dict(..., from_flatten=True, assign=True) when some keys contain a dot character."
-                for key in self.keys(True, True):
-                    if isinstance(key, tuple):
-                        for subkey in key:
-                            if "." in subkey:
-                                raise RuntimeError(DOT_ERROR)
-                    elif "." in key:
-                        raise RuntimeError(DOT_ERROR)
-                return self.update(self_flatten.unflatten_keys("."))
+                from_flatten = False
+
+        if from_flatten:
+            nested_sd = _unflatten_state_dict(state_dict)
+            return self.load_state_dict(
+                nested_sd, strict=strict, assign=assign, from_flatten=False
+            )
 
         # Read _metadata before copy (copy may not preserve custom attributes)
         _metadata = getattr(state_dict, "_metadata", None)
@@ -16372,6 +16377,45 @@ def _register_tensor_class(cls):
 
 
 _TENSOR_COLLECTION_MEMO = {}
+
+
+def _unflatten_state_dict(flat_sd):
+    """Convert a flat state_dict (dot-separated keys with _metadata) to nested OrderedDicts.
+
+    Creates intermediate nodes from both data keys and _metadata keys, so
+    that tensor-collection nodes that carry only metadata (e.g. NonTensorData)
+    are preserved in the nested structure.
+    """
+    _metadata = getattr(flat_sd, "_metadata", None)
+    root = collections.OrderedDict()
+    root._metadata = collections.OrderedDict()
+
+    def _ensure_nested(parent, part):
+        if part not in parent:
+            nested = collections.OrderedDict()
+            nested._metadata = collections.OrderedDict()
+            parent[part] = nested
+        return parent[part]
+
+    for flat_key, value in flat_sd.items():
+        parts = flat_key.split(".")
+        current = root
+        for part in parts[:-1]:
+            current = _ensure_nested(current, part)
+        current[parts[-1]] = value
+
+    if _metadata is not None:
+        for meta_key, meta_value in _metadata.items():
+            if meta_key == "":
+                root._metadata[""] = meta_value
+            else:
+                parts = meta_key.split(".")
+                current = root
+                for part in parts:
+                    current = _ensure_nested(current, part)
+                current._metadata[""] = meta_value
+
+    return root
 
 
 def _is_tensor_collection(datatype: type) -> bool:
