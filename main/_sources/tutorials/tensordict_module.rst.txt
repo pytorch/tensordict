@@ -408,13 +408,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
  .. code-block:: none
 
     Without compile
-    Regular:  212.1333 us
-    TDM:  273.7760 us
-    Sequential:  506.7312 us
+    Regular:  217.0386 us
+    TDM:  274.6768 us
+    Sequential:  492.9579 us
     Compiled versions
-    Compiled regular:  335.4720 us
-    Compiled TDM:  357.9620 us
-    Compiled sequential:  371.5320 us
+    Compiled regular:  302.8730 us
+    Compiled TDM:  323.8940 us
+    Compiled sequential:  330.2240 us
 
 
 
