@@ -5960,6 +5960,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         A tensordict state-dict contains all the tensors and meta-data needed
         to rebuild the tensordict (names are currently not supported).
 
+        Metadata (batch_size, device) is stored in a ``_metadata`` attribute on
+        the returned OrderedDict, following the same convention as
+        :meth:`torch.nn.Module.state_dict`. Each nested level stores its
+        metadata under key ``""`` in its own ``_metadata`` dict.
+
         Args:
             destination (dict, optional): If provided, the state of tensordict will
                 be updated into the dict and the same object is returned.
@@ -5979,12 +5984,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
             >>> sd = data.state_dict()
             >>> print(sd)
-            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3', OrderedDict([('3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])), ('__batch_size', torch.Size([])), ('__device', None)])
-            >>> sd = data.state_dict(flatten=True)
-            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3', OrderedDict([('3', tensor(3))]))])
+            >>> print(sd._metadata)
+            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None})])
+            >>> sd["3"]._metadata
+            OrderedDict([('', {'batch_size': torch.Size([]), 'device': None})])
 
         """
         out = collections.OrderedDict()
+        out._metadata = collections.OrderedDict()
         source = self
         if flatten:
             source = source.flatten_keys(".")
@@ -5995,19 +6003,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 else:
                     out[prefix + key] = item
             else:
-                out[prefix + key] = item.state_dict(keep_vars=keep_vars)
-        if "__batch_size" in out:
-            raise KeyError(
-                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
-            )
-        if "__device" in out:
-            raise KeyError(
-                "Cannot retrieve the state_dict of a TensorDict with `'__device'` key"
-            )
-        out[prefix + "__batch_size"] = source.batch_size
-        out[prefix + "__device"] = source.device
+                out[prefix + key] = item.state_dict(
+                    keep_vars=keep_vars, flatten=flatten
+                )
+        out._metadata[""] = {
+            "batch_size": source.batch_size,
+            "device": source.device,
+        }
         if destination is not None:
             destination.update(out)
+            if not hasattr(destination, "_metadata"):
+                destination._metadata = collections.OrderedDict()
+            destination._metadata.update(out._metadata)
             return destination
         return out
 
@@ -6019,6 +6026,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         from_flatten=False,
     ) -> Self:
         """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
+
+        Supports both the new format (metadata in ``_metadata`` attribute) and
+        the legacy format (``__batch_size``/``__device`` as data keys).
 
         Args:
             state_dict (OrderedDict): the state_dict of to be copied.
@@ -6055,10 +6065,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             self_flatten = self.flatten_keys(".")
             self_flatten.load_state_dict(state_dict, strict=strict, assign=assign)
             if not assign:
-                # modifications are done in-place so we should be fine returning self
                 return self
             else:
-                # run a check over keys, if we any key with a '.' in name we're doomed
                 DOT_ERROR = "Cannot use load_state_dict(..., from_flatten=True, assign=True) when some keys contain a dot character."
                 for key in self.keys(True, True):
                     if isinstance(key, tuple):
@@ -6069,26 +6077,38 @@ class TensorDictBase(MutableMapping, TensorCollection):
                         raise RuntimeError(DOT_ERROR)
                 return self.update(self_flatten.unflatten_keys("."))
 
-        # copy since we'll be using pop
+        # Read _metadata before copy (copy may not preserve custom attributes)
+        _metadata = getattr(state_dict, "_metadata", None)
+
         if is_compiling():
             state_dict = type(state_dict)(state_dict)
         else:
             state_dict = copy(state_dict)
-        batch_size = state_dict.pop("__batch_size")
-        device = state_dict.pop("__device", None)
+
+        if _metadata is not None:
+            local_metadata = _metadata.get("", {})
+            batch_size = local_metadata.get("batch_size", self.batch_size)
+            device = local_metadata.get("device")
+        elif "__batch_size" in state_dict:
+            # Legacy format: metadata stored as sentinel keys
+            batch_size = state_dict.pop("__batch_size")
+            device = state_dict.pop("__device", None)
+        else:
+            # No metadata (e.g., plain dict from nn.Module pipeline) — keep current
+            batch_size = self.batch_size
+            device = self.device
 
         if strict and set(state_dict.keys()) != set(self.keys()):
             set_sd = set(state_dict.keys())
             set_td = set(self.keys())
 
-            # if there are keys in state-dict that point to an empty tensordict
-            # or if the local tensordicts are empty, we can skip
             def _is_empty_dict(sd, key=None):
                 if key is not None:
                     if not isinstance(sd[key], dict):
                         return False
                     return _is_empty_dict(sd[key])
                 for key, item in sd.items():
+                    # Skip legacy sentinel keys if present in nested dicts
                     if key in ("__batch_size", "__device"):
                         continue
                     if isinstance(item, dict):
