@@ -13552,6 +13552,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if _is_unbatched(value):
             value_copy = value.copy()
             value_copy.batch_size = self.batch_size
+            device = self.device
+            if device is not None and value_copy.device != device:
+                if _device_recorder.marked and device.type != "cuda":
+                    _device_recorder.record_transfer(device)
+                value_copy = value_copy.to(device, non_blocking=non_blocking)
             return value_copy
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:

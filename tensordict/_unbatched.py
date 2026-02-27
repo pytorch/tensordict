@@ -379,6 +379,17 @@ class UnbatchedTensor(TensorClass):
         result.batch_size = self.batch_size
         return result
 
+    @property
+    def is_pinned(self):
+        """Returns whether the underlying data tensor is pinned in memory."""
+        return self.data.is_pinned()
+
+    def pin_memory(self):
+        """Pins the underlying data tensor's memory, preserving batch_size."""
+        result = UnbatchedTensor(self.data.pin_memory())
+        result.batch_size = self.batch_size
+        return result
+
     @classmethod
     def _stack_non_tensor(
         cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
