@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import collections
 import functools
 import inspect
 import re
@@ -1196,7 +1197,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             yield self._apply_get_post_hook(v)
 
     def state_dict(
-        self, *args, destination=None, prefix="", keep_vars=False, flatten=True
+        self, destination=None, prefix="", keep_vars=False, flatten=True
     ):
         # flatten must be True by default to comply with module's state-dict API
         # since we want all params to be visible at root
@@ -1210,8 +1211,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def load_state_dict(
         self, state_dict: OrderedDict[str, Any], strict=True, assign=False
     ):
-        # The state-dict is presumably the result of a call to TensorDictParams.state_dict
-        # but can't be sure.
+        _metadata = getattr(state_dict, "_metadata", None)
 
         state_dict_tensors = {}
         state_dict = dict(state_dict)
@@ -1223,7 +1223,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             TensorDict(state_dict_tensors, []).unflatten_keys(".")
         )
         state_dict.update(state_dict_tensors)
-        self.data.load_state_dict(state_dict, strict=True, assign=False)
+        state_dict = collections.OrderedDict(state_dict)
+        if _metadata is not None:
+            state_dict._metadata = _metadata
+        self.data.load_state_dict(state_dict, strict=strict, assign=assign)
         return self
 
     def _load_from_state_dict(

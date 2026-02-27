@@ -2266,19 +2266,20 @@ class TestTensorClass:
         )
 
         sd = tc.state_dict()
+        # Unexpected top-level key
         sd["a"] = None
         with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
             tc.load_state_dict(sd)
         del sd["a"]
-        sd["_tensordict"]["a"] = None
-        with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        # Unexpected key in nested tensorclass state_dict
+        sd["y"]["a"] = None
+        with pytest.raises(
+            (KeyError, RuntimeError),
+        ):
             tc.load_state_dict(sd)
-        del sd["_tensordict"]["a"]
-        sd["_non_tensordict"]["a"] = None
-        with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
-            tc.load_state_dict(sd)
-        del sd["_non_tensordict"]["a"]
-        sd["_tensordict"]["y"]["_tensordict"]["a"] = None
+        del sd["y"]["a"]
+        # Unexpected key in _metadata non_tensor data
+        sd._metadata[""]["_non_tensor"]["a"] = None
         with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
             tc.load_state_dict(sd)
 
