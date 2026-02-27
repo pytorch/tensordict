@@ -94,6 +94,29 @@ class TestTD:
         assert add_one_c(data) == 1
         assert add_one_c(data + 1) == 2
 
+    def test_td_construct(self, mode):
+        def fn(a, b):
+            td = TensorDict({"a": a, "b": b}, batch_size=[3])
+            return td["a"] + td["b"]
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        a = torch.randn(3)
+        b = torch.randn(3)
+        torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
+    def test_td_construct_nested(self, mode):
+        def fn(a, b):
+            td = TensorDict(
+                {"a": a, "nested": TensorDict({"b": b}, batch_size=[3])},
+                batch_size=[3],
+            )
+            return td["a"] + td["nested", "b"]
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        a = torch.randn(3)
+        b = torch.randn(3)
+        torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
     def test_td_output(self, mode):
         def add_one(td):
             td["a", "c"] = td["a", "b"] + 1
