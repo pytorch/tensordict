@@ -1209,7 +1209,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         )
 
     def load_state_dict(
-        self, state_dict: OrderedDict[str, Any], strict=True, assign=False
+        self,
+        state_dict: OrderedDict[str, Any],
+        strict=True,
+        assign=False,
+        from_flatten=None,
     ):
         _metadata = getattr(state_dict, "_metadata", None)
 
@@ -1226,7 +1230,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         state_dict = collections.OrderedDict(state_dict)
         if _metadata is not None:
             state_dict._metadata = _metadata
-        self.data.load_state_dict(state_dict, strict=strict, assign=assign)
+        self.data.load_state_dict(
+            state_dict, strict=strict, assign=assign, from_flatten=from_flatten
+        )
         return self
 
     def _load_from_state_dict(

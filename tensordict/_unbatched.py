@@ -498,7 +498,7 @@ class UnbatchedTensor(TensorClass):
         result.batch_size = batch_size
         return result
 
-    def load_state_dict(self, state_dict, strict=True, assign=False):
+    def load_state_dict(self, state_dict, strict=True, assign=False, from_flatten=None):
         """Loads a state dict into the UnbatchedTensor."""
         data = state_dict.get("data")
         _metadata = getattr(state_dict, "_metadata", None)
