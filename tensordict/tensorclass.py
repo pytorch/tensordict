@@ -2854,13 +2854,17 @@ def _load_state_dict(
     """
     # Legacy format detection
     if "_tensordict" in state_dict and "_non_tensordict" in state_dict:
-        return _load_state_dict_legacy(self, state_dict, strict=strict, assign=assign, from_flatten=from_flatten)
+        return _load_state_dict_legacy(
+            self, state_dict, strict=strict, assign=assign, from_flatten=from_flatten
+        )
 
     if from_flatten is None:
         _metadata = getattr(state_dict, "_metadata", None)
         if _metadata is not None:
             td = super(type(self), self).__getattribute__("_tensordict")
-            td_keys = {k for k in td.keys() if not is_non_tensor(td.get(k, default=None))}
+            td_keys = {
+                k for k in td.keys() if not is_non_tensor(td.get(k, default=None))
+            }
             sd_keys = set(state_dict.keys())
             from_flatten = sd_keys != td_keys
         else:
@@ -2882,13 +2886,15 @@ def _load_state_dict(
         td = super(type(self), self).__getattribute__("_tensordict")
         for key, value in non_tensor.items():
             if key not in type(self).__dataclass_fields__:
-                raise KeyError(
-                    f"Key '{key}' wasn't expected in the state-dict."
-                )
+                raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
             if key in _non_tensordict:
                 _non_tensordict[key] = value
             else:
-                td.set(key, NonTensorData(value, batch_size=self.batch_size), inplace=not assign)
+                td.set(
+                    key,
+                    NonTensorData(value, batch_size=self.batch_size),
+                    inplace=not assign,
+                )
 
     td = super(type(self), self).__getattribute__("_tensordict")
     td_keys = {k for k in td.keys() if not is_non_tensor(td.get(k, default=None))}
@@ -2898,9 +2904,7 @@ def _load_state_dict(
     if strict:
         for k in state_dict.keys():
             if k not in expected_keys:
-                raise KeyError(
-                    f"Key '{k}' wasn't expected in the state-dict."
-                )
+                raise KeyError(f"Key '{k}' wasn't expected in the state-dict.")
 
     _metadata = getattr(state_dict, "_metadata", None)
     if _metadata is not None:
@@ -2912,7 +2916,11 @@ def _load_state_dict(
         if key not in td_keys:
             continue
         td_value = td.get(key, default=None)
-        if isinstance(value, dict) and td_value is not None and _is_tensor_collection(type(td_value)):
+        if (
+            isinstance(value, dict)
+            and td_value is not None
+            and _is_tensor_collection(type(td_value))
+        ):
             td_value.load_state_dict(
                 value, strict=strict, assign=assign, from_flatten=from_flatten
             )
