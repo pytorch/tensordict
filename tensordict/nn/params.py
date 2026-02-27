@@ -1196,7 +1196,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             yield self._apply_get_post_hook(v)
 
     def state_dict(
-        self, *args, destination=None, prefix="", keep_vars=False, flatten=True
+        self, destination=None, prefix="", keep_vars=False, flatten=True
     ):
         # flatten must be True by default to comply with module's state-dict API
         # since we want all params to be visible at root
@@ -1223,7 +1223,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             TensorDict(state_dict_tensors, []).unflatten_keys(".")
         )
         state_dict.update(state_dict_tensors)
-        self.data.load_state_dict(state_dict, strict=True, assign=False)
+        self.data.load_state_dict(state_dict, strict=strict, assign=assign)
         return self
 
     def _load_from_state_dict(

@@ -5991,7 +5991,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         for key, item in source.items():
             if not _is_tensor_collection(type(item)):
                 if not keep_vars:
-                    out[prefix + key] = item.detach().clone()
+                    out[prefix + key] = item.detach()
                 else:
                     out[prefix + key] = item
             else:
@@ -6002,7 +6002,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
         if "__device" in out:
             raise KeyError(
-                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
+                "Cannot retrieve the state_dict of a TensorDict with `'__device'` key"
             )
         out[prefix + "__batch_size"] = source.batch_size
         out[prefix + "__device"] = source.device
