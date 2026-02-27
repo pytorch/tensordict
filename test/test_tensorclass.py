@@ -2284,6 +2284,82 @@ class TestTensorClass:
         ):
             tc.load_state_dict(sd_nested)
 
+    def test_statedict_flat_roundtrip(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            z: str
+            y: "MyClass" = None
+
+        z = "test_tensorclass"
+        tc = MyClass(
+            x=torch.randn(3),
+            z=z,
+            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+            batch_size=[],
+        )
+        sd = tc.state_dict()
+        assert set(sd.keys()) == {"x", "y.x"}
+        assert hasattr(sd, "_metadata")
+        assert "MyClass" in sd._metadata[""]["_type"]
+        assert sd._metadata[""]["_non_tensor"]["z"] == z
+        assert sd._metadata["y"]["_non_tensor"]["z"] == z
+
+        tc2 = tc.clone()
+        tc2.x = torch.zeros(3)
+        tc2.y.x = torch.zeros(3)
+        tc2.load_state_dict(sd)
+        assert torch.allclose(tc2.x, tc.x)
+        assert torch.allclose(tc2.y.x, tc.y.x)
+        assert tc2.z == z
+        assert tc2.y.z == z
+
+    def test_statedict_nested_roundtrip(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            z: str
+            y: "MyClass" = None
+
+        z = "test_tensorclass"
+        tc = MyClass(
+            x=torch.randn(3),
+            z=z,
+            y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+            batch_size=[],
+        )
+        sd = tc.state_dict(flatten=False)
+        assert set(sd.keys()) == {"x", "y"}
+        assert isinstance(sd["y"], dict)
+
+        tc2 = tc.clone()
+        tc2.x = torch.zeros(3)
+        tc2.y.x = torch.zeros(3)
+        tc2.load_state_dict(sd)
+        assert torch.allclose(tc2.x, tc.x)
+        assert torch.allclose(tc2.y.x, tc.y.x)
+
+    def test_statedict_legacy_compat(self):
+        import collections
+
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        tc = MyClass(x=torch.randn(3), y=torch.randn(3), batch_size=[])
+        # Build a legacy-format state_dict matching the old tensorclass output
+        legacy_sd = collections.OrderedDict()
+        legacy_sd["_tensordict"] = collections.OrderedDict()
+        legacy_sd["_tensordict"]["x"] = torch.tensor([1.0, 2.0, 3.0])
+        legacy_sd["_tensordict"]["y"] = torch.tensor([4.0, 5.0, 6.0])
+        legacy_sd["_tensordict"]["__batch_size"] = torch.Size([])
+        legacy_sd["_tensordict"]["__device"] = None
+        legacy_sd["_non_tensordict"] = {}
+        tc.load_state_dict(legacy_sd)
+        assert torch.allclose(tc.x, torch.tensor([1.0, 2.0, 3.0]))
+        assert torch.allclose(tc.y, torch.tensor([4.0, 5.0, 6.0]))
+
     def test_tensorclass_get_at(self):
         @tensorclass
         class MyDataNest:

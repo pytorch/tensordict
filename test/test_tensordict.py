@@ -1773,6 +1773,78 @@ class TestGeneric:
         data.load_state_dict(sd, strict=True)
         assert data["d"] == 1
 
+    def test_state_dict_flat_roundtrip(self):
+        td = TensorDict({"a": 1, "b": {"c": 2, "d": {"e": 3}}}, [])
+        sd = td.state_dict()
+        assert set(sd.keys()) == {"a", "b.c", "b.d.e"}
+        assert hasattr(sd, "_metadata")
+        assert "" in sd._metadata
+        assert "b" in sd._metadata
+        assert "b.d" in sd._metadata
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd)
+        assert (td_zero == td).all()
+
+    def test_state_dict_nested_roundtrip(self):
+        td = TensorDict({"a": 1, "b": {"c": 2, "d": {"e": 3}}}, [])
+        sd = td.state_dict(flatten=False)
+        assert set(sd.keys()) == {"a", "b"}
+        assert isinstance(sd["b"], dict)
+        assert set(sd["b"].keys()) == {"c", "d"}
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd)
+        assert (td_zero == td).all()
+
+    def test_state_dict_cross_format_loading(self):
+        td = TensorDict({"a": 1, "b": {"c": 2}}, [])
+        # Save flat, load with auto-detection
+        sd_flat = td.state_dict(flatten=True)
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd_flat)
+        assert (td_zero == td).all()
+        # Save nested, load with auto-detection
+        sd_nested = td.state_dict(flatten=False)
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd_nested)
+        assert (td_zero == td).all()
+        # Save flat, explicitly load as flat
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd_flat, from_flatten=True)
+        assert (td_zero == td).all()
+        # Save nested, explicitly load as nested
+        td_zero = td.clone().zero_()
+        td_zero.load_state_dict(sd_nested, from_flatten=False)
+        assert (td_zero == td).all()
+
+    def test_state_dict_legacy_format(self):
+        import collections
+
+        legacy_sd = collections.OrderedDict()
+        legacy_sd["a"] = torch.tensor(1)
+        legacy_sd["__batch_size"] = torch.Size([])
+        legacy_sd["__device"] = None
+        td = TensorDict({"a": 0}, [])
+        td.load_state_dict(legacy_sd)
+        assert td["a"] == 1
+
+    def test_state_dict_metadata_content(self):
+        td = TensorDict(
+            {"x": torch.randn(3), "sub": TensorDict({"y": torch.randn(3)}, [3])},
+            [3],
+        )
+        sd = td.state_dict()
+        assert sd._metadata[""]["batch_size"] == torch.Size([3])
+        assert sd._metadata["sub"]["batch_size"] == torch.Size([3])
+
+    def test_state_dict_keep_vars(self):
+        t = torch.randn(3, requires_grad=True)
+        td = TensorDict({"a": t}, [])
+        sd_detached = td.state_dict(keep_vars=False)
+        assert not sd_detached["a"].requires_grad
+        sd_kept = td.state_dict(keep_vars=True)
+        assert sd_kept["a"].requires_grad
+        assert sd_kept["a"].data_ptr() == t.data_ptr()
+
     def test_make_memmap(self, tmpdir):
         td = TensorDict()
         td.memmap_(tmpdir)
