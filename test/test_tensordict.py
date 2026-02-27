@@ -4856,8 +4856,6 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):
-        if td_name == "td_with_unbatched":
-            pytest.skip("UnbatchedTensor incompatible with vmap")
         td = getattr(self, td_name)(device)
         if nested:
             td = TensorDict({"parent": td}, td.batch_size)
@@ -14187,6 +14185,22 @@ class TestUnbatchedTensor:
         )
         with pytest.warns(UserWarning, match="different data storage"):
             torch.stack([td1, td2])
+
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+    def test_unbatched_vmap(self):
+        from torch import vmap
+
+        data = torch.randn(7, 11)
+        td = TensorDict(
+            a=torch.randn(4, 3, 5),
+            unbatched=UnbatchedTensor(data),
+            batch_size=[4, 3],
+        )
+        result = vmap(lambda x: x)(td)
+        assert result.batch_size == torch.Size([4, 3])
+        assert isinstance(result.get("unbatched"), UnbatchedTensor)
+        assert result.get("unbatched").data.data_ptr() == data.data_ptr()
+        assert result["a"].shape == (4, 3, 5)
 
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
