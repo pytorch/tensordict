@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3783+g2ab0a6962.d20260227)
+                  main (0.11.0.dev3787+g89765949b.d20260227)
                 </div>
               
             
@@ -940,6 +940,12 @@ equivalent to chained calls of getattr.</p></li>
 <dd><p>Returns the gradient of the underlying data tensor, wrapped in UnbatchedTensor.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_pinned">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_pinned</span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_pinned" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns whether the underlying data tensor is pinned in memory.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.lazy_stack">
 <span class="sig-name descname"><span class="pre">lazy_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.lazy_stack" title="Permalink to this definition">¶</a></dt>
@@ -1237,6 +1243,12 @@ be slow for large content.</p>
 <span class="sig-name descname"><span class="pre">memmap_refresh_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.memmap_refresh_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Refreshes the content of the memory-mapped tensordict if it has a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.saved_path" title="tensordict.TensorDict.saved_path"><code class="xref py py-attr docutils literal notranslate"><span class="pre">saved_path</span></code></a>.</p>
 <p>This method will raise an exception if no path is associated with it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.UnbatchedTensor.pin_memory">
+<span class="sig-name descname"><span class="pre">pin_memory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.pin_memory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pins the underlying data tensor’s memory, preserving batch_size.</p>
 </dd></dl>
 
 <dl class="py method">
