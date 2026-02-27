@@ -1,3 +1,5 @@
+.. _saving:
+
 Saving TensorDict and tensorclass objects
 =========================================
 
@@ -9,11 +11,11 @@ TensorDict serialization API mainly relies on :class:`~tensordict.MemoryMappedTe
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict's one.
 
-TensorDict's serialization speed can be an order of magnitude __faster__ than
+TensorDict's serialization speed can be an order of magnitude **faster** than
 PyTorch's one with :func:`~torch.save`'s pickle reliance. This document explains
 how to create and interact with data stored on disk using TensorDict.
 
-Saving memmory-mapped TensorDicts
+Saving memory-mapped TensorDicts
 ---------------------------------
 
 When a tensordict is dumped as a mmap data structure, each entry corresponds
@@ -25,10 +27,10 @@ advantages:
 
 - The saved data can be partially loaded. If a large model is saved on disk but
   only parts of its weights need to be loaded onto a module created in a separate
-  scripts, only these weights will be loaded in memory.
+  script, only these weights will be loaded in memory.
 - Saving data is safe: using the pickle library for serializing big data structures
   can be unsafe as unpickling can execute any arbitrary code. TensorDict's loading
-  API only reads pre-selected fields from saved json files and memorybuffers
+  API only reads pre-selected fields from saved json files and memory buffers
   saved on disk.
 - Saving is fast: because the data is written in several independent files,
   we can amortize the IO overhead by launching several concurrent threads that
@@ -45,7 +47,7 @@ However, this approach also has some disadvantages:
   The :class:`~tensordict.NonTensorData` class can be used to represent non-tensor
   data in a regular :class:`~tensordict.TensorDict` instance.
 
-tensordict's memory-mapped API relies on four core method:
+tensordict's memory-mapped API relies on four core methods:
 :meth:`~tensordict.TensorDictBase.memmap_`, :meth:`~tensordict.TensorDictBase.memmap`,
 :meth:`~tensordict.TensorDictBase.memmap_like` and :meth:`~tensordict.TensorDictBase.load_memmap`.
 
@@ -71,7 +73,7 @@ needs to be preallocated on disk, the typical usage being:
   >>> data_disk = data.memmap_like("/path/to/data")  # creates the two memory-mapped tensors on disk
   >>> del data # data is not needed anymore
 
-As illustrated above, when converting entries of a :class:`~tensordict.TensorDict``
+As illustrated above, when converting entries of a :class:`~tensordict.TensorDict`
 to :class:`~tensordict.MemoryMappedTensor`, it is possible to control where
 the memory maps are saved on disk so that they persist and can
 be loaded at a later date. On the other hand, the file system can also be used.
@@ -96,10 +98,10 @@ yields the following directory structure
   │   └── meta.json
   └── meta.json
 
-The ``meta.json`` files contain all the releant information to rebuild the
+The ``meta.json`` files contain all the relevant information to rebuild the
 tensordict, such as device, batch-size, but also the tensordict subtypes.
 This means that :meth:`~tensordict.TensorDict.load_memmap` will be able to
-reconstruct complex nested structure where sub-tensordicts have different types
+reconstruct complex nested structures where sub-tensordicts have different types
 than parents:
 
   >>> from tensordict import TensorDict, tensorclass, TensorDictBase
@@ -145,12 +147,12 @@ than parents:
 Handling existing :class:`~tensordict.MemoryMappedTensor`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If the :class:`~tensordict.TensorDict`` already contains
+If the :class:`~tensordict.TensorDict` already contains
 :class:`~tensordict.MemoryMappedTensor` entries there are a few
 possible behaviours.
 
 - If ``prefix`` is not specified and :meth:`~tensordict.TensorDict.memmap` is called
-  twice, the resulting `TensorDict` will contain the same data as the orignal one.
+  twice, the resulting `TensorDict` will contain the same data as the original one.
 
     >>> td = TensorDict({"a": 1}, [])
     >>> td0 = td.memmap()
@@ -172,53 +174,41 @@ possible behaviours.
     ...     with tempfile.TemporaryDirectory() as tmpdir_1:
     ...         td_load = TensorDict.load_memmap(tmpdir_1)  # breaks!
 
-  This feature is implemented to prevent users from inadvertently copy memorymapped
+  This feature is implemented to prevent users from inadvertently copying memory-mapped
   tensors from one location to another.
 
-TorchSnapshot compatibility
----------------------------
+Consolidated serialization
+--------------------------
+
+For fast transfer (e.g. across the network, or to GPU), you can consolidate all
+leaf tensors into a single contiguous buffer using
+:meth:`~tensordict.TensorDictBase.consolidate`:
+
+  >>> td = TensorDict(a=torch.randn(1000), b={"c": torch.randn(1000)}, batch_size=[1000])
+  >>> td_c = td.consolidate()
+
+A consolidated tensordict can be pickled much faster than a regular one because
+it becomes a single storage + metadata dict.  It can also be saved to disk as
+a memory-mapped file:
+
+  >>> td_c = td.consolidate("/path/to/storage.memmap")
+
+See :meth:`~tensordict.TensorDictBase.consolidate` for the full API, including
+options like ``num_threads``, ``device``, ``pin_memory``, and ``share_memory``.
+
+Legacy: TorchSnapshot compatibility
+------------------------------------
 
 .. warning::
-  As torchsnapshot maintenance is being discontinued. As such, we won't be implementing
-  new features for tensordict compatibility with this library.
+  torchsnapshot maintenance has been discontinued.  The section below is kept
+  for reference only; we recommend using the memory-mapped API above for new
+  projects.
 
-TensorDict is compatible with `torchsnapshot <https://github.com/pytorch/torchsnapshot>`_,
-a PyTorch checkpointing library.
-TorchSnapshot will save each of your tensors independently, with a data structure that
-mimics the one of your tensordict or tensorclass. Moreover, TensorDict has naturally
-buit-in the tools necessary for saving and loading huge datasets on disk without
-loading the full tensors in memory: in other words, the combination tensordict + torchsnapshot
-makes it possible to load a tensor big as several hundreds of Gb onto a
-pre-allocated :class:`~tensordict.MemmapTensor` without passing it in one chunk on RAM.
+TensorDict is compatible with `torchsnapshot <https://github.com/pytorch/torchsnapshot>`_.
+TorchSnapshot saves each tensor independently, with a data structure that
+mimics the TensorDict's one.
 
-There are two main use cases: saving and loading tensordicts that fit in memory,
-and saving and loading tensordicts stored on disk using :class:`~tensordict.MemmapTensor`.
-
-General use case: in-memory loading
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-This method is suitable if your destination tensordict is not pre-allocated.
-This offers flexibility (you can load any tensordict onto your tensordict, you
-don't need to know its content in advance) and this method is marginally
-easier to code than the other.
-However, this may break if your tensors are extremely big and do not fit in memory.
-Also, it will not allow you to load directly onto the device of your choice.
-
-The two main commands to remember for the saving operation are:
-
-  >>> state = {"state": tensordict_source}
-  >>> snapshot = torchsnapshot.Snapshot.take(app_state=state, path="/path/to/my/snapshot")
-
-To load onto a destination tensordict, you can simply load the snapshot and update the
-tensordict. Under the hood, this method will call :obj:`tensordict_target.load_state_dict(state_dict)`,
-meaning that the :obj:`state_dict` will first be put in memory entirely, and then loaded onto the
-destination tensordict:
-
-  >>> snapshot = Snapshot(path="/path/to/my/snapshot")
-  >>> state_target = {"state": tensordict_target}
-  >>> snapshot.restore(app_state=state_target)
-
-Here is a full example:
+**In-memory loading**
 
 .. code-block:: Python
 
@@ -228,125 +218,36 @@ Here is a full example:
   >>> import torch
   >>>
   >>> tensordict_source = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
-  >>> state = {"state": tensordict}
+  >>> state = {"state": tensordict_source}
   >>> path = f"/tmp/{uuid.uuid4()}"
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
   >>> # later
   >>> snapshot = torchsnapshot.Snapshot(path=path)
-  >>> tensordict2 = TensorDict()
-  >>> target_state = {
-  >>>     "state": tensordict2
-  >>> }
+  >>> tensordict_target = TensorDict()
+  >>> target_state = {"state": tensordict_target}
   >>> snapshot.restore(app_state=target_state)
-  >>> assert (tensordict == tensordict2).all()
+  >>> assert (tensordict_source == tensordict_target).all()
 
-
-Saving and loading big-datasets
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If the dataset is too big to fit in memory, the above method could easily break.
-We take advantage of the capabilities of torchsnapshot to load the tensors in small chunks
-on their preallocated destination.
-This requires you to know what shape, device etc. your destination data will have and live on,
-but it's a small price to pay to be able to checkpoint your model or dataloading!
-
-In contrast with the previous example, we will not be using the :func:`load_state_dict()` method
-of :obj:`TensorDict` but rather a :obj:`state_dict` obtained from the destination object
-that we will re-populate with the saved data.
-
-Again, two lines of code are sufficient to save the data:
-
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_source.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path="/path/to/my/snapshot")
-
-We have been using :obj:`torchsnapshot.StateDict` and we explicitly called
-:obj:`my_tensordict_source.state_dict(keep_vars=True)`, unlike the previous example.
-Now, to load this onto a destination tensordict:
-
-  >>> snapshot = Snapshot(path="/path/to/my/snapshot")
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_target.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot.restore(app_state=app_state)
-
-In this example, the loading is entirely handled by torchsnapshot, ie. there is
-no call to :func:`TensorDict.load_state_dict()`.
-
-.. note::
-
-    This has two important implications:
-
-    1. Since :func:`LazyStackedTensorDict.state_dict()` (and other lazy tensordict classes)
-       return a copy of the data after some operation has been executed, loading onto the
-       state-dict will not update the original class. However, since the `state_dict()` operation
-       is supported, this will not raise an error.
-    2. Similarly, since the state-dict is updated in-place but the tensordict is not
-       updated using :func:`TensorDict.update()` or :func:`TensorDict.set()`, a missing
-       key in the destination tensordict will go unnoticed.
-
-Here is a full example:
+**Big-dataset loading (memory-mapped)**
 
 .. code-block:: Python
 
   >>> td = TensorDict({"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])}, [3])
   >>> td.memmap_()
-  >>> assert isinstance(td["b", "c"], MemmapTensor)
+  >>> assert isinstance(td["b", "c"], MemoryMappedTensor)
   >>>
   >>> app_state = {
   ...     "state": torchsnapshot.StateDict(tensordict=td.state_dict(keep_vars=True))
   ... }
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=f"/tmp/{uuid.uuid4()}")
   >>>
-  >>>
   >>> td_dest = TensorDict({"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])}, [3])
   >>> td_dest.memmap_()
-  >>> assert isinstance(td_dest["b", "c"], MemmapTensor)
+  >>> assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
   >>> app_state = {
   ...     "state": torchsnapshot.StateDict(tensordict=td_dest.state_dict(keep_vars=True))
   ... }
   >>> snapshot.restore(app_state=app_state)
-  >>> # sanity check
   >>> assert (td_dest == td).all()
   >>> assert (td_dest["b"].batch_size == td["b"].batch_size)
-  >>> assert isinstance(td_dest["b", "c"], MemmapTensor)
-
-Finally, tensorclass also supports this feature. The code is fairly similar to the one above:
-
-.. code-block:: Python
-
-  >>> from __future__ import annotations
-  >>> import uuid
-  >>> from typing import Union, Optional
-  >>>
-  >>> import torchsnapshot
-  >>> from tensordict import TensorDict, MemmapTensor
-  >>> import torch
-  >>> from tensordict.prototype import tensorclass
-  >>>
-  >>> @tensorclass
-  >>> class MyClass:
-  ...      x: torch.Tensor
-  ...      y: Optional[MyClass]=None
-  ...
-  >>> tc = MyClass(x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[])
-  >>> tc.memmap_()
-  >>> assert isinstance(tc.y.x, MemmapTensor)
-  >>>
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=f"/tmp/{uuid.uuid4()}")
-  >>>
-  >>> tc_dest = MyClass(x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[])
-  >>> tc_dest.memmap_()
-  >>> assert isinstance(tc_dest.y.x, MemmapTensor)
-  >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict(keep_vars=True))
-  ... }
-  >>> snapshot.restore(app_state=app_state)
-  >>>
-  >>> assert (tc_dest == tc).all()
-  >>> assert (tc_dest.y.batch_size == tc.y.batch_size)
-  >>> assert isinstance(tc_dest.y.x, MemmapTensor)
+  >>> assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
