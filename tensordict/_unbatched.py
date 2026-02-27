@@ -458,7 +458,7 @@ class UnbatchedTensor(TensorClass):
         """Returns the dtype of the underlying data tensor."""
         return self.data.dtype
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=False):
+    def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=True):
         """Returns a state dict containing the data and batch_size.
 
         Metadata is stored in the ``_metadata`` attribute on the returned

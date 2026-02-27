@@ -175,6 +175,58 @@ possible behaviours.
   This feature is implemented to prevent users from inadvertently copy memorymapped
   tensors from one location to another.
 
+state_dict / load_state_dict
+----------------------------
+
+TensorDict and tensorclass support :meth:`~tensordict.TensorDictBase.state_dict` and
+:meth:`~tensordict.TensorDictBase.load_state_dict`, following the same conventions as
+:meth:`torch.nn.Module.state_dict`.
+
+By default, ``state_dict()`` returns a **flat** :class:`~collections.OrderedDict` with
+dot-separated keys, just like ``nn.Module``:
+
+  >>> td = TensorDict({"a": 1, "b": {"c": 2}}, [])
+  >>> sd = td.state_dict()
+  >>> print(sd)
+  OrderedDict([('a', tensor(1)), ('b.c', tensor(2))])
+
+Metadata (``batch_size``, ``device``) is stored in an ``_metadata`` attribute on the
+returned ``OrderedDict``, keyed by dot-separated prefix (``""`` for root, ``"b"`` for a
+nested tensordict at key ``"b"``). This mirrors ``nn.Module``'s metadata convention
+and replaces the legacy ``__batch_size`` / ``__device`` sentinel keys.
+
+A nested format can be obtained by passing ``flatten=False``:
+
+  >>> sd_nested = td.state_dict(flatten=False)
+  >>> print(sd_nested)
+  OrderedDict([('a', tensor(1)), ('b', OrderedDict([('c', tensor(2))]))])
+
+:meth:`~tensordict.TensorDictBase.load_state_dict` **auto-detects** the format of the
+incoming state-dict: flat (with ``_metadata`` and dot-separated keys), nested (with
+per-level ``_metadata``), and the legacy format (with ``__batch_size`` / ``__device``
+sentinel keys) are all supported transparently:
+
+  >>> td_zero = td.clone().zero_()
+  >>> td_zero.load_state_dict(sd)       # flat format
+  >>> assert (td_zero == td).all()
+  >>> td_zero.zero_()
+  >>> td_zero.load_state_dict(sd_nested)  # nested format
+  >>> assert (td_zero == td).all()
+
+For tensorclass objects, ``state_dict()`` exposes the logical field names as keys.
+Non-tensor fields are stored in ``_metadata`` rather than appearing as data keys:
+
+  >>> @tensorclass
+  ... class MyClass:
+  ...     x: torch.Tensor
+  ...     label: str
+  >>> tc = MyClass(x=torch.randn(3), label="hello", batch_size=[])
+  >>> sd = tc.state_dict()
+  >>> print(list(sd.keys()))          # only tensor fields
+  ['x']
+  >>> print(sd._metadata[""]["_non_tensor"])  # non-tensor fields
+  {'label': 'hello'}
+
 TorchSnapshot compatibility
 ---------------------------
 

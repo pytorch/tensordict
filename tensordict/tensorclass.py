@@ -2793,7 +2793,7 @@ def _names_setter(self, names: str) -> None:  # noqa: D417
 
 
 def _state_dict(
-    self, destination=None, prefix="", keep_vars=False, flatten=False
+    self, destination=None, prefix="", keep_vars=False, flatten=True
 ) -> dict[str, Any]:
     """Returns a state_dict with logical keys, matching TensorDictBase conventions.
 
@@ -2803,8 +2803,11 @@ def _state_dict(
     """
     import collections
 
-    out = collections.OrderedDict()
-    out._metadata = collections.OrderedDict()
+    if destination is None:
+        destination = collections.OrderedDict()
+        destination._metadata = collections.OrderedDict()
+    elif not hasattr(destination, "_metadata"):
+        destination._metadata = collections.OrderedDict()
 
     td = super(type(self), self).__getattribute__("_tensordict")
     _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
@@ -2815,32 +2818,34 @@ def _state_dict(
             non_tensor[key] = item.data
         elif not _is_tensor_collection(type(item)):
             if not keep_vars:
-                out[prefix + key] = item.detach()
+                destination[prefix + key] = item.detach()
             else:
-                out[prefix + key] = item
+                destination[prefix + key] = item
+        elif flatten:
+            item.state_dict(
+                destination=destination,
+                prefix=prefix + key + ".",
+                keep_vars=keep_vars,
+                flatten=True,
+            )
         else:
-            out[prefix + key] = item.state_dict(
-                keep_vars=keep_vars, flatten=flatten
+            destination[prefix + key] = item.state_dict(
+                keep_vars=keep_vars, flatten=False
             )
 
-    out._metadata[""] = {
+    metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+    destination._metadata[metadata_key] = {
         "batch_size": self.batch_size,
         "device": self.device,
         "_type": type(self).__qualname__,
         "_non_tensor": non_tensor,
     }
 
-    if destination is not None:
-        destination.update(out)
-        if not hasattr(destination, "_metadata"):
-            destination._metadata = collections.OrderedDict()
-        destination._metadata.update(out._metadata)
-        return destination
-    return out
+    return destination
 
 
 def _load_state_dict(
-    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=False
+    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=None
 ):
     """Loads a state_dict into the tensorclass.
 
@@ -2850,6 +2855,24 @@ def _load_state_dict(
     # Legacy format detection
     if "_tensordict" in state_dict and "_non_tensordict" in state_dict:
         return _load_state_dict_legacy(self, state_dict, strict=strict, assign=assign, from_flatten=from_flatten)
+
+    if from_flatten is None:
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            td = super(type(self), self).__getattribute__("_tensordict")
+            td_keys = {k for k in td.keys() if not is_non_tensor(td.get(k, default=None))}
+            sd_keys = set(state_dict.keys())
+            from_flatten = sd_keys != td_keys
+        else:
+            from_flatten = False
+
+    if from_flatten:
+        from tensordict.base import _unflatten_state_dict
+
+        nested_sd = _unflatten_state_dict(state_dict)
+        return _load_state_dict(
+            self, nested_sd, strict=strict, assign=assign, from_flatten=False
+        )
 
     _metadata = getattr(state_dict, "_metadata", None)
     if _metadata is not None:
