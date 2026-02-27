@@ -537,7 +537,7 @@ class LazyStackedTensorDict(TensorDictBase):
         destination=None,
         prefix="",
         keep_vars=False,
-        flatten=False,
+        flatten=True,
     ) -> OrderedDict[str, Any]: ...
 
     @_fails_exclusive_keys
