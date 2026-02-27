@@ -458,19 +458,30 @@ class UnbatchedTensor(TensorClass):
         """Returns the dtype of the underlying data tensor."""
         return self.data.dtype
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False):
-        """Returns a state dict containing the data and batch_size."""
+    def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=True):
+        """Returns a state dict containing the data and batch_size.
+
+        Metadata is stored in the ``_metadata`` attribute on the returned
+        OrderedDict, following the same convention as
+        :meth:`TensorDictBase.state_dict`.
+        """
         import collections
 
         out = collections.OrderedDict()
+        out._metadata = collections.OrderedDict()
         if not keep_vars:
-            out[prefix + "data"] = self.data.detach().clone()
+            out[prefix + "data"] = self.data.detach()
         else:
             out[prefix + "data"] = self.data
-        out[prefix + "__batch_size"] = self.batch_size
-        out[prefix + "__is_unbatched"] = True
+        out._metadata[""] = {
+            "batch_size": self.batch_size,
+            "is_unbatched": True,
+        }
         if destination is not None:
             destination.update(out)
+            if not hasattr(destination, "_metadata"):
+                destination._metadata = collections.OrderedDict()
+            destination._metadata.update(out._metadata)
             return destination
         return out
 
@@ -478,7 +489,11 @@ class UnbatchedTensor(TensorClass):
     def from_state_dict(cls, state_dict, prefix=""):
         """Creates an UnbatchedTensor from a state dict."""
         data = state_dict[prefix + "data"]
-        batch_size = state_dict[prefix + "__batch_size"]
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            batch_size = _metadata.get("", {}).get("batch_size", torch.Size([]))
+        else:
+            batch_size = state_dict[prefix + "__batch_size"]
         result = cls(data)
         result.batch_size = batch_size
         return result
@@ -486,7 +501,11 @@ class UnbatchedTensor(TensorClass):
     def load_state_dict(self, state_dict, strict=True, assign=False):
         """Loads a state dict into the UnbatchedTensor."""
         data = state_dict.get("data")
-        batch_size = state_dict.get("__batch_size", self.batch_size)
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            batch_size = _metadata.get("", {}).get("batch_size", self.batch_size)
+        else:
+            batch_size = state_dict.get("__batch_size", self.batch_size)
         if data is not None:
             if assign:
                 self._tensordict.set("data", data)

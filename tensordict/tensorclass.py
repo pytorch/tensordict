@@ -2793,38 +2793,151 @@ def _names_setter(self, names: str) -> None:  # noqa: D417
 
 
 def _state_dict(
-    self, destination=None, prefix="", keep_vars=False, flatten=False
+    self, destination=None, prefix="", keep_vars=False, flatten=True
 ) -> dict[str, Any]:
-    """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = {
-        "_tensordict": super(type(self), self)
-        .__getattribute__("_tensordict")
-        .state_dict(
-            destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
-        )
+    """Returns a state_dict with logical keys, matching TensorDictBase conventions.
+
+    Tensor fields appear as data keys. Non-tensor fields (strings, ints, etc.)
+    and the tensorclass type are stored in ``_metadata``. This replaces the
+    legacy ``_tensordict``/``_non_tensordict`` wrapper format.
+    """
+    import collections
+
+    if destination is None:
+        destination = collections.OrderedDict()
+        destination._metadata = collections.OrderedDict()
+    elif not hasattr(destination, "_metadata"):
+        destination._metadata = collections.OrderedDict()
+
+    td = super(type(self), self).__getattribute__("_tensordict")
+    _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
+
+    non_tensor = dict(_non_tensordict)
+    for key, item in td.items():
+        if is_non_tensor(item):
+            non_tensor[key] = item.data
+        elif not _is_tensor_collection(type(item)):
+            if not keep_vars:
+                destination[prefix + key] = item.detach()
+            else:
+                destination[prefix + key] = item
+        elif flatten:
+            item.state_dict(
+                destination=destination,
+                prefix=prefix + key + ".",
+                keep_vars=keep_vars,
+                flatten=True,
+            )
+        else:
+            destination[prefix + key] = item.state_dict(
+                keep_vars=keep_vars, flatten=False
+            )
+
+    metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+    destination._metadata[metadata_key] = {
+        "batch_size": self.batch_size,
+        "device": self.device,
+        "_type": type(self).__qualname__,
+        "_non_tensor": non_tensor,
     }
-    state_dict["_non_tensordict"] = dict(self._non_tensordict)
-    return state_dict
+
+    return destination
 
 
 def _load_state_dict(
+    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=None
+):
+    """Loads a state_dict into the tensorclass.
+
+    Supports both the new format (logical keys with ``_metadata``) and the
+    legacy format (``_tensordict``/``_non_tensordict`` wrapper keys).
+    """
+    # Legacy format detection
+    if "_tensordict" in state_dict and "_non_tensordict" in state_dict:
+        return _load_state_dict_legacy(self, state_dict, strict=strict, assign=assign, from_flatten=from_flatten)
+
+    if from_flatten is None:
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            td = super(type(self), self).__getattribute__("_tensordict")
+            td_keys = {k for k in td.keys() if not is_non_tensor(td.get(k, default=None))}
+            sd_keys = set(state_dict.keys())
+            from_flatten = sd_keys != td_keys
+        else:
+            from_flatten = False
+
+    if from_flatten:
+        from tensordict.base import _unflatten_state_dict
+
+        nested_sd = _unflatten_state_dict(state_dict)
+        return _load_state_dict(
+            self, nested_sd, strict=strict, assign=assign, from_flatten=False
+        )
+
+    _metadata = getattr(state_dict, "_metadata", None)
+    if _metadata is not None:
+        local_metadata = _metadata.get("", {})
+        non_tensor = local_metadata.get("_non_tensor", {})
+        _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
+        td = super(type(self), self).__getattribute__("_tensordict")
+        for key, value in non_tensor.items():
+            if key not in type(self).__dataclass_fields__:
+                raise KeyError(
+                    f"Key '{key}' wasn't expected in the state-dict."
+                )
+            if key in _non_tensordict:
+                _non_tensordict[key] = value
+            else:
+                td.set(key, NonTensorData(value, batch_size=self.batch_size), inplace=not assign)
+
+    td = super(type(self), self).__getattribute__("_tensordict")
+    td_keys = {k for k in td.keys() if not is_non_tensor(td.get(k, default=None))}
+    non_tensor_keys = set(non_tensor) if _metadata is not None else set()
+    expected_keys = td_keys | non_tensor_keys
+
+    if strict:
+        for k in state_dict.keys():
+            if k not in expected_keys:
+                raise KeyError(
+                    f"Key '{k}' wasn't expected in the state-dict."
+                )
+
+    _metadata = getattr(state_dict, "_metadata", None)
+    if _metadata is not None:
+        local_metadata = _metadata.get("", {})
+        batch_size = local_metadata.get("batch_size", td.batch_size)
+        td.batch_size = batch_size
+
+    for key, value in state_dict.items():
+        if key not in td_keys:
+            continue
+        td_value = td.get(key, default=None)
+        if isinstance(value, dict) and td_value is not None and _is_tensor_collection(type(td_value)):
+            td_value.load_state_dict(
+                value, strict=strict, assign=assign, from_flatten=from_flatten
+            )
+            if assign:
+                td.set(key, td_value)
+        else:
+            td.set(key, value, inplace=not assign)
+
+    return self
+
+
+def _load_state_dict_legacy(
     self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=False
 ):
-    """Loads a state_dict attemptedly in-place on the destination tensorclass."""
+    """Load a legacy-format state_dict with _tensordict/_non_tensordict wrapper."""
     for key, item in state_dict.items():
-        # keys will never be nested which facilitates everything, but let's
-        # double check in case someone does something nasty
         if not isinstance(key, str):
             raise TypeError("Only str keys are allowed when calling load_state_dict.")
         if key == "_non_tensordict":
             for sub_key, sub_item in item.items():
-                # sub_item is the state dict of a tensorclass
                 if isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
                     raise RuntimeError(
                         "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
                     )
                 else:
-                    # check that sub_key is part of the tensorclass
                     if sub_key not in type(self).__dataclass_fields__:
                         raise KeyError(
                             f"Key '{sub_key}' wasn't expected in the state-dict."
@@ -2846,7 +2959,6 @@ def _load_state_dict(
             )
         else:
             raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
-
     return self
 
 
