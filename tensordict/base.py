@@ -9208,7 +9208,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def send(
         self,
-        dst: int,
+        dst: int | "TensorDictPipe",
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
@@ -9218,8 +9218,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Sends the content of a tensordict to a distant worker.
 
         Args:
-            dst (int): the rank of the destination worker where the content
-                should be sent.
+            dst (int or TensorDictPipe): the rank of the destination worker
+                where the content should be sent, or a
+                :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
+                transport.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
@@ -9299,6 +9301,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     secondary_worker.join()
 
         """
+        from tensordict._ucxx import TensorDictPipe
+
+        if isinstance(dst, TensorDictPipe):
+            dst.send(self)
+            return
         if consolidated:
             from torch import distributed as dist
 
@@ -9335,7 +9342,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def recv(
         self,
-        src: int,
+        src: int | "TensorDictPipe",
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
@@ -9347,7 +9354,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Check the example in the `send` method for context.
 
         Args:
-            src (int): the rank of the source worker.
+            src (int or TensorDictPipe): the rank of the source worker, or a
+                :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
+                transport.  When a pipe is passed, the data is received
+                in-place into this tensordict's consolidated storage (if
+                available).
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
@@ -9369,6 +9380,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 in-place automatically.
                 Defaults to ``False``.
         """
+        from tensordict._ucxx import TensorDictPipe
+
+        if isinstance(src, TensorDictPipe):
+            return src.recv(self)
         if consolidated:
             from torch import distributed as dist
 
@@ -9376,6 +9391,39 @@ class TensorDictBase(MutableMapping, TensorCollection):
             dist.recv(storage, src=src, group=group)
             return
         return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
+
+    async def asend(self, dst: "TensorDictPipe") -> None:
+        """Sends the content of a tensordict through a UCXX pipe (async).
+
+        Args:
+            dst (TensorDictPipe): the pipe to send through.
+
+        .. seealso:: :meth:`send` for the synchronous variant and
+            torch.distributed-based transport.
+        """
+        await dst.asend(self)
+
+    async def arecv(
+        self,
+        src: "TensorDictPipe",
+        *,
+        device: torch.device | str | None = None,
+    ) -> "TensorDictBase":
+        """Receives content into this tensordict from a UCXX pipe (async).
+
+        Args:
+            src (TensorDictPipe): the pipe to receive from.
+
+        Keyword Args:
+            device: device for storage allocation on first receive.
+
+        Returns:
+            The received TensorDict (may be ``self`` for in-place updates).
+
+        .. seealso:: :meth:`recv` for the synchronous variant and
+            torch.distributed-based transport.
+        """
+        return await src.arecv(self, device=device)
 
     def _recv(
         self,
