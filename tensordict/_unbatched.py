@@ -234,7 +234,8 @@ class UnbatchedTensor(TensorClass):
                 "TensorClass fields must be accessed as attributes, not items."
             )
         self_copy = self.copy()
-        self_copy.batch_size = _getitem_batch_size(self.batch_size, index)
+        if self.batch_size:
+            self_copy.batch_size = _getitem_batch_size(self.batch_size, index)
         return self_copy
 
     @property

@@ -14492,6 +14492,14 @@ class TestUnbatchedTensor:
         assert not isinstance(result, UnbatchedTensor)
         assert result is data
 
+    def test_unbatched_getitem_empty_batch_size(self):
+        data = torch.randn(5, 3)
+        ut = UnbatchedTensor(data)
+        assert ut.batch_size == torch.Size([])
+        sliced = ut[:3]
+        assert sliced.batch_size == torch.Size([])
+        assert sliced.data is data
+
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
             {"query": ["str1", "str2", "str3", "str4"]},
