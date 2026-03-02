@@ -197,69 +197,75 @@ def bench_init_remote(rank, n_floats, device, group):
 # ---------------------------------------------------------------------------
 
 
-def bench_ucxx(rank, n_floats, device, peer_ip):
-    """UCXX pipe — measures first-send (with metadata) and steady-state.
+def bench_ucxx_all_sizes(rank, sizes, device, peer_ip):
+    """UCXX pipe — benchmarks all sizes in a single connection.
 
-    Returns (first_send_time, steady_mean, steady_std, nbytes).
+    Returns dict of {size_name: (first_time, steady_mean, steady_std, nbytes)}.
     """
     from tensordict._ucxx import TensorDictPipe
-
-    td = _make_td(n_floats, device)
-    nbytes = _data_bytes(td)
 
     port = _next_ucxx_port()
     _barrier()
 
-    timeout = max(60, n_floats * 4 / 1e8)  # at least 60s, scale with data size
-
     async def _run():
         if rank == 0:
             pipe = await TensorDictPipe.listen(port)
-
-            # First receive: includes metadata handshake
-            t0 = time.perf_counter()
-            td_recv = await pipe.arecv()
-            first_time = time.perf_counter() - t0
-
-            # Steady-state: schema already known, zero-alloc recv
-            steady_times = []
-            for i in range(WARMUP + ROUNDS):
-                t0 = time.perf_counter()
-                await pipe.arecv(td_recv)
-                t1 = time.perf_counter()
-                if i >= WARMUP:
-                    steady_times.append(t1 - t0)
-
-            await pipe.aclose()
         else:
+            await asyncio.sleep(0.5)
             pipe = await TensorDictPipe.connect(peer_ip, port)
 
-            # First send
-            t0 = time.perf_counter()
-            await pipe.asend(td)
-            first_time = time.perf_counter() - t0
+        results = {}
+        for size_name, n_floats in sizes.items():
+            if device == "cpu" and n_floats > 100_000_000:
+                continue
 
-            # Steady-state
-            steady_times = []
-            for i in range(WARMUP + ROUNDS):
+            td = _make_td(n_floats, device)
+            nbytes = _data_bytes(td)
+
+            # Reset pipe state for each size (new schema)
+            pipe._send_schema_hash = None
+            pipe._recv_schema_hash = None
+            pipe._recv_td = None
+
+            if rank == 0:
+                # First receive: includes metadata handshake
+                t0 = time.perf_counter()
+                td_recv = await pipe.arecv()
+                first_time = time.perf_counter() - t0
+
+                # Steady-state: schema already known, zero-alloc recv
+                steady_times = []
+                for i in range(WARMUP + ROUNDS):
+                    t0 = time.perf_counter()
+                    await pipe.arecv(td_recv)
+                    t1 = time.perf_counter()
+                    if i >= WARMUP:
+                        steady_times.append(t1 - t0)
+            else:
+                # First send
                 t0 = time.perf_counter()
                 await pipe.asend(td)
-                t1 = time.perf_counter()
-                if i >= WARMUP:
-                    steady_times.append(t1 - t0)
+                first_time = time.perf_counter() - t0
 
-            await pipe.aclose()
+                # Steady-state
+                steady_times = []
+                for i in range(WARMUP + ROUNDS):
+                    t0 = time.perf_counter()
+                    await pipe.asend(td)
+                    t1 = time.perf_counter()
+                    if i >= WARMUP:
+                        steady_times.append(t1 - t0)
 
-        steady_mean = sum(steady_times) / len(steady_times)
-        steady_std = (sum((t - steady_mean) ** 2 for t in steady_times) / len(steady_times)) ** 0.5
-        return first_time, steady_mean, steady_std
+            steady_mean = sum(steady_times) / len(steady_times)
+            steady_std = (
+                sum((t - steady_mean) ** 2 for t in steady_times) / len(steady_times)
+            ) ** 0.5
+            results[size_name] = (first_time, steady_mean, steady_std, nbytes)
 
-    async def _run_with_timeout():
-        return await asyncio.wait_for(_run(), timeout=timeout)
+        await pipe.aclose()
+        return results
 
-    first_time, steady_mean, steady_std = asyncio.run(_run_with_timeout())
-    _barrier()
-    return first_time, steady_mean, steady_std, nbytes
+    return asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +421,6 @@ def main():
         ("init_remote/from_remote_init", bench_init_remote),
     ]
 
-    has_ucxx_bench = has_ucxx
-
     for device in DEVICES:
         if rank == 0:
             print(f"\n--- Device: {device.upper()} ---\n", flush=True)  # noqa: T201
@@ -427,7 +431,6 @@ def main():
             print("-" * 80, flush=True)  # noqa: T201
 
         for size_name, n_floats in SIZES.items():
-            # Skip 1GB on CPU to avoid OOM issues
             if device == "cpu" and n_floats > 100_000_000:
                 continue
 
@@ -457,45 +460,50 @@ def main():
                         flush=True,
                     )
 
-            if has_ucxx_bench and device == "cpu":
-                gc.collect()
-                _barrier()
-
-                try:
-                    first_time, steady_mean, steady_std, nbytes = (
-                        bench_ucxx(rank, n_floats, device, peer_ip)
-                    )
-                except Exception as e:
-                    has_ucxx_bench = False
-                    if rank == 0:
-                        print(  # noqa: T201
-                            f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
-                            flush=True,
-                        )
-                        print(  # noqa: T201
-                            f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | {'(skipped)':>18s} |",
-                            flush=True,
-                        )
-                else:
-                    if rank == 0:
-                        print(  # noqa: T201
-                            f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
-                            f"{_fmt_time(first_time):>18s} | "
-                            f"{_fmt_throughput(nbytes, first_time)}",
-                            flush=True,
-                        )
-                        print(  # noqa: T201
-                            f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
-                            f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
-                            f"{_fmt_throughput(nbytes, steady_mean)}",
-                            flush=True,
-                        )
-
             if rank == 0:
                 print("", flush=True)  # noqa: T201
 
+    # UCXX benchmarks — single connection, all sizes
+    if has_ucxx:
+        if rank == 0:
+            print("\n--- UCXX TensorDictPipe (CPU, all sizes) ---\n", flush=True)  # noqa: T201
+            print(  # noqa: T201
+                f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
+                flush=True,
+            )
+            print("-" * 80, flush=True)  # noqa: T201
+
+        gc.collect()
+        _barrier()
+
+        try:
+            ucxx_results = bench_ucxx_all_sizes(rank, SIZES, "cpu", peer_ip)
+        except Exception as e:
+            if rank == 0:
+                print(  # noqa: T201
+                    f"{'UCXX pipe':<35s} | {'ALL':>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
+                    flush=True,
+                )
+        else:
+            for size_name, (first_time, steady_mean, steady_std, nbytes) in ucxx_results.items():
+                if rank == 0:
+                    print(  # noqa: T201
+                        f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
+                        f"{_fmt_time(first_time):>18s} | "
+                        f"{_fmt_throughput(nbytes, first_time)}",
+                        flush=True,
+                    )
+                    print(  # noqa: T201
+                        f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
+                        f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
+                        f"{_fmt_throughput(nbytes, steady_mean)}",
+                        flush=True,
+                    )
+
+        _barrier()
+
     if rank == 0:
-        print("=" * 80, flush=True)  # noqa: T201
+        print("\n" + "=" * 80, flush=True)  # noqa: T201
         if not has_ucxx:
             print(  # noqa: T201
                 "NOTE: ucxx not installed — UCXX benchmarks skipped.",
