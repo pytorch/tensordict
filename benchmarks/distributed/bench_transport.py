@@ -210,6 +210,8 @@ def bench_ucxx(rank, n_floats, device, peer_ip):
     port = _next_ucxx_port()
     _barrier()
 
+    timeout = max(60, n_floats * 4 / 1e8)  # at least 60s, scale with data size
+
     async def _run():
         if rank == 0:
             pipe = await TensorDictPipe.listen(port)
@@ -252,7 +254,10 @@ def bench_ucxx(rank, n_floats, device, peer_ip):
         steady_std = (sum((t - steady_mean) ** 2 for t in steady_times) / len(steady_times)) ** 0.5
         return first_time, steady_mean, steady_std
 
-    first_time, steady_mean, steady_std = asyncio.run(_run())
+    async def _run_with_timeout():
+        return await asyncio.wait_for(_run(), timeout=timeout)
+
+    first_time, steady_mean, steady_std = asyncio.run(_run_with_timeout())
     _barrier()
     return first_time, steady_mean, steady_std, nbytes
 
