@@ -14469,6 +14469,29 @@ class TestUnbatchedTensor:
         assert result.get("unbatched").data.data_ptr() == data.data_ptr()
         assert result["a"].shape == (4, 3, 5)
 
+    def test_unbatched_tensorclass_attr_unwraps(self):
+        from tensordict import tensorclass
+
+        @tensorclass
+        class MyClass:
+            config: torch.Tensor
+            value: torch.Tensor
+
+        data = torch.tensor([1.0, 2.0])
+        tc = MyClass(
+            config=UnbatchedTensor(data),
+            value=torch.randn(3),
+            batch_size=[3],
+        )
+        assert isinstance(tc.config, torch.Tensor)
+        assert not isinstance(tc.config, UnbatchedTensor)
+        assert tc.config is data
+
+        result = tc.get("config")
+        assert isinstance(result, torch.Tensor)
+        assert not isinstance(result, UnbatchedTensor)
+        assert result is data
+
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
             {"query": ["str1", "str2", "str3", "str4"]},
