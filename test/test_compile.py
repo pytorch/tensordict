@@ -1580,6 +1580,49 @@ class TestCompileNontensor:
         torch.compile(self.fn_with_device_without_batch_size)(data)
 
 
+class TestTCNonTensorInit:
+    """TensorClass with non-tensor fields must be constructible under torch.compile without graph breaks."""
+
+    class MyTC(TensorClass):
+        x: torch.Tensor
+        label: str
+
+    def test_tc_nontensor_init_fullgraph(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="hello", batch_size=[3])
+            return tc.x
+
+        result = fn(torch.randn(3))
+        assert result.shape == (3,)
+
+    def test_tc_nontensor_init_roundtrip(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="hello", batch_size=[3])
+            return tc.x + 1
+
+        inp = torch.randn(3)
+        result = fn(inp)
+        torch.testing.assert_close(result, inp + 1)
+
+    def test_tc_nontensor_init_with_device(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="world", batch_size=[3], device="cpu")
+            return tc.x * 2
+
+        inp = torch.randn(3)
+        result = fn(inp)
+        torch.testing.assert_close(result, inp * 2)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

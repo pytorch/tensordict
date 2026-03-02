@@ -2493,7 +2493,7 @@ def _set(
                 return self
             if non_tensor:
                 value = NonTensorData(
-                    value, batch_size=self.batch_size, device=self.device
+                    data=value, batch_size=self.batch_size, device=self.device
                 )
             if key in self._non_tensordict:
                 del self._non_tensordict[key]
@@ -2892,7 +2892,7 @@ def _load_state_dict(
             else:
                 td.set(
                     key,
-                    NonTensorData(value, batch_size=self.batch_size),
+                    NonTensorData(data=value, batch_size=self.batch_size),
                     inplace=not assign,
                 )
 
@@ -3659,7 +3659,7 @@ class NonTensorDataBase(TensorClass):
             if self.batch_size
             else torch.Size([])
         )
-        return NonTensorData(new_data, new_batch_size, self.device)
+        return NonTensorData(data=new_data, batch_size=new_batch_size, device=self.device)
 
     def update(
         self,
@@ -4524,7 +4524,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def __init__(self, *args, **kwargs):
         args = [
-            arg if is_tensor_collection(arg) else NonTensorData(arg) for arg in args
+            arg if is_tensor_collection(arg) else NonTensorData(data=arg) for arg in args
         ]
         super().__init__(*args, **kwargs)
         if not all(is_non_tensor(item) for item in self.tensordicts):
@@ -4585,7 +4585,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 return cls.from_list(nontensor)
             if is_non_tensor(nontensor):
                 return nontensor
-            return NonTensorData(nontensor)
+            return NonTensorData(data=nontensor)
 
         return cls(*[_maybe_from_list(nontensor) for nontensor in non_tensors])
 
@@ -4597,7 +4597,7 @@ class NonTensorStack(LazyStackedTensorDict):
     @classmethod
     def from_nontensordata(cls, non_tensor: NonTensorData):
         data = non_tensor.data
-        prev = NonTensorData(data, batch_size=[], device=non_tensor.device)
+        prev = NonTensorData(data=data, batch_size=[], device=non_tensor.device)
         for dim in reversed(non_tensor.shape):
             prev = cls(*[prev.clone(False) for _ in range(dim)], stack_dim=0)
         return prev
@@ -4896,7 +4896,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 if isinstance(value, list):
                     value = NonTensorStack(*value)
                 else:
-                    value = NonTensorData(value)
+                    value = NonTensorData(data=value)
             super().__setitem__(index, value)
             if memmap:
                 self._memmap_(
