@@ -452,7 +452,9 @@ def main():
                         flush=True,
                     )
 
-            if has_ucxx_bench and device == "cpu":
+            # UCXX over TCP can hang for very large transfers; cap at 10M floats
+            ucxx_max_floats = 10_000_000
+            if has_ucxx_bench and device == "cpu" and n_floats <= ucxx_max_floats:
                 gc.collect()
                 _barrier()
 
