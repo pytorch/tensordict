@@ -24,10 +24,12 @@ import os
 import socket
 import time
 
-# UCX transport config — must be set before ucxx is imported
-os.environ.setdefault("UCX_TLS", "tcp")
-os.environ.setdefault("UCX_NET_DEVICES", "eth0")
-os.environ.setdefault("UCX_WARN_UNUSED_ENV_VARS", "n")
+# UCX transport config — must be set before ucxx is imported.
+# Force-set because cluster step0_env.sh may set IB devices that are
+# unavailable inside the container.
+os.environ["UCX_TLS"] = "tcp"
+os.environ["UCX_NET_DEVICES"] = "all"
+os.environ["UCX_WARN_UNUSED_ENV_VARS"] = "n"
 
 import torch
 import torch.distributed as dist
@@ -398,9 +400,10 @@ def main():
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
-    print(f"[rank {rank}] Initializing process group (gloo)...", flush=True)  # noqa: T201
+    backend = "cpu:gloo,cuda:nccl" if torch.cuda.is_available() else "gloo"
+    print(f"[rank {rank}] Initializing process group ({backend})...", flush=True)  # noqa: T201
     dist.init_process_group(
-        backend="gloo", rank=rank, world_size=world_size,
+        backend=backend, rank=rank, world_size=world_size,
         init_method=f"tcp://{master_ip}:29500",
     )
     print(f"[rank {rank}] Process group initialized.", flush=True)  # noqa: T201
@@ -416,7 +419,7 @@ def main():
             flush=True,
         )
         print(  # noqa: T201
-            f"  Nodes: {my_ip} <-> {peer_ip}  |  Backend: gloo",
+            f"  Nodes: {my_ip} <-> {peer_ip}  |  Backend: {backend}",
             flush=True,
         )
         print("=" * 100, flush=True)  # noqa: T201
