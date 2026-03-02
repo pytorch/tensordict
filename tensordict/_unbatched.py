@@ -437,10 +437,8 @@ class UnbatchedTensor(TensorClass):
 
     def clone(self, recurse: bool = True):
         """Clones the UnbatchedTensor, preserving the batch_size."""
-        if recurse:
-            result = type(self)(self.data.clone())
-        else:
-            result = type(self)(self.data)
+        data = self.data.clone() if recurse else self.data
+        result = type(self)(data=data)
         result.batch_size = self.batch_size
         return result
 
