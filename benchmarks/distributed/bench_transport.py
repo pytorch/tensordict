@@ -1,0 +1,486 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""Benchmark TensorDict distributed transport methods across two nodes.
+
+Compares: torch.distributed send/recv (leaf & consolidated), broadcast,
+init_remote/from_remote_init, and UCXX TensorDictPipe.
+
+Usage (on a 2-node Ray cluster):
+    # Both nodes:
+    python benchmarks/distributed/bench_transport.py
+
+    # Or via steve:
+    steve step <JOBID> "python /root/tensordict/benchmarks/distributed/bench_transport.py" --init-ray
+"""
+
+from __future__ import annotations
+
+import asyncio
+import gc
+import os
+import socket
+import time
+
+import torch
+import torch.distributed as dist
+
+from tensordict import TensorDict
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+WARMUP = 2
+ROUNDS = 10
+UCXX_PORT = 23456
+
+SIZES = {
+    "1KB": 256,
+    "1MB": 262_144,
+    "100MB": 26_214_400,
+    "1GB": 268_435_456,
+}
+
+DEVICES = ["cpu"]
+if torch.cuda.is_available():
+    DEVICES.append("cuda")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_ip():
+    """Get the node's IP address visible to other nodes."""
+    hostname = socket.gethostname()
+    return socket.gethostbyname(hostname)
+
+
+def _data_bytes(td):
+    total = 0
+    for v in td.values(True, True):
+        if isinstance(v, torch.Tensor):
+            total += v.numel() * v.element_size()
+    return total
+
+
+def _fmt_time(seconds):
+    if seconds < 1e-3:
+        return f"{seconds * 1e6:8.1f} us"
+    if seconds < 1:
+        return f"{seconds * 1e3:8.2f} ms"
+    return f"{seconds:8.3f}  s"
+
+
+def _fmt_throughput(data_bytes, seconds):
+    if seconds <= 0:
+        return "    inf GB/s"
+    gbps = data_bytes / seconds / 1e9
+    return f"{gbps:7.2f} GB/s"
+
+
+def _make_td(n_floats, device="cpu"):
+    return TensorDict(
+        {
+            "a": torch.randn(n_floats, device=device),
+            "b": torch.randn(n_floats // 4 or 1, 4, device=device),
+        },
+        batch_size=[],
+    )
+
+
+def _barrier():
+    dist.barrier()
+
+
+def _timeit(fn, warmup=WARMUP, rounds=ROUNDS):
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize() if torch.cuda.is_available() else None
+    times = []
+    for _ in range(rounds):
+        t0 = time.perf_counter()
+        fn()
+        torch.cuda.synchronize() if torch.cuda.is_available() else None
+        t1 = time.perf_counter()
+        times.append(t1 - t0)
+    mean = sum(times) / len(times)
+    std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
+    return mean, std
+
+
+# ---------------------------------------------------------------------------
+# torch.distributed benchmarks
+# ---------------------------------------------------------------------------
+
+
+def bench_send_recv_leaf(rank, n_floats, device, group):
+    """send/recv, one message per leaf tensor."""
+    td = _make_td(n_floats, device)
+    td_recv = _make_td(n_floats, device)
+    nbytes = _data_bytes(td)
+    _barrier()
+
+    if rank == 0:
+        mean, std = _timeit(lambda: (td.send(dst=1, group=group), _barrier()))
+    else:
+        mean, std = _timeit(lambda: (td_recv.recv(src=0, group=group), _barrier()))
+    return mean, std, nbytes
+
+
+def bench_send_recv_consolidated(rank, n_floats, device, group):
+    """send/recv with consolidated=True."""
+    td = _make_td(n_floats, device)
+    td_c = td.consolidate(metadata=True)
+    td_recv = _make_td(n_floats, device).consolidate(metadata=True)
+    nbytes = _data_bytes(td)
+    _barrier()
+
+    if rank == 0:
+        mean, std = _timeit(
+            lambda: (td_c.send(dst=1, consolidated=True, group=group), _barrier())
+        )
+    else:
+        mean, std = _timeit(
+            lambda: (td_recv.recv(src=0, consolidated=True, group=group), _barrier())
+        )
+    return mean, std, nbytes
+
+
+def bench_broadcast(rank, n_floats, device, group):
+    """broadcast from rank 0."""
+    td = _make_td(n_floats, device)
+    nbytes = _data_bytes(td)
+    _barrier()
+
+    mean, std = _timeit(lambda: (td.broadcast(src=0, group=group), _barrier()))
+    return mean, std, nbytes
+
+
+def bench_init_remote(rank, n_floats, device, group):
+    """init_remote + from_remote_init (includes schema transfer)."""
+    td = _make_td(n_floats, device)
+    nbytes = _data_bytes(td)
+    _barrier()
+
+    def _run():
+        if rank == 0:
+            td.init_remote(dst=1, group=group)
+        else:
+            TensorDict.from_remote_init(src=0, group=group)
+        _barrier()
+
+    mean, std = _timeit(_run)
+    return mean, std, nbytes
+
+
+# ---------------------------------------------------------------------------
+# UCXX benchmarks
+# ---------------------------------------------------------------------------
+
+
+def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
+    """UCXX pipe — first send (includes metadata handshake)."""
+    from tensordict._ucxx import TensorDictPipe
+
+    td = _make_td(n_floats, device)
+    nbytes = _data_bytes(td)
+
+    async def _run():
+        if rank == 0:
+            pipe = await TensorDictPipe.listen(UCXX_PORT)
+            _barrier()
+            times = []
+            for i in range(WARMUP + ROUNDS):
+                t0 = time.perf_counter()
+                await pipe.arecv()
+                t1 = time.perf_counter()
+                if i >= WARMUP:
+                    times.append(t1 - t0)
+                pipe._send_schema_hash = None
+                pipe._recv_schema_hash = None
+                pipe._recv_td = None
+                _barrier()
+            await pipe.aclose()
+        else:
+            _barrier()
+            pipe = await TensorDictPipe.connect(peer_ip, UCXX_PORT)
+            times = []
+            for i in range(WARMUP + ROUNDS):
+                pipe._send_schema_hash = None
+                t0 = time.perf_counter()
+                await pipe.asend(td)
+                t1 = time.perf_counter()
+                if i >= WARMUP:
+                    times.append(t1 - t0)
+                _barrier()
+            await pipe.aclose()
+
+        mean = sum(times) / len(times)
+        std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
+        return mean, std
+
+    mean, std = asyncio.run(_run())
+    return mean, std, nbytes
+
+
+def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
+    """UCXX pipe — steady-state (raw buffer only, zero-alloc on receiver)."""
+    from tensordict._ucxx import TensorDictPipe
+
+    td = _make_td(n_floats, device)
+    nbytes = _data_bytes(td)
+
+    async def _run():
+        if rank == 0:
+            pipe = await TensorDictPipe.listen(UCXX_PORT + 1)
+            _barrier()
+            td_recv = await pipe.arecv()
+            _barrier()
+
+            times = []
+            for i in range(WARMUP + ROUNDS):
+                t0 = time.perf_counter()
+                await pipe.arecv(td_recv)
+                t1 = time.perf_counter()
+                if i >= WARMUP:
+                    times.append(t1 - t0)
+                _barrier()
+            await pipe.aclose()
+        else:
+            _barrier()
+            pipe = await TensorDictPipe.connect(peer_ip, UCXX_PORT + 1)
+            await pipe.asend(td)
+            _barrier()
+
+            times = []
+            for i in range(WARMUP + ROUNDS):
+                t0 = time.perf_counter()
+                await pipe.asend(td)
+                t1 = time.perf_counter()
+                if i >= WARMUP:
+                    times.append(t1 - t0)
+                _barrier()
+            await pipe.aclose()
+
+        mean = sum(times) / len(times)
+        std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
+        return mean, std
+
+    mean, std = asyncio.run(_run())
+    return mean, std, nbytes
+
+
+# ---------------------------------------------------------------------------
+# Discovery via environment or Ray
+# ---------------------------------------------------------------------------
+
+
+def _discover_peers():
+    """Return (rank, world_size, master_ip, peer_ip) using Ray or env vars.
+
+    If MASTER_ADDR / RANK are set, uses those directly (no Ray needed).
+    Otherwise, uses Ray named actors for discovery.
+    """
+    if "RANK" in os.environ and "MASTER_ADDR" in os.environ:
+        rank = int(os.environ["RANK"])
+        master_ip = os.environ["MASTER_ADDR"]
+        world_size = int(os.environ.get("WORLD_SIZE", 2))
+        my_ip = _get_ip()
+        peer_ip = master_ip if rank != 0 else None
+        return rank, world_size, master_ip, peer_ip, my_ip
+
+    import ray
+
+    if not ray.is_initialized():
+        ray.init()
+
+    @ray.remote
+    class _NodeInfo:
+        def __init__(self):
+            self.ips = {}
+
+        def register(self, node_id, ip):
+            self.ips[node_id] = ip
+
+        def get_all(self):
+            return dict(self.ips)
+
+    info = _NodeInfo.options(name="bench_node_info", get_if_exists=True).remote()
+    my_ip = _get_ip()
+    node_id = ray.get_runtime_context().get_node_id()
+    ray.get(info.register.remote(node_id, my_ip))
+
+    # Wait for both nodes
+    for _ in range(120):
+        all_ips = ray.get(info.get_all.remote())
+        if len(all_ips) >= 2:
+            break
+        time.sleep(0.5)
+    else:
+        raise RuntimeError(f"Timed out waiting for 2 nodes, got: {all_ips}")
+
+    sorted_nodes = sorted(all_ips.items(), key=lambda x: x[1])
+    node_ids = [nid for nid, _ in sorted_nodes]
+    ips = [ip for _, ip in sorted_nodes]
+
+    rank = node_ids.index(node_id)
+    master_ip = ips[0]
+    peer_ip = ips[1] if rank == 0 else ips[0]
+
+    return rank, 2, master_ip, peer_ip, my_ip
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main():
+    rank, world_size, master_ip, peer_ip, my_ip = _discover_peers()
+
+    print(  # noqa: T201
+        f"[rank {rank}] ip={my_ip} master={master_ip} peer={peer_ip}",
+        flush=True,
+    )
+
+    # ---- torch.distributed setup ----
+    os.environ["MASTER_ADDR"] = master_ip
+    os.environ["MASTER_PORT"] = "29500"
+
+    groups = {}
+    for backend in ["gloo", "nccl"] if torch.cuda.is_available() else ["gloo"]:
+        dist.init_process_group(
+            backend=backend, rank=rank, world_size=world_size
+        )
+        groups[backend] = dist.group.WORLD
+        break  # only one init_process_group allowed; we'll use the one backend
+
+    # Use gloo for CPU, and if CUDA available we use nccl by re-init
+    # Actually torch.distributed only allows one init. Use gloo which supports both.
+    # For CUDA tensors with gloo, they're moved to CPU internally by gloo.
+    # We'll note this in the output.
+
+    if rank == 0:
+        print(flush=True)  # noqa: T201
+        print(  # noqa: T201
+            "=" * 100, flush=True
+        )
+        print(  # noqa: T201
+            f"  TensorDict Distributed Transport Benchmark  "
+            f"(warmup={WARMUP}, rounds={ROUNDS})",
+            flush=True,
+        )
+        print(  # noqa: T201
+            f"  Nodes: {my_ip} <-> {peer_ip}  |  Backend: gloo",
+            flush=True,
+        )
+        print("=" * 100, flush=True)  # noqa: T201
+        print(flush=True)  # noqa: T201
+
+    # Check if UCXX is available
+    try:
+        from tensordict._ucxx import TensorDictPipe  # noqa: F401
+
+        has_ucxx = True
+    except ImportError:
+        has_ucxx = False
+
+    dist_benchmarks = [
+        ("send/recv (leaf)", bench_send_recv_leaf),
+        ("send/recv (consolidated)", bench_send_recv_consolidated),
+        ("broadcast", bench_broadcast),
+        ("init_remote/from_remote_init", bench_init_remote),
+    ]
+
+    ucxx_benchmarks = [
+        ("UCXX pipe (first send)", bench_ucxx_first_send),
+        ("UCXX pipe (steady-state)", bench_ucxx_steady_state),
+    ]
+
+    for device in DEVICES:
+        if rank == 0:
+            print(f"\n--- Device: {device.upper()} ---\n", flush=True)  # noqa: T201
+            print(  # noqa: T201
+                f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
+                flush=True,
+            )
+            print("-" * 80, flush=True)  # noqa: T201
+
+        for size_name, n_floats in SIZES.items():
+            # Skip 1GB on CPU to avoid OOM issues
+            if device == "cpu" and n_floats > 100_000_000:
+                continue
+
+            for bench_name, bench_fn in dist_benchmarks:
+                gc.collect()
+                torch.cuda.empty_cache() if device == "cuda" else None
+                _barrier()
+
+                try:
+                    mean, std, nbytes = bench_fn(
+                        rank, n_floats, device, group=groups.get("gloo")
+                    )
+                except Exception as e:
+                    if rank == 0:
+                        print(  # noqa: T201
+                            f"{bench_name:<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
+                            flush=True,
+                        )
+                    _barrier()
+                    continue
+
+                if rank == 0:
+                    print(  # noqa: T201
+                        f"{bench_name:<35s} | {size_name:>6s} | "
+                        f"{_fmt_time(mean)} +/- {_fmt_time(std)} | "
+                        f"{_fmt_throughput(nbytes, mean)}",
+                        flush=True,
+                    )
+
+            # UCXX benchmarks (CPU only for now, UCXX handles device internally)
+            if has_ucxx and device == "cpu":
+                for bench_name, bench_fn in ucxx_benchmarks:
+                    gc.collect()
+                    _barrier()
+
+                    try:
+                        mean, std, nbytes = bench_fn(rank, n_floats, device, peer_ip)
+                    except Exception as e:
+                        if rank == 0:
+                            print(  # noqa: T201
+                                f"{bench_name:<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
+                                flush=True,
+                            )
+                        _barrier()
+                        continue
+
+                    if rank == 0:
+                        print(  # noqa: T201
+                            f"{bench_name:<35s} | {size_name:>6s} | "
+                            f"{_fmt_time(mean)} +/- {_fmt_time(std)} | "
+                            f"{_fmt_throughput(nbytes, mean)}",
+                            flush=True,
+                        )
+
+            if rank == 0:
+                print("", flush=True)  # noqa: T201
+
+    if rank == 0:
+        print("=" * 80, flush=True)  # noqa: T201
+        if not has_ucxx:
+            print(  # noqa: T201
+                "NOTE: ucxx not installed — UCXX benchmarks skipped.",
+                flush=True,
+            )
+        print("Done.", flush=True)  # noqa: T201
+
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    main()
