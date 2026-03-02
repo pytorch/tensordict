@@ -64,6 +64,23 @@ README Tutos
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to use TensorDict for functional-style programming with Module, including parameter swapping, model ensembling with vmap, and functional calls with functional_call.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_functional_thumb.png
+    :alt:
+
+  :doc:`/tutorials/functional`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Functional Programming with TensorDict</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
 
 .. only:: html
@@ -211,6 +228,7 @@ README Tutos
    /tutorials/tensordict_memory
    /tutorials/tensordict_slicing
    /tutorials/tensordict_preallocation
+   /tutorials/functional
    /tutorials/export
    /tutorials/tensordict_keys
    /tutorials/streamed_tensordict

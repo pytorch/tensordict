@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3794+gc07686fff.d20260302)
+                  main (0.11.0.dev3799+g35ba87f49.d20260302)
                 </div>
               
             
@@ -265,6 +265,7 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional Programming with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
@@ -846,6 +847,46 @@ output keys by querying the in_keys and out_keys attributes. It is also possible
 <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> with only the modules that are indispensable to satisfy those requirements.
 The <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> is also compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> and other <code class="docutils literal notranslate"><span class="pre">torch.func</span></code>
 capabilities.</p>
+<section id="jacobian-and-hessian-computation">
+<h3>Jacobian and Hessian computation<a class="headerlink" href="#jacobian-and-hessian-computation" title="Permalink to this heading">¶</a></h3>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> is compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.jacrev.html#torch.func.jacrev" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.jacrev()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.jacfwd.html#torch.func.jacfwd" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.jacfwd()</span></code></a>, and
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.hessian.html#torch.func.hessian" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.func.hessian()</span></code></a>. These transforms work directly on functions that accept and return
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instances, producing structured Jacobians (or Hessians) where each entry
+<code class="docutils literal notranslate"><span class="pre">J[&quot;output_key&quot;,</span> <span class="pre">&quot;input_key&quot;]</span></code> is the Jacobian block for that pair of keys.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.func</span><span class="w"> </span><span class="kn">import</span> <span class="n">jacrev</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">3</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">J</span> <span class="o">=</span> <span class="n">jacrev</span><span class="p">(</span><span class="n">f</span><span class="p">)(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">J</span><span class="o">.</span><span class="n">batch_size</span>  <span class="c1"># preserved from input/output</span>
+<span class="go">torch.Size([3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">J</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># output_shape + input_shape = (3, 2) + (3, 2)</span>
+<span class="go">torch.Size([3, 2, 3, 2])</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All tensors in the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> <strong>must have at least one non-batch (feature) dimension</strong>
+(i.e., <code class="docutils literal notranslate"><span class="pre">tensor.ndim</span> <span class="pre">&gt;</span> <span class="pre">len(batch_size)</span></code>). When tensors have no feature dimensions (their shape equals
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>), the Jacobian basis vectors become ambiguous with the batch dimensions, leading to pytree
+structure mismatches.</p>
+<p>If your tensors have no feature dimensions, either set <code class="docutils literal notranslate"><span class="pre">batch_size=[]</span></code> on the
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> so that all dimensions are treated as features, or add a trailing
+dimension with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unsqueeze.html#torch.Tensor.unsqueeze" title="(in PyTorch v2.10)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Instead of this (will fail for some torch.func transforms):</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+
+<span class="c1"># Do one of these:</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>          <span class="c1"># no batch dims</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>      <span class="c1"># feature dim added</span>
+</pre></div>
+</div>
+</div>
+</section>
 </section>
 </section>
 
@@ -916,7 +957,10 @@ capabilities.</p>
 <li><a class="reference internal" href="#nested-tensordicts">Nested TensorDicts</a></li>
 <li><a class="reference internal" href="#lazy-evaluation">Lazy evaluation</a></li>
 <li><a class="reference internal" href="#lazy-pre-allocation">Lazy pre-allocation</a></li>
-<li><a class="reference internal" href="#tensordictmodule">TensorDictModule</a></li>
+<li><a class="reference internal" href="#tensordictmodule">TensorDictModule</a><ul>
+<li><a class="reference internal" href="#jacobian-and-hessian-computation">Jacobian and Hessian computation</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

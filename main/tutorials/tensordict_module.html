@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Exporting tensordict modules" href="export.html" />
+    <link rel="next" title="Functional Programming with TensorDict" href="functional.html" />
     <link rel="prev" title="Building tensordicts from streams" href="streamed_tensordict.html" />
   <!-- Google Analytics -->
   
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3794+gc07686fff.d20260302)
+                  main (0.11.0.dev3799+g35ba87f49.d20260302)
                 </div>
               
             
@@ -265,6 +265,7 @@
 </ul>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="functional.html">Functional Programming with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export.html">Exporting tensordict modules</a></li>
 </ul>
 <ul>
@@ -560,13 +561,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  214.2336 us
-TDM:  275.3455 us
-Sequential:  492.5887 us
+Regular:  218.0068 us
+TDM:  279.0608 us
+Sequential:  509.0108 us
 Compiled versions
-Compiled regular:  334.8720 us
-Compiled TDM:  358.5280 us
-Compiled sequential:  332.2580 us
+Compiled regular:  334.9265 us
+Compiled TDM:  352.5970 us
+Compiled sequential:  332.1060 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -666,7 +667,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 13.986 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 14.157 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>
@@ -690,7 +691,7 @@ tensordict-free version of their module.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="export.html" class="btn btn-neutral float-right" title="Exporting tensordict modules" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="functional.html" class="btn btn-neutral float-right" title="Functional Programming with TensorDict" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="streamed_tensordict.html" class="btn btn-neutral" title="Building tensordicts from streams" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
