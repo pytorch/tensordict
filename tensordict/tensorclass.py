@@ -3659,7 +3659,9 @@ class NonTensorDataBase(TensorClass):
             if self.batch_size
             else torch.Size([])
         )
-        return NonTensorData(data=new_data, batch_size=new_batch_size, device=self.device)
+        return NonTensorData(
+            data=new_data, batch_size=new_batch_size, device=self.device
+        )
 
     def update(
         self,
@@ -4524,7 +4526,8 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def __init__(self, *args, **kwargs):
         args = [
-            arg if is_tensor_collection(arg) else NonTensorData(data=arg) for arg in args
+            arg if is_tensor_collection(arg) else NonTensorData(data=arg)
+            for arg in args
         ]
         super().__init__(*args, **kwargs)
         if not all(is_non_tensor(item) for item in self.tensordicts):
