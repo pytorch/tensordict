@@ -2,21 +2,28 @@
 #
 # Usage:
 #   - PR title must start with a [Label] prefix in brackets
-#   - Example: "[BugFix] Fix memory leak" will add the "BugFix" label
+#   - Example: "[BugFix] Fix memory leak" will add the "bug" label
 #   - Fails if no valid prefix is found
 #   - Labels are ONLY ADDED, never removed (preserves manual labels)
+#   - Matching is case-insensitive
 #
-# Supported prefixes (supports common variations):
-#   - [BugFix], [Bugfix], [bugfix] -> BugFix
-#   - [Feature], [Features] -> Feature
-#   - [Doc], [Docs], [Documentation] -> Documentation
-#   - [Refactor], [Refactoring] -> Refactor
-#   - [CI], [ci] -> CI
-#   - [Test], [Tests] -> Test
-#   - [Compile], [compile] -> Compile
-#   - [Performance], [Perf] -> Perf
-#   - [Deprecation], [Deprecated] -> Deprecation
-#   - [Setup], [setup] -> Setup
+# Supported prefixes -> label:
+#   [BugFix], [Fix]                     -> bug
+#   [Feature]                           -> Feature
+#   [Doc], [Docs], [Documentation]      -> documentation
+#   [Refactor], [Refactoring]           -> Refactor
+#   [CI]                                -> CI
+#   [Test], [Tests]                     -> Test
+#   [Compile]                           -> Compile
+#   [Performance], [Perf]              -> Performance
+#   [Deprecation], [Deprecated]         -> Deprecation
+#   [Setup]                             -> setup
+#   [Distributed], [Dist]              -> Distributed
+#   [Benchmark], [Benchmarks], [Bench]  -> Benchmarks
+#   [Typing], [Type]                    -> Typing
+#   [BC-breaking], [BC]                 -> BC-breaking
+#   [Formatting], [Format]             -> Formatting
+#   [Quality]                           -> Quality
 #------------------------------------------------------------
 
 name: PR Label
@@ -54,22 +61,28 @@ jobs:
 
           ### Supported Prefixes
 
-          Your PR title must start with **exactly** one of these prefixes:
+          Your PR title must start with **exactly** one of these prefixes (case-insensitive):
 
           | Prefix | Label Applied | Example |
           |--------|---------------|---------|
-          | `[BugFix]` | BugFix | `[BugFix] Fix memory leak in TensorDict` |
+          | `[BugFix]` or `[Fix]` | bug | `[BugFix] Fix memory leak in TensorDict` |
           | `[Feature]` | Feature | `[Feature] Add new storage backend` |
-          | `[Doc]` or `[Docs]` | Documentation | `[Doc] Update installation guide` |
+          | `[Doc]` or `[Docs]` | documentation | `[Doc] Update installation guide` |
           | `[Refactor]` | Refactor | `[Refactor] Clean up module imports` |
           | `[CI]` | CI | `[CI] Fix workflow permissions` |
           | `[Test]` or `[Tests]` | Test | `[Test] Add unit tests for nn module` |
           | `[Compile]` | Compile | `[Compile] Fix torch.compile issue` |
-          | `[Performance]` or `[Perf]` | Perf | `[Perf] Optimize tensor operations` |
+          | `[Performance]` or `[Perf]` | Performance | `[Perf] Optimize tensor operations` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
-          | `[Setup]` | Setup | `[Setup] Update build configuration` |
+          | `[Setup]` | setup | `[Setup] Update build configuration` |
+          | `[Distributed]` or `[Dist]` | Distributed | `[Distributed] Add scatter collective` |
+          | `[Benchmark]` or `[Bench]` | Benchmarks | `[Benchmark] Add compile benchmark` |
+          | `[Typing]` or `[Type]` | Typing | `[Typing] Add type stubs` |
+          | `[BC-breaking]` or `[BC]` | BC-breaking | `[BC-breaking] Remove deprecated API` |
+          | `[Formatting]` or `[Format]` | Formatting | `[Format] Fix code style` |
+          | `[Quality]` | Quality | `[Quality] Improve error messages` |
 
-          **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
+          **Note:** Matching is case-insensitive. Common variations (singular/plural) are supported.
           COMMENT_EOF
             sed -i 's/^ *//' /tmp/pr_comment.md
             sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
@@ -91,38 +104,27 @@ jobs:
 
           echo "Extracted prefix: $PREFIX"
 
-          # Map prefixes to GitHub label names (supports common variations)
-          case "$PREFIX" in
-            BugFix|Bugfix|bugfix)
-              LABEL="BugFix"
-              ;;
-            Feature|Features|feature|features)
-              LABEL="Feature"
-              ;;
-            Doc|Docs|Documentation|doc|docs)
-              LABEL="Documentation"
-              ;;
-            Refactor|Refactoring|refactor|refactoring)
-              LABEL="Refactor"
-              ;;
-            CI|ci)
-              LABEL="CI"
-              ;;
-            Test|Tests|test|tests)
-              LABEL="Test"
-              ;;
-            Compile|compile)
-              LABEL="Compile"
-              ;;
-            Performance|Perf|performance|perf)
-              LABEL="Perf"
-              ;;
-            Deprecation|Deprecated|deprecation|deprecated)
-              LABEL="Deprecation"
-              ;;
-            Setup|setup)
-              LABEL="Setup"
-              ;;
+          # Case-insensitive matching: lowercase the prefix once
+          PREFIX_LOWER="${PREFIX,,}"
+
+          # Map prefixes to GitHub label names
+          case "$PREFIX_LOWER" in
+            bugfix|fix|bug)            LABEL="bug" ;;
+            feature|features)          LABEL="Feature" ;;
+            doc|docs|documentation)    LABEL="documentation" ;;
+            refactor|refactoring)      LABEL="Refactor" ;;
+            ci)                        LABEL="CI" ;;
+            test|tests)                LABEL="Test" ;;
+            compile)                   LABEL="Compile" ;;
+            performance|perf)          LABEL="Performance" ;;
+            deprecation|deprecated)    LABEL="Deprecation" ;;
+            setup)                     LABEL="setup" ;;
+            distributed|dist)          LABEL="Distributed" ;;
+            benchmark|benchmarks|bench) LABEL="Benchmarks" ;;
+            typing|type)               LABEL="Typing" ;;
+            bc-breaking|bc)            LABEL="BC-breaking" ;;
+            formatting|format)         LABEL="Formatting" ;;
+            quality)                   LABEL="Quality" ;;
             *)
               echo "::error::Unknown or invalid prefix '[$PREFIX]'."
               post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`." "$PR_TITLE"

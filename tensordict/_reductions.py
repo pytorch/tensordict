@@ -31,7 +31,7 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = 
         is_locked = cls_metadata.pop("is_locked", False)
 
         d = {
-            key: NonTensorData(data, batch_size=batch_size)
+            key: NonTensorData(data=data, batch_size=batch_size)
             for (key, (data, batch_size)) in non_tensor.items()
         }
         for key in leaves.keys():

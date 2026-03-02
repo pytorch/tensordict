@@ -94,6 +94,29 @@ class TestTD:
         assert add_one_c(data) == 1
         assert add_one_c(data + 1) == 2
 
+    def test_td_construct(self, mode):
+        def fn(a, b):
+            td = TensorDict({"a": a, "b": b}, batch_size=[3])
+            return td["a"] + td["b"]
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        a = torch.randn(3)
+        b = torch.randn(3)
+        torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
+    def test_td_construct_nested(self, mode):
+        def fn(a, b):
+            td = TensorDict(
+                {"a": a, "nested": TensorDict({"b": b}, batch_size=[3])},
+                batch_size=[3],
+            )
+            return td["a"] + td["nested", "b"]
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        a = torch.randn(3)
+        b = torch.randn(3)
+        torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
     def test_td_output(self, mode):
         def add_one(td):
             td["a", "c"] = td["a", "b"] + 1
@@ -1555,6 +1578,49 @@ class TestCompileNontensor:
     def test_nontensor_with_device_without_batch_size(self, data):
         torch._dynamo.reset_code_caches()
         torch.compile(self.fn_with_device_without_batch_size)(data)
+
+
+class TestTCNonTensorInit:
+    """TensorClass with non-tensor fields must be constructible under torch.compile without graph breaks."""
+
+    class MyTC(TensorClass):
+        x: torch.Tensor
+        label: str
+
+    def test_tc_nontensor_init_fullgraph(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="hello", batch_size=[3])
+            return tc.x
+
+        result = fn(torch.randn(3))
+        assert result.shape == (3,)
+
+    def test_tc_nontensor_init_roundtrip(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="hello", batch_size=[3])
+            return tc.x + 1
+
+        inp = torch.randn(3)
+        result = fn(inp)
+        torch.testing.assert_close(result, inp + 1)
+
+    def test_tc_nontensor_init_with_device(self):
+        torch._dynamo.reset_code_caches()
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(a):
+            tc = self.MyTC(x=a, label="world", batch_size=[3], device="cpu")
+            return tc.x * 2
+
+        inp = torch.randn(3)
+        result = fn(inp)
+        torch.testing.assert_close(result, inp * 2)
 
 
 if __name__ == "__main__":

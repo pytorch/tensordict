@@ -307,21 +307,24 @@ class TensorDict(TensorDictBase):
             if not is_compiling():
                 self._set_names(names)
 
-            # Fast path: bypass the set() → _set_tuple() → _set_str() dispatch
-            # chain during init. We know the dict is empty (no inplace needed)
-            # and not locked, so we can validate and assign directly.
+            # Fast path: use dict.update() to establish all keys in one
+            # bulk operation, then validate values individually. This
+            # avoids per-key dict mutations that trigger Dynamo
+            # DICT_KEYS_MATCH guards and graph breaks.
             _tensordict = self._tensordict
             _validate_value = self._validate_value
-            for key, value in source.items():
+            _tensordict.update(source)
+            for key in list(_tensordict):
                 if isinstance(key, str):
                     _tensordict[key] = _validate_value(
-                        value,
+                        _tensordict[key],
                         check_shape=True,
                         non_blocking=sub_non_blocking,
                     )
                 else:
                     # Tuple keys need nested TensorDict creation via the
                     # standard path.
+                    value = _tensordict.pop(key)
                     self.set(key, value, non_blocking=sub_non_blocking)
             if call_sync:
                 if _device_recorder.has_transfer():

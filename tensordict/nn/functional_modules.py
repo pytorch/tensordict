@@ -202,6 +202,31 @@ Got in_dim={in_dim} for an input but the input is of type
 {type(arg)}. We cannot vmap over non-Tensor arguments,
 please use None as the respective in_dim"""
                 )
+            if (
+                in_dim is not None
+                and is_tensor_collection(arg)
+                and (in_dim >= arg.dim() or in_dim < -arg.dim())
+            ):
+                # TensorDict with insufficient batch dims (e.g. batch_size=[]
+                # but tensors have dims). This occurs when tree_unflatten
+                # creates a TD from transformed tensors (e.g. jacrev basis).
+                # Infer batch_size from contained tensor shapes.
+                td_shapes = [v.shape for v in arg.values() if isinstance(v, Tensor)]
+                needed_dims = (in_dim + 1) if in_dim >= 0 else (-in_dim)
+                if td_shapes:
+                    td_min_dims = min(len(s) for s in td_shapes)
+                    max_prefix = min(td_min_dims, needed_dims)
+                    common_dims = 0
+                    for j in range(max_prefix):
+                        if all(s[j] == td_shapes[0][j] for s in td_shapes):
+                            common_dims = j + 1
+                        else:
+                            break
+                    if common_dims >= needed_dims:
+                        new_batch_size = torch.Size(td_shapes[0][:common_dims])
+                        arg = arg.clone(False)
+                        arg._change_batch_size(new_batch_size)
+                        flat_args[i] = arg
             if in_dim is not None and (in_dim < -arg.dim() or in_dim >= arg.dim()):
                 raise ValueError(
                     f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):

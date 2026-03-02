@@ -771,14 +771,14 @@ class TensorCollection:
         destination: Incomplete | None = None,
         prefix: str = "",
         keep_vars: bool = False,
-        flatten: bool = False,
+        flatten: bool = True,
     ) -> OrderedDict[str, Any]: ...
     def load_state_dict(
         self,
         state_dict: OrderedDict[str, Any],
         strict: bool = True,
         assign: bool = False,
-        from_flatten: bool = False,
+        from_flatten: bool | None = None,
     ) -> Self: ...
     def is_shared(self) -> bool: ...
     def is_memmap(self) -> bool: ...

@@ -515,3 +515,45 @@ output keys by querying the in_keys and out_keys attributes. It is also possible
 :class:`~tensordict.nn.TensorDictSequential` with only the modules that are indispensable to satisfy those requirements.
 The :class:`~tensordict.nn.TensorDictModule` is also compatible with :func:`~torch.vmap` and other ``torch.func``
 capabilities.
+
+Jacobian and Hessian computation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:class:`~tensordict.TensorDict` is compatible with :func:`torch.func.jacrev`, :func:`torch.func.jacfwd`, and
+:func:`torch.func.hessian`. These transforms work directly on functions that accept and return
+:class:`~tensordict.TensorDict` instances, producing structured Jacobians (or Hessians) where each entry
+``J["output_key", "input_key"]`` is the Jacobian block for that pair of keys.
+
+>>> import torch
+>>> from torch.func import jacrev
+>>> from tensordict import TensorDict
+>>> td = TensorDict({"a": torch.randn(3, 2), "b": torch.randn(3, 4)}, batch_size=[3])
+>>> def f(td):
+...     return TensorDict(
+...         {"x": td["a"] ** 2, "y": td["b"] ** 3}, batch_size=td.batch_size
+...     )
+>>> J = jacrev(f)(td)
+>>> J.batch_size  # preserved from input/output
+torch.Size([3])
+>>> J["x", "a"].shape  # output_shape + input_shape = (3, 2) + (3, 2)
+torch.Size([3, 2, 3, 2])
+
+.. note::
+
+   All tensors in the :class:`~tensordict.TensorDict` **must have at least one non-batch (feature) dimension**
+   (i.e., ``tensor.ndim > len(batch_size)``). When tensors have no feature dimensions (their shape equals
+   ``batch_size``), the Jacobian basis vectors become ambiguous with the batch dimensions, leading to pytree
+   structure mismatches.
+
+   If your tensors have no feature dimensions, either set ``batch_size=[]`` on the
+   :class:`~tensordict.TensorDict` so that all dimensions are treated as features, or add a trailing
+   dimension with :meth:`~torch.Tensor.unsqueeze`:
+
+   .. code-block:: python
+
+      # Instead of this (will fail for some torch.func transforms):
+      td = TensorDict({"a": torch.randn(4)}, batch_size=[4])
+
+      # Do one of these:
+      td = TensorDict({"a": torch.randn(4)}, batch_size=[])          # no batch dims
+      td = TensorDict({"a": torch.randn(4, 1)}, batch_size=[4])      # feature dim added
