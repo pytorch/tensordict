@@ -47,10 +47,20 @@
       - 'tensordict/functional.py'
       - 'test/test_functorch.py'
 
+"Distributed":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'test/test_distributed.py'
+
+"Compile":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'test/test_compile.py'
+
 # =============================================================================
 # Documentation & CI
 # =============================================================================
-"Documentation":
+"documentation":
   - changed-files:
     - any-glob-to-any-file:
       - 'docs/**'

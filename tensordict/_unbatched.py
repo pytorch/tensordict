@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 from functools import wraps
 from typing import Any, Callable, TYPE_CHECKING
 
@@ -378,15 +379,53 @@ class UnbatchedTensor(TensorClass):
         result.batch_size = self.batch_size
         return result
 
+    @property
+    def is_pinned(self):
+        """Returns whether the underlying data tensor is pinned in memory."""
+        return self.data.is_pinned()
+
+    def pin_memory(self):
+        """Pins the underlying data tensor's memory, preserving batch_size."""
+        result = UnbatchedTensor(self.data.pin_memory())
+        result.batch_size = self.batch_size
+        return result
+
     @classmethod
     def _stack_non_tensor(
         cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
     ):
-        result = list_of_non_tensor[0].copy()
+        first = list_of_non_tensor[0]
+        ptr = first.data.data_ptr()
+        if any(other.data.data_ptr() != ptr for other in list_of_non_tensor[1:]):
+            warnings.warn(
+                "Stacking UnbatchedTensors with different data storage. "
+                "Only the first element's data will be kept. "
+                "UnbatchedTensor is shape-invariant; if you need different data "
+                "per batch element, consider using a regular tensor.",
+                stacklevel=2,
+            )
+        result = first.copy()
         batch_size = list(result.batch_size)
         batch_size.insert(dim, len(list_of_non_tensor))
         result.batch_size = torch.Size(batch_size)
         return result
+
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        copy = self.copy()
+        copy.batch_size = torch.Size(
+            [b for i, b in enumerate(self.batch_size) if i != in_dim]
+        )
+        return copy
+
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        copy = self.copy()
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        copy.batch_size = torch.Size(new_batch_size)
+        return copy
+
+    def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
+        return self._remove_batch_dim(vmap_level, batch_size, out_dim)
 
     @_bypass
     def unflatten(self, dim, unflattened_size): ...
@@ -447,19 +486,30 @@ class UnbatchedTensor(TensorClass):
         """Returns the dtype of the underlying data tensor."""
         return self.data.dtype
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False):
-        """Returns a state dict containing the data and batch_size."""
+    def state_dict(self, destination=None, prefix="", keep_vars=False, flatten=True):
+        """Returns a state dict containing the data and batch_size.
+
+        Metadata is stored in the ``_metadata`` attribute on the returned
+        OrderedDict, following the same convention as
+        :meth:`TensorDictBase.state_dict`.
+        """
         import collections
 
         out = collections.OrderedDict()
+        out._metadata = collections.OrderedDict()
         if not keep_vars:
-            out[prefix + "data"] = self.data.detach().clone()
+            out[prefix + "data"] = self.data.detach()
         else:
             out[prefix + "data"] = self.data
-        out[prefix + "__batch_size"] = self.batch_size
-        out[prefix + "__is_unbatched"] = True
+        out._metadata[""] = {
+            "batch_size": self.batch_size,
+            "is_unbatched": True,
+        }
         if destination is not None:
             destination.update(out)
+            if not hasattr(destination, "_metadata"):
+                destination._metadata = collections.OrderedDict()
+            destination._metadata.update(out._metadata)
             return destination
         return out
 
@@ -467,15 +517,23 @@ class UnbatchedTensor(TensorClass):
     def from_state_dict(cls, state_dict, prefix=""):
         """Creates an UnbatchedTensor from a state dict."""
         data = state_dict[prefix + "data"]
-        batch_size = state_dict[prefix + "__batch_size"]
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            batch_size = _metadata.get("", {}).get("batch_size", torch.Size([]))
+        else:
+            batch_size = state_dict[prefix + "__batch_size"]
         result = cls(data)
         result.batch_size = batch_size
         return result
 
-    def load_state_dict(self, state_dict, strict=True, assign=False):
+    def load_state_dict(self, state_dict, strict=True, assign=False, from_flatten=None):
         """Loads a state dict into the UnbatchedTensor."""
         data = state_dict.get("data")
-        batch_size = state_dict.get("__batch_size", self.batch_size)
+        _metadata = getattr(state_dict, "_metadata", None)
+        if _metadata is not None:
+            batch_size = _metadata.get("", {}).get("batch_size", self.batch_size)
+        else:
+            batch_size = state_dict.get("__batch_size", self.batch_size)
         if data is not None:
             if assign:
                 self._tensordict.set("data", data)
