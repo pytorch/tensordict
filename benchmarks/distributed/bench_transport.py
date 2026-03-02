@@ -24,6 +24,11 @@ import os
 import socket
 import time
 
+# UCX transport config — must be set before ucxx is imported
+os.environ.setdefault("UCX_TLS", "tcp")
+os.environ.setdefault("UCX_NET_DEVICES", "eth0")
+os.environ.setdefault("UCX_WARN_UNUSED_ENV_VARS", "n")
+
 import torch
 import torch.distributed as dist
 
