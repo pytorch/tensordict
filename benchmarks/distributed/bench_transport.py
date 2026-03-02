@@ -385,19 +385,15 @@ def main():
     # ---- torch.distributed setup ----
     os.environ["MASTER_ADDR"] = master_ip
     os.environ["MASTER_PORT"] = "29500"
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
 
-    groups = {}
-    for backend in ["gloo", "nccl"] if torch.cuda.is_available() else ["gloo"]:
-        dist.init_process_group(
-            backend=backend, rank=rank, world_size=world_size
-        )
-        groups[backend] = dist.group.WORLD
-        break  # only one init_process_group allowed; we'll use the one backend
-
-    # Use gloo for CPU, and if CUDA available we use nccl by re-init
-    # Actually torch.distributed only allows one init. Use gloo which supports both.
-    # For CUDA tensors with gloo, they're moved to CPU internally by gloo.
-    # We'll note this in the output.
+    print(f"[rank {rank}] Initializing process group (gloo)...", flush=True)  # noqa: T201
+    dist.init_process_group(
+        backend="gloo", rank=rank, world_size=world_size,
+        init_method=f"tcp://{master_ip}:29500",
+    )
+    print(f"[rank {rank}] Process group initialized.", flush=True)  # noqa: T201
 
     if rank == 0:
         print(flush=True)  # noqa: T201
@@ -457,7 +453,7 @@ def main():
 
                 try:
                     mean, std, nbytes = bench_fn(
-                        rank, n_floats, device, group=groups.get("gloo")
+                        rank, n_floats, device, group=None
                     )
                 except Exception as e:
                     if rank == 0:
