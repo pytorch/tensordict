@@ -178,12 +178,30 @@ Pointwise arithmetic is applied to the underlying data:
 Accessing values
 ^^^^^^^^^^^^^^^^
 
-Note that ``get()`` returns the :class:`~tensordict.UnbatchedTensor` wrapper, while ``__getitem__()`` (bracket
-syntax) returns the underlying tensor data:
+Note that for a plain TensorDict, ``get()`` returns the :class:`~tensordict.UnbatchedTensor` wrapper, while
+``__getitem__()`` (bracket syntax) returns the underlying tensor data:
 
     >>> type(td.get("config"))  # UnbatchedTensor
     <class 'tensordict._unbatched.UnbatchedTensor'>
     >>> type(td["config"])      # plain Tensor
+    <class 'torch.Tensor'>
+
+For :class:`~tensordict.tensorclass` instances, both attribute access and ``get()`` return the underlying tensor
+data (not the wrapper):
+
+    >>> from tensordict import tensorclass
+    >>> @tensorclass
+    ... class MyClass:
+    ...     config: torch.Tensor
+    ...     value: torch.Tensor
+    >>> tc = MyClass(
+    ...     config=UnbatchedTensor(torch.tensor([1.0, 2.0])),
+    ...     value=torch.randn(3),
+    ...     batch_size=[3],
+    ... )
+    >>> type(tc.config)
+    <class 'torch.Tensor'>
+    >>> type(tc.get("config"))
     <class 'torch.Tensor'>
 
 Limitations
@@ -517,7 +535,7 @@ The :class:`~tensordict.nn.TensorDictModule` is also compatible with :func:`~tor
 capabilities.
 
 Jacobian and Hessian computation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :class:`~tensordict.TensorDict` is compatible with :func:`torch.func.jacrev`, :func:`torch.func.jacfwd`, and
 :func:`torch.func.hessian`. These transforms work directly on functions that accept and return
