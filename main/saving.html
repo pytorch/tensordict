@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3799+g35ba87f49.d20260302)
+                  main (0.11.0.dev3807+ge6a2947f4.d20260302)
                 </div>
               
             
@@ -352,18 +352,18 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="saving-tensordict-and-tensorclass-objects">
-<h1>Saving TensorDict and tensorclass objects<a class="headerlink" href="#saving-tensordict-and-tensorclass-objects" title="Permalink to this heading">¶</a></h1>
+<span id="saving"></span><h1>Saving TensorDict and tensorclass objects<a class="headerlink" href="#saving-tensordict-and-tensorclass-objects" title="Permalink to this heading">¶</a></h1>
 <p>While we can just save a tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, this
 will create a single file with the whole content of the data structure.
 One can easily imagine situations where this is sub-optimal!</p>
 <p>TensorDict serialization API mainly relies on <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict’s one.</p>
-<p>TensorDict’s serialization speed can be an order of magnitude __faster__ than
+<p>TensorDict’s serialization speed can be an order of magnitude <strong>faster</strong> than
 PyTorch’s one with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
 how to create and interact with data stored on disk using TensorDict.</p>
-<section id="saving-memmory-mapped-tensordicts">
-<h2>Saving memmory-mapped TensorDicts<a class="headerlink" href="#saving-memmory-mapped-tensordicts" title="Permalink to this heading">¶</a></h2>
+<section id="saving-memory-mapped-tensordicts">
+<h2>Saving memory-mapped TensorDicts<a class="headerlink" href="#saving-memory-mapped-tensordicts" title="Permalink to this heading">¶</a></h2>
 <p>When a tensordict is dumped as a mmap data structure, each entry corresponds
 to a single <code class="docutils literal notranslate"><span class="pre">*.memmap</span></code> file, and the directory structure is determined by the
 key structure: generally, nested keys correspond to sub-directories.</p>
@@ -372,10 +372,10 @@ advantages:</p>
 <ul class="simple">
 <li><p>The saved data can be partially loaded. If a large model is saved on disk but
 only parts of its weights need to be loaded onto a module created in a separate
-scripts, only these weights will be loaded in memory.</p></li>
+script, only these weights will be loaded in memory.</p></li>
 <li><p>Saving data is safe: using the pickle library for serializing big data structures
 can be unsafe as unpickling can execute any arbitrary code. TensorDict’s loading
-API only reads pre-selected fields from saved json files and memorybuffers
+API only reads pre-selected fields from saved json files and memory buffers
 saved on disk.</p></li>
 <li><p>Saving is fast: because the data is written in several independent files,
 we can amortize the IO overhead by launching several concurrent threads that
@@ -392,7 +392,7 @@ with <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 The <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> class can be used to represent non-tensor
 data in a regular <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p></li>
 </ul>
-<p>tensordict’s memory-mapped API relies on four core method:
+<p>tensordict’s memory-mapped API relies on four core methods:
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>,
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p>
 <p>The <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>
@@ -417,7 +417,7 @@ needs to be preallocated on disk, the typical usage being:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">del</span> <span class="n">data</span> <span class="c1"># data is not needed anymore</span>
 </pre></div>
 </div>
-<p>As illustrated above, when converting entries of a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict`</span></code>
+<p>As illustrated above, when converting entries of a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 to <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>, it is possible to control where
 the memory maps are saved on disk so that they persist and can
 be loaded at a later date. On the other hand, the file system can also be used.
@@ -439,10 +439,10 @@ methods above.</p>
 └── meta.json
 </pre></div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> files contain all the releant information to rebuild the
+<p>The <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> files contain all the relevant information to rebuild the
 tensordict, such as device, batch-size, but also the tensordict subtypes.
 This means that <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> will be able to
-reconstruct complex nested structure where sub-tensordicts have different types
+reconstruct complex nested structures where sub-tensordicts have different types
 than parents:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_directory_tree</span>
@@ -486,12 +486,12 @@ than parents:</p>
 </div>
 <section id="handling-existing-memorymappedtensor">
 <h3>Handling existing <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a><a class="headerlink" href="#handling-existing-memorymappedtensor" title="Permalink to this heading">¶</a></h3>
-<p>If the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict`</span></code> already contains
+<p>If the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> already contains
 <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> entries there are a few
 possible behaviours.</p>
 <ul>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">prefix</span></code> is not specified and <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.memmap" title="tensordict.TensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> is called
-twice, the resulting <cite>TensorDict</cite> will contain the same data as the orignal one.</p>
+twice, the resulting <cite>TensorDict</cite> will contain the same data as the original one.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">td0</span><span class="o">.</span><span class="n">memmap</span><span class="p">()</span>
@@ -514,11 +514,29 @@ unless <cite>copy_existing=True</cite> is passed:</p>
 <span class="gp">... </span>        <span class="n">td_load</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">tmpdir_1</span><span class="p">)</span>  <span class="c1"># breaks!</span>
 </pre></div>
 </div>
-<p>This feature is implemented to prevent users from inadvertently copy memorymapped
+<p>This feature is implemented to prevent users from inadvertently copying memory-mapped
 tensors from one location to another.</p>
 </li>
 </ul>
 </section>
+</section>
+<section id="consolidated-serialization">
+<h2>Consolidated serialization<a class="headerlink" href="#consolidated-serialization" title="Permalink to this heading">¶</a></h2>
+<p>For fast transfer (e.g. across the network, or to GPU), you can consolidate all
+leaf tensors into a single contiguous buffer using
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1000</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>A consolidated tensordict can be pickled much faster than a regular one because
+it becomes a single storage + metadata dict.  It can also be saved to disk as
+a memory-mapped file:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="s2">&quot;/path/to/storage.memmap&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> for the full API, including
+options like <code class="docutils literal notranslate"><span class="pre">num_threads</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>, and <code class="docutils literal notranslate"><span class="pre">share_memory</span></code>.</p>
 </section>
 <section id="state-dict-load-state-dict">
 <h2>state_dict / load_state_dict<a class="headerlink" href="#state-dict-load-state-dict" title="Permalink to this heading">¶</a></h2>
@@ -570,170 +588,57 @@ Non-tensor fields are stored in <code class="docutils literal notranslate"><span
 </pre></div>
 </div>
 </section>
-<section id="torchsnapshot-compatibility">
-<h2>TorchSnapshot compatibility<a class="headerlink" href="#torchsnapshot-compatibility" title="Permalink to this heading">¶</a></h2>
+<section id="legacy-torchsnapshot-compatibility">
+<h2>Legacy: TorchSnapshot compatibility<a class="headerlink" href="#legacy-torchsnapshot-compatibility" title="Permalink to this heading">¶</a></h2>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>As torchsnapshot maintenance is being discontinued. As such, we won’t be implementing
-new features for tensordict compatibility with this library.</p>
+<p>torchsnapshot maintenance has been discontinued.  The section below is kept
+for reference only; we recommend using the memory-mapped API above for new
+projects.</p>
 </div>
-<p>TensorDict is compatible with <a class="reference external" href="https://github.com/pytorch/torchsnapshot">torchsnapshot</a>,
-a PyTorch checkpointing library.
-TorchSnapshot will save each of your tensors independently, with a data structure that
-mimics the one of your tensordict or tensorclass. Moreover, TensorDict has naturally
-buit-in the tools necessary for saving and loading huge datasets on disk without
-loading the full tensors in memory: in other words, the combination tensordict + torchsnapshot
-makes it possible to load a tensor big as several hundreds of Gb onto a
-pre-allocated <code class="xref py py-class docutils literal notranslate"><span class="pre">MemmapTensor</span></code> without passing it in one chunk on RAM.</p>
-<p>There are two main use cases: saving and loading tensordicts that fit in memory,
-and saving and loading tensordicts stored on disk using <code class="xref py py-class docutils literal notranslate"><span class="pre">MemmapTensor</span></code>.</p>
-<section id="general-use-case-in-memory-loading">
-<h3>General use case: in-memory loading<a class="headerlink" href="#general-use-case-in-memory-loading" title="Permalink to this heading">¶</a></h3>
-<p>This method is suitable if your destination tensordict is not pre-allocated.
-This offers flexibility (you can load any tensordict onto your tensordict, you
-don’t need to know its content in advance) and this method is marginally
-easier to code than the other.
-However, this may break if your tensors are extremely big and do not fit in memory.
-Also, it will not allow you to load directly onto the device of your choice.</p>
-<p>The two main commands to remember for the saving operation are:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict_source</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/path/to/my/snapshot&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>To load onto a destination tensordict, you can simply load the snapshot and update the
-tensordict. Under the hood, this method will call <code class="xref py py-obj docutils literal notranslate"><span class="pre">tensordict_target.load_state_dict(state_dict)</span></code>,
-meaning that the <code class="xref py py-obj docutils literal notranslate"><span class="pre">state_dict</span></code> will first be put in memory entirely, and then loaded onto the
-destination tensordict:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span> <span class="o">=</span> <span class="n">Snapshot</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;/path/to/my/snapshot&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state_target</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict_target</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">state_target</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Here is a full example:</p>
+<p>TensorDict is compatible with <a class="reference external" href="https://github.com/pytorch/torchsnapshot">torchsnapshot</a>.
+TorchSnapshot saves each tensor independently, with a data structure that
+mimics the TensorDict’s one.</p>
+<p><strong>In-memory loading</strong></p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">torchsnapshot</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="o">&gt;&gt;&gt;</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict_source</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)}},</span> <span class="p">[])</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict</span><span class="p">}</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict_source</span><span class="p">}</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;/tmp/</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="c1"># later</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">target_state</span> <span class="o">=</span> <span class="p">{</span>
-<span class="o">&gt;&gt;&gt;</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict2</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="p">}</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">tensordict_target</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">target_state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">tensordict_target</span><span class="p">}</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">target_state</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span> <span class="o">==</span> <span class="n">tensordict2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">tensordict_source</span> <span class="o">==</span> <span class="n">tensordict_target</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
-</section>
-<section id="saving-and-loading-big-datasets">
-<h3>Saving and loading big-datasets<a class="headerlink" href="#saving-and-loading-big-datasets" title="Permalink to this heading">¶</a></h3>
-<p>If the dataset is too big to fit in memory, the above method could easily break.
-We take advantage of the capabilities of torchsnapshot to load the tensors in small chunks
-on their preallocated destination.
-This requires you to know what shape, device etc. your destination data will have and live on,
-but it’s a small price to pay to be able to checkpoint your model or dataloading!</p>
-<p>In contrast with the previous example, we will not be using the <code class="xref py py-func docutils literal notranslate"><span class="pre">load_state_dict()</span></code> method
-of <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDict</span></code> but rather a <code class="xref py py-obj docutils literal notranslate"><span class="pre">state_dict</span></code> obtained from the destination object
-that we will re-populate with the saved data.</p>
-<p>Again, two lines of code are sufficient to save the data:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
-<span class="gp">... </span>    <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">tensordict_source</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="gp">... </span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/path/to/my/snapshot&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>We have been using <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchsnapshot.StateDict</span></code> and we explicitly called
-<code class="xref py py-obj docutils literal notranslate"><span class="pre">my_tensordict_source.state_dict(keep_vars=True)</span></code>, unlike the previous example.
-Now, to load this onto a destination tensordict:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span> <span class="o">=</span> <span class="n">Snapshot</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;/path/to/my/snapshot&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
-<span class="gp">... </span>    <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">tensordict_target</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="gp">... </span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">snapshot</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>In this example, the loading is entirely handled by torchsnapshot, ie. there is
-no call to <code class="xref py py-func docutils literal notranslate"><span class="pre">TensorDict.load_state_dict()</span></code>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This has two important implications:</p>
-<ol class="arabic simple">
-<li><p>Since <code class="xref py py-func docutils literal notranslate"><span class="pre">LazyStackedTensorDict.state_dict()</span></code> (and other lazy tensordict classes)
-return a copy of the data after some operation has been executed, loading onto the
-state-dict will not update the original class. However, since the <cite>state_dict()</cite> operation
-is supported, this will not raise an error.</p></li>
-<li><p>Similarly, since the state-dict is updated in-place but the tensordict is not
-updated using <code class="xref py py-func docutils literal notranslate"><span class="pre">TensorDict.update()</span></code> or <code class="xref py py-func docutils literal notranslate"><span class="pre">TensorDict.set()</span></code>, a missing
-key in the destination tensordict will go unnoticed.</p></li>
-</ol>
-</div>
-<p>Here is a full example:</p>
+<p><strong>Big-dataset loading (memory-mapped)</strong></p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">])},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemmapTensor</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemoryMappedTensor</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
 <span class="o">...</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">td</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="o">...</span> <span class="p">}</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/tmp/</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">td_dest</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">])},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">td_dest</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td_dest</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemmapTensor</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td_dest</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemoryMappedTensor</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
 <span class="o">...</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">td_dest</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="o">...</span> <span class="p">}</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="c1"># sanity check</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">td_dest</span> <span class="o">==</span> <span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">td_dest</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td_dest</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemmapTensor</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">td_dest</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">MemoryMappedTensor</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Finally, tensorclass also supports this feature. The code is fairly similar to the one above:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">torchsnapshot</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">MemmapTensor</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.prototype</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="nd">@tensorclass</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
-<span class="o">...</span>      <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-<span class="o">...</span>      <span class="n">y</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyClass</span><span class="p">]</span><span class="o">=</span><span class="kc">None</span>
-<span class="o">...</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tc</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tc</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tc</span><span class="o">.</span><span class="n">y</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">MemmapTensor</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
-<span class="o">...</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">tc</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="o">...</span> <span class="p">}</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span> <span class="o">=</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">Snapshot</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/tmp/</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tc_dest</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">tc_dest</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tc_dest</span><span class="o">.</span><span class="n">y</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">MemmapTensor</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">app_state</span> <span class="o">=</span> <span class="p">{</span>
-<span class="o">...</span>     <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">torchsnapshot</span><span class="o">.</span><span class="n">StateDict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">=</span><span class="n">tc_dest</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">keep_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="o">...</span> <span class="p">}</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="n">app_state</span><span class="o">=</span><span class="n">app_state</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">tc_dest</span> <span class="o">==</span> <span class="n">tc</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="p">(</span><span class="n">tc_dest</span><span class="o">.</span><span class="n">y</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="n">tc</span><span class="o">.</span><span class="n">y</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tc_dest</span><span class="o">.</span><span class="n">y</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">MemmapTensor</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
 </section>
 </section>
 
@@ -781,16 +686,13 @@ key in the destination tensordict will go unnoticed.</p></li>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Saving TensorDict and tensorclass objects</a><ul>
-<li><a class="reference internal" href="#saving-memmory-mapped-tensordicts">Saving memmory-mapped TensorDicts</a><ul>
+<li><a class="reference internal" href="#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a><ul>
 <li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#consolidated-serialization">Consolidated serialization</a></li>
 <li><a class="reference internal" href="#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
-<li><a class="reference internal" href="#torchsnapshot-compatibility">TorchSnapshot compatibility</a><ul>
-<li><a class="reference internal" href="#general-use-case-in-memory-loading">General use case: in-memory loading</a></li>
-<li><a class="reference internal" href="#saving-and-loading-big-datasets">Saving and loading big-datasets</a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#legacy-torchsnapshot-compatibility">Legacy: TorchSnapshot compatibility</a></li>
 </ul>
 </li>
 </ul>

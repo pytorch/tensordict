@@ -226,7 +226,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3799+g35ba87f49.d20260302)
+                  main (0.11.0.dev3807+ge6a2947f4.d20260302)
                 </div>
               
             
@@ -464,8 +464,18 @@ otherwise uv may re-resolve and replace the existing nightly <code class="docuti
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#creating-a-memory-mapped-tensordict">Creating a memory-mapped TensorDict</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#operating-on-memory-mapped-tensors-across-nodes">Operating on Memory-mapped tensors across nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#consolidate-and-fast-serialization"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#point-to-point-send-recv">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#async-point-to-point-isend-irecv">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#cold-start-initialization-init-remote-from-remote-init">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#broadcast">Broadcast</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#all-reduce">All-reduce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#reduce">Reduce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#all-gather">All-gather</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#scatter">Scatter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#quick-reference">Quick reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed.html#shared-storage-workflows-memory-mapped">Shared-storage workflows (memory-mapped)</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a><ul>
@@ -474,16 +484,13 @@ otherwise uv may re-resolve and replace the existing nightly <code class="docuti
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#saving-memmory-mapped-tensordicts">Saving memmory-mapped TensorDicts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="saving.html#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="saving.html#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="saving.html#consolidated-serialization">Consolidated serialization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="saving.html#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#torchsnapshot-compatibility">TorchSnapshot compatibility</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="saving.html#general-use-case-in-memory-loading">General use case: in-memory loading</a></li>
-<li class="toctree-l3"><a class="reference internal" href="saving.html#saving-and-loading-big-datasets">Saving and loading big-datasets</a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="saving.html#legacy-torchsnapshot-compatibility">Legacy: TorchSnapshot compatibility</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a><ul>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3799+g35ba87f49.d20260302)
+                  main (0.11.0.dev3807+ge6a2947f4.d20260302)
                 </div>
               
             
@@ -353,129 +353,295 @@
               
   <section id="tensordict-in-distributed-settings">
 <span id="distributed"></span><h1>TensorDict in distributed settings<a class="headerlink" href="#tensordict-in-distributed-settings" title="Permalink to this heading">¶</a></h1>
-<p>TensorDict can be used in distributed settings to pass tensors from one node
-to another.
-If two nodes have access to a shared physical storage, a memory-mapped tensor can
-be used to efficiently pass data from one running process to another.
-Here, we provide some details on how this can be achieved in a distributed RPC setting.
-For more details on distributed RPC, check the
-<a class="reference external" href="https://pytorch.org/docs/stable/rpc.html">official pytorch documentation</a>.</p>
-<section id="creating-a-memory-mapped-tensordict">
-<h2>Creating a memory-mapped TensorDict<a class="headerlink" href="#creating-a-memory-mapped-tensordict" title="Permalink to this heading">¶</a></h2>
-<p>Memory-mapped tensors (and arrays) have the great advantage that they can store
-a great amount of data and allow slices of data to be accessed readily without
-reading the whole file in memory.
-TensorDict offers an interface between memory-mapped
-arrays and the <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> class named <code class="xref py py-obj docutils literal notranslate"><span class="pre">MemmapTensor</span></code>.
-<code class="xref py py-obj docutils literal notranslate"><span class="pre">MemmapTensor</span></code> instances can be stored in <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDict</span></code> objects, allowing a
-tensordict to represent a big dataset, stored on disk, easily accessible in a
-batched way across nodes.</p>
-<p>A memory-mapped tensordict is simply created via (1) populating a TensorDict with
-memory-mapped tensors or (2) by calling <code class="xref py py-obj docutils literal notranslate"><span class="pre">tensordict.memmap_()</span></code> to put it on
-physical storage.
-One can easily check that a tensordict is put on physical storage by querying
-<cite>tensordict.is_memmap()</cite>.</p>
-<p>Creating a memory-mapped tensor can itself be done in several ways.
-Firstly, one can simply create an empty tensor:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">Memmaptensor</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/tmp&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The <code class="xref py py-obj docutils literal notranslate"><span class="pre">prefix</span></code> attribute indicates where the temporary file has to be stored.
-It is crucial that the tensor is stored in a directory that is accessible to every
-node!</p>
-<p>Another option is to represent an existing tensor on disk:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">Memmaptensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/tmp&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The former method will be preferred when tensors are big or do not fit in memory:
-it is suitable for tensors that are extremely big and serve as common storage
-across nodes. For instance, one could create a dataset that would be easily accessed
-by a single or different nodes, much faster than it would be if each file had to be
-loaded independently in memory:</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">Creating an empty dataset on disk</span><a class="headerlink" href="#id1" title="Permalink to this code">¶</a></div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dataset</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
-<span class="gp">... </span>     <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">MemmapTensor</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">480</span><span class="p">,</span> <span class="mi">480</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;masks&quot;</span><span class="p">:</span> <span class="n">MemmapTensor</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">480</span><span class="p">,</span> <span class="mi">480</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">MemmapTensor</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-<span class="gp">... </span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">50000</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5020</span><span class="p">,</span> <span class="mi">34572</span><span class="p">,</span> <span class="mi">11200</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        images: Tensor(torch.Size([4, 480, 480, 3]), dtype=torch.float32),</span>
-<span class="go">        labels: Tensor(torch.Size([4, 1]), dtype=torch.uint8),</span>
-<span class="go">        masks: Tensor(torch.Size([4, 480, 480, 3]), dtype=torch.bool)},</span>
-<span class="go">    batch_size=torch.Size([4]),</span>
-<span class="go">    device=cpu,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
-</div>
-<p>Notice that we have indicated the device of the <code class="xref py py-obj docutils literal notranslate"><span class="pre">MemmapTensor</span></code>.
-This syntax sugar allows for the tensors that are queried to be directly loaded
-on device if needed.</p>
-<p>Another consideration to take into account is that currently <code class="xref py py-obj docutils literal notranslate"><span class="pre">MemmapTensor</span></code>
-is not compatible with autograd operations.</p>
-</section>
-<section id="operating-on-memory-mapped-tensors-across-nodes">
-<h2>Operating on Memory-mapped tensors across nodes<a class="headerlink" href="#operating-on-memory-mapped-tensors-across-nodes" title="Permalink to this heading">¶</a></h2>
-<p>We provide a simple example of a distributed script where one process creates a
-memory-mapped tensor, and sends its reference to another worker that is responsible of
-updating it. You will find this example in the
-<a class="reference external" href="https://github.com/pytorch/tensordict/tree/main/benchmarks/distributed_benchmark.py">benchmark directory</a>.</p>
-<p>In short, our goal is to show how to handle read and write operations on big
-tensors when nodes have access to a shared physical storage. The steps involve:</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>Creating the empty tensor on disk;</p></li>
-<li><p>Setting the local and remote operations to be executed;</p></li>
-<li><p>Passing commands from worker to worker using RPC to read and write the
-shared data.</p></li>
+<p>TensorDict integrates with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a> to send, receive,
+broadcast, reduce, gather and scatter collections of tensors with a single
+method call.  It also supports shared-storage workflows where nodes access
+the same memory-mapped files on a shared filesystem.</p>
+<nav class="contents local" id="on-this-page">
+<p class="topic-title">On this page</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#prerequisites" id="id1">Prerequisites</a></p></li>
+<li><p><a class="reference internal" href="#consolidate-and-fast-serialization" id="id2"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></p></li>
+<li><p><a class="reference internal" href="#point-to-point-send-recv" id="id3">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#async-point-to-point-isend-irecv" id="id4">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#cold-start-initialization-init-remote-from-remote-init" id="id5">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></p></li>
+<li><p><a class="reference internal" href="#broadcast" id="id6">Broadcast</a></p></li>
+<li><p><a class="reference internal" href="#all-reduce" id="id7">All-reduce</a></p></li>
+<li><p><a class="reference internal" href="#reduce" id="id8">Reduce</a></p></li>
+<li><p><a class="reference internal" href="#all-gather" id="id9">All-gather</a></p></li>
+<li><p><a class="reference internal" href="#scatter" id="id10">Scatter</a></p></li>
+<li><p><a class="reference internal" href="#quick-reference" id="id11">Quick reference</a></p></li>
+<li><p><a class="reference internal" href="#shared-storage-workflows-memory-mapped" id="id12">Shared-storage workflows (memory-mapped)</a></p></li>
 </ul>
-</div></blockquote>
-<p>This example first writes a function that updates a TensorDict instance
-at specific indices with a one-filled tensor:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">fill_tensordict</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">tensordict</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;memmap&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">640</span><span class="p">,</span> <span class="mi">640</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)},</span> <span class="p">[</span><span class="mi">5</span><span class="p">]</span>
-<span class="gp">... </span>    <span class="p">)</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">tensordict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">fill_tensordict_cp</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">fill_tensordict</span><span class="p">)</span>
+</nav>
+<section id="prerequisites">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Prerequisites</a><a class="headerlink" href="#prerequisites" title="Permalink to this heading">¶</a></h2>
+<p>All collective and point-to-point APIs below require a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> to be set up.  Refer to the
+<a class="reference external" href="https://pytorch.org/docs/stable/distributed.html">PyTorch distributed documentation</a>
+for details.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The <code class="xref py py-obj docutils literal notranslate"><span class="pre">CloudpickleWrapper</span></code> ensures that the function is serializable.
-Next, we create a tensordict of a considerable size, to make the point that
-this would be hard to pass from worker to worker if it had to be passed through
-a regular tensorpipe:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;memmap&quot;</span><span class="p">:</span> <span class="n">MemmapTensor</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">640</span><span class="p">,</span> <span class="mi">640</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/tmp/&quot;</span><span class="p">)},</span> <span class="p">[</span><span class="mi">1000</span><span class="p">]</span>
-<span class="gp">... </span><span class="p">)</span>
+</section>
+<section id="consolidate-and-fast-serialization">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a><a class="headerlink" href="#consolidate-and-fast-serialization" title="Permalink to this heading">¶</a></h2>
+<p>Several distributed primitives (<em>broadcast</em>, <em>all_gather</em>, <em>scatter</em>,
+<em>init_remote / from_remote_init</em>, and <em>consolidated send / recv</em>) rely on
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>, which packs every leaf tensor
+into a single contiguous storage buffer.  This turns an arbitrarily nested
+TensorDict into <strong>one</strong> message on the wire:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">td_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># td_c._consolidated[&quot;storage&quot;]  – a single flat uint8 tensor</span>
+<span class="c1"># td_c._consolidated[&quot;metadata&quot;] – a dict describing how to reconstruct the tree</span>
 </pre></div>
 </div>
-<p>Finally, still on the main node, we call the function <em>on the remote node</em> and then
-check that the data has been written where needed:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">998</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">worker_info</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">fill_tensordict_cp</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">idx</span><span class="p">),</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;time elapsed:&quot;</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;check all ones&quot;</span><span class="p">,</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;memmap&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">metadata=True</span></code> so that the receiving side can reconstruct the full
+tree structure.</p>
+</section>
+<section id="point-to-point-send-recv">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a><a class="headerlink" href="#point-to-point-send-recv" title="Permalink to this heading">¶</a></h2>
+<p>The simplest pattern sends a TensorDict from one rank to another.
+The receiver must already hold a TensorDict with matching structure so that
+incoming tensors can be written in-place:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">td</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>Although the call to <code class="xref py py-obj docutils literal notranslate"><span class="pre">rpc.rpc_sync</span></code> involved passing the entire tensordict,
-updating specific indices of this object and return it to the original worker,
-the execution of this snippet is extremely fast (even more so if the reference
-to the memory location is already passed beforehand, see <a class="reference external" href="https://github.com/pytorch/rl/blob/main/examples/distributed/replay_buffers/distributed_replay_buffer.py">torchrl’s distributed
-replay buffer documentation</a> to learn more).</p>
-<p>The script contains additional RPC configuration steps that are beyond the
-purpose of this document.</p>
+<p><strong>Consolidated mode</strong> sends the entire TensorDict as a single tensor message
+instead of one message per leaf.  This is more efficient when
+the TensorDict has many small tensors:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0  – sender</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">consolidated</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># rank 1  – receiver (must already be consolidated)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">consolidated</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a> for the full API.</p>
+</section>
+<section id="async-point-to-point-isend-irecv">
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a><a class="headerlink" href="#async-point-to-point-isend-irecv" title="Permalink to this heading">¶</a></h2>
+<p>Non-blocking variants let you overlap communication with computation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0</span>
+<span class="n">td</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1</span>
+<span class="n">futures</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">return_premature</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># ... do other work ...</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.isend" title="tensordict.TensorDictBase.isend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isend()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.irecv" title="tensordict.TensorDictBase.irecv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">irecv()</span></code></a> for the full API.</p>
+</section>
+<section id="cold-start-initialization-init-remote-from-remote-init">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a><a class="headerlink" href="#cold-start-initialization-init-remote-from-remote-init" title="Permalink to this heading">¶</a></h2>
+<p>When the receiving rank does <strong>not</strong> know the structure of the TensorDict in
+advance, <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> sends both the metadata <em>and</em> the content so that
+the receiver can reconstruct the full object from scratch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0  – sender</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">84</span><span class="p">),</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">init_remote</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1  – receiver</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_remote_init</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># fully reconstructed, including nested structure</span>
+</pre></div>
+</div>
+<p>This is handy during setup / warm-up: the first call uses <code class="docutils literal notranslate"><span class="pre">init_remote</span></code>
+/ <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code> to establish the schema, and subsequent transfers
+use the faster <code class="docutils literal notranslate"><span class="pre">send(consolidated=True)</span></code> / <code class="docutils literal notranslate"><span class="pre">recv(consolidated=True)</span></code>
+path.</p>
+<p>Two transport modes are available:</p>
+<ul class="simple">
+<li><p><strong>Point-to-point</strong> (default): only sender and receiver participate.</p></li>
+<li><p><strong>Broadcast</strong> (<code class="docutils literal notranslate"><span class="pre">use_broadcast=True</span></code>): delegates to
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.  All ranks in the group
+must participate.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># all ranks</span>
+<span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">td</span><span class="o">.</span><span class="n">init_remote</span><span class="p">(</span><span class="n">use_broadcast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_remote_init</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">use_broadcast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> objects are preserved across the wire: the receiving side
+will automatically reconstruct the original tensorclass type.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.init_remote" title="tensordict.TensorDictBase.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.from_remote_init" title="tensordict.TensorDictBase.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a> for the full API.</p>
+</section>
+<section id="broadcast">
+<h2><a class="toc-backref" href="#id6" role="doc-backlink">Broadcast</a><a class="headerlink" href="#broadcast" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a> sends a consolidated
+TensorDict from <em>one</em> rank to <em>all</em> ranks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">src</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">)</span>
+<span class="c1"># all ranks now hold the same td</span>
+</pre></div>
+</div>
+<p>Internally this broadcasts the metadata via
+<code class="docutils literal notranslate"><span class="pre">dist.broadcast_object_list</span></code> followed by the storage via
+<code class="docutils literal notranslate"><span class="pre">dist.broadcast</span></code>.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.</p>
+</section>
+<section id="all-reduce">
+<h2><a class="toc-backref" href="#id7" role="doc-backlink">All-reduce</a><a class="headerlink" href="#all-reduce" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_reduce" title="tensordict.TensorDictBase.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a> reduces every leaf tensor
+across all ranks in-place:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+<span class="c1"># td[&quot;a&quot;] is now the sum across all ranks</span>
+</pre></div>
+</div>
+<p>Supports <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code> to return a list of futures.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_reduce" title="tensordict.TensorDictBase.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a>.</p>
+</section>
+<section id="reduce">
+<h2><a class="toc-backref" href="#id8" role="doc-backlink">Reduce</a><a class="headerlink" href="#reduce" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.reduce" title="tensordict.TensorDictBase.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a> is like <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code> but only
+the destination rank receives the result:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.reduce" title="tensordict.TensorDictBase.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a>.</p>
+</section>
+<section id="all-gather">
+<h2><a class="toc-backref" href="#id9" role="doc-backlink">All-gather</a><a class="headerlink" href="#all-gather" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_gather" title="tensordict.TensorDictBase.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a> gathers TensorDict instances
+from every rank and returns a list (one per rank):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">local_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">all_tds</span> <span class="o">=</span> <span class="n">local_td</span><span class="o">.</span><span class="n">all_gather</span><span class="p">()</span>
+<span class="c1"># len(all_tds) == world_size</span>
+</pre></div>
+</div>
+<p>Uses consolidated transport: each rank consolidates its TensorDict,
+metadata is gathered with <code class="docutils literal notranslate"><span class="pre">dist.all_gather_object</span></code>, and storage buffers
+are gathered with <code class="docutils literal notranslate"><span class="pre">dist.all_gather</span></code>.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_gather" title="tensordict.TensorDictBase.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a>.</p>
+</section>
+<section id="scatter">
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">Scatter</a><a class="headerlink" href="#scatter" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.scatter" title="tensordict.TensorDictBase.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a> distributes <em>different</em>
+TensorDict instances from one rank to all other ranks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">src</span><span class="p">:</span>
+    <span class="n">tds</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)]</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">tds</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">,</span> <span class="n">tensordicts</span><span class="o">=</span><span class="n">tds</span><span class="p">)</span>
+<span class="c1"># each rank receives its own td</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.scatter" title="tensordict.TensorDictBase.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a>.</p>
+</section>
+<section id="quick-reference">
+<h2><a class="toc-backref" href="#id11" role="doc-backlink">Quick reference</a><a class="headerlink" href="#quick-reference" title="Permalink to this heading">¶</a></h2>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Transport</p></th>
+<th class="head"><p>Participants</p></th>
+<th class="head"><p>Use case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.send" title="tensordict.LazyStackedTensorDict.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.recv" title="tensordict.LazyStackedTensorDict.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a></p></td>
+<td><p>point-to-point</p></td>
+<td><p>2 ranks</p></td>
+<td><p>Steady-state data transfer (supports <code class="docutils literal notranslate"><span class="pre">consolidated=True</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.isend" title="tensordict.LazyStackedTensorDict.isend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isend()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.irecv" title="tensordict.LazyStackedTensorDict.irecv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">irecv()</span></code></a></p></td>
+<td><p>point-to-point (async)</p></td>
+<td><p>2 ranks</p></td>
+<td><p>Overlapping communication and computation</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.init_remote" title="tensordict.LazyStackedTensorDict.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.from_remote_init" title="tensordict.LazyStackedTensorDict.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a></p></td>
+<td><p>point-to-point or broadcast</p></td>
+<td><p>2 ranks (or all)</p></td>
+<td><p>Cold-start: receiver doesn’t know the schema</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.broadcast" title="tensordict.LazyStackedTensorDict.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>One-to-all (same data)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.scatter" title="tensordict.LazyStackedTensorDict.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>One-to-all (different data per rank)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.all_gather" title="tensordict.LazyStackedTensorDict.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>All-to-all gather</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.all_reduce" title="tensordict.LazyStackedTensorDict.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>In-place reduce (e.g. gradient averaging)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.reduce" title="tensordict.LazyStackedTensorDict.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>Reduce to single rank</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="shared-storage-workflows-memory-mapped">
+<h2><a class="toc-backref" href="#id12" role="doc-backlink">Shared-storage workflows (memory-mapped)</a><a class="headerlink" href="#shared-storage-workflows-memory-mapped" title="Permalink to this heading">¶</a></h2>
+<p>When nodes share a filesystem (e.g. NFS), a memory-mapped TensorDict lets
+multiple processes read from and write to the same data without sending
+tensors over the network.</p>
+<p>Create a memory-mapped TensorDict with
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> or
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">MemoryMappedTensor</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+        <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">50000</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Any process that can read <code class="docutils literal notranslate"><span class="pre">/shared/nfs/dataset</span></code> can load this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">td</span><span class="p">[:</span><span class="mi">64</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>  <span class="c1"># only reads the first 64 entries</span>
+</pre></div>
+</div>
+<p>For more details on memory-mapped serialization, see the
+<a class="reference internal" href="saving.html#saving"><span class="std std-ref">saving documentation</span></a>.</p>
 </section>
 </section>
 
@@ -523,8 +689,18 @@ purpose of this document.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">TensorDict in distributed settings</a><ul>
-<li><a class="reference internal" href="#creating-a-memory-mapped-tensordict">Creating a memory-mapped TensorDict</a></li>
-<li><a class="reference internal" href="#operating-on-memory-mapped-tensors-across-nodes">Operating on Memory-mapped tensors across nodes</a></li>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#consolidate-and-fast-serialization"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></li>
+<li><a class="reference internal" href="#point-to-point-send-recv">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
+<li><a class="reference internal" href="#async-point-to-point-isend-irecv">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></li>
+<li><a class="reference internal" href="#cold-start-initialization-init-remote-from-remote-init">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></li>
+<li><a class="reference internal" href="#broadcast">Broadcast</a></li>
+<li><a class="reference internal" href="#all-reduce">All-reduce</a></li>
+<li><a class="reference internal" href="#reduce">Reduce</a></li>
+<li><a class="reference internal" href="#all-gather">All-gather</a></li>
+<li><a class="reference internal" href="#scatter">Scatter</a></li>
+<li><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+<li><a class="reference internal" href="#shared-storage-workflows-memory-mapped">Shared-storage workflows (memory-mapped)</a></li>
 </ul>
 </li>
 </ul>
