@@ -198,9 +198,9 @@ def bench_init_remote(rank, n_floats, device, group):
 
 
 def bench_ucxx(rank, n_floats, device, peer_ip):
-    """UCXX pipe — measures both first-send and steady-state in one connection.
+    """UCXX pipe — measures first-send (with metadata) and steady-state.
 
-    Returns (first_send_mean, first_send_std, steady_mean, steady_std, nbytes).
+    Returns (first_send_time, steady_mean, steady_std, nbytes).
     """
     from tensordict._ucxx import TensorDictPipe
 
@@ -214,21 +214,12 @@ def bench_ucxx(rank, n_floats, device, peer_ip):
         if rank == 0:
             pipe = await TensorDictPipe.listen(port)
 
-            # First send: includes metadata handshake
-            first_times = []
-            for i in range(WARMUP + ROUNDS):
-                t0 = time.perf_counter()
-                await pipe.arecv()
-                t1 = time.perf_counter()
-                if i >= WARMUP:
-                    first_times.append(t1 - t0)
-                # Reset schema to force metadata re-send each time
-                pipe._send_schema_hash = None
-                pipe._recv_schema_hash = None
-                pipe._recv_td = None
+            # First receive: includes metadata handshake
+            t0 = time.perf_counter()
+            td_recv = await pipe.arecv()
+            first_time = time.perf_counter() - t0
 
             # Steady-state: schema already known, zero-alloc recv
-            td_recv = await pipe.arecv()
             steady_times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
@@ -242,17 +233,11 @@ def bench_ucxx(rank, n_floats, device, peer_ip):
             pipe = await TensorDictPipe.connect(peer_ip, port)
 
             # First send
-            first_times = []
-            for i in range(WARMUP + ROUNDS):
-                pipe._send_schema_hash = None
-                t0 = time.perf_counter()
-                await pipe.asend(td)
-                t1 = time.perf_counter()
-                if i >= WARMUP:
-                    first_times.append(t1 - t0)
+            t0 = time.perf_counter()
+            await pipe.asend(td)
+            first_time = time.perf_counter() - t0
 
             # Steady-state
-            await pipe.asend(td)
             steady_times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
@@ -263,16 +248,13 @@ def bench_ucxx(rank, n_floats, device, peer_ip):
 
             await pipe.aclose()
 
-        def _stats(times):
-            mean = sum(times) / len(times)
-            std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
-            return mean, std
+        steady_mean = sum(steady_times) / len(steady_times)
+        steady_std = (sum((t - steady_mean) ** 2 for t in steady_times) / len(steady_times)) ** 0.5
+        return first_time, steady_mean, steady_std
 
-        return _stats(first_times), _stats(steady_times)
-
-    (first_mean, first_std), (steady_mean, steady_std) = asyncio.run(_run())
+    first_time, steady_mean, steady_std = asyncio.run(_run())
     _barrier()
-    return first_mean, first_std, steady_mean, steady_std, nbytes
+    return first_time, steady_mean, steady_std, nbytes
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +457,7 @@ def main():
                 _barrier()
 
                 try:
-                    first_mean, first_std, steady_mean, steady_std, nbytes = (
+                    first_time, steady_mean, steady_std, nbytes = (
                         bench_ucxx(rank, n_floats, device, peer_ip)
                     )
                 except Exception as e:
@@ -493,8 +475,8 @@ def main():
                     if rank == 0:
                         print(  # noqa: T201
                             f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
-                            f"{_fmt_time(first_mean)} +/- {_fmt_time(first_std)} | "
-                            f"{_fmt_throughput(nbytes, first_mean)}",
+                            f"{_fmt_time(first_time):>18s} | "
+                            f"{_fmt_throughput(nbytes, first_time)}",
                             flush=True,
                         )
                         print(  # noqa: T201
