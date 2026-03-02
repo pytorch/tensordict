@@ -280,20 +280,56 @@ def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
 # ---------------------------------------------------------------------------
 
 
-def _discover_peers():
-    """Return (rank, world_size, master_ip, peer_ip) using Ray or env vars.
+def _resolve_slurm_nodelist(nodelist):
+    """Expand a SLURM nodelist like 'node[1-3,5]' into a list of hostnames."""
+    import subprocess
 
-    If MASTER_ADDR / RANK are set, uses those directly (no Ray needed).
-    Otherwise, uses Ray named actors for discovery.
+    result = subprocess.run(
+        ["scontrol", "show", "hostnames", nodelist],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip().split("\n")
+    return [nodelist]
+
+
+def _discover_peers():
+    """Return (rank, world_size, master_ip, peer_ip, my_ip).
+
+    Discovery order:
+    1. RANK + MASTER_ADDR + PEER_ADDR env vars (fully explicit)
+    2. SLURM_PROCID + SLURM_NODELIST (standard SLURM 2-node job)
+    3. Ray named actors (fallback)
     """
+    my_ip = _get_ip()
+
+    # Method 1: explicit env vars
     if "RANK" in os.environ and "MASTER_ADDR" in os.environ:
         rank = int(os.environ["RANK"])
         master_ip = os.environ["MASTER_ADDR"]
         world_size = int(os.environ.get("WORLD_SIZE", 2))
-        my_ip = _get_ip()
-        peer_ip = master_ip if rank != 0 else None
+        peer_ip = os.environ.get("PEER_ADDR", master_ip if rank != 0 else my_ip)
         return rank, world_size, master_ip, peer_ip, my_ip
 
+    # Method 2: SLURM
+    if "SLURM_PROCID" in os.environ:
+        rank = int(os.environ["SLURM_PROCID"])
+        world_size = int(os.environ.get("SLURM_NTASKS", 2))
+        nodelist = os.environ.get("SLURM_NODELIST", "")
+        nodes = _resolve_slurm_nodelist(nodelist)
+        if len(nodes) >= 2:
+            master_hostname = nodes[0]
+            master_ip = socket.gethostbyname(master_hostname)
+            my_node_idx = min(rank, len(nodes) - 1)
+            peer_idx = 1 if my_node_idx == 0 else 0
+            peer_ip = socket.gethostbyname(nodes[peer_idx])
+        else:
+            master_ip = my_ip
+            peer_ip = my_ip
+        return rank, world_size, master_ip, peer_ip, my_ip
+
+    # Method 3: Ray
     import ray
 
     if not ray.is_initialized():
@@ -311,11 +347,9 @@ def _discover_peers():
             return dict(self.ips)
 
     info = _NodeInfo.options(name="bench_node_info", get_if_exists=True).remote()
-    my_ip = _get_ip()
     node_id = ray.get_runtime_context().get_node_id()
     ray.get(info.register.remote(node_id, my_ip))
 
-    # Wait for both nodes
     for _ in range(120):
         all_ips = ray.get(info.get_all.remote())
         if len(all_ips) >= 2:
