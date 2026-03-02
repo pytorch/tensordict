@@ -25,9 +25,10 @@ import socket
 import time
 
 # UCX transport config — must be set before ucxx is imported.
-# Let UCX auto-select best transport (IB/RDMA if available, else TCP).
-os.environ.setdefault("UCX_TLS", "all")
-os.environ.setdefault("UCX_NET_DEVICES", "all")
+# Force-override step0_env.sh which restricts to IB-only devices.
+# "all" lets UCX auto-select best available transport (IB + TCP fallback).
+os.environ["UCX_TLS"] = "all"
+os.environ["UCX_NET_DEVICES"] = "all"
 os.environ["UCX_WARN_UNUSED_ENV_VARS"] = "n"
 
 import torch
