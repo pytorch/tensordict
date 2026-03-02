@@ -25,10 +25,9 @@ import socket
 import time
 
 # UCX transport config — must be set before ucxx is imported.
-# Force-set because cluster step0_env.sh may set IB devices that are
-# unavailable inside the container.
-os.environ["UCX_TLS"] = "tcp"
-os.environ["UCX_NET_DEVICES"] = "all"
+# Let UCX auto-select best transport (IB/RDMA if available, else TCP).
+os.environ.setdefault("UCX_TLS", "all")
+os.environ.setdefault("UCX_NET_DEVICES", "all")
 os.environ["UCX_WARN_UNUSED_ENV_VARS"] = "n"
 
 import torch
@@ -457,9 +456,7 @@ def main():
                         flush=True,
                     )
 
-            # UCXX over TCP can hang for very large transfers; cap at 10M floats
-            ucxx_max_floats = 10_000_000
-            if has_ucxx_bench and device == "cpu" and n_floats <= ucxx_max_floats:
+            if has_ucxx_bench and device == "cpu":
                 gc.collect()
                 _barrier()
 
