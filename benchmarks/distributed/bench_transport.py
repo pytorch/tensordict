@@ -197,8 +197,11 @@ def bench_init_remote(rank, n_floats, device, group):
 # ---------------------------------------------------------------------------
 
 
-def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
-    """UCXX pipe — first send (includes metadata handshake)."""
+def bench_ucxx(rank, n_floats, device, peer_ip):
+    """UCXX pipe — measures both first-send and steady-state in one connection.
+
+    Returns (first_send_mean, first_send_std, steady_mean, steady_std, nbytes).
+    """
     from tensordict._ucxx import TensorDictPipe
 
     td = _make_td(n_floats, device)
@@ -210,81 +213,66 @@ def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
     async def _run():
         if rank == 0:
             pipe = await TensorDictPipe.listen(port)
-            times = []
+
+            # First send: includes metadata handshake
+            first_times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
                 await pipe.arecv()
                 t1 = time.perf_counter()
                 if i >= WARMUP:
-                    times.append(t1 - t0)
+                    first_times.append(t1 - t0)
+                # Reset schema to force metadata re-send each time
                 pipe._send_schema_hash = None
                 pipe._recv_schema_hash = None
                 pipe._recv_td = None
-            await pipe.aclose()
-        else:
-            pipe = await TensorDictPipe.connect(peer_ip, port)
-            times = []
-            for i in range(WARMUP + ROUNDS):
-                pipe._send_schema_hash = None
-                t0 = time.perf_counter()
-                await pipe.asend(td)
-                t1 = time.perf_counter()
-                if i >= WARMUP:
-                    times.append(t1 - t0)
-            await pipe.aclose()
 
-        mean = sum(times) / len(times)
-        std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
-        return mean, std
-
-    mean, std = asyncio.run(_run())
-    _barrier()
-    return mean, std, nbytes
-
-
-def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
-    """UCXX pipe — steady-state (raw buffer only, zero-alloc on receiver)."""
-    from tensordict._ucxx import TensorDictPipe
-
-    td = _make_td(n_floats, device)
-    nbytes = _data_bytes(td)
-
-    port = _next_ucxx_port()
-    _barrier()
-
-    async def _run():
-        if rank == 0:
-            pipe = await TensorDictPipe.listen(port)
+            # Steady-state: schema already known, zero-alloc recv
             td_recv = await pipe.arecv()
-
-            times = []
+            steady_times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
                 await pipe.arecv(td_recv)
                 t1 = time.perf_counter()
                 if i >= WARMUP:
-                    times.append(t1 - t0)
+                    steady_times.append(t1 - t0)
+
             await pipe.aclose()
         else:
             pipe = await TensorDictPipe.connect(peer_ip, port)
-            await pipe.asend(td)
 
-            times = []
+            # First send
+            first_times = []
+            for i in range(WARMUP + ROUNDS):
+                pipe._send_schema_hash = None
+                t0 = time.perf_counter()
+                await pipe.asend(td)
+                t1 = time.perf_counter()
+                if i >= WARMUP:
+                    first_times.append(t1 - t0)
+
+            # Steady-state
+            await pipe.asend(td)
+            steady_times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
                 await pipe.asend(td)
                 t1 = time.perf_counter()
                 if i >= WARMUP:
-                    times.append(t1 - t0)
+                    steady_times.append(t1 - t0)
+
             await pipe.aclose()
 
-        mean = sum(times) / len(times)
-        std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
-        return mean, std
+        def _stats(times):
+            mean = sum(times) / len(times)
+            std = (sum((t - mean) ** 2 for t in times) / len(times)) ** 0.5
+            return mean, std
 
-    mean, std = asyncio.run(_run())
+        return _stats(first_times), _stats(steady_times)
+
+    (first_mean, first_std), (steady_mean, steady_std) = asyncio.run(_run())
     _barrier()
-    return mean, std, nbytes
+    return first_mean, first_std, steady_mean, steady_std, nbytes
 
 
 # ---------------------------------------------------------------------------
@@ -440,10 +428,7 @@ def main():
         ("init_remote/from_remote_init", bench_init_remote),
     ]
 
-    ucxx_benchmarks = [
-        ("UCXX pipe (first send)", bench_ucxx_first_send),
-        ("UCXX pipe (steady-state)", bench_ucxx_steady_state),
-    ]
+    has_ucxx_bench = has_ucxx
 
     for device in DEVICES:
         if rank == 0:
@@ -485,28 +470,37 @@ def main():
                         flush=True,
                     )
 
-            # UCXX benchmarks (CPU only for now, UCXX handles device internally)
-            if has_ucxx and device == "cpu":
-                for bench_name, bench_fn in ucxx_benchmarks:
-                    gc.collect()
-                    _barrier()
+            if has_ucxx_bench and device == "cpu":
+                gc.collect()
+                _barrier()
 
-                    try:
-                        mean, std, nbytes = bench_fn(rank, n_floats, device, peer_ip)
-                    except Exception as e:
-                        if rank == 0:
-                            print(  # noqa: T201
-                                f"{bench_name:<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
-                                flush=True,
-                            )
-                        _barrier()
-                        continue
-
+                try:
+                    first_mean, first_std, steady_mean, steady_std, nbytes = (
+                        bench_ucxx(rank, n_floats, device, peer_ip)
+                    )
+                except Exception as e:
+                    has_ucxx_bench = False
                     if rank == 0:
                         print(  # noqa: T201
-                            f"{bench_name:<35s} | {size_name:>6s} | "
-                            f"{_fmt_time(mean)} +/- {_fmt_time(std)} | "
-                            f"{_fmt_throughput(nbytes, mean)}",
+                            f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
+                            flush=True,
+                        )
+                        print(  # noqa: T201
+                            f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | {'(skipped)':>18s} |",
+                            flush=True,
+                        )
+                else:
+                    if rank == 0:
+                        print(  # noqa: T201
+                            f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
+                            f"{_fmt_time(first_mean)} +/- {_fmt_time(first_std)} | "
+                            f"{_fmt_throughput(nbytes, first_mean)}",
+                            flush=True,
+                        )
+                        print(  # noqa: T201
+                            f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
+                            f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
+                            f"{_fmt_throughput(nbytes, steady_mean)}",
                             flush=True,
                         )
 
