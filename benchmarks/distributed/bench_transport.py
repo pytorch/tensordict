@@ -35,7 +35,14 @@ from tensordict import TensorDict
 
 WARMUP = 2
 ROUNDS = 10
-UCXX_PORT = 23456
+_ucxx_port_counter = 23456
+
+
+def _next_ucxx_port():
+    global _ucxx_port_counter
+    port = _ucxx_port_counter
+    _ucxx_port_counter += 2
+    return port
 
 SIZES = {
     "1KB": 256,
@@ -190,10 +197,12 @@ def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
     td = _make_td(n_floats, device)
     nbytes = _data_bytes(td)
 
+    port = _next_ucxx_port()
+    _barrier()
+
     async def _run():
         if rank == 0:
-            pipe = await TensorDictPipe.listen(UCXX_PORT)
-            _barrier()
+            pipe = await TensorDictPipe.listen(port)
             times = []
             for i in range(WARMUP + ROUNDS):
                 t0 = time.perf_counter()
@@ -204,11 +213,9 @@ def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
                 pipe._send_schema_hash = None
                 pipe._recv_schema_hash = None
                 pipe._recv_td = None
-                _barrier()
             await pipe.aclose()
         else:
-            _barrier()
-            pipe = await TensorDictPipe.connect(peer_ip, UCXX_PORT)
+            pipe = await TensorDictPipe.connect(peer_ip, port)
             times = []
             for i in range(WARMUP + ROUNDS):
                 pipe._send_schema_hash = None
@@ -217,7 +224,6 @@ def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
                 t1 = time.perf_counter()
                 if i >= WARMUP:
                     times.append(t1 - t0)
-                _barrier()
             await pipe.aclose()
 
         mean = sum(times) / len(times)
@@ -225,6 +231,7 @@ def bench_ucxx_first_send(rank, n_floats, device, peer_ip):
         return mean, std
 
     mean, std = asyncio.run(_run())
+    _barrier()
     return mean, std, nbytes
 
 
@@ -235,12 +242,13 @@ def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
     td = _make_td(n_floats, device)
     nbytes = _data_bytes(td)
 
+    port = _next_ucxx_port()
+    _barrier()
+
     async def _run():
         if rank == 0:
-            pipe = await TensorDictPipe.listen(UCXX_PORT + 1)
-            _barrier()
+            pipe = await TensorDictPipe.listen(port)
             td_recv = await pipe.arecv()
-            _barrier()
 
             times = []
             for i in range(WARMUP + ROUNDS):
@@ -249,13 +257,10 @@ def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
                 t1 = time.perf_counter()
                 if i >= WARMUP:
                     times.append(t1 - t0)
-                _barrier()
             await pipe.aclose()
         else:
-            _barrier()
-            pipe = await TensorDictPipe.connect(peer_ip, UCXX_PORT + 1)
+            pipe = await TensorDictPipe.connect(peer_ip, port)
             await pipe.asend(td)
-            _barrier()
 
             times = []
             for i in range(WARMUP + ROUNDS):
@@ -264,7 +269,6 @@ def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
                 t1 = time.perf_counter()
                 if i >= WARMUP:
                     times.append(t1 - t0)
-                _barrier()
             await pipe.aclose()
 
         mean = sum(times) / len(times)
@@ -272,6 +276,7 @@ def bench_ucxx_steady_state(rank, n_floats, device, peer_ip):
         return mean, std
 
     mean, std = asyncio.run(_run())
+    _barrier()
     return mean, std, nbytes
 
 
