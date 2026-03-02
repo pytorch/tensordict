@@ -1,7 +1,7 @@
 .. _distributed:
 
 TensorDict in distributed settings
-===================================
+==================================
 
 TensorDict integrates with :mod:`torch.distributed` to send, receive,
 broadcast, reduce, gather and scatter collections of tensors with a single
@@ -26,7 +26,7 @@ for details.
    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 ``consolidate()`` and fast serialization
------------------------------------------
+----------------------------------------
 
 Several distributed primitives (*broadcast*, *all_gather*, *scatter*,
 *init_remote / from_remote_init*, and *consolidated send / recv*) rely on
@@ -45,7 +45,7 @@ Pass ``metadata=True`` so that the receiving side can reconstruct the full
 tree structure.
 
 Point-to-point: ``send`` / ``recv``
-------------------------------------
+-----------------------------------
 
 The simplest pattern sends a TensorDict from one rank to another.
 The receiver must already hold a TensorDict with matching structure so that
@@ -78,7 +78,7 @@ See :meth:`~tensordict.TensorDictBase.send` and
 :meth:`~tensordict.TensorDictBase.recv` for the full API.
 
 Async point-to-point: ``isend`` / ``irecv``
---------------------------------------------
+-------------------------------------------
 
 Non-blocking variants let you overlap communication with computation:
 
@@ -97,7 +97,7 @@ See :meth:`~tensordict.TensorDictBase.isend` and
 :meth:`~tensordict.TensorDictBase.irecv` for the full API.
 
 Cold-start initialization: ``init_remote`` / ``from_remote_init``
-------------------------------------------------------------------
+-----------------------------------------------------------------
 
 When the receiving rank does **not** know the structure of the TensorDict in
 advance, ``init_remote`` sends both the metadata *and* the content so that
@@ -275,7 +275,7 @@ Quick reference
      - Reduce to single rank
 
 Shared-storage workflows (memory-mapped)
------------------------------------------
+----------------------------------------
 
 When nodes share a filesystem (e.g. NFS), a memory-mapped TensorDict lets
 multiple processes read from and write to the same data without sending

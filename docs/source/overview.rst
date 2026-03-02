@@ -128,7 +128,7 @@ If an operation is not present, the :meth:`~tensordict.TensorDict.apply` method 
 that was needed.
 
 Escaping shape operations: UnbatchedTensor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
 shape operations. A common example is a configuration tensor, a mask, or a set of parameters that is shared across

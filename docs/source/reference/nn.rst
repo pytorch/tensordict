@@ -187,7 +187,7 @@ to build distributions from network outputs and get summary statistics or sample
       is_shared=False)
 
 Type-Safe TensorClass Modules
-------------------------------
+-----------------------------
 
 The :class:`~.TensorClassModuleBase` provides a type-safe way to define modules that work with
 :class:`~tensordict.tensorclass.TensorClass` inputs and outputs. This offers compile-time type

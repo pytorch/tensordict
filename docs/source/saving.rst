@@ -16,7 +16,7 @@ PyTorch's one with :func:`~torch.save`'s pickle reliance. This document explains
 how to create and interact with data stored on disk using TensorDict.
 
 Saving memory-mapped TensorDicts
----------------------------------
+--------------------------------
 
 When a tensordict is dumped as a mmap data structure, each entry corresponds
 to a single ``*.memmap`` file, and the directory structure is determined by the
@@ -197,7 +197,7 @@ See :meth:`~tensordict.TensorDictBase.consolidate` for the full API, including
 options like ``num_threads``, ``device``, ``pin_memory``, and ``share_memory``.
 
 Legacy: TorchSnapshot compatibility
-------------------------------------
+-----------------------------------
 
 .. warning::
   torchsnapshot maintenance has been discontinued.  The section below is kept
