@@ -93,8 +93,9 @@ class UnbatchedTensor(TensorClass):
         >>> td_reshaped["a"] is td["a"]
         True
 
-    Note that accessing an UnbatchedTensor using `get()` and `__getitem__()` will return different results.
-    `get()` returns the UnbatchedTensor instance, while `__getitem__()` returns the underlying tensor content.
+    Note that for a plain TensorDict, ``get()`` returns the UnbatchedTensor wrapper while
+    ``__getitem__()`` returns the underlying tensor content. For TensorClass instances, both
+    attribute access (``tc.field``) and ``get()`` return the unwrapped tensor.
 
     Example:
         >>> td.get("a")
@@ -233,7 +234,8 @@ class UnbatchedTensor(TensorClass):
                 "TensorClass fields must be accessed as attributes, not items."
             )
         self_copy = self.copy()
-        self_copy.batch_size = _getitem_batch_size(self.batch_size, index)
+        if self.batch_size:
+            self_copy.batch_size = _getitem_batch_size(self.batch_size, index)
         return self_copy
 
     @property
@@ -435,10 +437,8 @@ class UnbatchedTensor(TensorClass):
 
     def clone(self, recurse: bool = True):
         """Clones the UnbatchedTensor, preserving the batch_size."""
-        if recurse:
-            result = type(self)(self.data.clone())
-        else:
-            result = type(self)(self.data)
+        data = self.data.clone() if recurse else self.data
+        result = type(self)(data=data)
         result.batch_size = self.batch_size
         return result
 

@@ -43,3 +43,12 @@ repos:
     hooks:
       - id: pydocstyle
         files: ^tensordict/
+
+  - repo: local
+    hooks:
+      - id: check-rst-titles
+        name: check RST title underlines
+        entry: python scripts/check_rst_titles.py
+        language: python
+        types: [rst]
+        pass_filenames: true
