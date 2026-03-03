@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
+import importlib.util
 import json
 import struct
 from typing import Any, AsyncIterator, Awaitable, Callable, TYPE_CHECKING
@@ -17,23 +19,45 @@ import torch
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
-try:
-    import ucxx
-
-    _has_ucxx = True
-except ImportError:
-    _has_ucxx = False
+_has_ucxx = importlib.util.find_spec("ucxx") is not None
+_ucxx = None
 
 _NEW_SCHEMA_FLAG = b"\x00"
 _SAME_SCHEMA_FLAG = b"\x01"
 
 
-def _check_ucxx():
-    if not _has_ucxx:
-        raise ImportError(
-            "ucxx is required for TensorDictPipe but is not installed. "
-            "Install it with: conda install -c rapidsai ucxx"
-        )
+def _check_ucxx(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        global _ucxx
+        if _ucxx is None:
+            if not _has_ucxx:
+                raise ImportError(
+                    "ucxx is required for TensorDictPipe but is not installed. "
+                    "Install it with: conda install -c rapidsai ucxx"
+                )
+            import ucxx
+
+            _ucxx = ucxx
+        return func(*args, **kwargs)
+
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        global _ucxx
+        if _ucxx is None:
+            if not _has_ucxx:
+                raise ImportError(
+                    "ucxx is required for TensorDictPipe but is not installed. "
+                    "Install it with: conda install -c rapidsai ucxx"
+                )
+            import ucxx
+
+            _ucxx = ucxx
+        return await func(*args, **kwargs)
+
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    return wrapper
 
 
 def _metadata_hash(metadata: dict) -> bytes:
@@ -84,6 +108,7 @@ def _run_coroutine_sync(coro):
     return asyncio.run(coro)
 
 
+@_check_ucxx
 async def send_tensordict(
     endpoint,
     td: TensorDictBase,
@@ -100,7 +125,6 @@ async def send_tensordict(
         consolidated (bool): if ``True``, consolidates into a single buffer
             before sending. Defaults to ``True``.
     """
-    _check_ucxx()
 
     if consolidated:
         if td.is_consolidated():
@@ -125,6 +149,7 @@ async def send_tensordict(
         await _send_tensordict_uncollated(endpoint, td)
 
 
+@_check_ucxx
 async def recv_tensordict(
     endpoint,
     td: TensorDictBase | None = None,
@@ -145,7 +170,6 @@ async def recv_tensordict(
     Returns:
         The received TensorDict.
     """
-    _check_ucxx()
     from tensordict._reductions import _rebuild_tensordict_files_consolidated
 
     meta_len_buf = np.empty(8, dtype=np.uint8)
@@ -266,6 +290,7 @@ class TensorDictPipe:
         self._closed = False
 
     @classmethod
+    @_check_ucxx
     async def connect(
         cls,
         host: str,
@@ -286,11 +311,11 @@ class TensorDictPipe:
         Returns:
             A connected TensorDictPipe.
         """
-        _check_ucxx()
-        endpoint = await ucxx.create_endpoint(host, port)
+        endpoint = await _ucxx.create_endpoint(host, port)
         return cls(endpoint, consolidated=consolidated)
 
     @classmethod
+    @_check_ucxx
     async def listen(
         cls,
         port: int,
@@ -309,7 +334,6 @@ class TensorDictPipe:
         Returns:
             A connected TensorDictPipe for the first accepted client.
         """
-        _check_ucxx()
         pipe_future: asyncio.Future[TensorDictPipe] = (
             asyncio.get_event_loop().create_future()
         )
@@ -319,7 +343,7 @@ class TensorDictPipe:
                 pipe = cls(ep, consolidated=consolidated, listener=listener)
                 pipe_future.set_result(pipe)
 
-        listener = ucxx.create_listener(_on_connect, port=port)
+        listener = _ucxx.create_listener(_on_connect, port=port)
         return await pipe_future
 
     async def asend(self, td: TensorDictBase) -> None:
@@ -599,8 +623,8 @@ class TensorDictServer:
         >>> await server.serve(handler)
     """
 
+    @_check_ucxx
     def __init__(self, port: int, *, consolidated: bool = True):
-        _check_ucxx()
         self._port = port
         self._consolidated = consolidated
         self._listener = None
@@ -624,7 +648,7 @@ class TensorDictServer:
             pipe = TensorDictPipe(ep, consolidated=self._consolidated)
             await queue.put(pipe)
 
-        self._listener = ucxx.create_listener(_on_connect, port=self._port)
+        self._listener = _ucxx.create_listener(_on_connect, port=self._port)
 
         while not self._closed:
             try:
@@ -640,7 +664,7 @@ class TensorDictServer:
             pipe = TensorDictPipe(ep, consolidated=self._consolidated)
             await queue.put(pipe)
 
-        self._listener = ucxx.create_listener(_on_connect, port=self._port)
+        self._listener = _ucxx.create_listener(_on_connect, port=self._port)
 
         while not self._closed:
             try:

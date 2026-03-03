@@ -497,36 +497,111 @@ Or using the async iterator interface:
        async for pipe in server:
            asyncio.ensure_future(handle_client(pipe))
 
-Performance notes
-~~~~~~~~~~~~~~~~~
+Benchmarks
+~~~~~~~~~~
 
-On a two-node cluster with H200 GPUs connected via 400 Gb/s InfiniBand,
-typical steady-state numbers are:
+The numbers below were measured on a two-node cluster with NVIDIA H200
+GPUs and 400 Gb/s InfiniBand (``nvidia_peermem`` loaded for GPUDirect
+RDMA).  Each transfer is a ``TensorDict`` whose leaves are packed into a
+single contiguous ``float32`` buffer of the indicated size.  Latencies
+are averages over 50 steady-state iterations after warm-up (UCXX "first
+send" includes the one-off metadata handshake).  The benchmark script is
+at ``benchmarks/distributed/bench_transport.py``.
+
+**CPU — gloo (TCP) vs UCXX (InfiniBand)**
 
 .. list-table::
    :header-rows: 1
-   :widths: 15 20 20 20
+   :widths: 10 30 15 15
 
    * - Size
-     - NCCL ``send``/``recv``
-     - UCXX ``TensorDictPipe``
-     - UCXX speedup
+     - Method
+     - Latency
+     - Throughput
    * - 1 KB
-     - 231 µs
-     - 138 µs
-     - 1.7×
+     - gloo ``send``/``recv`` (leaf)
+     - 900 µs
+     -
+   * - 1 KB
+     - gloo ``send``/``recv`` (consolidated)
+     - 212 µs
+     -
+   * - 1 KB
+     - **UCXX pipe (steady-state)**
+     - **105 µs**
+     -
    * - 1 MB
-     - 238 µs (8.8 GB/s)
-     - 231 µs (9.1 GB/s)
-     - ~1×
+     - gloo ``send``/``recv`` (leaf)
+     - 963 µs
+     - 2.18 GB/s
+   * - 1 MB
+     - gloo ``send``/``recv`` (consolidated)
+     - 903 µs
+     - 2.32 GB/s
+   * - 1 MB
+     - **UCXX pipe (steady-state)**
+     - **682 µs**
+     - **3.08 GB/s**
    * - 100 MB
-     - 7.5 ms (28.0 GB/s)
-     - 7.5 ms (28.1 GB/s)
-     - ~1×
+     - gloo ``send``/``recv`` (leaf)
+     - 87 ms
+     - 2.40 GB/s
+   * - 100 MB
+     - gloo ``send``/``recv`` (consolidated)
+     - 87 ms
+     - 2.42 GB/s
+   * - 100 MB
+     - gloo ``broadcast``
+     - 159 ms
+     - 1.32 GB/s
+   * - 100 MB
+     - **UCXX pipe (steady-state)**
+     - **37 ms**
+     - **5.71 GB/s**
 
-UCXX matches NCCL throughput for large messages and is faster for small
-ones (lower per-message overhead).  On CPU, UCXX over InfiniBand
-achieves ~5.8 GB/s for 100 MB — roughly 2.3× faster than ``gloo``.
+UCXX over InfiniBand is **2.4× faster** than the best gloo method for
+large CPU transfers.
+
+**CUDA — NCCL vs UCXX (GPUDirect RDMA)**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 30 15 15
+
+   * - Size
+     - Method
+     - Latency
+     - Throughput
+   * - 1 KB
+     - NCCL ``send``/``recv`` (leaf)
+     - 231 µs
+     -
+   * - 1 KB
+     - **UCXX pipe (steady-state)**
+     - **138 µs**
+     -
+   * - 1 MB
+     - NCCL ``send``/``recv`` (leaf)
+     - 238 µs
+     - 8.81 GB/s
+   * - 1 MB
+     - **UCXX pipe (steady-state)**
+     - **231 µs**
+     - **9.08 GB/s**
+   * - 100 MB
+     - NCCL ``send``/``recv`` (leaf)
+     - 7.50 ms
+     - 27.95 GB/s
+   * - 100 MB
+     - **UCXX pipe (steady-state)**
+     - **7.47 ms**
+     - **28.08 GB/s**
+
+UCXX matches NCCL throughput for large CUDA transfers and is
+**40% faster** for small messages (138 µs vs 231 µs at 1 KB) due to
+lower per-message overhead.  Both backends use GPUDirect RDMA — the
+consolidated storage stays on GPU and goes directly over InfiniBand
+without CPU staging.
 
 Shared-storage workflows (memory-mapped)
 ----------------------------------------

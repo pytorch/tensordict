@@ -1062,6 +1062,13 @@ class TensorClass:
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None: ...
+    async def asend(self, dst: "TensorDictPipe") -> None: ...  # noqa: F821
+    async def arecv(
+        self,
+        src: "TensorDictPipe",  # noqa: F821
+        *,
+        device: torch.device | str | None = None,
+    ) -> T: ...
     def reduce(
         self,
         dst,
