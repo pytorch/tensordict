@@ -400,6 +400,122 @@ def test_compile_replace(mode, variant, benchmark):
     benchmark(func, s)
 
 
+
+# ── Attribute-access benchmarks ──────────────────────────────────────────
+
+
+@tensorclass(tensor_only=True)
+class BigTC20:
+    f0: torch.Tensor
+    f1: torch.Tensor
+    f2: torch.Tensor
+    f3: torch.Tensor
+    f4: torch.Tensor
+    f5: torch.Tensor
+    f6: torch.Tensor
+    f7: torch.Tensor
+    f8: torch.Tensor
+    f9: torch.Tensor
+    f10: torch.Tensor
+    f11: torch.Tensor
+    f12: torch.Tensor
+    f13: torch.Tensor
+    f14: torch.Tensor
+    f15: torch.Tensor
+    f16: torch.Tensor
+    f17: torch.Tensor
+    f18: torch.Tensor
+    f19: torch.Tensor
+
+
+def _get_big_tc20():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    kwargs = {f"f{i}": torch.randn(4, device=device) for i in range(20)}
+    return BigTC20(**kwargs, batch_size=[4], device=device)
+
+
+def tc_getattr_sum(tc):
+    total = tc.f0
+    for i in range(1, 20):
+        total = total + getattr(tc, f"f{i}")
+    return total
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+def test_compile_tc_getattr_20(mode, benchmark):
+    func = tc_getattr_sum
+    if mode == "compile":
+        func = torch.compile(func, fullgraph=True, mode="reduce-overhead")
+    tc = _get_big_tc20()
+    func(tc)
+    func(tc)
+    benchmark(func, tc)
+
+
+# ── Shallow clone benchmarks ────────────────────────────────────────────
+
+def clone_shallow(td):
+    return td.clone(recurse=False)
+
+
+def _get_flat_td_n(n):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    return TensorDict(
+        {f"k{i}": torch.randn(4, device=device) for i in range(n)},
+        batch_size=[4],
+        device=device,
+    )
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("n_fields", [20, 40, 80])
+def test_compile_clone_shallow(mode, n_fields, benchmark):
+    td = _get_flat_td_n(n_fields)
+    func = clone_shallow
+    if mode == "compile":
+        func = torch.compile(func, fullgraph=True, mode="reduce-overhead")
+    func(td)
+    func(td)
+    benchmark(func, td)
+
+
+# ── update_ benchmarks ──────────────────────────────────────────────────
+
+def update_inplace(td, src):
+    td.update_(src)
+    return td
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+def test_compile_update_inplace(mode, benchmark):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    td = TensorDict(
+        {f"k{i}": torch.randn(4, device=device) for i in range(20)},
+        batch_size=[4],
+        device=device,
+    )
+    src = TensorDict(
+        {f"k{i}": torch.ones(4, device=device) for i in range(20)},
+        batch_size=[4],
+        device=device,
+    )
+    func = update_inplace
+    if mode == "compile":
+        func = torch.compile(func, fullgraph=True, mode="reduce-overhead")
+    func(td, src)
+    func(td, src)
+    benchmark(func, td, src)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
