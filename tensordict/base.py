@@ -128,6 +128,16 @@ except ImportError:
     _foreach_copy_ = None
 
 try:
+    from torch.compiler import allow_in_graph as _allow_in_graph
+except (ImportError, AttributeError):
+    _allow_in_graph = None
+
+if _foreach_copy_ is not None and _allow_in_graph is not None:
+    _foreach_copy_compiled = _allow_in_graph(_foreach_copy_)
+else:
+    _foreach_copy_compiled = _foreach_copy_
+
+try:
     from torch.nn.parameter import Buffer
 except ImportError:
     from tensordict.utils import Buffer
@@ -8295,7 +8305,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                _foreach_copy_(vals, other_val, non_blocking=non_blocking)
+                copy_fn = (
+                    _foreach_copy_compiled
+                    if is_compiling()
+                    else _foreach_copy_
+                )
+                copy_fn(vals, other_val, non_blocking=non_blocking)
                 return self
             named = True
 

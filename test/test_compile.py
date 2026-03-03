@@ -37,10 +37,12 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 
+from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from tensordict.tensorclass import TensorClass
 
+from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -1621,6 +1623,142 @@ class TestTCNonTensorInit:
         inp = torch.randn(3)
         result = fn(inp)
         torch.testing.assert_close(result, inp * 2)
+
+
+def _count_compiles(fn, *args):
+    """Compile fn, run it twice, return (frame_count_first, frame_count_second).
+
+    Uses CompileCounterWithBackend("eager") so the function actually executes.
+    """
+    torch._dynamo.reset_code_caches()
+    cnt = CompileCounterWithBackend("eager")
+    compiled = torch.compile(fn, backend=cnt)
+    compiled(*args)
+    first = cnt.frame_count
+    compiled(*args)
+    second = cnt.frame_count
+    return first, second
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+class TestGuardCount:
+    """Tests that verify compile guard/recompile counts for optimized paths."""
+
+    def test_clone_recurse_false_no_recompile(self):
+        def fn(td):
+            c = td.clone(recurse=False)
+            return c["a"] + 1
+
+        td = TensorDict(
+            {"a": torch.randn(4), **{f"key_{i}": torch.randn(4) for i in range(20)}},
+            batch_size=[4],
+        )
+        first, second = _count_compiles(fn, td)
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_tc_getattr_no_recompile(self):
+        class BigTC(TensorClass["nocast"]):
+            a: torch.Tensor
+            b: torch.Tensor
+            c: torch.Tensor
+            d: torch.Tensor
+            e: torch.Tensor
+
+        def fn(tc):
+            return tc.a + tc.b + tc.c + tc.d + tc.e
+
+        tc = BigTC(
+            a=torch.randn(4),
+            b=torch.randn(4),
+            c=torch.randn(4),
+            d=torch.randn(4),
+            e=torch.randn(4),
+            batch_size=[4],
+        )
+        first, second = _count_compiles(fn, tc)
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_replace_no_recompile(self):
+        class State(TensorClass["nocast"]):
+            x: torch.Tensor
+            y: torch.Tensor
+            z: torch.Tensor
+
+        def fn(s):
+            s = s.replace(x=s.x + 1)
+            s = s.replace(y=s.y + 2)
+            s = s.replace(x=s.x + s.y, z=s.z + 1)
+            return s
+
+        s = State(
+            x=torch.randn(4),
+            y=torch.randn(4),
+            z=torch.randn(4),
+            batch_size=[4],
+        )
+        first, second = _count_compiles(fn, s)
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_update_inplace_no_recompile(self):
+        def fn(td, src):
+            td.update_(src)
+            return td["a"] + 0
+
+        td = TensorDict(
+            {"a": torch.randn(4), "b": torch.randn(4)},
+            batch_size=[4],
+        )
+        src = TensorDict(
+            {"a": torch.ones(4), "b": torch.ones(4)},
+            batch_size=[4],
+        )
+        first, second = _count_compiles(fn, td, src)
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_unbatched_clone_no_recompile(self):
+        def fn(td):
+            c = td.clone()
+            return c["a"] + 0
+
+        td = TensorDict(
+            {
+                "a": torch.randn(4, 3),
+                "unbatched": UnbatchedTensor(data=torch.randn(5)),
+            },
+            batch_size=[4],
+        )
+        first, second = _count_compiles(fn, td)
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_unbatched_clone_preserves_semantics(self):
+        """Cloning an UnbatchedTensor must produce independent data."""
+        torch._dynamo.reset_code_caches()
+
+        def fn(td):
+            cloned = td.clone()
+            return cloned
+
+        td = TensorDict(
+            {
+                "a": torch.randn(4, 3),
+                "unbatched": UnbatchedTensor(data=torch.randn(5)),
+            },
+            batch_size=[4],
+        )
+        fn_c = torch.compile(fn, fullgraph=True)
+        result = fn_c(td)
+        ut_orig = td.get("unbatched")
+        ut_clone = result.get("unbatched")
+        assert ut_clone.data.data_ptr() != ut_orig.data.data_ptr(), (
+            "clone() must produce independent data"
+        )
 
 
 if __name__ == "__main__":
