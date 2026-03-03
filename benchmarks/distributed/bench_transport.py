@@ -51,6 +51,7 @@ def _next_ucxx_port():
     _ucxx_port_counter += 2
     return port
 
+
 SIZES = {
     "1KB": 256,
     "1MB": 262_144,
@@ -216,7 +217,11 @@ def bench_ucxx_all_sizes(rank, sizes, device, peer_ip):
 
         results = {}
         for size_name, n_floats in sizes.items():
+            # Skip 1GB on CPU to avoid OOM
             if device == "cpu" and n_floats > 100_000_000:
+                continue
+            # Skip 1GB on CUDA to avoid GPU OOM with consolidation overhead
+            if device == "cuda" and n_floats > 100_000_000:
                 continue
 
             td = _make_td(n_floats, device)
@@ -377,23 +382,25 @@ def main():
 
     # ---- torch.distributed setup ----
     os.environ["MASTER_ADDR"] = master_ip
-    os.environ["MASTER_PORT"] = "29500"
+    os.environ["MASTER_PORT"] = "29502"
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
     backend = "cpu:gloo,cuda:nccl" if torch.cuda.is_available() else "gloo"
-    print(f"[rank {rank}] Initializing process group ({backend})...", flush=True)  # noqa: T201
+    print(
+        f"[rank {rank}] Initializing process group ({backend})...", flush=True
+    )  # noqa: T201
     dist.init_process_group(
-        backend=backend, rank=rank, world_size=world_size,
-        init_method=f"tcp://{master_ip}:29500",
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+        init_method=f"tcp://{master_ip}:29502",
     )
     print(f"[rank {rank}] Process group initialized.", flush=True)  # noqa: T201
 
     if rank == 0:
         print(flush=True)  # noqa: T201
-        print(  # noqa: T201
-            "=" * 100, flush=True
-        )
+        print("=" * 100, flush=True)  # noqa: T201
         print(  # noqa: T201
             f"  TensorDict Distributed Transport Benchmark  "
             f"(warmup={WARMUP}, rounds={ROUNDS})",
@@ -440,9 +447,7 @@ def main():
                 _barrier()
 
                 try:
-                    mean, std, nbytes = bench_fn(
-                        rank, n_floats, device, group=None
-                    )
+                    mean, std, nbytes = bench_fn(rank, n_floats, device, group=None)
                 except Exception as e:
                     if rank == 0:
                         print(  # noqa: T201
@@ -463,44 +468,55 @@ def main():
             if rank == 0:
                 print("", flush=True)  # noqa: T201
 
-    # UCXX benchmarks — single connection, all sizes
+    # UCXX benchmarks — single connection per device, all sizes
     if has_ucxx:
-        if rank == 0:
-            print("\n--- UCXX TensorDictPipe (CPU, all sizes) ---\n", flush=True)  # noqa: T201
-            print(  # noqa: T201
-                f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
-                flush=True,
-            )
-            print("-" * 80, flush=True)  # noqa: T201
-
-        gc.collect()
-        _barrier()
-
-        try:
-            ucxx_results = bench_ucxx_all_sizes(rank, SIZES, "cpu", peer_ip)
-        except Exception as e:
+        for ucxx_device in DEVICES:
             if rank == 0:
                 print(  # noqa: T201
-                    f"{'UCXX pipe':<35s} | {'ALL':>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
+                    f"\n--- UCXX TensorDictPipe ({ucxx_device.upper()}, all sizes) ---\n",
                     flush=True,
                 )
-        else:
-            for size_name, (first_time, steady_mean, steady_std, nbytes) in ucxx_results.items():
+                print(  # noqa: T201
+                    f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
+                    flush=True,
+                )
+                print("-" * 80, flush=True)  # noqa: T201
+
+            gc.collect()
+            torch.cuda.empty_cache() if ucxx_device == "cuda" else None
+            _barrier()
+
+            try:
+                ucxx_results = bench_ucxx_all_sizes(rank, SIZES, ucxx_device, peer_ip)
+            except Exception as e:
                 if rank == 0:
                     print(  # noqa: T201
-                        f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
-                        f"{_fmt_time(first_time):>18s} | "
-                        f"{_fmt_throughput(nbytes, first_time)}",
+                        f"{'UCXX pipe':<35s} | {'ALL':>6s} | "
+                        f"{'ERROR: ' + str(e)[:50]:>18s} |",
                         flush=True,
                     )
-                    print(  # noqa: T201
-                        f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
-                        f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
-                        f"{_fmt_throughput(nbytes, steady_mean)}",
-                        flush=True,
-                    )
+            else:
+                for size_name, (
+                    first_time,
+                    steady_mean,
+                    steady_std,
+                    nbytes,
+                ) in ucxx_results.items():
+                    if rank == 0:
+                        print(  # noqa: T201
+                            f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
+                            f"{_fmt_time(first_time):>18s} | "
+                            f"{_fmt_throughput(nbytes, first_time)}",
+                            flush=True,
+                        )
+                        print(  # noqa: T201
+                            f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
+                            f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
+                            f"{_fmt_throughput(nbytes, steady_mean)}",
+                            flush=True,
+                        )
 
-        _barrier()
+            _barrier()
 
     if rank == 0:
         print("\n" + "=" * 80, flush=True)  # noqa: T201

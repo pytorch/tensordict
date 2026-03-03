@@ -47,6 +47,22 @@ def _tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
     return tensor.detach().numpy()
 
 
+def _infer_device(td: "TensorDictBase") -> torch.device:
+    """Return the device of a TensorDict, falling back to inspecting leaf tensors.
+
+    TensorDict.device can be None even when all leaves live on CUDA
+    (e.g. when constructed without an explicit ``device=``).  This helper
+    ensures we always get a concrete device for consolidation / allocation.
+    """
+    device = td.device
+    if device is not None:
+        return device
+    for v in td.values(True, True):
+        if isinstance(v, torch.Tensor):
+            return v.device
+    return torch.device("cpu")
+
+
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     try:
         loop = asyncio.get_running_loop()
@@ -87,7 +103,11 @@ async def send_tensordict(
     _check_ucxx()
 
     if consolidated:
-        td_c = td if td.is_consolidated() else td.consolidate(metadata=True)
+        if td.is_consolidated():
+            td_c = td
+        else:
+            device = _infer_device(td)
+            td_c = td.consolidate(metadata=True, device=device)
         metadata = td_c._consolidated["metadata"]
         storage = td_c._consolidated["storage"]
 
@@ -149,7 +169,9 @@ async def recv_tensordict(
             await endpoint.recv(storage_np)
         return td
 
-    effective_device = torch.device(device) if device is not None else torch.device("cpu")
+    effective_device = (
+        torch.device(device) if device is not None else torch.device("cpu")
+    )
     storage = torch.empty(total_bytes, dtype=torch.uint8, device=effective_device)
 
     if storage.is_cuda:
@@ -196,9 +218,9 @@ def _compute_total_bytes(metadata: dict) -> int:
     """Compute total storage bytes from consolidation metadata."""
     total = 0
     leaves = metadata.get("leaves", {})
-    for _dtype, _shape, start, stop, _pad in leaves.values():
+    for _dtype, _shape, _start, stop, _pad in leaves.values():
         total = max(total, stop)
-    for key, val in metadata.items():
+    for _key, val in metadata.items():
         if isinstance(val, dict) and "cls" in val:
             total = max(total, _compute_total_bytes(val))
     return total
@@ -288,7 +310,9 @@ class TensorDictPipe:
             A connected TensorDictPipe for the first accepted client.
         """
         _check_ucxx()
-        pipe_future: asyncio.Future[TensorDictPipe] = asyncio.get_event_loop().create_future()
+        pipe_future: asyncio.Future[TensorDictPipe] = (
+            asyncio.get_event_loop().create_future()
+        )
 
         async def _on_connect(ep):
             if not pipe_future.done():
@@ -316,7 +340,11 @@ class TensorDictPipe:
             await self._asend_uncollated(td)
 
     async def _asend_consolidated(self, td: TensorDictBase) -> None:
-        td_c = td if td.is_consolidated() else td.consolidate(metadata=True)
+        if td.is_consolidated():
+            td_c = td
+        else:
+            device = _infer_device(td)
+            td_c = td.consolidate(metadata=True, device=device)
         metadata = td_c._consolidated["metadata"]
         storage = td_c._consolidated["storage"]
 
@@ -325,17 +353,22 @@ class TensorDictPipe:
         if schema_hash != self._send_schema_hash:
             self._send_schema_hash = schema_hash
 
-            await self._endpoint.send(np.frombuffer(_NEW_SCHEMA_FLAG, dtype=np.uint8).copy())
+            await self._endpoint.send(
+                np.frombuffer(_NEW_SCHEMA_FLAG, dtype=np.uint8).copy()
+            )
 
             metadata_with_size = dict(metadata)
             metadata_with_size["_total_bytes"] = storage.numel()
+            metadata_with_size["_device"] = str(storage.device)
             meta_bytes = json.dumps(metadata_with_size, sort_keys=True).encode("utf-8")
             meta_len = struct.pack("<Q", len(meta_bytes))
 
             await self._endpoint.send(np.frombuffer(meta_len, dtype=np.uint8))
             await self._endpoint.send(np.frombuffer(meta_bytes, dtype=np.uint8).copy())
         else:
-            await self._endpoint.send(np.frombuffer(_SAME_SCHEMA_FLAG, dtype=np.uint8).copy())
+            await self._endpoint.send(
+                np.frombuffer(_SAME_SCHEMA_FLAG, dtype=np.uint8).copy()
+            )
 
         if storage.is_cuda:
             await self._endpoint.send(storage)
@@ -407,10 +440,16 @@ class TensorDictPipe:
             metadata = json.loads(bytes(meta_buf))
 
             total_bytes = metadata.pop("_total_bytes")
+            sender_device = metadata.pop("_device", "cpu")
             self._recv_schema_hash = _metadata_hash(metadata)
 
-            effective_device = torch.device(device) if device is not None else torch.device("cpu")
-            storage = torch.empty(total_bytes, dtype=torch.uint8, device=effective_device)
+            if device is not None:
+                effective_device = torch.device(device)
+            else:
+                effective_device = torch.device(sender_device)
+            storage = torch.empty(
+                total_bytes, dtype=torch.uint8, device=effective_device
+            )
 
             if storage.is_cuda:
                 await self._endpoint.recv(storage)
@@ -456,7 +495,9 @@ class TensorDictPipe:
         await self._endpoint.recv(header_buf)
         header = json.loads(bytes(header_buf))
 
-        effective_device = torch.device(device) if device is not None else torch.device("cpu")
+        effective_device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
         result = {}
         for key, dtype_str, shape in zip(
             header["keys"], header["dtypes"], header["shapes"]

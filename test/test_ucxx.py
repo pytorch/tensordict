@@ -53,14 +53,29 @@ requires_cuda = pytest.mark.skipif(
 
 class TestMetadataHash:
     def test_deterministic(self):
-        meta = {"leaves": {"a": ("torch.float32", [2, 3], 0, 24, 0)}, "cls": "TensorDict", "non_tensors": {}, "cls_metadata": {"batch_size": [2], "device": None, "names": None}}
+        meta = {
+            "leaves": {"a": ("torch.float32", [2, 3], 0, 24, 0)},
+            "cls": "TensorDict",
+            "non_tensors": {},
+            "cls_metadata": {"batch_size": [2], "device": None, "names": None},
+        }
         h1 = _metadata_hash(meta)
         h2 = _metadata_hash(meta)
         assert h1 == h2
 
     def test_different_metadata_different_hash(self):
-        meta1 = {"leaves": {"a": ("torch.float32", [2, 3], 0, 24, 0)}, "cls": "TensorDict", "non_tensors": {}, "cls_metadata": {"batch_size": [2], "device": None, "names": None}}
-        meta2 = {"leaves": {"b": ("torch.float64", [4], 0, 32, 0)}, "cls": "TensorDict", "non_tensors": {}, "cls_metadata": {"batch_size": [4], "device": None, "names": None}}
+        meta1 = {
+            "leaves": {"a": ("torch.float32", [2, 3], 0, 24, 0)},
+            "cls": "TensorDict",
+            "non_tensors": {},
+            "cls_metadata": {"batch_size": [2], "device": None, "names": None},
+        }
+        meta2 = {
+            "leaves": {"b": ("torch.float64", [4], 0, 32, 0)},
+            "cls": "TensorDict",
+            "non_tensors": {},
+            "cls_metadata": {"batch_size": [4], "device": None, "names": None},
+        }
         assert _metadata_hash(meta1) != _metadata_hash(meta2)
 
     def test_key_order_invariant(self):

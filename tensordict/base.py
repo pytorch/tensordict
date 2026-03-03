@@ -9208,7 +9208,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def send(
         self,
-        dst: int | "TensorDictPipe",
+        dst: int | "TensorDictPipe",  # noqa: F821
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
@@ -9342,7 +9342,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def recv(
         self,
-        src: int | "TensorDictPipe",
+        src: int | "TensorDictPipe",  # noqa: F821
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         init_tag: int = 0,
@@ -9392,7 +9392,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return
         return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
-    async def asend(self, dst: "TensorDictPipe") -> None:
+    async def asend(self, dst: "TensorDictPipe") -> None:  # noqa: F821
         """Sends the content of a tensordict through a UCXX pipe (async).
 
         Args:
@@ -9405,7 +9405,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     async def arecv(
         self,
-        src: "TensorDictPipe",
+        src: "TensorDictPipe",  # noqa: F821
         *,
         device: torch.device | str | None = None,
     ) -> "TensorDictBase":
