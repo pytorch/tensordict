@@ -9,8 +9,14 @@ from functools import wraps
 from typing import Any, Callable, TYPE_CHECKING
 
 import torch
+from tensordict._td import TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import TensorDictBase
+
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
 
 from tensordict.tensorclass import (
     _arg_to_tensordict,
@@ -438,6 +444,13 @@ class UnbatchedTensor(TensorClass):
     def clone(self, recurse: bool = True):
         """Clones the UnbatchedTensor, preserving the batch_size."""
         data = self.data.clone() if recurse else self.data
+        if is_compiling():
+            result = UnbatchedTensor.__new__(UnbatchedTensor)
+            td = TensorDict(source={"data": data}, batch_size=[])
+            td._batch_size = self.batch_size
+            object.__setattr__(result, "_tensordict", td)
+            object.__setattr__(result, "_non_tensordict", {})
+            return result
         result = type(self)(data=data)
         result.batch_size = self.batch_size
         return result

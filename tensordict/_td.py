@@ -3397,6 +3397,11 @@ class TensorDict(TensorDictBase):
         if recurse and self.device is not None:
             return self._clone_recurse()
 
+        if not recurse and is_compiling():
+            result = TensorDict(batch_size=self.batch_size, device=self.device)
+            result._tensordict.update(self._tensordict)
+            return result
+
         result = self._new_unsafe(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,

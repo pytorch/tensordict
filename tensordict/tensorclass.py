@@ -995,6 +995,27 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 delattr(cls, field.name)
             except AttributeError:
                 pass
+
+    if tensor_only:
+        for field in cls.fields():
+            name = field.name
+
+            def _make_prop(key):
+                def _getter(self):
+                    out = self._tensordict._get_str(key, _UNSET)
+                    if out is _UNSET:
+                        out = self._non_tensordict.get(key, _UNSET)
+                        if out is _UNSET:
+                            raise AttributeError(key)
+                        return out
+                    if _is_unbatched(out):
+                        return out.data
+                    return out
+
+                return property(_getter)
+
+            setattr(cls, name, _make_prop(name))
+
     _get_type_hints(cls, tensor_only=tensor_only)
     # Detect user-defined __setattr__ that must be called during init.
     # After dataclass(), frozen=True adds a guard __setattr__, which is not
@@ -1903,7 +1924,12 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             or "_non_tensordict" not in __dict__
             or (
                 not self._shadow
-                and (key in SET_ATTRIBUTES or key in type(self).__dict__)
+                and (
+                    key in SET_ATTRIBUTES
+                    or (
+                        key in type(self).__dict__ and key not in self.__expected_keys__
+                    )
+                )
             )
         ):
             return self.__setattr_parent__(key, value)
