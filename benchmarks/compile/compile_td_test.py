@@ -400,7 +400,6 @@ def test_compile_replace(mode, variant, benchmark):
     benchmark(func, s)
 
 
-
 # ── Attribute-access benchmarks ──────────────────────────────────────────
 
 
@@ -457,6 +456,7 @@ def test_compile_tc_getattr_20(mode, benchmark):
 
 # ── Shallow clone benchmarks ────────────────────────────────────────────
 
+
 def clone_shallow(td):
     return td.clone(recurse=False)
 
@@ -486,6 +486,7 @@ def test_compile_clone_shallow(mode, n_fields, benchmark):
 
 
 # ── update_ benchmarks ──────────────────────────────────────────────────
+
 
 def update_inplace(td, src):
     td.update_(src)

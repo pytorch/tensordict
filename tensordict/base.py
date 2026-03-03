@@ -8305,11 +8305,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
                     vals = [vals[k] for k in new_keys]
-                copy_fn = (
-                    _foreach_copy_compiled
-                    if is_compiling()
-                    else _foreach_copy_
-                )
+                copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
                 copy_fn(vals, other_val, non_blocking=non_blocking)
                 return self
             named = True

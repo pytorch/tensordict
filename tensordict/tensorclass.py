@@ -1927,8 +1927,7 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
                 and (
                     key in SET_ATTRIBUTES
                     or (
-                        key in type(self).__dict__
-                        and key not in self.__expected_keys__
+                        key in type(self).__dict__ and key not in self.__expected_keys__
                     )
                 )
             )

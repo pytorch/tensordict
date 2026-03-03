@@ -27,6 +27,8 @@ from tensordict import (
     TensorDict,
     TensorDictParams,
 )
+
+from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
@@ -36,8 +38,6 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-
-from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from tensordict.tensorclass import TensorClass
@@ -1756,9 +1756,9 @@ class TestGuardCount:
         result = fn_c(td)
         ut_orig = td.get("unbatched")
         ut_clone = result.get("unbatched")
-        assert ut_clone.data.data_ptr() != ut_orig.data.data_ptr(), (
-            "clone() must produce independent data"
-        )
+        assert (
+            ut_clone.data.data_ptr() != ut_orig.data.data_ptr()
+        ), "clone() must produce independent data"
 
 
 if __name__ == "__main__":
