@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3836+geffac5884.d20260304)
+                  main (0.11.0.dev3839+g9b158640e.d20260304)
                 </div>
               
             
@@ -371,7 +371,19 @@ the same memory-mapped files on a shared filesystem.</p>
 <li><p><a class="reference internal" href="#all-gather" id="id9">All-gather</a></p></li>
 <li><p><a class="reference internal" href="#scatter" id="id10">Scatter</a></p></li>
 <li><p><a class="reference internal" href="#quick-reference" id="id11">Quick reference</a></p></li>
-<li><p><a class="reference internal" href="#shared-storage-workflows-memory-mapped" id="id12">Shared-storage workflows (memory-mapped)</a></p></li>
+<li><p><a class="reference internal" href="#high-performance-streaming-with-ucxx" id="id12">High-performance streaming with UCXX</a></p>
+<ul>
+<li><p><a class="reference internal" href="#installing-ucxx" id="id13">Installing UCXX</a></p></li>
+<li><p><a class="reference internal" href="#tensordictpipe-the-two-phase-protocol" id="id14"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a></p></li>
+<li><p><a class="reference internal" href="#establishing-a-connection" id="id15">Establishing a connection</a></p></li>
+<li><p><a class="reference internal" href="#async-iteration" id="id16">Async iteration</a></p></li>
+<li><p><a class="reference internal" href="#cpu-and-cuda-transfers" id="id17">CPU and CUDA transfers</a></p></li>
+<li><p><a class="reference internal" href="#unified-api-with-send-recv" id="id18">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#one-to-many-tensordictserver" id="id19">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a></p></li>
+<li><p><a class="reference internal" href="#benchmarks" id="id20">Benchmarks</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#shared-storage-workflows-memory-mapped" id="id21">Shared-storage workflows (memory-mapped)</a></p></li>
 </ul>
 </nav>
 <section id="prerequisites">
@@ -615,8 +627,337 @@ TensorDict instances from one rank to all other ranks:</p>
 </tbody>
 </table>
 </section>
+<section id="high-performance-streaming-with-ucxx">
+<h2><a class="toc-backref" href="#id12" role="doc-backlink">High-performance streaming with UCXX</a><a class="headerlink" href="#high-performance-streaming-with-ucxx" title="Permalink to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> primitives above operate within a process group
+and are ideal for collective communication patterns.  For <strong>persistent
+point-to-point streaming</strong> — such as a data-producer on one node
+continuously feeding batches to a trainer on another —
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> provides a higher-performance
+alternative built on <a class="reference external" href="https://github.com/rapidsai/ucxx">UCXX</a>, the
+Python bindings for <a class="reference external" href="https://openucx.org/">UCX</a>.</p>
+<p>Key advantages over <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> send/recv:</p>
+<ul class="simple">
+<li><p><strong>No process group required</strong> — connect directly by IP and port.</p></li>
+<li><p><strong>Zero-allocation steady-state</strong> — after the first send establishes
+the schema, subsequent sends transmit only the raw storage buffer
+with no metadata, no allocation, and no parsing on the receiver.</p></li>
+<li><p><strong>InfiniBand / RDMA</strong> — UCX auto-selects the fastest available
+transport (TCP, InfiniBand verbs, RoCE).</p></li>
+<li><p><strong>GPUDirect RDMA</strong> — when tensors live on CUDA, the consolidated
+buffer is sent directly from GPU memory over RDMA, matching NCCL
+throughput without CPU staging.</p></li>
+<li><p><strong>Async-native</strong> — built on <a class="reference external" href="https://docs.python.org/3/library/asyncio.html#module-asyncio" title="(in Python v3.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">asyncio</span></code></a>, with synchronous wrappers
+for convenience.</p></li>
+</ul>
+<section id="installing-ucxx">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">Installing UCXX</a><a class="headerlink" href="#installing-ucxx" title="Permalink to this heading">¶</a></h3>
+<p>UCXX requires a Linux host with UCX system libraries.  Install via pip
+or conda:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># pip (CUDA 12)</span>
+pip<span class="w"> </span>install<span class="w"> </span>ucxx-cu12
+
+<span class="c1"># pip (CUDA 13)</span>
+pip<span class="w"> </span>install<span class="w"> </span>ucxx-cu13
+
+<span class="c1"># conda</span>
+conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>-c<span class="w"> </span>rapidsai<span class="w"> </span>ucxx
+</pre></div>
+</div>
+<p>For InfiniBand support the host needs <code class="docutils literal notranslate"><span class="pre">rdma-core</span></code> (or MOFED 5.0+) and
+a Linux kernel ≥ 5.6.  For GPUDirect RDMA, the <code class="docutils literal notranslate"><span class="pre">nvidia_peermem</span></code> kernel
+module must be loaded.  Verify with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># check IB devices</span>
+ibstat
+
+<span class="c1"># check GPUDirect RDMA</span>
+lsmod<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>nvidia_peermem
+</pre></div>
+</div>
+<p>UCX picks up transports automatically.  You can control transport
+selection with environment variables:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># let UCX auto-select (recommended)</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_TLS</span><span class="o">=</span>all
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_NET_DEVICES</span><span class="o">=</span>all
+
+<span class="c1"># restrict to TCP only (useful for debugging)</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_TLS</span><span class="o">=</span>tcp
+</pre></div>
+</div>
+</section>
+<section id="tensordictpipe-the-two-phase-protocol">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a><a class="headerlink" href="#tensordictpipe-the-two-phase-protocol" title="Permalink to this heading">¶</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> wraps a UCXX endpoint into a
+typed channel that understands TensorDict’s consolidated layout.  It
+implements a <strong>two-phase protocol</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong>Handshake (first send)</strong> — the sender consolidates the TensorDict,
+transmits the consolidation metadata (keys, dtypes, shapes, byte
+offsets — serialized as JSON) followed by the raw storage buffer.
+The receiver allocates a single flat tensor and rebuilds a TensorDict
+whose leaves are views into that buffer.</p></li>
+<li><p><strong>Steady-state (subsequent sends with same schema)</strong> — the sender
+sends a one-byte “same schema” flag followed by just the raw buffer.
+The receiver overwrites its pre-allocated storage in-place.  No
+allocation, no metadata parsing, no deserialization.</p></li>
+</ol>
+<p>When the schema changes (e.g. different keys or shapes), the pipe
+automatically falls back to the handshake phase.</p>
+</section>
+<section id="establishing-a-connection">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">Establishing a connection</a><a class="headerlink" href="#establishing-a-connection" title="Permalink to this heading">¶</a></h3>
+<p>One side listens, the other connects:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._ucxx</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPipe</span>
+
+<span class="c1"># --- node A (receiver) ---</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">receiver</span><span class="p">():</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
+
+    <span class="c1"># first receive: handshake — allocates buffer, builds TensorDict</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># TensorDict with the sender&#39;s keys/shapes/dtypes</span>
+
+    <span class="c1"># steady-state: zero-alloc receive into the same buffer</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+        <span class="n">train</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+
+<span class="c1"># --- node B (sender) ---</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">sender</span><span class="p">():</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">&quot;10.0.1.1&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">dataloader</span><span class="p">:</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">]},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">B</span><span class="p">])</span>
+        <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The pipe also supports synchronous usage and context managers:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># synchronous</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+
+<span class="c1"># context manager</span>
+<span class="k">async</span> <span class="k">with</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">pipe</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="async-iteration">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">Async iteration</a><a class="headerlink" href="#async-iteration" title="Permalink to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> implements the async iterator protocol, so you can
+consume incoming TensorDicts with <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">for</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">13337</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">pipe</span><span class="p">:</span>
+    <span class="n">train</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The iterator yields the received TensorDict on each iteration,
+automatically reusing the buffer after the first handshake.</p>
+</section>
+<section id="cpu-and-cuda-transfers">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">CPU and CUDA transfers</a><a class="headerlink" href="#cpu-and-cuda-transfers" title="Permalink to this heading">¶</a></h3>
+<p>The pipe is <strong>device-aware</strong>.  When the sender’s TensorDict contains
+CUDA tensors, the consolidated buffer lives on GPU and is transferred
+directly over RDMA (GPUDirect) without touching host memory.  The
+receiver automatically allocates its buffer on the same device:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sender — data on GPU</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1024</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># sends from GPU memory</span>
+
+<span class="c1"># receiver — automatically receives into GPU memory</span>
+<span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>  <span class="c1"># cuda:0</span>
+</pre></div>
+</div>
+<p>You can override the receiver’s device by passing <code class="docutils literal notranslate"><span class="pre">device=</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>  <span class="c1"># force receive onto CPU</span>
+</pre></div>
+</div>
+</section>
+<section id="unified-api-with-send-recv">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a><a class="headerlink" href="#unified-api-with-send-recv" title="Permalink to this heading">¶</a></h3>
+<p>The <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a> methods accept a
+<code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> in place of a rank integer:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># works with torch.distributed</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># works with UCXX — same API, different transport</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="n">pipe</span><span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">pipe</span><span class="p">)</span>
+
+<span class="c1"># async variants</span>
+<span class="k">await</span> <span class="n">td</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">td</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This makes it easy to switch between <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> and UCXX
+without changing application logic.</p>
+</section>
+<section id="one-to-many-tensordictserver">
+<h3><a class="toc-backref" href="#id19" role="doc-backlink">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a><a class="headerlink" href="#one-to-many-tensordictserver" title="Permalink to this heading">¶</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictServer</span></code> accepts multiple incoming
+connections, yielding a separate <code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> for each client:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._ucxx</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictServer</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_client</span><span class="p">(</span><span class="n">pipe</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">pipe</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+<span class="k">async</span> <span class="k">with</span> <span class="n">TensorDictServer</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">serve</span><span class="p">(</span><span class="n">handle_client</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Or using the async iterator interface:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">with</span> <span class="n">TensorDictServer</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="n">server</span><span class="p">:</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">handle_client</span><span class="p">(</span><span class="n">pipe</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="benchmarks">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">Benchmarks</a><a class="headerlink" href="#benchmarks" title="Permalink to this heading">¶</a></h3>
+<p>The numbers below were measured on a two-node cluster with NVIDIA H200
+GPUs and 400 Gb/s InfiniBand (<code class="docutils literal notranslate"><span class="pre">nvidia_peermem</span></code> loaded for GPUDirect
+RDMA).  Each transfer is a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> whose leaves are packed into a
+single contiguous <code class="docutils literal notranslate"><span class="pre">float32</span></code> buffer of the indicated size.  Latencies
+are averages over 50 steady-state iterations after warm-up (UCXX “first
+send” includes the one-off metadata handshake).  The benchmark script is
+at <code class="docutils literal notranslate"><span class="pre">benchmarks/distributed/bench_transport.py</span></code>.</p>
+<p><strong>CPU — gloo (TCP) vs UCXX (InfiniBand)</strong></p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 43%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Size</p></th>
+<th class="head"><p>Method</p></th>
+<th class="head"><p>Latency</p></th>
+<th class="head"><p>Throughput</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>900 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 KB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>212 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>105 µs</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>963 µs</p></td>
+<td><p>2.18 GB/s</p></td>
+</tr>
+<tr class="row-even"><td><p>1 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>903 µs</p></td>
+<td><p>2.32 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>682 µs</strong></p></td>
+<td><p><strong>3.08 GB/s</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>87 ms</p></td>
+<td><p>2.40 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>87 ms</p></td>
+<td><p>2.42 GB/s</p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">broadcast</span></code></p></td>
+<td><p>159 ms</p></td>
+<td><p>1.32 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>37 ms</strong></p></td>
+<td><p><strong>5.71 GB/s</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>UCXX over InfiniBand is <strong>2.4× faster</strong> than the best gloo method for
+large CPU transfers.</p>
+<p><strong>CUDA — NCCL vs UCXX (GPUDirect RDMA)</strong></p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 43%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Size</p></th>
+<th class="head"><p>Method</p></th>
+<th class="head"><p>Latency</p></th>
+<th class="head"><p>Throughput</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>231 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 KB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>138 µs</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>1 MB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>238 µs</p></td>
+<td><p>8.81 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>231 µs</strong></p></td>
+<td><p><strong>9.08 GB/s</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>7.50 ms</p></td>
+<td><p>27.95 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>7.47 ms</strong></p></td>
+<td><p><strong>28.08 GB/s</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>UCXX matches NCCL throughput for large CUDA transfers and is
+<strong>40% faster</strong> for small messages (138 µs vs 231 µs at 1 KB) due to
+lower per-message overhead.  Both backends use GPUDirect RDMA — the
+consolidated storage stays on GPU and goes directly over InfiniBand
+without CPU staging.</p>
+</section>
+</section>
 <section id="shared-storage-workflows-memory-mapped">
-<h2><a class="toc-backref" href="#id12" role="doc-backlink">Shared-storage workflows (memory-mapped)</a><a class="headerlink" href="#shared-storage-workflows-memory-mapped" title="Permalink to this heading">¶</a></h2>
+<h2><a class="toc-backref" href="#id21" role="doc-backlink">Shared-storage workflows (memory-mapped)</a><a class="headerlink" href="#shared-storage-workflows-memory-mapped" title="Permalink to this heading">¶</a></h2>
 <p>When nodes share a filesystem (e.g. NFS), a memory-mapped TensorDict lets
 multiple processes read from and write to the same data without sending
 tensors over the network.</p>
@@ -700,6 +1041,17 @@ tensors over the network.</p>
 <li><a class="reference internal" href="#all-gather">All-gather</a></li>
 <li><a class="reference internal" href="#scatter">Scatter</a></li>
 <li><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+<li><a class="reference internal" href="#high-performance-streaming-with-ucxx">High-performance streaming with UCXX</a><ul>
+<li><a class="reference internal" href="#installing-ucxx">Installing UCXX</a></li>
+<li><a class="reference internal" href="#tensordictpipe-the-two-phase-protocol"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a></li>
+<li><a class="reference internal" href="#establishing-a-connection">Establishing a connection</a></li>
+<li><a class="reference internal" href="#async-iteration">Async iteration</a></li>
+<li><a class="reference internal" href="#cpu-and-cuda-transfers">CPU and CUDA transfers</a></li>
+<li><a class="reference internal" href="#unified-api-with-send-recv">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
+<li><a class="reference internal" href="#one-to-many-tensordictserver">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a></li>
+<li><a class="reference internal" href="#benchmarks">Benchmarks</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#shared-storage-workflows-memory-mapped">Shared-storage workflows (memory-mapped)</a></li>
 </ul>
 </li>
