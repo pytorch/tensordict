@@ -125,7 +125,6 @@ async def send_tensordict(
         consolidated (bool): if ``True``, consolidates into a single buffer
             before sending. Defaults to ``True``.
     """
-
     if consolidated:
         if td.is_consolidated():
             td_c = td

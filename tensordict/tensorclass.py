@@ -215,6 +215,8 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_values_list",
     "all_gather",
     "all_reduce",
+    "arecv",
+    "asend",
     "batch_dims",
     "batch_size",
     # "broadcast" is handled separately (tensorclass type injection)

@@ -10,6 +10,7 @@ RST_SECTION_CHARS = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 
 logger = getLogger(__name__)
 
+
 def _strip_bom(line: str) -> str:
     """Strip the Unicode BOM (U+FEFF) that some generators emit."""
     return line.lstrip("\ufeff")
