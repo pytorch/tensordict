@@ -207,11 +207,9 @@ def _gather(
         out = torch.gather(tensor, dim, index_expand, out=dest)
         return out
 
-    def _process_gather_value(value, index_shape=index.shape):
+    def _process_gather_value(value):
         if _is_unbatched(value):
-            value_copy = value.copy()
-            value_copy.batch_size = index_shape
-            return value_copy
+            return value
         return _gather_tensor(value)
 
     if out is None:
@@ -231,11 +229,7 @@ def _gather(
         )
     for key, value in input.items(is_leaf=_is_leaf_nontensor):
         if _is_unbatched(value):
-            value_copy = value.copy()
-            value_copy.batch_size = index.shape
-            out._set_str(
-                key, value_copy, validated=True, inplace=False, non_blocking=False
-            )
+            out._set_str(key, value, validated=True, inplace=False, non_blocking=False)
         else:
             _gather_tensor(value, out, key)
     return out
@@ -459,9 +453,7 @@ def _cat(
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
             if _is_unbatched(items[0]):
-                copy = items[0].copy()
-                copy.batch_size = batch_size
-                out[key] = copy
+                out[key] = items[0]
             elif not is_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
@@ -498,10 +490,8 @@ def _cat(
         for key in keys:
             first_item = list_of_tensordicts[0]._get_str(key, NO_DEFAULT)
             if _is_unbatched(first_item):
-                copy = first_item.copy()
-                copy.batch_size = batch_size
                 out._set_str(
-                    key, copy, validated=True, inplace=False, non_blocking=False
+                    key, first_item, validated=True, inplace=False, non_blocking=False
                 )
             else:
                 with (
@@ -770,6 +760,8 @@ def _stack(
                 if is_not_init:
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
+                    if _is_unbatched(values[0]):
+                        return type(values[0])._stack_non_tensor(values, dim)
                     return torch.stack(values, dim)
                 with (
                     _ErrorInteceptor(
@@ -1036,42 +1028,28 @@ def _grad(
             "torch.autograd.grad for TensorDict only supports TensorDictBase as grad_output"
         )
 
-    def _unwrap_pass_through(val):
-        if _is_unbatched(val):
-            return val.data
-        return val
-
     if grad_outputs is not None:
         tup_grad_outputs = tuple(
-            _unwrap_pass_through(v)
-            for v in grad_outputs._values_list(
-                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-            )
+            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         )
     else:
         tup_grad_outputs = None
 
     tup_outputs = tuple(
-        _unwrap_pass_through(v)
-        for v in outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
     )
 
     keys, all_inputs_raw = inputs._items_list(
         True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
     )
-    all_inputs = [_unwrap_pass_through(v) for v in all_inputs_raw]
 
-    all_grads = torch.autograd.grad(tup_outputs, all_inputs, tup_grad_outputs, **kwargs)
+    all_grads = torch.autograd.grad(
+        tup_outputs, all_inputs_raw, tup_grad_outputs, **kwargs
+    )
 
-    # Wrap gradients back into pass-through wrappers if the original input was pass-through
     pairs = {}
-    for key, grad, orig_input in _zip_strict(keys, all_grads, all_inputs_raw):
-        if _is_unbatched(orig_input):
-            wrapped_grad = type(orig_input)(grad)
-            wrapped_grad.batch_size = orig_input.batch_size
-            pairs[key] = wrapped_grad
-        else:
-            pairs[key] = grad
+    for key, grad in _zip_strict(keys, all_grads):
+        pairs[key] = grad
 
     def pop(name, val):
         return pairs.pop(name, None)

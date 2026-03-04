@@ -84,9 +84,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
     )
     for key, tensor in tensordict.items():
         if _is_unbatched(tensor):
-            tensor_copy = tensor.copy()
-            tensor_copy.batch_size = torch.Size(new_batch_size)
-            out._set_str(key, tensor_copy, validated=True, inplace=False)
+            out._set_str(key, tensor, validated=True, inplace=False)
             continue
 
         cur_pad = reverse_pad
@@ -216,6 +214,9 @@ def pad_sequence(
     for key in keys:
         try:
             item0 = list_of_dicts[0][key]
+            if _is_unbatched(item0):
+                out.set(key, item0)
+                continue
             if is_non_tensor(item0):
                 out.set(key, TensorDict.lazy_stack([d[key] for d in list_of_dicts]))
                 continue

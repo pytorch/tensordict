@@ -5925,18 +5925,14 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: gather is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             index = torch.ones(td.shape, device=td.device, dtype=torch.long)
             other_dim = dim + index.ndim if dim < 0 else dim
             idx = (*[slice(None) for _ in range(other_dim)], slice(2))
             index = index[idx]
             index = index.cumsum(dim=other_dim) - 1
             td_gather = torch.gather(td, dim=dim, index=index)
-            # UnbatchedTensor data should be unchanged
-            assert (td_gather.get("unbatched").data == original_unbatched).all()
-            # batch_size should be updated
-            assert td_gather.get("unbatched").batch_size == td_gather.batch_size
+            assert td_gather.get("unbatched") is original_unbatched
             return
         index = torch.ones(td.shape, device=td.device, dtype=torch.long)
         other_dim = dim + index.ndim if dim < 0 else dim
@@ -6410,7 +6406,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
             # UnbatchedTensor: masking set is a no-op for UnbatchedTensor data
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             mask = torch.zeros(
                 td.batch_size, dtype=torch.bool, device=device
             ).bernoulli_(0.8)
@@ -6424,7 +6420,7 @@ class TestTensorDicts(TestTensorDictsBase):
             )
             td[mask] = pseudo_td
             # UnbatchedTensor data should be unchanged
-            assert (td["unbatched"].data == original_unbatched).all()
+            assert td["unbatched"] is original_unbatched
             return
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
             0.8
@@ -7149,14 +7145,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: pad is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             pad_size = [0, 1, 0, 2]
             padded_td = pad(td, pad_size)
-            # UnbatchedTensor data should be unchanged
-            assert (padded_td.get("unbatched").data == original_unbatched).all()
-            # batch_size should be updated
-            assert padded_td.get("unbatched").batch_size == padded_td.batch_size
+            assert padded_td.get("unbatched") is original_unbatched
             return
         paddings = [
             [0, 1, 0, 2],
@@ -8079,17 +8071,13 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_split(self, td_name, device, performer, dim):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: split is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             if performer == "torch":
                 tds = torch.split(td, 2, dim)
             else:
                 tds = td.split(2, dim)
             for split_td in tds:
-                # UnbatchedTensor data should be unchanged (same object)
-                assert (split_td.get("unbatched").data == original_unbatched).all()
-                # batch_size should be updated
-                assert split_td.get("unbatched").batch_size == split_td.batch_size
+                assert split_td.get("unbatched") is original_unbatched
             return
         t = torch.zeros(()).expand(td.shape)
         for dim in range(td.batch_dims):
@@ -8636,13 +8624,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: transpose is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            # UnbatchedTensor data should be unchanged
-            assert (tdt.get("unbatched").data == original_unbatched).all()
-            # batch_size should be updated
-            assert tdt.get("unbatched").batch_size == tdt.batch_size
+            assert tdt.get("unbatched") is original_unbatched
             return
         tdt = td.transpose(0, 1)
         assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
@@ -8677,13 +8661,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_transpose(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: transpose is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            # UnbatchedTensor data should be unchanged
-            assert (tdt.get("unbatched").data == original_unbatched).all()
-            # batch_size should be updated
-            assert tdt.get("unbatched").batch_size == tdt.batch_size
+            assert tdt.get("unbatched") is original_unbatched
             return
         is_lazy = td_name in (
             "sub_td",
@@ -8752,13 +8732,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_movedim(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_with_unbatched":
-            # UnbatchedTensor: movedim is a no-op for data, only batch_size changes
-            original_unbatched = td.get("unbatched").data.clone()
+            original_unbatched = td.get("unbatched")
             td_moved = td.movedim(0, -1)
-            # UnbatchedTensor data should be unchanged
-            assert (td_moved.get("unbatched").data == original_unbatched).all()
-            # batch_size should be updated
-            assert td_moved.get("unbatched").batch_size == td_moved.batch_size
+            assert td_moved.get("unbatched") is original_unbatched
             return
         is_lazy = td_name in (
             "sub_td",
@@ -14373,8 +14349,6 @@ class TestUnbatchedTensor:
         unflatten = td.unflatten(0, (1, 3))
         assert unflatten["a"] is td["a"]
         assert unflatten.batch_size == (1, 3)
-        assert unflatten.get("a").batch_size == (1, 3)
-        assert unflatten.get("a")._tensordict.batch_size == ()
 
         flatten = unflatten.flatten(0, 1)
         assert flatten["a"] is td["a"]
@@ -14422,7 +14396,7 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
-    def test_unbatched_getitem_returns_data(self):
+    def test_unbatched_getitem_returns_unbatched(self):
         data = torch.randn(7, 11)
         td = TensorDict(
             a=UnbatchedTensor(data),
@@ -14431,8 +14405,8 @@ class TestUnbatchedTensor:
         )
         result = td["a"]
         assert isinstance(result, torch.Tensor)
-        assert not isinstance(result, UnbatchedTensor)
-        assert result is data
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data_ptr() == data.data_ptr()
 
     def test_unbatched_stack_same_data_no_warning(self):
         data = torch.randn(5)
@@ -14441,7 +14415,7 @@ class TestUnbatchedTensor:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             stacked = torch.stack([td1, td2])
-        assert stacked["ub"] is data
+        assert stacked["ub"].data_ptr() == data.data_ptr()
 
     def test_unbatched_stack_different_data_warns(self):
         td1 = TensorDict(
@@ -14466,10 +14440,10 @@ class TestUnbatchedTensor:
         result = vmap(lambda x: x)(td)
         assert result.batch_size == torch.Size([4, 3])
         assert isinstance(result.get("unbatched"), UnbatchedTensor)
-        assert result.get("unbatched").data.data_ptr() == data.data_ptr()
+        assert result.get("unbatched").data_ptr() == data.data_ptr()
         assert result["a"].shape == (4, 3, 5)
 
-    def test_unbatched_tensorclass_attr_unwraps(self):
+    def test_unbatched_tensorclass_attr_returns_unbatched(self):
         from tensordict import tensorclass
 
         @tensorclass
@@ -14484,21 +14458,21 @@ class TestUnbatchedTensor:
             batch_size=[3],
         )
         assert isinstance(tc.config, torch.Tensor)
-        assert not isinstance(tc.config, UnbatchedTensor)
-        assert tc.config is data
+        assert isinstance(tc.config, UnbatchedTensor)
+        assert tc.config.data_ptr() == data.data_ptr()
 
         result = tc.get("config")
         assert isinstance(result, torch.Tensor)
-        assert not isinstance(result, UnbatchedTensor)
-        assert result is data
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data_ptr() == data.data_ptr()
 
-    def test_unbatched_getitem_empty_batch_size(self):
+    def test_unbatched_tensor_is_tensor(self):
         data = torch.randn(5, 3)
         ut = UnbatchedTensor(data)
-        assert ut.batch_size == torch.Size([])
-        sliced = ut[:3]
-        assert sliced.batch_size == torch.Size([])
-        assert sliced.data is data
+        assert isinstance(ut, torch.Tensor)
+        assert isinstance(ut, UnbatchedTensor)
+        assert ut.shape == data.shape
+        assert ut.data_ptr() == data.data_ptr()
 
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
