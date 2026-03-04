@@ -61,6 +61,7 @@ from tensordict.utils import (
     _getitem_batch_size,
     _infer_size_impl,
     _is_number,
+    _is_unbatched,
     _maybe_correct_neg_dim,
     _parse_to,
     _recursive_unbind_list,
@@ -3995,6 +3996,8 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._transform_value(tensor)
 
     def _transform_value(self, item):
+        if _is_unbatched(item):
+            return item
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
     def _set_str(

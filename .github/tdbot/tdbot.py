@@ -9,6 +9,7 @@
 Triggered by PR comments starting with ``@tensordictbot``. Supports commands:
   - merge: Merge a PR (or ghstack) using ghstack land or gh pr merge
   - rebase: Rebase a PR onto a target branch
+  - lint: Auto-fix lint issues and push the result
 
 Inspired by PyTorch's @pytorchbot.
 """
@@ -110,6 +111,51 @@ def check_admin_permission(repo: str, username: str) -> bool:
 def is_ghstack_pr(head_branch: str) -> bool:
     """Detect whether the PR was created by ghstack."""
     return bool(re.match(r"^gh/[^/]+/\d+/head$", head_branch))
+
+
+def find_ghstack_stack_top(repo: str, head_branch: str) -> int:
+    """Return the PR number at the top of the ghstack stack containing *head_branch*.
+
+    Follows the baseRefName chain: each ghstack PR N+1 has
+    ``baseRefName == gh/USER/N/orig``.  We walk forward from the current PR
+    until no successor is found.
+    """
+    m = re.match(r"^gh/([^/]+)/(\d+)/head$", head_branch)
+    username = m.group(1)
+
+    result = gh(
+        "pr",
+        "list",
+        "--repo",
+        repo,
+        "--json",
+        "number,headRefName,baseRefName",
+        "--limit",
+        "200",
+        "--state",
+        "open",
+    )
+    all_prs = json.loads(result.stdout)
+
+    stack_pattern = re.compile(rf"^gh/{re.escape(username)}/(\d+)/head$")
+    by_base: dict[str, int] = {}
+    pr_num_for: dict[int, int] = {}
+    for pr in all_prs:
+        sm = stack_pattern.match(pr["headRefName"])
+        if sm:
+            idx = int(sm.group(1))
+            pr_num_for[idx] = pr["number"]
+            by_base[pr["baseRefName"]] = idx
+
+    current_idx = int(m.group(2))
+    while True:
+        orig_branch = f"gh/{username}/{current_idx}/orig"
+        next_idx = by_base.get(orig_branch)
+        if next_idx is None:
+            break
+        current_idx = next_idx
+
+    return pr_num_for.get(current_idx, current_idx)
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +269,6 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
     """Handle ``@tensordictbot rebase``."""
     pr = ctx.pr_info
     head = pr["headRefName"]
-    target_branch = args.branch
 
     if not check_write_permission(ctx.repo, ctx.comment_author):
         post_comment(
@@ -233,6 +278,17 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
             "Only collaborators with write access can rebase PRs.",
         )
         return
+
+    if is_ghstack_pr(head):
+        _rebase_ghstack(ctx, args)
+    else:
+        _rebase_regular(ctx, args)
+
+
+def _rebase_regular(ctx: CommandContext, args: argparse.Namespace) -> None:
+    """Rebase a regular (non-ghstack) PR branch."""
+    head = ctx.pr_info["headRefName"]
+    target_branch = args.branch
 
     post_comment(
         ctx.repo,
@@ -264,6 +320,177 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _rebase_ghstack(ctx: CommandContext, args: argparse.Namespace) -> None:
+    """Rebase an entire ghstack stack onto the target branch."""
+    head = ctx.pr_info["headRefName"]
+    target_branch = args.branch
+    top_pr = find_ghstack_stack_top(ctx.repo, head)
+
+    post_comment(
+        ctx.repo,
+        ctx.pr_number,
+        f"Rebasing ghstack stack onto `{target_branch}` "
+        f"(top of stack: #{top_pr}, requested by @{ctx.comment_author}).",
+    )
+
+    try:
+        git("fetch", "origin", target_branch)
+        subprocess.run(
+            ["ghstack", "checkout", f"https://github.com/{ctx.repo}/pull/{top_pr}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        git("rebase", f"origin/{target_branch}")
+        subprocess.run(
+            ["ghstack", "submit"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Ghstack stack rebased onto `{target_branch}` successfully.",
+        )
+    except subprocess.CalledProcessError as exc:
+        try:
+            git("rebase", "--abort")
+        except subprocess.CalledProcessError:
+            pass
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Ghstack rebase **failed**.\n\n```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+
+def cmd_lint(ctx: CommandContext, _args: argparse.Namespace) -> None:
+    """Handle ``@tensordictbot lint``."""
+    pr = ctx.pr_info
+    head = pr["headRefName"]
+
+    if not check_write_permission(ctx.repo, ctx.comment_author):
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"@{ctx.comment_author} you don't have write permission on this repository. "
+            "Only collaborators with write access can run lint fixes.",
+        )
+        return
+
+    post_comment(
+        ctx.repo,
+        ctx.pr_number,
+        f"Running lint auto-fix on `{head}` (requested by @{ctx.comment_author}).",
+    )
+
+    if is_ghstack_pr(head):
+        _lint_ghstack(ctx)
+    else:
+        _lint_regular(ctx)
+
+
+def _lint_regular(ctx: CommandContext) -> None:
+    """Run lint auto-fix on a regular PR branch."""
+    head = ctx.pr_info["headRefName"]
+
+    try:
+        git("fetch", "origin", head)
+        git("checkout", head)
+    except subprocess.CalledProcessError as exc:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Lint **failed** (could not checkout branch).\n\n"
+            f"```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+    subprocess.run(
+        ["pre-commit", "run", "--all-files"],
+        capture_output=True,
+        text=True,
+    )
+
+    diff = git("diff")
+    if not diff.stdout.strip():
+        post_comment(ctx.repo, ctx.pr_number, "Lint auto-fix found nothing to change.")
+        return
+
+    try:
+        git("add", "-A")
+        git("commit", "-m", "[tensordictbot] lint fixes")
+        git("push", "origin", head)
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            "Lint fixes committed and pushed successfully.",
+        )
+    except subprocess.CalledProcessError as exc:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Lint **failed** (could not push fixes).\n\n"
+            f"```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+
+def _lint_ghstack(ctx: CommandContext) -> None:
+    """Run lint auto-fix on a ghstack PR (amend the commit and re-submit)."""
+    try:
+        subprocess.run(
+            ["ghstack", "checkout", ctx.pr_info["url"]],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Lint **failed** (ghstack checkout failed).\n\n"
+            f"```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+    subprocess.run(
+        ["pre-commit", "run", "--all-files"],
+        capture_output=True,
+        text=True,
+    )
+
+    diff = git("diff")
+    if not diff.stdout.strip():
+        post_comment(ctx.repo, ctx.pr_number, "Lint auto-fix found nothing to change.")
+        return
+
+    try:
+        git("add", "-A")
+        git("commit", "--amend", "--no-edit")
+        subprocess.run(
+            ["ghstack", "submit"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            "Lint fixes amended and pushed via ghstack successfully.",
+        )
+    except subprocess.CalledProcessError as exc:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Lint **failed** (could not push fixes).\n\n"
+            f"```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+
 def cmd_help(ctx: CommandContext, _args: argparse.Namespace) -> None:
     """Handle ``@tensordictbot help``."""
     post_comment(ctx.repo, ctx.pr_number, HELP_TEXT)
@@ -277,7 +504,7 @@ HELP_TEXT = """\
 ## @tensordictbot Help
 
 ```
-usage: @tensordictbot {merge,rebase,help}
+usage: @tensordictbot {merge,rebase,lint,help}
 ```
 
 ### `merge`
@@ -295,7 +522,8 @@ Merge a PR. For ghstack PRs, uses `ghstack land`; otherwise uses `gh pr merge --
 > approval gate only applies to regular collaborators with write access.
 
 ### `rebase`
-Rebase the PR branch onto a target branch.
+Rebase the PR branch onto a target branch. For ghstack PRs, rebases the
+entire stack and re-submits via `ghstack submit`.
 
 ```
 @tensordictbot rebase [-b BRANCH]
@@ -304,6 +532,14 @@ Rebase the PR branch onto a target branch.
 | Flag | Description |
 |------|-------------|
 | `-b`, `--branch` | Target branch (default: `main`) |
+
+### `lint`
+Run the linter (pre-commit) and auto-fix issues. For regular PRs, commits
+the fixes. For ghstack PRs, amends the commit and re-submits the stack.
+
+```
+@tensordictbot lint
+```
 
 ### `help`
 Show this help message.
@@ -336,6 +572,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Branch to rebase onto (default: main)",
     )
 
+    sub.add_parser("lint", add_help=False)
+
     sub.add_parser("help", add_help=False)
 
     return parser
@@ -343,7 +581,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMAND_HANDLERS = {
     "merge": cmd_merge,
+    "land": cmd_merge,
     "rebase": cmd_rebase,
+    "lint": cmd_lint,
+    "linter": cmd_lint,
     "help": cmd_help,
 }
 

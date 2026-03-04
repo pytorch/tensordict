@@ -62,7 +62,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
-    _is_unbatched,
     _LOCK_ERROR,
     _td_fields,
     _TENSORCLASS_MEMO,
@@ -995,6 +994,25 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 delattr(cls, field.name)
             except AttributeError:
                 pass
+
+    if tensor_only:
+        for field in cls.fields():
+            name = field.name
+
+            def _make_prop(key):
+                def _getter(self):
+                    out = self._tensordict._get_str(key, _UNSET)
+                    if out is _UNSET:
+                        out = self._non_tensordict.get(key, _UNSET)
+                        if out is _UNSET:
+                            raise AttributeError(key)
+                        return out
+                    return out
+
+                return property(_getter)
+
+            setattr(cls, name, _make_prop(name))
+
     _get_type_hints(cls, tensor_only=tensor_only)
     # Detect user-defined __setattr__ that must be called during init.
     # After dataclass(), frozen=True adds a guard __setattr__, which is not
@@ -1794,8 +1812,6 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
     # Use _UNSET sentinel instead of try/except for torch.compile compatibility
     out = self._tensordict._get_str(item, _UNSET, **kwargs)
     if out is not _UNSET:
-        if _is_unbatched(out):
-            return out.data
         return out
     out = self._non_tensordict.get(item, _UNSET)
     if out is not _UNSET:
@@ -1834,8 +1850,6 @@ def _getattr(self, item: str, **kwargs) -> Any:
                     return _from_shared_nontensor(out)
                 return out
         out = self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
-        if _is_unbatched(out):
-            return out.data
         if is_non_tensor(out):
             return (
                 out.data
@@ -1903,7 +1917,12 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             or "_non_tensordict" not in __dict__
             or (
                 not self._shadow
-                and (key in SET_ATTRIBUTES or key in type(self).__dict__)
+                and (
+                    key in SET_ATTRIBUTES
+                    or (
+                        key in type(self).__dict__ and key not in self.__expected_keys__
+                    )
+                )
             )
         ):
             return self.__setattr_parent__(key, value)
