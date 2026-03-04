@@ -6,9 +6,9 @@ import argparse
 from logging import getLogger
 from pathlib import Path
 
-logger = getLogger(__name__)
-
 RST_SECTION_CHARS = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+logger = getLogger(__name__)
 
 
 def _strip_bom(line: str) -> str:

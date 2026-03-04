@@ -90,7 +90,7 @@ def _get_methods_from_pyi(file_path):
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for child_node in node.body:
-                if isinstance(child_node, ast.FunctionDef):
+                if isinstance(child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     methods.add(child_node.name)
 
     return methods
