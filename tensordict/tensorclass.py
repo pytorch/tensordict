@@ -62,7 +62,6 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
-    _is_unbatched,
     _LOCK_ERROR,
     _td_fields,
     _TENSORCLASS_MEMO,
@@ -1008,8 +1007,6 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                         if out is _UNSET:
                             raise AttributeError(key)
                         return out
-                    if _is_unbatched(out):
-                        return out.data
                     return out
 
                 return property(_getter)
@@ -1815,8 +1812,6 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
     # Use _UNSET sentinel instead of try/except for torch.compile compatibility
     out = self._tensordict._get_str(item, _UNSET, **kwargs)
     if out is not _UNSET:
-        if _is_unbatched(out):
-            return out.data
         return out
     out = self._non_tensordict.get(item, _UNSET)
     if out is not _UNSET:
@@ -1855,8 +1850,6 @@ def _getattr(self, item: str, **kwargs) -> Any:
                     return _from_shared_nontensor(out)
                 return out
         out = self._tensordict._get_str(item, NO_DEFAULT, **kwargs)
-        if _is_unbatched(out):
-            return out.data
         if is_non_tensor(out):
             return (
                 out.data

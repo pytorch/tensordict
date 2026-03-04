@@ -7894,10 +7894,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
         result = self._get_tuple(key, default, **kwargs)
-        if _is_unbatched(result):
-            return result.data
-        if _pass_through(result):
-            # Only lazy stacks of non tensors are actually tensordict instances
+        if _pass_through(result) and not _is_unbatched(result):
             if isinstance(result, TensorDictBase):
                 return result.tolist(as_linked_list=True)
             return result.data
@@ -12837,23 +12834,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if not vals:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
-
-            def _maximum_passthrough(x, y=None):
-                if y is None:
-                    y = other
-                x_data = x.data if _is_unbatched(x) else x
-                y_data = y.data if _is_unbatched(y) else y
-                result_data = torch.maximum(x_data, y_data)
-                if _is_unbatched(x):
-                    result = type(x)(result_data)
-                    result.batch_size = x.batch_size
-                    return result
-                return result_data
-
             if _is_tensor_collection(type(other)):
-                return self.apply(_maximum_passthrough, other)
+                return self.apply(lambda x, y: torch.maximum(x, y), other)
             else:
-                return self.apply(_maximum_passthrough)
+                return self.apply(lambda x: torch.maximum(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -12934,23 +12918,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if not vals:
             return self.copy()
         if any(_is_unbatched(v) for v in vals):
-
-            def _minimum_passthrough(x, y=None):
-                if y is None:
-                    y = other
-                x_data = x.data if _is_unbatched(x) else x
-                y_data = y.data if _is_unbatched(y) else y
-                result_data = torch.minimum(x_data, y_data)
-                if _is_unbatched(x):
-                    result = type(x)(result_data)
-                    result.batch_size = x.batch_size
-                    return result
-                return result_data
-
             if _is_tensor_collection(type(other)):
-                return self.apply(_minimum_passthrough, other)
+                return self.apply(lambda x, y: torch.minimum(x, y), other)
             else:
-                return self.apply(_minimum_passthrough)
+                return self.apply(lambda x: torch.minimum(x, other))
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
                 True, True, sorting_keys=keys, default=default
@@ -13561,14 +13532,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 ) from err
             is_tc = _is_tensor_collection(cls)
         if _is_unbatched(value):
-            value_copy = value.copy()
-            value_copy.batch_size = self.batch_size
             device = self.device
-            if device is not None and value_copy.device != device:
+            if device is not None and value.device != device:
                 if _device_recorder.marked and device.type != "cuda":
                     _device_recorder.record_transfer(device)
-                value_copy = value_copy.to(device, non_blocking=non_blocking)
-            return value_copy
+                value = value.to(device, non_blocking=non_blocking)
+            return value
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -13661,9 +13630,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 ) from err
             is_tc = _is_tensor_collection(cls)
         if _is_unbatched(value):
-            value_copy = value.copy()
-            value_copy.batch_size = self.batch_size
-            return value_copy
+            return value
 
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:

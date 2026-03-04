@@ -1506,13 +1506,10 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
-                # (indicated by batch_size being set) should be copied with updated batch_size
-                # but not have the function applied. For other ops (data ops like zero_),
-                # apply the function normally.
+                # (indicated by batch_size being set) should be passed through unchanged.
+                # For other ops (data ops like zero_), apply the function normally.
                 if _is_unbatched(item) and batch_size is not None:
-                    item_trsf = item.copy() if hasattr(item, "copy") else item
-                    if hasattr(item_trsf, "batch_size"):
-                        item_trsf.batch_size = batch_size
+                    item_trsf = item
                 else:
                     _others = [
                         _other._get_str(key, default=default) for _other in others
@@ -1562,6 +1559,8 @@ class TensorDict(TensorDictBase):
         td = self
 
         def _add_batch_dim_wrapper(key: str, value: Any) -> Any:
+            if _is_unbatched(value):
+                return value
             if is_tensor_collection(value):
                 return value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
 
@@ -1597,17 +1596,18 @@ class TensorDict(TensorDictBase):
             new_names.insert(out_dim, None)
         else:
             new_names = None
-        out = TensorDict(
-            {
-                key: (
-                    value._remove_batch_dim(
-                        vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
-                    )
-                    if is_tensor_collection(value)
-                    else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
+
+        def _process_remove(value):
+            if _is_unbatched(value):
+                return value
+            if is_tensor_collection(value):
+                return value._remove_batch_dim(
+                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
-                for key, value in self.items()
-            },
+            return _remove_batch_dim(value, vmap_level, batch_size, out_dim)
+
+        out = TensorDict(
+            {key: _process_remove(value) for key, value in self.items()},
             batch_size=new_batch_size,
             names=new_names,
             lock=self.is_locked,
@@ -1629,10 +1629,7 @@ class TensorDict(TensorDictBase):
 
         def _process_value(value):
             if _is_unbatched(value):
-                copy = value.copy() if hasattr(value, "copy") else value
-                if hasattr(copy, "batch_size"):
-                    copy.batch_size = torch.Size(new_batch_size)
-                return copy
+                return value
             if is_tensor_collection(value):
                 return value._maybe_remove_batch_dim(
                     funcname=funcname,
@@ -1705,7 +1702,9 @@ class TensorDict(TensorDictBase):
 
         source = {}
         for key, item in self.items():
-            if isinstance(item, TensorDict):
+            if _is_unbatched(item):
+                source[key] = item
+            elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily
                 new_batch_size = batch_size + item.batch_size[batch_dims:]
                 source[key] = item._index_tensordict(
@@ -1866,19 +1865,8 @@ class TensorDict(TensorDictBase):
             for start, end in segments
         ]
 
-        def _update_batch_size_for_split(value, new_batch_size):
-            if _is_unbatched(value) and hasattr(value, "batch_size"):
-                copy = value.copy() if hasattr(value, "copy") else value
-                copy.batch_size = new_batch_size
-                return copy
-            return value
-
         splits = [
-            {
-                k: _update_batch_size_for_split(v[ss], batch_sizes[ss])
-                for k, v in splits.items()
-            }
-            for ss in range(len(batch_sizes))
+            {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
         ]
         device = self.device
         is_shared = self._is_shared
@@ -1909,7 +1897,10 @@ class TensorDict(TensorDictBase):
         max_size = batch_size[dim]
         split_size = -(max_size // -chunks)
         segments = _create_segments_from_int(split_size, max_size)
-        splits = {k: v.chunk(chunks, dim) for k, v in self.items()}
+        splits = {
+            k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
+            for k, v in self.items()
+        }
         names = self._maybe_names()
         batch_sizes = [
             torch.Size(
@@ -1947,7 +1938,10 @@ class TensorDict(TensorDictBase):
             if mndim == mask_expand.ndimension():  # no more squeeze
                 break
         for key, value in self.items():
-            d[key] = value[mask_expand]
+            if _is_unbatched(value):
+                d[key] = value
+            else:
+                d[key] = value[mask_expand]
         dim = int(mask.sum().item())
         other_dim = self.shape[mask.ndim :]
         return TensorDict(
@@ -2781,20 +2775,19 @@ class TensorDict(TensorDictBase):
         return self
 
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
-        # if not isinstance(key, str):
-        #     raise ValueError("_stack_onto_ expects string keys.")
         for key in self.keys():
             vals = [item._get_str(key, None) for item in list_item]
             if all(v is None for v in vals):
                 continue
             dest = self._get_str(key, NO_DEFAULT)
+            if _is_unbatched(dest):
+                continue
             new_dest = torch.stack(
                 vals,
                 dim=dim,
                 out=dest,
             )
             if new_dest is not dest:
-                # This can happen with non-tensor data
                 self._set_str(key, new_dest, inplace=False, validated=True)
         return self
 
@@ -2815,16 +2808,14 @@ class TensorDict(TensorDictBase):
             if all(v is None for v in vals):
                 continue
             v = self._get_str(key, NO_DEFAULT)
+            if _is_unbatched(v):
+                continue
             v_idx = v[idx]
             if v.data_ptr() != v_idx.data_ptr():
                 raise IndexError(
                     f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
                 )
             torch.stack(vals, dim=dim, out=v_idx)
-            # raise ValueError(
-            #     f"Cannot stack onto an indexed tensor with index {idx} "
-            #     f"as its storage differs."
-            # )
         return self
 
     def _get_str(self, key, default, **kwargs):

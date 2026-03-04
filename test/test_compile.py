@@ -1729,7 +1729,7 @@ class TestGuardCount:
         td = TensorDict(
             {
                 "a": torch.randn(4, 3),
-                "unbatched": UnbatchedTensor(data=torch.randn(5)),
+                "unbatched": UnbatchedTensor(torch.randn(5)),
             },
             batch_size=[4],
         )
@@ -1748,7 +1748,7 @@ class TestGuardCount:
         td = TensorDict(
             {
                 "a": torch.randn(4, 3),
-                "unbatched": UnbatchedTensor(data=torch.randn(5)),
+                "unbatched": UnbatchedTensor(torch.randn(5)),
             },
             batch_size=[4],
         )
@@ -1757,7 +1757,7 @@ class TestGuardCount:
         ut_orig = td.get("unbatched")
         ut_clone = result.get("unbatched")
         assert (
-            ut_clone.data.data_ptr() != ut_orig.data.data_ptr()
+            ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"
 
 
