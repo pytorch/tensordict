@@ -48,7 +48,9 @@ otherwise it performs a squash merge via `gh pr merge --squash`.
 
 #### `rebase`
 
-Rebase the PR branch onto a target branch (default: `main`).
+Rebase the PR branch onto a target branch (default: `main`). For **ghstack**
+PRs, the entire stack is rebased: the bot finds the top of the stack, runs
+`ghstack checkout`, rebases onto the target, and re-submits via `ghstack submit`.
 
 ```
 @tensordictbot rebase [-b BRANCH]
@@ -63,6 +65,25 @@ Rebase the PR branch onto a target branch (default: `main`).
 ```
 @tensordictbot rebase
 @tensordictbot rebase -b release/0.6
+```
+
+**Requirements:**
+- The commenter must have **write** (or higher) permission on the repository.
+
+#### `lint`
+
+Run the linter (`pre-commit run --all-files`) and auto-fix issues. For regular
+PRs, the fixes are committed and pushed. For **ghstack** PRs, the commit is
+amended and re-submitted via `ghstack submit`.
+
+```
+@tensordictbot lint
+```
+
+**Examples:**
+
+```
+@tensordictbot lint
 ```
 
 **Requirements:**
@@ -88,7 +109,7 @@ checks permissions via the GitHub API before executing any action.
 .github/
 ├── tensordictbot/
 │   ├── tensordictbot.py   # Command parser and handler
-│   └── README.md          # This file
+│   └── README.md  # This file
 └── workflows/
     └── tensordictbot.yml  # GitHub Actions workflow (issue_comment trigger)
 ```
@@ -102,7 +123,7 @@ The workflow:
 4. **Validate**: The bot checks that the commenter has write permission and that
    the PR meets any required conditions (e.g., approval status for merge).
 5. **Execute**: The appropriate handler runs (`ghstack land`, `gh pr merge`,
-   `git rebase`, etc.) and posts status comments back on the PR.
+   `git rebase`, `pre-commit`, etc.) and posts status comments back on the PR.
 
 ## Adding new commands
 

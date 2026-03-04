@@ -6,9 +6,10 @@
 # Commands:
 #   @tensordictbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
 #   @tensordictbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
+#   @tensordictbot lint                  Auto-fix lint issues and push the result
 #   @tensordictbot help                  Show available commands
 
-name: TensorDictBot
+name: tensordictbot
 
 on:
   issue_comment:
@@ -38,8 +39,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ghstack
-        run: pip install ghstack
+      - name: Install dependencies
+        run: pip install ghstack pre-commit
 
       - name: Configure git
         run: |
