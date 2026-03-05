@@ -118,6 +118,13 @@
       "new_flaky_count": 0,
       "resolved_count": 0,
       "total_tests": 43477
+    },
+    {
+      "date": "2026-03-05",
+      "flaky_count": 33,
+      "new_flaky_count": 16,
+      "resolved_count": 0,
+      "total_tests": 43494
     }
   ]
 }
