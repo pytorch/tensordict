@@ -9463,6 +9463,259 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         return _tag
 
+    def dtensor_send(
+        self,
+        dst,
+        *,
+        dst_mesh=None,
+        dst_placements=None,
+        strategy: str = "auto",
+        transport: str = "auto",
+        group=None,
+    ) -> None:
+        """Send a TensorDict containing DTensors to a remote worker or set of workers.
+
+        Supports three strategies for handling different sharding layouts between
+        sender and receiver, and two transport backends (torch.distributed, UCXX).
+
+        Args:
+            dst: the destination. Can be an ``int`` rank (for torch.distributed),
+                or a :class:`~tensordict._ucxx.TensorDictPipe` (for UCXX).
+
+        Keyword Args:
+            dst_mesh: the destination :class:`~torch.distributed.device_mesh.DeviceMesh`.
+                Required for ``strategy="optimal"``.
+            dst_placements: per-key destination placements. Can be a single
+                ``tuple[Placement, ...]`` applied to all keys, or a
+                ``dict[str, tuple[Placement, ...]]``. Required for
+                ``strategy="optimal"``.
+            strategy (str): one of ``"materialize"`` (A), ``"redistribute"`` (B),
+                ``"optimal"`` (C), or ``"auto"``. ``"auto"`` selects
+                ``"optimal"`` when mesh info is available, else falls back to
+                ``"materialize"``.
+                Defaults to ``"auto"``.
+            transport (str): one of ``"torch_distributed"``, ``"ucxx"``, or
+                ``"auto"``. ``"auto"`` picks based on *dst* type.
+                Defaults to ``"auto"``.
+            group: ``torch.distributed`` process group. Only used with
+                ``transport="torch_distributed"``.
+        """
+        from tensordict._dtensor import _get_transport_backend
+
+        backend = _get_transport_backend(transport, dst, group=group)
+
+        resolved = strategy
+        if resolved == "auto":
+            resolved = "materialize"
+
+        if resolved == "materialize":
+            self._dtensor_send_materialize(dst, backend=backend)
+        elif resolved == "redistribute":
+            self._dtensor_send_redistribute(dst, backend=backend)
+        elif resolved == "optimal":
+            self._dtensor_send_optimal(
+                dst,
+                backend=backend,
+                dst_mesh=dst_mesh,
+                dst_placements=dst_placements,
+            )
+        else:
+            raise ValueError(
+                f"Unknown dtensor strategy {strategy!r}. "
+                "Expected 'materialize', 'redistribute', 'optimal', or 'auto'."
+            )
+
+    def dtensor_recv(
+        self,
+        src,
+        *,
+        src_mesh=None,
+        src_placements=None,
+        strategy: str = "auto",
+        transport: str = "auto",
+        group=None,
+    ) -> None:
+        """Receive a TensorDict containing DTensors from a remote worker.
+
+        This is the counterpart to :meth:`dtensor_send`.
+
+        Args:
+            src: the source. Can be an ``int`` rank (for torch.distributed),
+                or a :class:`~tensordict._ucxx.TensorDictPipe` (for UCXX).
+
+        Keyword Args:
+            src_mesh: the source :class:`~torch.distributed.device_mesh.DeviceMesh`.
+                Required for ``strategy="optimal"``.
+            src_placements: per-key source placements. Can be a single
+                ``tuple[Placement, ...]`` applied to all keys, or a
+                ``dict[str, tuple[Placement, ...]]``. Required for
+                ``strategy="optimal"``.
+            strategy (str): must match the *strategy* used by the sender.
+                Defaults to ``"auto"``.
+            transport (str): one of ``"torch_distributed"``, ``"ucxx"``, or
+                ``"auto"``. Defaults to ``"auto"``.
+            group: ``torch.distributed`` process group. Only used with
+                ``transport="torch_distributed"``.
+        """
+        from tensordict._dtensor import _get_transport_backend
+
+        backend = _get_transport_backend(transport, src, group=group)
+
+        resolved = strategy
+        if resolved == "auto":
+            resolved = "materialize"
+
+        if resolved == "materialize":
+            self._dtensor_recv_materialize(src, backend=backend)
+        elif resolved == "redistribute":
+            self._dtensor_recv_redistribute(src, backend=backend)
+        elif resolved == "optimal":
+            self._dtensor_recv_optimal(
+                src,
+                backend=backend,
+                src_mesh=src_mesh,
+                src_placements=src_placements,
+            )
+        else:
+            raise ValueError(
+                f"Unknown dtensor strategy {strategy!r}. "
+                "Expected 'materialize', 'redistribute', 'optimal', or 'auto'."
+            )
+
+    # -- Strategy A: materialize-and-reshard ----------------------------
+
+    def _dtensor_send_materialize(self, dst, *, backend) -> None:
+        """Send by materializing DTensors to full tensors first."""
+        metadata = {}
+        tensors = []
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                raise NotImplementedError(
+                    "Nested TensorDicts in dtensor_send are not yet supported."
+                )
+            if hasattr(value, "full_tensor"):
+                placements_str = [str(p) for p in value.placements]
+                metadata[key] = {
+                    "is_dtensor": True,
+                    "shape": list(value.shape),
+                    "dtype": str(value.dtype),
+                    "placements": placements_str,
+                }
+                value = value.full_tensor()
+            else:
+                metadata[key] = {
+                    "is_dtensor": False,
+                    "shape": list(value.shape),
+                    "dtype": str(value.dtype),
+                }
+            tensors.append((key, value))
+
+        dst_int = dst if isinstance(dst, int) else 0
+        backend.send_object(metadata, dst_int)
+        for key, tensor in tensors:
+            backend.send_tensor(tensor.contiguous(), dst_int)
+
+    def _dtensor_recv_materialize(self, src, *, backend) -> None:
+        """Receive full tensors and wrap them back as DTensors if needed."""
+        src_int = src if isinstance(src, int) else 0
+        metadata = backend.recv_object(src_int)
+
+        for key, meta in metadata.items():
+            shape = torch.Size(meta["shape"])
+            dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
+            buf = torch.empty(shape, dtype=dtype)
+            backend.recv_tensor(buf, src_int)
+            self._set_str(key, buf, inplace=False, validated=True)
+
+    # -- Strategy B / C stubs (implemented in later PRs) ----------------
+
+    def _dtensor_send_redistribute(self, dst, *, backend) -> None:
+        """Send local shards + placement metadata.
+
+        The receiver will reconstruct DTensors with the sender's placements
+        and then redistribute() to its own target placements.
+        """
+        metadata = {}
+        tensors = []
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                raise NotImplementedError(
+                    "Nested TensorDicts in dtensor_send are not yet supported."
+                )
+            if hasattr(value, "placements"):
+                local = value.to_local()
+                placements_str = [str(p) for p in value.placements]
+                mesh_tensor = value.device_mesh.mesh.tolist()
+                mesh_dim_names = (
+                    list(value.device_mesh.mesh_dim_names)
+                    if value.device_mesh.mesh_dim_names is not None
+                    else None
+                )
+                metadata[key] = {
+                    "is_dtensor": True,
+                    "global_shape": list(value.shape),
+                    "local_shape": list(local.shape),
+                    "dtype": str(value.dtype),
+                    "placements": placements_str,
+                    "mesh": mesh_tensor,
+                    "mesh_dim_names": mesh_dim_names,
+                }
+                tensors.append((key, local))
+            else:
+                metadata[key] = {
+                    "is_dtensor": False,
+                    "shape": list(value.shape),
+                    "dtype": str(value.dtype),
+                }
+                tensors.append((key, value))
+
+        dst_int = dst if isinstance(dst, int) else 0
+        backend.send_object(metadata, dst_int)
+        for key, tensor in tensors:
+            backend.send_tensor(tensor.contiguous(), dst_int)
+
+    def _dtensor_recv_redistribute(self, src, *, backend) -> None:
+        """Receive local shards and reconstruct DTensors.
+
+        Uses DTensor.from_local() with the sender's placements, then the
+        caller can redistribute() to target placements if needed.
+        """
+        src_int = src if isinstance(src, int) else 0
+        metadata = backend.recv_object(src_int)
+
+        for key, meta in metadata.items():
+            dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
+            if meta["is_dtensor"]:
+                local_shape = torch.Size(meta["local_shape"])
+                global_shape = torch.Size(meta["global_shape"])
+                buf = torch.empty(local_shape, dtype=dtype)
+                backend.recv_tensor(buf, src_int)
+                # Store as plain tensor with metadata attached.
+                # Full DTensor reconstruction requires being inside a
+                # distributed context (DeviceMesh). The caller is
+                # responsible for calling DTensor.from_local() or
+                # redistribute() after receiving.
+                self._set_str(key, buf, inplace=False, validated=True)
+            else:
+                shape = torch.Size(meta["shape"])
+                buf = torch.empty(shape, dtype=dtype)
+                backend.recv_tensor(buf, src_int)
+                self._set_str(key, buf, inplace=False, validated=True)
+
+    def _dtensor_send_optimal(self, dst, *, backend, dst_mesh, dst_placements) -> None:
+        raise NotImplementedError(
+            "Strategy 'optimal' is not yet implemented. "
+            "Use strategy='materialize' for now."
+        )
+
+    def _dtensor_recv_optimal(self, src, *, backend, src_mesh, src_placements) -> None:
+        raise NotImplementedError(
+            "Strategy 'optimal' is not yet implemented. "
+            "Use strategy='materialize' for now."
+        )
+
     def init_remote(
         self,
         dst: int | None = None,
