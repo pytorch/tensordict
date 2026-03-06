@@ -9629,10 +9629,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src_int = src if isinstance(src, int) else 0
         metadata = backend.recv_object(src_int)
 
+        device = self.device
+
         for key, meta in metadata.items():
             shape = torch.Size(meta["shape"])
             dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
-            buf = torch.empty(shape, dtype=dtype)
+            kwargs = {}
+            if device is not None:
+                kwargs["device"] = device
+            buf = torch.empty(shape, dtype=dtype, **kwargs)
             backend.recv_tensor(buf, src_int)
             self._set_str(key, buf, inplace=False, validated=True)
 
@@ -9693,21 +9698,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
         src_int = src if isinstance(src, int) else 0
         metadata = backend.recv_object(src_int)
 
+        device = self.device
+
         for key, meta in metadata.items():
             dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
+            kwargs = {}
+            if device is not None:
+                kwargs["device"] = device
             if meta["is_dtensor"]:
                 local_shape = torch.Size(meta["local_shape"])
-                buf = torch.empty(local_shape, dtype=dtype)
+                buf = torch.empty(local_shape, dtype=dtype, **kwargs)
                 backend.recv_tensor(buf, src_int)
-                # Store as plain tensor with metadata attached.
-                # Full DTensor reconstruction requires being inside a
-                # distributed context (DeviceMesh). The caller is
-                # responsible for calling DTensor.from_local() or
-                # redistribute() after receiving.
                 self._set_str(key, buf, inplace=False, validated=True)
             else:
                 shape = torch.Size(meta["shape"])
-                buf = torch.empty(shape, dtype=dtype)
+                buf = torch.empty(shape, dtype=dtype, **kwargs)
                 backend.recv_tensor(buf, src_int)
                 self._set_str(key, buf, inplace=False, validated=True)
 
@@ -9841,7 +9846,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     chunk_shape = tuple(
                         s.stop - s.start for s in transfer.global_slices
                     )
-                    buf = torch.empty(chunk_shape, dtype=local_tensor.dtype)
+                    buf = torch.empty(
+                        chunk_shape,
+                        dtype=local_tensor.dtype,
+                        device=local_tensor.device,
+                    )
                     backend.recv_tensor(buf, transfer.src_rank, tag=tag)
                     local_tensor[transfer.dst_slices] = buf
                     tag += 1

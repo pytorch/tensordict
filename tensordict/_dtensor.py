@@ -410,10 +410,13 @@ def _get_transport_backend(
         group: process group for torch.distributed backend.
     """
     if transport == "auto":
-        from tensordict._ucxx import TensorDictPipe
+        if _has_ucxx:
+            from tensordict._ucxx import TensorDictPipe
 
-        if isinstance(dst_or_src, TensorDictPipe):
-            transport = "ucxx"
+            if isinstance(dst_or_src, TensorDictPipe):
+                transport = "ucxx"
+            else:
+                transport = "torch_distributed"
         else:
             transport = "torch_distributed"
 

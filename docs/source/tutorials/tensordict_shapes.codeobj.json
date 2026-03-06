@@ -1,0 +1,3540 @@
+{
+ ".LazyStackedTensorDict": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "LazyStackedTensorDict"
+  }
+ ],
+ ".TensorDict": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "",
+   "module_short": "",
+   "name": "TensorDict"
+  }
+ ],
+ "LazyStackedTensorDict": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._lazy",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "LazyStackedTensorDict"
+  }
+ ],
+ "LazyStackedTensorDict.lazy_stack": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._lazy",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.lazy_stack"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.lazy_stack"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.LazyStackedTensorDict",
+   "module_short": "tensordict.LazyStackedTensorDict",
+   "name": "lazy_stack"
+  }
+ ],
+ "TensorDict": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "TensorDict"
+  }
+ ],
+ "a": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "b": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "chunks": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  }
+ ],
+ "cloned_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "concatenated_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "concatenated_tensordict.batch_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.batch_size"
+  }
+ ],
+ "dense_stack": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "exp_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "exp_tensordict.batch_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.batch_size"
+  }
+ ],
+ "gathered_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "index": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "indexed_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "lazy_stack": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._lazy",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  }
+ ],
+ "permuted_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "reshaped_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "reshaped_tensordict.batch_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.batch_size"
+  }
+ ],
+ "set_lazy_legacy": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.utils",
+   "module_short": "tensordict",
+   "name": "set_lazy_legacy"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "set_lazy_legacy"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils._contextlib",
+   "module_short": "torch.utils._contextlib",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils",
+   "module_short": "torch.utils",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.utils",
+   "module_short": "tensordict",
+   "name": "set_lazy_legacy"
+  }
+ ],
+ "slices": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  }
+ ],
+ "squeezed_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "stacked_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._lazy",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  }
+ ],
+ "tdt": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "tdt.set": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.set"
+  }
+ ],
+ "tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "tensordict.LazyStackedTensorDict": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "LazyStackedTensorDict"
+  }
+ ],
+ "tensordict.LazyStackedTensorDict.contiguous": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.LazyStackedTensorDict",
+   "module_short": "tensordict.LazyStackedTensorDict",
+   "name": "contiguous"
+  }
+ ],
+ "tensordict.LazyStackedTensorDict.to_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.LazyStackedTensorDict",
+   "module_short": "tensordict.LazyStackedTensorDict",
+   "name": "to_tensordict"
+  }
+ ],
+ "tensordict.TensorDict.expand": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "expand"
+  }
+ ],
+ "tensordict.TensorDict.gather": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "gather"
+  }
+ ],
+ "tensordict.TensorDict.permute": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "permute"
+  }
+ ],
+ "tensordict.TensorDict.reshape": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "reshape"
+  }
+ ],
+ "tensordict.TensorDict.split": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "split"
+  }
+ ],
+ "tensordict.TensorDict.unbind": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDict",
+   "module_short": "tensordict.TensorDict",
+   "name": "unbind"
+  }
+ ],
+ "tensordict.TensorDictBase.lock_": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "lock_"
+  }
+ ],
+ "tensordict.TensorDictBase.permute": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "permute"
+  }
+ ],
+ "tensordict.TensorDictBase.squeeze": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "squeeze"
+  }
+ ],
+ "tensordict.TensorDictBase.to_module": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "to_module"
+  }
+ ],
+ "tensordict.TensorDictBase.transpose": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "transpose"
+  }
+ ],
+ "tensordict.TensorDictBase.unlock_": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "unlock_"
+  }
+ ],
+ "tensordict.TensorDictBase.unsqueeze": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "unsqueeze"
+  }
+ ],
+ "tensordict.TensorDictBase.view": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.TensorDictBase",
+   "module_short": "tensordict.TensorDictBase",
+   "name": "view"
+  }
+ ],
+ "tensordict.batch_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.batch_size"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.batch_size"
+  }
+ ],
+ "tensordict.clone": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.clone"
+  }
+ ],
+ "tensordict.expand": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.expand"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.expand"
+  }
+ ],
+ "tensordict.gather": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.gather"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.gather"
+  }
+ ],
+ "tensordict.get": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.get"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.get"
+  }
+ ],
+ "tensordict.permute": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.permute"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.permute"
+  }
+ ],
+ "tensordict.reshape": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.reshape"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.reshape"
+  }
+ ],
+ "tensordict.split": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.split"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.split"
+  }
+ ],
+ "tensordict.squeeze": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.squeeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.squeeze"
+  }
+ ],
+ "tensordict.transpose": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.transpose"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.transpose"
+  }
+ ],
+ "tensordict.unbind": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.unbind"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.unbind"
+  }
+ ],
+ "tensordict.unsqueeze": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.unsqueeze"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.unsqueeze"
+  }
+ ],
+ "tensordict.utils.set_lazy_legacy": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.utils",
+   "module_short": "tensordict",
+   "name": "set_lazy_legacy"
+  }
+ ],
+ "tensordict.view": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.view"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.view"
+  }
+ ],
+ "torch.Size": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Size"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Size"
+  }
+ ],
+ "torch.Tensor.reshape": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch.Tensor",
+   "module_short": "torch.Tensor",
+   "name": "reshape"
+  }
+ ],
+ "torch.Tensor.split": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch.Tensor",
+   "module_short": "torch.Tensor",
+   "name": "split"
+  }
+ ],
+ "torch.Tensor.unbind": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch.Tensor",
+   "module_short": "torch.Tensor",
+   "name": "unbind"
+  }
+ ],
+ "torch.arange": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "arange"
+  }
+ ],
+ "torch.cat": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "cat"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "cat"
+  }
+ ],
+ "torch.gather": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "gather"
+  }
+ ],
+ "torch.ones": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "ones"
+  }
+ ],
+ "torch.permute": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "permute"
+  }
+ ],
+ "torch.rand": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "rand"
+  }
+ ],
+ "torch.randint": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "randint"
+  }
+ ],
+ "torch.stack": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "stack"
+  }
+ ],
+ "torch.testing.assert_close": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.testing",
+   "module_short": "torch.testing",
+   "name": "assert_close"
+  }
+ ],
+ "unsqueezed_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "viewed_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}
