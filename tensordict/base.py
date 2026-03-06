@@ -9506,7 +9506,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         resolved = strategy
         if resolved == "auto":
-            resolved = "materialize"
+            resolved = (
+                "optimal"
+                if dst_mesh is not None and dst_placements is not None
+                else "materialize"
+            )
 
         if resolved == "materialize":
             self._dtensor_send_materialize(dst, backend=backend)
@@ -9563,7 +9567,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         resolved = strategy
         if resolved == "auto":
-            resolved = "materialize"
+            resolved = (
+                "optimal"
+                if src_mesh is not None and src_placements is not None
+                else "materialize"
+            )
 
         if resolved == "materialize":
             self._dtensor_recv_materialize(src, backend=backend)
@@ -9689,7 +9697,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
             if meta["is_dtensor"]:
                 local_shape = torch.Size(meta["local_shape"])
-                global_shape = torch.Size(meta["global_shape"])
                 buf = torch.empty(local_shape, dtype=dtype)
                 backend.recv_tensor(buf, src_int)
                 # Store as plain tensor with metadata attached.
@@ -9705,16 +9712,150 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 self._set_str(key, buf, inplace=False, validated=True)
 
     def _dtensor_send_optimal(self, dst, *, backend, dst_mesh, dst_placements) -> None:
-        raise NotImplementedError(
-            "Strategy 'optimal' is not yet implemented. "
-            "Use strategy='materialize' for now."
+        """Send using the optimal P2P transfer plan.
+
+        Computes which slices of each local shard need to go to which dst
+        rank, then issues targeted P2P sends for just those slices.
+        """
+        from torch import distributed as dist
+
+        from tensordict._dtensor import (
+            _compute_transfer_plan,
+            _mesh_all_ranks,
+            _mesh_to_rank_map,
         )
 
+        my_rank = dist.get_rank()
+
+        # Normalise dst_placements to per-key dict
+        _dst_plc = dst_placements
+        if _dst_plc is not None and not isinstance(_dst_plc, dict):
+            _dst_plc = {key: _dst_plc for key in self.sorted_keys}
+
+        tag = 0
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                raise NotImplementedError(
+                    "Nested TensorDicts in dtensor_send are not yet supported."
+                )
+
+            if hasattr(value, "placements"):
+                src_mesh = value.device_mesh
+                src_placements_t = tuple(value.placements)
+                global_shape = value.shape
+                local_tensor = value.to_local()
+
+                key_dst_plc = _dst_plc[key] if _dst_plc is not None else None
+                if key_dst_plc is None:
+                    raise ValueError(
+                        f"dst_placements is required for optimal strategy, "
+                        f"missing for key {key!r}."
+                    )
+
+                src_mesh_shape = tuple(src_mesh.mesh.shape)
+                dst_mesh_shape = tuple(dst_mesh.mesh.shape)
+
+                src_rank_map = _mesh_to_rank_map(src_mesh)
+                dst_rank_map = _mesh_to_rank_map(dst_mesh)
+
+                plan = _compute_transfer_plan(
+                    global_shape=global_shape,
+                    src_mesh_shape=src_mesh_shape,
+                    src_placements=src_placements_t,
+                    dst_mesh_shape=dst_mesh_shape,
+                    dst_placements=key_dst_plc,
+                    src_rank_map=src_rank_map,
+                    dst_rank_map=dst_rank_map,
+                )
+
+                for transfer in plan.sends_for_rank(my_rank):
+                    chunk = local_tensor[transfer.src_slices].contiguous()
+                    backend.send_tensor(chunk, transfer.dst_rank, tag=tag)
+                    tag += 1
+            else:
+                # Non-DTensor: send to all dst ranks
+                for dst_rank in _mesh_all_ranks(dst_mesh):
+                    backend.send_tensor(value.contiguous(), dst_rank, tag=tag)
+                    tag += 1
+
     def _dtensor_recv_optimal(self, src, *, backend, src_mesh, src_placements) -> None:
-        raise NotImplementedError(
-            "Strategy 'optimal' is not yet implemented. "
-            "Use strategy='materialize' for now."
+        """Receive using the optimal P2P transfer plan.
+
+        Computes which slices this rank needs and from which src ranks,
+        then issues targeted P2P recvs and assembles the local shard.
+        """
+        from torch import distributed as dist
+
+        from tensordict._dtensor import (
+            _compute_transfer_plan,
+            _mesh_all_ranks,
+            _mesh_to_rank_map,
         )
+
+        my_rank = dist.get_rank()
+
+        # Normalise src_placements to per-key dict
+        _src_plc = src_placements
+        if _src_plc is not None and not isinstance(_src_plc, dict):
+            _src_plc = {key: _src_plc for key in self.sorted_keys}
+
+        tag = 0
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                raise NotImplementedError(
+                    "Nested TensorDicts in dtensor_recv are not yet supported."
+                )
+
+            if hasattr(value, "placements"):
+                dst_mesh = value.device_mesh
+                dst_placements_t = tuple(value.placements)
+                global_shape = value.shape
+                local_tensor = value.to_local()
+
+                key_src_plc = _src_plc[key] if _src_plc is not None else None
+                if key_src_plc is None:
+                    raise ValueError(
+                        f"src_placements is required for optimal strategy, "
+                        f"missing for key {key!r}."
+                    )
+
+                src_mesh_shape = tuple(src_mesh.mesh.shape)
+                dst_mesh_shape = tuple(dst_mesh.mesh.shape)
+
+                src_rank_map = _mesh_to_rank_map(src_mesh)
+                dst_rank_map = _mesh_to_rank_map(dst_mesh)
+
+                plan = _compute_transfer_plan(
+                    global_shape=global_shape,
+                    src_mesh_shape=src_mesh_shape,
+                    src_placements=key_src_plc,
+                    dst_mesh_shape=dst_mesh_shape,
+                    dst_placements=dst_placements_t,
+                    src_rank_map=src_rank_map,
+                    dst_rank_map=dst_rank_map,
+                )
+
+                for transfer in plan.recvs_for_rank(my_rank):
+                    chunk_shape = tuple(
+                        s.stop - s.start for s in transfer.global_slices
+                    )
+                    buf = torch.empty(chunk_shape, dtype=local_tensor.dtype)
+                    backend.recv_tensor(buf, transfer.src_rank, tag=tag)
+                    local_tensor[transfer.dst_slices] = buf
+                    tag += 1
+
+                self._set_str(
+                    key, local_tensor, inplace=True, validated=True
+                )
+            else:
+                # Non-DTensor: recv from the first src rank
+                first_src = _mesh_all_ranks(src_mesh)[0]
+                buf = torch.empty_like(value)
+                backend.recv_tensor(buf, first_src, tag=tag)
+                self._set_str(key, buf, inplace=False, validated=True)
+                tag += 1
 
     def init_remote(
         self,
