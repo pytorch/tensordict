@@ -431,3 +431,22 @@ def _get_transport_backend(
             f"Unknown transport {transport!r}. "
             "Expected 'torch_distributed', 'ucxx', or 'auto'."
         )
+
+
+# ---------------------------------------------------------------------------
+# DeviceMesh helpers
+# ---------------------------------------------------------------------------
+
+
+def _mesh_to_rank_map(mesh) -> dict[tuple[int, ...], int]:
+    """Convert a DeviceMesh to a {coords: global_rank} dict."""
+    mesh_tensor = mesh.mesh
+    result = {}
+    for idx in itertools.product(*(range(s) for s in mesh_tensor.shape)):
+        result[idx] = int(mesh_tensor[idx].item())
+    return result
+
+
+def _mesh_all_ranks(mesh) -> list[int]:
+    """Return all global ranks in a DeviceMesh (flat, sorted)."""
+    return sorted(mesh.mesh.flatten().tolist())
