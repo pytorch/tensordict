@@ -50,6 +50,7 @@ def test_strategy_a_materialize():
 
     mesh = DeviceMesh("cuda", torch.arange(world_size))
 
+    torch.manual_seed(42)
     full_a = torch.arange(
         world_size * 10, dtype=torch.float32, device="cuda"
     )
@@ -209,6 +210,7 @@ def test_multi_key():
 
     mesh = DeviceMesh("cuda", torch.arange(world_size))
 
+    torch.manual_seed(123)
     full_w = torch.randn(8, world_size * 4, dtype=torch.float32, device="cuda")
     full_b = torch.randn(world_size * 4, dtype=torch.float32, device="cuda")
 
