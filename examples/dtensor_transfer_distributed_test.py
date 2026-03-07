@@ -9,12 +9,12 @@
 Usage (4 GPUs, single-node):
     torchrun --nproc_per_node=4 examples/dtensor_transfer_distributed_test.py
 
-Usage (8 GPUs, single-node):
-    torchrun --nproc_per_node=8 examples/dtensor_transfer_distributed_test.py
+Strategy A (materialize): all ranks collectively call full_tensor() to
+    gather shards, then rank 0 sends the full tensor to rank 1 as a
+    plain (non-DTensor) tensor via P2P.
 
-Strategy A: rank 0 sends materialized full tensors to rank 1.
-Strategy B: rank 0 sends local shards + metadata to rank 1.
-Non-participating ranks wait at barriers.
+Strategy B (redistribute): rank 0 sends its local shard + metadata to
+    rank 1 via P2P. No collective needed.
 """
 
 import torch
@@ -32,10 +32,14 @@ def log(msg: str):
 
 
 # ======================================================================
-# Strategy A: materialize-and-reshard
+# Strategy A: materialize-and-send
 # ======================================================================
 def test_strategy_a_materialize():
-    """Test Strategy A: rank 0 sends, rank 1 receives."""
+    """Test Strategy A.
+
+    full_tensor() is a collective, so ALL ranks must participate.
+    After materializing, only rank 0 sends the plain tensors to rank 1.
+    """
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
@@ -54,16 +58,21 @@ def test_strategy_a_materialize():
     dt_a = distribute_tensor(full_a, mesh, [Shard(0)])
     dt_b = distribute_tensor(full_b, mesh, [Shard(1)])
 
-    td_src = TensorDict(a=dt_a, b=dt_b)
+    # full_tensor() is COLLECTIVE - all ranks must call it
+    materialized_a = dt_a.full_tensor()
+    materialized_b = dt_b.full_tensor()
 
     if rank == 0:
-        log(f"  a local shape: {dt_a.to_local().shape}")
-        log(f"  b local shape: {dt_b.to_local().shape}")
+        log(f"  Materialized a: {materialized_a.shape}")
+        log(f"  Materialized b: {materialized_b.shape}")
+
+    # Now send the plain (non-DTensor) tensors from rank 0 -> rank 1
+    td_plain = TensorDict(a=materialized_a, b=materialized_b)
 
     dist.barrier()
 
     if rank == 0:
-        td_src.dtensor_send(
+        td_plain.dtensor_send(
             dst=1,
             strategy="materialize",
             transport="torch_distributed",
@@ -89,10 +98,14 @@ def test_strategy_a_materialize():
 
 
 # ======================================================================
-# Strategy B: redistribute
+# Strategy B: redistribute (send local shard)
 # ======================================================================
 def test_strategy_b_redistribute():
-    """Test Strategy B: send local shards + placement metadata."""
+    """Test Strategy B: send local shards + placement metadata.
+
+    to_local() is NOT collective - only rank 0 calls it.
+    Rank 0 sends its local shard to rank 1.
+    """
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
@@ -144,19 +157,19 @@ def test_strategy_b_redistribute():
 
 
 # ======================================================================
-# Strategy A with non-DTensor
+# Strategy A with plain tensors only
 # ======================================================================
-def test_strategy_a_plain_tensor():
-    """Test that non-DTensor tensors pass through correctly."""
+def test_plain_tensor():
+    """Test plain tensor P2P (no DTensor involved)."""
     rank = dist.get_rank()
 
     if rank == 0:
         log("=" * 60)
-        log("Testing Strategy A: plain tensor (rank 0 -> rank 1)")
+        log("Testing plain tensor (rank 0 -> rank 1)")
         log("=" * 60)
 
     plain = torch.tensor([1.0, 2.0, 3.0, 4.0], device="cuda")
-    td_src = TensorDict(plain_tensor=plain)
+    td_src = TensorDict(x=plain)
 
     dist.barrier()
 
@@ -166,34 +179,32 @@ def test_strategy_a_plain_tensor():
             strategy="materialize",
             transport="torch_distributed",
         )
-        log("  Sent non-DTensor OK")
+        log("  Sent OK")
     elif rank == 1:
-        td_recv = TensorDict(
-            plain_tensor=torch.empty(4, device="cuda"),
-        )
+        td_recv = TensorDict(x=torch.empty(4, device="cuda"))
         td_recv.dtensor_recv(
             src=0,
             strategy="materialize",
             transport="torch_distributed",
         )
-        assert torch.equal(td_recv["plain_tensor"], plain)
-        log("  Non-DTensor passthrough PASSED!")
+        assert torch.equal(td_recv["x"], plain)
+        log("  Plain tensor PASSED!")
 
     dist.barrier()
     log("  Plain tensor test done")
 
 
 # ======================================================================
-# Strategy A with multiple keys
+# Strategy A with multiple keys (pre-materialized)
 # ======================================================================
-def test_strategy_a_multi_key():
-    """Test Strategy A with multiple DTensor keys."""
+def test_multi_key():
+    """Test multi-key DTensor transfer with pre-materialization."""
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
     if rank == 0:
         log("=" * 60)
-        log("Testing Strategy A: multi-key DTensor (rank 0 -> rank 1)")
+        log("Testing multi-key DTensor (rank 0 -> rank 1)")
         log("=" * 60)
 
     mesh = DeviceMesh("cuda", torch.arange(world_size))
@@ -204,17 +215,21 @@ def test_strategy_a_multi_key():
     dt_w = distribute_tensor(full_w, mesh, [Shard(1)])
     dt_b = distribute_tensor(full_b, mesh, [Shard(0)])
 
-    td_src = TensorDict(bias=dt_b, weight=dt_w)
+    # Collective materialize
+    mat_w = dt_w.full_tensor()
+    mat_b = dt_b.full_tensor()
+
+    td_plain = TensorDict(bias=mat_b, weight=mat_w)
 
     dist.barrier()
 
     if rank == 0:
-        td_src.dtensor_send(
+        td_plain.dtensor_send(
             dst=1,
             strategy="materialize",
             transport="torch_distributed",
         )
-        log("  Sent multi-key OK")
+        log("  Sent OK")
     elif rank == 1:
         td_recv = TensorDict(
             bias=torch.empty_like(full_b),
@@ -227,7 +242,7 @@ def test_strategy_a_multi_key():
         )
         assert torch.allclose(td_recv["weight"], full_w), "weight mismatch!"
         assert torch.allclose(td_recv["bias"], full_b), "bias mismatch!"
-        log("  Multi-key Verification PASSED!")
+        log("  Multi-key PASSED!")
 
     dist.barrier()
     log("  Multi-key test done")
@@ -246,10 +261,10 @@ def main():
     log(f"Initialized: world_size={world_size}, "
         f"device=cuda:{rank % torch.cuda.device_count()}")
 
+    test_plain_tensor()
     test_strategy_a_materialize()
     test_strategy_b_redistribute()
-    test_strategy_a_plain_tensor()
-    test_strategy_a_multi_key()
+    test_multi_key()
 
     if rank == 0:
         log("\n" + "=" * 60)
