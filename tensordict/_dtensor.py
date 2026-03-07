@@ -312,9 +312,9 @@ class _TorchDistributedBackend:
 
     Metadata is serialized to JSON and sent as a CUDA byte tensor so that
     only the NCCL backend is required (no Gloo needed for CPU tensors).
+    All operations use tag=0 and rely on FIFO ordering of NCCL P2P ops
+    between each (src, dst) pair.
     """
-
-    _OBJ_TAG = 2**20
 
     def __init__(self, group=None):
         self.group = group
@@ -322,30 +322,30 @@ class _TorchDistributedBackend:
     def send_tensor(self, tensor: Tensor, dst: int, *, tag: int = 0) -> None:
         from torch import distributed as dist
 
-        dist.send(tensor.contiguous(), dst=dst, tag=tag, group=self.group)
+        dist.send(tensor.contiguous(), dst=dst, group=self.group)
 
     def recv_tensor(self, tensor: Tensor, src: int, *, tag: int = 0) -> None:
         from torch import distributed as dist
 
-        dist.recv(tensor, src=src, tag=tag, group=self.group)
+        dist.recv(tensor, src=src, group=self.group)
 
     def send_object(self, obj: Any, dst: int) -> None:
         from torch import distributed as dist
 
         data = json.dumps(obj).encode("utf-8")
         length_t = torch.tensor([len(data)], dtype=torch.int64, device="cuda")
-        dist.send(length_t, dst=dst, tag=self._OBJ_TAG, group=self.group)
+        dist.send(length_t, dst=dst, group=self.group)
         data_t = torch.frombuffer(bytearray(data), dtype=torch.uint8).cuda()
-        dist.send(data_t, dst=dst, tag=self._OBJ_TAG + 1, group=self.group)
+        dist.send(data_t, dst=dst, group=self.group)
 
     def recv_object(self, src: int) -> Any:
         from torch import distributed as dist
 
         length_t = torch.empty(1, dtype=torch.int64, device="cuda")
-        dist.recv(length_t, src=src, tag=self._OBJ_TAG, group=self.group)
+        dist.recv(length_t, src=src, group=self.group)
         length = int(length_t.item())
         data_t = torch.empty(length, dtype=torch.uint8, device="cuda")
-        dist.recv(data_t, src=src, tag=self._OBJ_TAG + 1, group=self.group)
+        dist.recv(data_t, src=src, group=self.group)
         return json.loads(bytes(data_t.cpu().numpy()))
 
 

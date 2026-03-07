@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Distributed test for DTensor transfer strategies A, B, C.
+"""Distributed test for DTensor transfer strategies A, B.
 
 Usage (4 GPUs, single-node):
     torchrun --nproc_per_node=4 examples/dtensor_transfer_distributed_test.py
@@ -12,20 +12,15 @@ Usage (4 GPUs, single-node):
 Usage (8 GPUs, single-node):
     torchrun --nproc_per_node=8 examples/dtensor_transfer_distributed_test.py
 
-The test creates DTensors with known values, transfers them using each
-strategy, and verifies correctness on the receiving side.
-
-Strategy A and B use a single sender rank -> single receiver rank pattern.
-Strategy C uses the full mesh-to-mesh optimal P2P transfer.
+Strategy A: rank 0 sends materialized full tensors to rank 1.
+Strategy B: rank 0 sends local shards + metadata to rank 1.
+Non-participating ranks wait at barriers.
 """
-
-import os
-import sys
 
 import torch
 import torch.distributed as dist
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor import DTensor, Replicate, Shard
+from torch.distributed.tensor import Shard
 from torch.distributed.tensor import distribute_tensor
 
 from tensordict import TensorDict
@@ -40,10 +35,7 @@ def log(msg: str):
 # Strategy A: materialize-and-reshard
 # ======================================================================
 def test_strategy_a_materialize():
-    """Test Strategy A: rank 0 sends, rank 1 receives.
-
-    Only ranks 0 and 1 participate in the P2P; others wait at the barrier.
-    """
+    """Test Strategy A: rank 0 sends, rank 1 receives."""
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
@@ -52,7 +44,6 @@ def test_strategy_a_materialize():
         log("Testing Strategy A: materialize (rank 0 -> rank 1)")
         log("=" * 60)
 
-    # Create a DeviceMesh covering all ranks
     mesh = DeviceMesh("cuda", torch.arange(world_size))
 
     full_a = torch.arange(
@@ -66,7 +57,8 @@ def test_strategy_a_materialize():
     td_src = TensorDict(a=dt_a, b=dt_b)
 
     if rank == 0:
-        log(f"  a local shape: {dt_a.to_local().shape}, b local shape: {dt_b.to_local().shape}")
+        log(f"  a local shape: {dt_a.to_local().shape}")
+        log(f"  b local shape: {dt_b.to_local().shape}")
 
     dist.barrier()
 
@@ -93,6 +85,7 @@ def test_strategy_a_materialize():
         log("  Verification PASSED!")
 
     dist.barrier()
+    log("  Strategy A done")
 
 
 # ======================================================================
@@ -129,7 +122,6 @@ def test_strategy_b_redistribute():
         )
         log("  Sent OK")
     elif rank == 1:
-        # Recv expects a buffer matching the local shard shape
         local_size = len(full_tensor) // world_size
         td_recv = TensorDict(
             weight=torch.empty(local_size, device="cuda"),
@@ -140,7 +132,6 @@ def test_strategy_b_redistribute():
             transport="torch_distributed",
         )
 
-        # Strategy B sends rank 0's local shard
         expected_local = list(full_tensor.chunk(world_size))[0]
         received = td_recv["weight"]
         assert torch.allclose(received, expected_local), (
@@ -149,92 +140,97 @@ def test_strategy_b_redistribute():
         log("  Verification PASSED!")
 
     dist.barrier()
+    log("  Strategy B done")
 
 
 # ======================================================================
-# Strategy C: optimal P2P
+# Strategy A with non-DTensor
 # ======================================================================
-def test_strategy_c_optimal():
-    """Test Strategy C: optimal P2P mesh-to-mesh transfer.
+def test_strategy_a_plain_tensor():
+    """Test that non-DTensor tensors pass through correctly."""
+    rank = dist.get_rank()
 
-    Simulates cross-mesh transfer by using the first half of ranks as
-    "source mesh" and the second half as "destination mesh".
-    All ranks participate in the P2P transfers.
-    """
+    if rank == 0:
+        log("=" * 60)
+        log("Testing Strategy A: plain tensor (rank 0 -> rank 1)")
+        log("=" * 60)
+
+    plain = torch.tensor([1.0, 2.0, 3.0, 4.0], device="cuda")
+    td_src = TensorDict(plain_tensor=plain)
+
+    dist.barrier()
+
+    if rank == 0:
+        td_src.dtensor_send(
+            dst=1,
+            strategy="materialize",
+            transport="torch_distributed",
+        )
+        log("  Sent non-DTensor OK")
+    elif rank == 1:
+        td_recv = TensorDict(
+            plain_tensor=torch.empty(4, device="cuda"),
+        )
+        td_recv.dtensor_recv(
+            src=0,
+            strategy="materialize",
+            transport="torch_distributed",
+        )
+        assert torch.equal(td_recv["plain_tensor"], plain)
+        log("  Non-DTensor passthrough PASSED!")
+
+    dist.barrier()
+    log("  Plain tensor test done")
+
+
+# ======================================================================
+# Strategy A with multiple keys
+# ======================================================================
+def test_strategy_a_multi_key():
+    """Test Strategy A with multiple DTensor keys."""
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
-    if world_size < 4:
-        if rank == 0:
-            log("SKIP Strategy C: need at least 4 GPUs")
-        return
-
     if rank == 0:
         log("=" * 60)
-        log("Testing Strategy C: optimal P2P mesh-to-mesh")
+        log("Testing Strategy A: multi-key DTensor (rank 0 -> rank 1)")
         log("=" * 60)
 
-    half = world_size // 2
-    src_ranks = list(range(half))
-    dst_ranks = list(range(half, world_size))
+    mesh = DeviceMesh("cuda", torch.arange(world_size))
 
-    src_mesh = DeviceMesh("cuda", torch.tensor(src_ranks))
-    dst_mesh = DeviceMesh("cuda", torch.tensor(dst_ranks))
+    full_w = torch.randn(8, world_size * 4, dtype=torch.float32, device="cuda")
+    full_b = torch.randn(world_size * 4, dtype=torch.float32, device="cuda")
 
-    full_tensor = torch.arange(
-        half * 16, dtype=torch.float32, device="cuda"
-    )
+    dt_w = distribute_tensor(full_w, mesh, [Shard(1)])
+    dt_b = distribute_tensor(full_b, mesh, [Shard(0)])
 
-    is_sender = rank in src_ranks
-    is_receiver = rank in dst_ranks
-
-    if rank == 0:
-        log(f"  src_ranks={src_ranks}, dst_ranks={dst_ranks}")
-        log(f"  Src placements: [Shard(0)] on {half} ranks")
-        log(f"  Dst placements: [Shard(0)] on {half} ranks")
+    td_src = TensorDict(bias=dt_b, weight=dt_w)
 
     dist.barrier()
 
-    src_placements = (Shard(0),)
-    dst_placements = (Shard(0),)
-
-    if is_sender:
-        dt = distribute_tensor(full_tensor, src_mesh, list(src_placements))
-        td_src = TensorDict(data=dt)
-
-        log(f"  Sender local shape: {dt.to_local().shape}")
-
+    if rank == 0:
         td_src.dtensor_send(
-            dst=dst_ranks[0],
-            dst_mesh=dst_mesh,
-            dst_placements=dst_placements,
-            strategy="optimal",
+            dst=1,
+            strategy="materialize",
             transport="torch_distributed",
         )
-        log("  Sent OK")
-
-    if is_receiver:
-        dt_recv = distribute_tensor(
-            torch.zeros_like(full_tensor), dst_mesh, list(dst_placements)
+        log("  Sent multi-key OK")
+    elif rank == 1:
+        td_recv = TensorDict(
+            bias=torch.empty_like(full_b),
+            weight=torch.empty_like(full_w),
         )
-        td_recv = TensorDict(data=dt_recv)
-
         td_recv.dtensor_recv(
-            src=src_ranks[0],
-            src_mesh=src_mesh,
-            src_placements=src_placements,
-            strategy="optimal",
+            src=0,
+            strategy="materialize",
             transport="torch_distributed",
         )
-
-        # Verify: gather the received DTensor and compare
-        received_full = td_recv["data"].full_tensor()
-        assert torch.allclose(received_full, full_tensor), (
-            f"Mismatch on rank {rank}!"
-        )
-        log("  Verification PASSED!")
+        assert torch.allclose(td_recv["weight"], full_w), "weight mismatch!"
+        assert torch.allclose(td_recv["bias"], full_b), "bias mismatch!"
+        log("  Multi-key Verification PASSED!")
 
     dist.barrier()
+    log("  Multi-key test done")
 
 
 # ======================================================================
@@ -252,7 +248,8 @@ def main():
 
     test_strategy_a_materialize()
     test_strategy_b_redistribute()
-    test_strategy_c_optimal()
+    test_strategy_a_plain_tensor()
+    test_strategy_a_multi_key()
 
     if rank == 0:
         log("\n" + "=" * 60)
