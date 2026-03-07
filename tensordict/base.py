@@ -9630,6 +9630,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         metadata = backend.recv_object(src_int)
 
         device = self.device
+        if device is None:
+            for key in self.sorted_keys:
+                v = self._get_str(key, NO_DEFAULT)
+                if hasattr(v, "device"):
+                    device = v.device
+                    break
 
         for key, meta in metadata.items():
             shape = torch.Size(meta["shape"])
@@ -9699,6 +9705,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         metadata = backend.recv_object(src_int)
 
         device = self.device
+        if device is None:
+            for key in self.sorted_keys:
+                v = self._get_str(key, NO_DEFAULT)
+                if hasattr(v, "device"):
+                    device = v.device
+                    break
 
         for key, meta in metadata.items():
             dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
