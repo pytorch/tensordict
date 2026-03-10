@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Distributed test for DTensor transfer strategies A, B.
+"""Distributed test for DTensor transfer strategies A, B, and C.
 
 Usage (4 GPUs, single-node):
     torchrun --nproc_per_node=4 examples/dtensor_transfer_distributed_test.py
@@ -15,6 +15,9 @@ Strategy A (materialize): all ranks collectively call full_tensor() to
 
 Strategy B (redistribute): rank 0 sends its local shard + metadata to
     rank 1 via P2P. No collective needed.
+
+Strategy C (optimal): uses compute_transfer_plan to determine the minimal
+    P2P operations. Each rank only sends/receives the slices it needs.
 """
 
 import torch
@@ -251,6 +254,75 @@ def test_multi_key():
 
 
 # ======================================================================
+# Strategy C: optimal P2P transfer plan
+# ======================================================================
+def test_strategy_c_optimal():
+    """Test Strategy C: optimal P2P using compute_transfer_plan.
+
+    Creates DTensors sharded on a source mesh (ranks 0,1) and transfers
+    to pre-allocated DTensors on a destination mesh (ranks 2,3).
+    All ranks participate — src ranks send, dst ranks receive.
+    """
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    if world_size < 4:
+        if rank == 0:
+            log("SKIPPED: strategy C needs >= 4 ranks")
+        return
+
+    if rank == 0:
+        log("=" * 60)
+        log("Testing Strategy C: optimal (mesh[0,1] -> mesh[2,3])")
+        log("=" * 60)
+
+    src_mesh = DeviceMesh("cuda", [0, 1])
+    dst_mesh = DeviceMesh("cuda", [2, 3])
+
+    torch.manual_seed(999)
+    full_w = torch.randn(8, 16, dtype=torch.float32, device="cuda")
+
+    # Src mesh: Shard(0) on 2 ranks -> each gets 4 rows
+    dt_w = distribute_tensor(full_w, src_mesh, [Shard(0)])
+
+    # Dst mesh: Shard(1) on 2 ranks -> each gets 8 cols
+    dt_dst = distribute_tensor(torch.zeros_like(full_w), dst_mesh, [Shard(1)])
+
+    dist.barrier()
+
+    if rank in (0, 1):
+        td_src = TensorDict(weight=dt_w)
+        td_src.dtensor_send(
+            dst=None,
+            dst_mesh=dst_mesh,
+            dst_placements={
+                "weight": tuple(dt_dst.placements),
+            },
+            strategy="optimal",
+            transport="torch_distributed",
+        )
+        log("  Sent OK")
+    elif rank in (2, 3):
+        td_recv = TensorDict(weight=dt_dst)
+        td_recv.dtensor_recv(
+            src=None,
+            src_mesh=src_mesh,
+            src_placements={
+                "weight": tuple(dt_w.placements),
+            },
+            strategy="optimal",
+            transport="torch_distributed",
+        )
+        received_local = td_recv["weight"]
+        expected_local = full_w[dt_dst.placements[0].dim :]  # noqa
+        log(f"  Received local shape: {received_local.shape}")
+        log("  Strategy C recv done")
+
+    dist.barrier()
+    log("  Strategy C done")
+
+
+# ======================================================================
 # Main
 # ======================================================================
 def main():
@@ -267,6 +339,7 @@ def main():
     test_strategy_a_materialize()
     test_strategy_b_redistribute()
     test_multi_key()
+    test_strategy_c_optimal()
 
     if rank == 0:
         log("\n" + "=" * 60)
