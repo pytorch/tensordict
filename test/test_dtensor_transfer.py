@@ -24,6 +24,8 @@ from tensordict._dtensor import (
     _ShardSpec,
     _slice_relative_to,
     _TransferPlan,
+    execute_transfer_plan,
+    ShardingDescriptor,
 )
 
 
@@ -660,3 +662,258 @@ class TestTransferPlanSimulation:
             assert torch.equal(dst_buffers[i], dst_shards[i]), (
                 f"rank {i}: expected {dst_shards[i]}, got {dst_buffers[i]}"
             )
+
+
+# ---------------------------------------------------------------------------
+# ShardingDescriptor
+# ---------------------------------------------------------------------------
+
+
+class TestShardingDescriptor:
+    def test_sharded(self):
+        desc = ShardingDescriptor(
+            mesh_shape=(4,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+        )
+        assert desc.mesh_shape == (4,)
+        assert desc.logical_shape == torch.Size([100])
+        assert desc.rank_map is None
+
+    def test_replicated(self):
+        desc = ShardingDescriptor(
+            mesh_shape=(4,),
+            placements=(_Replicate(),),
+            logical_shape=torch.Size([100, 200]),
+        )
+        assert desc.mesh_shape == (4,)
+        assert desc.logical_shape == torch.Size([100, 200])
+
+    def test_with_rank_map(self):
+        rank_map = {(0,): 10, (1,): 11}
+        desc = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+            rank_map=rank_map,
+        )
+        assert desc.rank_map == rank_map
+
+    def test_frozen(self):
+        desc = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([50]),
+        )
+        with pytest.raises(AttributeError):
+            desc.mesh_shape = (4,)
+
+    def test_2d_mesh(self):
+        desc = ShardingDescriptor(
+            mesh_shape=(2, 4),
+            placements=(_Shard(0), _Shard(1)),
+            logical_shape=torch.Size([100, 200]),
+        )
+        assert desc.mesh_shape == (2, 4)
+        assert len(desc.placements) == 2
+
+
+# ---------------------------------------------------------------------------
+# ChunkTransfer properties
+# ---------------------------------------------------------------------------
+
+
+class TestChunkTransferProperties:
+    def test_numel_1d(self):
+        t = _ChunkTransfer(
+            src_rank=0,
+            dst_rank=1,
+            src_slices=(slice(0, 25),),
+            dst_slices=(slice(0, 25),),
+            global_slices=(slice(0, 25),),
+        )
+        assert t.numel == 25
+
+    def test_numel_2d(self):
+        t = _ChunkTransfer(
+            src_rank=0,
+            dst_rank=1,
+            src_slices=(slice(0, 5), slice(0, 10)),
+            dst_slices=(slice(0, 5), slice(0, 10)),
+            global_slices=(slice(0, 5), slice(0, 10)),
+        )
+        assert t.numel == 50
+
+    def test_nbytes(self):
+        t = _ChunkTransfer(
+            src_rank=0,
+            dst_rank=1,
+            src_slices=(slice(0, 10),),
+            dst_slices=(slice(0, 10),),
+            global_slices=(slice(0, 10),),
+        )
+        assert t.nbytes(itemsize=4) == 40
+
+    def test_repr(self):
+        t = _ChunkTransfer(
+            src_rank=0,
+            dst_rank=1,
+            src_slices=(slice(0, 25),),
+            dst_slices=(slice(0, 25),),
+            global_slices=(slice(0, 25),),
+        )
+        r = repr(t)
+        assert "src=0" in r
+        assert "dst=1" in r
+
+
+# ---------------------------------------------------------------------------
+# execute_transfer_plan (simulated with mock backend)
+# ---------------------------------------------------------------------------
+
+
+class _MockBackend:
+    """In-process mock backend that routes sends/recvs through a shared dict.
+
+    All ranks run in a single process. Call ``run_rank(rank, fn)`` for each
+    simulated rank, then call ``drain()`` to execute them sequentially.
+    """
+
+    def __init__(self):
+        self._mailbox: dict[tuple[int, int, int], torch.Tensor] = {}
+        self._tag_counter: dict[int, int] = {}
+
+    def for_rank(self, rank: int) -> "_RankView":
+        return _RankView(self, rank)
+
+
+class _RankView:
+    """Per-rank view of the mock backend."""
+
+    def __init__(self, parent: _MockBackend, rank: int):
+        self._parent = parent
+        self._rank = rank
+        self._send_seq: dict[int, int] = {}
+        self._recv_seq: dict[int, int] = {}
+
+    def send_tensor(self, tensor: torch.Tensor, dst: int, *, tag: int = 0) -> None:
+        seq = self._send_seq.get(dst, 0)
+        key = (self._rank, dst, seq)
+        self._send_seq[dst] = seq + 1
+        self._parent._mailbox[key] = tensor.clone()
+
+    def recv_tensor(self, tensor: torch.Tensor, src: int, *, tag: int = 0) -> None:
+        seq = self._recv_seq.get(src, 0)
+        key = (src, self._rank, seq)
+        self._recv_seq[src] = seq + 1
+        tensor.copy_(self._parent._mailbox[key])
+
+    def send_object(self, obj, dst: int) -> None:
+        raise NotImplementedError
+
+    def recv_object(self, src: int):
+        raise NotImplementedError
+
+
+class TestExecuteTransferPlan:
+    """Test execute_transfer_plan with the mock backend."""
+
+    def test_shard4_to_shard2(self):
+        """Shard(0) on 4 src ranks -> Shard(0) on 2 dst ranks."""
+        full = torch.arange(100, dtype=torch.float32)
+        src_shards = list(full.chunk(4))
+
+        plan = _compute_transfer_plan(
+            global_shape=[100],
+            src_mesh_shape=[4],
+            src_placements=[_Shard(0)],
+            dst_mesh_shape=[2],
+            dst_placements=[_Shard(0)],
+        )
+
+        mock = _MockBackend()
+
+        # Run senders first (they populate the mailbox)
+        for rank in range(4):
+            execute_transfer_plan(
+                plan, src_shards[rank], None, rank, mock.for_rank(rank)
+            )
+
+        # Run receivers
+        dst_buffers = [torch.zeros(50) for _ in range(2)]
+        for rank in range(2):
+            execute_transfer_plan(
+                plan, None, dst_buffers[rank], rank, mock.for_rank(rank)
+            )
+
+        expected = list(full.chunk(2))
+        for i in range(2):
+            assert torch.equal(dst_buffers[i], expected[i])
+
+    def test_2d_to_1d(self):
+        """[Shard(0), Shard(1)] on 2x2 -> [Shard(0)] on 2."""
+        full = torch.arange(200, dtype=torch.float32).reshape(10, 20)
+
+        src_shards = {
+            0: full[:5, :10].contiguous(),
+            1: full[:5, 10:].contiguous(),
+            2: full[5:, :10].contiguous(),
+            3: full[5:, 10:].contiguous(),
+        }
+
+        plan = _compute_transfer_plan(
+            global_shape=[10, 20],
+            src_mesh_shape=[2, 2],
+            src_placements=[_Shard(0), _Shard(1)],
+            dst_mesh_shape=[2],
+            dst_placements=[_Shard(0)],
+        )
+
+        mock = _MockBackend()
+
+        for rank in range(4):
+            execute_transfer_plan(
+                plan, src_shards[rank], None, rank, mock.for_rank(rank)
+            )
+
+        dst_buffers = {
+            0: torch.zeros(5, 20),
+            1: torch.zeros(5, 20),
+        }
+        for rank in range(2):
+            execute_transfer_plan(
+                plan, None, dst_buffers[rank], rank, mock.for_rank(rank)
+            )
+
+        assert torch.equal(dst_buffers[0], full[:5])
+        assert torch.equal(dst_buffers[1], full[5:])
+
+    def test_replicate_to_shard(self):
+        """Replicate on 2 -> Shard(0) on 4."""
+        full = torch.arange(100, dtype=torch.float32)
+
+        plan = _compute_transfer_plan(
+            global_shape=[100],
+            src_mesh_shape=[2],
+            src_placements=[_Replicate()],
+            dst_mesh_shape=[4],
+            dst_placements=[_Shard(0)],
+        )
+
+        mock = _MockBackend()
+
+        # Only rank 0 sends (dedup)
+        for rank in range(2):
+            execute_transfer_plan(
+                plan, full.clone(), None, rank, mock.for_rank(rank)
+            )
+
+        dst_buffers = [torch.zeros(25) for _ in range(4)]
+        for rank in range(4):
+            execute_transfer_plan(
+                plan, None, dst_buffers[rank], rank, mock.for_rank(rank)
+            )
+
+        expected = list(full.chunk(4))
+        for i in range(4):
+            assert torch.equal(dst_buffers[i], expected[i])
