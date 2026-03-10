@@ -17,7 +17,7 @@ import itertools
 import json
 import struct
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Protocol, runtime_checkable, Sequence, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -415,7 +415,11 @@ def execute_transfer_plan(
     sends = plan.sends_for_rank(rank)
     recvs = plan.recvs_for_rank(rank)
 
-    recv_bufs: list[tuple[Tensor, _ChunkTransfer]] = []
+    if src_tensor is not None:
+        for transfer in sends:
+            chunk = src_tensor[transfer.src_slices].contiguous()
+            backend.send_tensor(chunk, transfer.dst_rank)
+
     if dst_buffer is not None:
         for transfer in recvs:
             chunk_shape = tuple(
@@ -425,15 +429,7 @@ def execute_transfer_plan(
                 chunk_shape, dtype=dst_buffer.dtype, device=dst_buffer.device
             )
             backend.recv_tensor(buf, transfer.src_rank)
-            recv_bufs.append((buf, transfer))
-
-    if src_tensor is not None:
-        for transfer in sends:
-            chunk = src_tensor[transfer.src_slices].contiguous()
-            backend.send_tensor(chunk, transfer.dst_rank)
-
-    for buf, transfer in recv_bufs:
-        dst_buffer[transfer.dst_slices].copy_(buf)
+            dst_buffer[transfer.dst_slices].copy_(buf)
 
 
 # ---------------------------------------------------------------------------
@@ -610,3 +606,269 @@ def _mesh_to_rank_map(mesh) -> dict[tuple[int, ...], int]:
 def _mesh_all_ranks(mesh) -> list[int]:
     """Return all global ranks in a DeviceMesh (flat, sorted)."""
     return sorted(mesh.mesh.flatten().tolist())
+
+
+# ---------------------------------------------------------------------------
+# Model-level transfer plan
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ParameterPlan:
+    """Transfer plan for a single named parameter."""
+
+    src_name: str
+    dst_name: str
+    plan: _TransferPlan
+    src_desc: ShardingDescriptor
+    dst_desc: ShardingDescriptor
+    transform: Callable[[Tensor], Tensor] | None = None
+    strategy: str = "optimal"
+
+
+class ModelTransferPlan:
+    """Precomputed plan for transferring an entire model's parameters
+    between two differently-sharded meshes.
+
+    Designed for LLM post-training: compute once at setup, execute
+    every training iteration with near-zero overhead.
+
+    Example::
+
+        plan = ModelTransferPlan.build(
+            src_params={"layer.0.weight": src_desc, ...},
+            dst_params={"layer.0.weight": dst_desc, ...},
+        )
+
+        dst_tensors = plan.execute(
+            src_tensors={"layer.0.weight": param.data, ...},
+            rank=dist.get_rank(),
+            backend=backend,
+        )
+    """
+
+    def __init__(self, param_plans: list[ParameterPlan], batches: list[list[ParameterPlan]]):
+        self._param_plans = param_plans
+        self._batches = batches
+
+    @classmethod
+    def build(
+        cls,
+        src_params: dict[str, ShardingDescriptor],
+        dst_params: dict[str, ShardingDescriptor],
+        name_mapping: dict[str, str] | Callable[[str], str] | None = None,
+        transforms: dict[str, Callable[[Tensor], Tensor]] | None = None,
+        buffer_size: int = 2 * 1024**3,
+    ) -> ModelTransferPlan:
+        """Build the plan from source and destination sharding descriptors.
+
+        Args:
+            src_params: ``{src_name: ShardingDescriptor}`` for each parameter
+                on the source (training) side.
+            dst_params: ``{dst_name: ShardingDescriptor}`` for each parameter
+                on the destination (inference) side.
+            name_mapping: maps src_name to dst_name. If ``None``, names must
+                match between src and dst. Can be a dict or a callable.
+            transforms: per-parameter transforms applied to the source tensor
+                before transfer. Keyed by src_name.
+            buffer_size: maximum bytes per transfer batch.
+        """
+        param_plans: list[ParameterPlan] = []
+
+        for src_name, src_desc in src_params.items():
+            dst_name = cls._resolve_name(src_name, name_mapping)
+            dst_desc = dst_params[dst_name]
+
+            transform = transforms.get(src_name) if transforms else None
+
+            if transform is not None:
+                strategy = "materialize"
+            elif (
+                src_desc.placements == dst_desc.placements
+                and src_desc.mesh_shape == dst_desc.mesh_shape
+            ):
+                strategy = "direct_copy"
+            else:
+                strategy = "optimal"
+
+            plan = _compute_transfer_plan(
+                global_shape=src_desc.logical_shape,
+                src_mesh_shape=src_desc.mesh_shape,
+                src_placements=src_desc.placements,
+                dst_mesh_shape=dst_desc.mesh_shape,
+                dst_placements=dst_desc.placements,
+                src_rank_map=src_desc.rank_map,
+                dst_rank_map=dst_desc.rank_map,
+            )
+
+            param_plans.append(
+                ParameterPlan(
+                    src_name=src_name,
+                    dst_name=dst_name,
+                    plan=plan,
+                    src_desc=src_desc,
+                    dst_desc=dst_desc,
+                    transform=transform,
+                    strategy=strategy,
+                )
+            )
+
+        batches = cls._batch_parameters(param_plans, buffer_size)
+        return cls(param_plans, batches)
+
+    @staticmethod
+    def _resolve_name(
+        src_name: str,
+        name_mapping: dict[str, str] | Callable[[str], str] | None,
+    ) -> str:
+        if name_mapping is None:
+            return src_name
+        if callable(name_mapping):
+            return name_mapping(src_name)
+        return name_mapping[src_name]
+
+    @staticmethod
+    def _batch_parameters(
+        param_plans: list[ParameterPlan],
+        buffer_size: int,
+    ) -> list[list[ParameterPlan]]:
+        batches: list[list[ParameterPlan]] = []
+        current_batch: list[ParameterPlan] = []
+        current_bytes = 0
+        for pp in param_plans:
+            param_bytes = 1
+            for d in pp.src_desc.logical_shape:
+                param_bytes *= d
+            param_bytes *= 4  # assume float32
+            if current_bytes + param_bytes > buffer_size and current_batch:
+                batches.append(current_batch)
+                current_batch = []
+                current_bytes = 0
+            current_batch.append(pp)
+            current_bytes += param_bytes
+        if current_batch:
+            batches.append(current_batch)
+        return batches
+
+    def execute(
+        self,
+        src_tensors: dict[str, Tensor],
+        rank: int,
+        backend: _TransportBackend,
+    ) -> dict[str, Tensor]:
+        """Execute the precomputed plan.
+
+        On source ranks: reads from *src_tensors*, sends slices via P2P.
+        On destination ranks: allocates buffers, receives slices, returns
+        the populated tensors.
+
+        This method is called by ALL participating ranks (both source mesh
+        and destination mesh). Each rank only sends/receives its own data.
+
+        Args:
+            src_tensors: ``{src_name: local_tensor}`` -- the local shard on
+                this rank. Only needed on source ranks; can be empty on
+                destination-only ranks.
+            rank: this rank's global rank ID.
+            backend: transport backend to use.
+
+        Returns:
+            ``{dst_name: local_tensor}`` with received data on destination
+            ranks. Empty dict on source-only ranks.
+        """
+        result: dict[str, Tensor] = {}
+
+        for pp in self._param_plans:
+            src_tensor = src_tensors.get(pp.src_name)
+
+            if src_tensor is not None and pp.transform is not None:
+                src_tensor = pp.transform(src_tensor)
+
+            sends = pp.plan.sends_for_rank(rank)
+            recvs = pp.plan.recvs_for_rank(rank)
+
+            # Allocate dst buffer if this rank receives data
+            dst_buffer = None
+            if recvs:
+                dst_shape = tuple(
+                    _compute_local_slices(
+                        pp.dst_desc.logical_shape,
+                        pp.dst_desc.mesh_shape,
+                        pp.dst_desc.placements,
+                        self._rank_coords_for(rank, pp.dst_desc),
+                    )
+                )
+                local_shape = tuple(s.stop - s.start for s in dst_shape)
+                dtype = src_tensor.dtype if src_tensor is not None else torch.float32
+                dst_buffer = torch.zeros(local_shape, dtype=dtype)
+
+            execute_transfer_plan(pp.plan, src_tensor, dst_buffer, rank, backend)
+
+            if dst_buffer is not None:
+                result[pp.dst_name] = dst_buffer
+
+        return result
+
+    @staticmethod
+    def _rank_coords_for(
+        rank: int, desc: ShardingDescriptor
+    ) -> tuple[int, ...]:
+        """Find the mesh coordinates for *rank* in the descriptor's mesh."""
+        if desc.rank_map is not None:
+            for coords, r in desc.rank_map.items():
+                if r == rank:
+                    return coords
+        # Default row-major mapping
+        coords = []
+        remaining = rank
+        for dim_size in reversed(desc.mesh_shape):
+            coords.append(remaining % dim_size)
+            remaining //= dim_size
+        return tuple(reversed(coords))
+
+    @property
+    def total_bytes(self) -> int:
+        """Total bytes that will be transferred across the wire (assumes float32)."""
+        total = 0
+        for pp in self._param_plans:
+            for t in pp.plan.transfers:
+                total += t.nbytes(itemsize=4)
+        return total
+
+    @property
+    def per_rank_bytes(self) -> dict[int, int]:
+        """Bytes sent + received per rank (assumes float32)."""
+        rank_bytes: dict[int, int] = {}
+        for pp in self._param_plans:
+            for t in pp.plan.transfers:
+                b = t.nbytes(itemsize=4)
+                rank_bytes[t.src_rank] = rank_bytes.get(t.src_rank, 0) + b
+                rank_bytes[t.dst_rank] = rank_bytes.get(t.dst_rank, 0) + b
+        return rank_bytes
+
+    @property
+    def param_plans(self) -> list[ParameterPlan]:
+        return list(self._param_plans)
+
+    @property
+    def batches(self) -> list[list[ParameterPlan]]:
+        return list(self._batches)
+
+    def summary(self) -> str:
+        """Human-readable summary of the plan for debugging."""
+        n_total = len(self._param_plans)
+        n_optimal = sum(1 for p in self._param_plans if p.strategy == "optimal")
+        n_materialize = sum(1 for p in self._param_plans if p.strategy == "materialize")
+        n_direct = sum(1 for p in self._param_plans if p.strategy == "direct_copy")
+
+        lines = [
+            f"ModelTransferPlan: {n_total} parameters, {len(self._batches)} batches",
+        ]
+        if n_optimal:
+            lines.append(f"  Strategy C (optimal P2P): {n_optimal} params")
+        if n_materialize:
+            lines.append(f"  Strategy A (materialize): {n_materialize} params (have transforms)")
+        if n_direct:
+            lines.append(f"  Direct copy: {n_direct} params (same sharding)")
+        lines.append(f"  Total transfer: {self.total_bytes / 1024**2:.1f} MB (float32)")
+        return "\n".join(lines)
