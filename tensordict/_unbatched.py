@@ -9,43 +9,6 @@ import warnings
 import torch
 
 
-_UNBATCHED_DOCSTRING = """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
-
-    When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-    squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
-    unchanged. Data operations (arithmetic, clone, to, etc.) work natively
-    through standard PyTorch tensor dispatch.
-
-    Example:
-        >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
-        >>> td_reshaped = td.reshape((1, 2))
-        >>> td_reshaped["a"] is td["a"]
-        True
-
-    Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-    TensorDict returns a usable tensor directly:
-
-    Example:
-        >>> val = td["a"]
-        >>> isinstance(val, torch.Tensor)
-        True
-        >>> isinstance(val, UnbatchedTensor)
-        True
-
-    **Indexed Assignment Behavior:**
-
-    UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
-    Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
-    will skip the UnbatchedTensor entries entirely.
-
-    **Batch Size Computation:**
-
-    UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
-    solely by regular tensors.
-
-    """
-
-
 def _has_wrapper_subclass_vmap_fix():
     """Check if MetaConverter handles wrapper subclass storage correctly.
 
@@ -84,7 +47,41 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
     # or as_subclass() calls appear in the FX graph.
 
     class UnbatchedTensor(torch.Tensor):
-        __doc__ = _UNBATCHED_DOCSTRING
+        """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
+
+        When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
+        squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
+        unchanged. Data operations (arithmetic, clone, to, etc.) work natively
+        through standard PyTorch tensor dispatch.
+
+        Example:
+            >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
+            >>> td_reshaped = td.reshape((1, 2))
+            >>> td_reshaped["a"] is td["a"]
+            True
+
+        Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
+        TensorDict returns a usable tensor directly:
+
+        Example:
+            >>> val = td["a"]
+            >>> isinstance(val, torch.Tensor)
+            True
+            >>> isinstance(val, UnbatchedTensor)
+            True
+
+        **Indexed Assignment Behavior:**
+
+        UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
+        Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
+        will skip the UnbatchedTensor entries entirely.
+
+        **Batch Size Computation:**
+
+        UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
+        solely by regular tensors.
+
+        """
 
         _pass_through = True
 
@@ -177,7 +174,41 @@ else:
     # (DisableTorchFunctionSubclass enter/exit + as_subclass) under Dynamo.
 
     class UnbatchedTensor(torch.Tensor):  # type: ignore[no-redef]
-        __doc__ = _UNBATCHED_DOCSTRING
+        """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
+
+        When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
+        squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
+        unchanged. Data operations (arithmetic, clone, to, etc.) work natively
+        through standard PyTorch tensor dispatch.
+
+        Example:
+            >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
+            >>> td_reshaped = td.reshape((1, 2))
+            >>> td_reshaped["a"] is td["a"]
+            True
+
+        Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
+        TensorDict returns a usable tensor directly:
+
+        Example:
+            >>> val = td["a"]
+            >>> isinstance(val, torch.Tensor)
+            True
+            >>> isinstance(val, UnbatchedTensor)
+            True
+
+        **Indexed Assignment Behavior:**
+
+        UnbatchedTensor is not affected by indexed assignment operations on the parent TensorDict.
+        Since UnbatchedTensor does not follow batch dimensions, operations like ``td[:, :2] = other``
+        will skip the UnbatchedTensor entries entirely.
+
+        **Batch Size Computation:**
+
+        UnbatchedTensor is excluded from ``auto_batch_size_()`` computation. The batch size is determined
+        solely by regular tensors.
+
+        """
 
         _pass_through = True
 
