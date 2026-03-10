@@ -56,15 +56,19 @@ def _placement_is_partial(p) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _ShardSpec:
     """What a single rank holds, expressed as slices into the global tensor."""
 
     rank: int
     slices: tuple[slice, ...]
 
+    def __repr__(self) -> str:
+        slices_str = ", ".join(f"{s.start}:{s.stop}" for s in self.slices)
+        return f"ShardSpec(rank={self.rank}, slices=[{slices_str}])"
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True)
 class _ChunkTransfer:
     """One point-to-point transfer instruction."""
 
@@ -74,8 +78,27 @@ class _ChunkTransfer:
     dst_slices: tuple[slice, ...]
     global_slices: tuple[slice, ...]
 
+    @property
+    def numel(self) -> int:
+        """Number of elements this transfer moves."""
+        n = 1
+        for s in self.global_slices:
+            n *= s.stop - s.start
+        return n
 
-@dataclass
+    def nbytes(self, itemsize: int = 1) -> int:
+        """Number of bytes (numel * itemsize) this transfer moves."""
+        return self.numel * itemsize
+
+    def __repr__(self) -> str:
+        gl = ", ".join(f"{s.start}:{s.stop}" for s in self.global_slices)
+        return (
+            f"ChunkTransfer(src={self.src_rank}->dst={self.dst_rank}, "
+            f"global=[{gl}], numel={self.numel})"
+        )
+
+
+@dataclass(slots=True)
 class _TransferPlan:
     """Complete plan for transferring one tensor between two sharding specs."""
 
@@ -87,6 +110,82 @@ class _TransferPlan:
 
     def recvs_for_rank(self, rank: int) -> list[_ChunkTransfer]:
         return [t for t in self.transfers if t.dst_rank == rank]
+
+    def __repr__(self) -> str:
+        return (
+            f"TransferPlan(shape={tuple(self.global_shape)}, "
+            f"transfers={len(self.transfers)})"
+        )
+
+
+@dataclass(frozen=True)
+class ShardingDescriptor:
+    """Describes how a logical tensor is distributed across a device mesh.
+
+    This is the bridge between framework-specific metadata (Megatron's
+    partition_dim, vLLM's column/row parallel, FSDP's DTensor placements)
+    and tensordict's framework-agnostic transfer plan computation.
+    """
+
+    mesh_shape: tuple[int, ...]
+    placements: tuple
+    logical_shape: torch.Size
+    rank_map: dict[tuple[int, ...], int] | None = None
+
+    @classmethod
+    def from_dtensor(cls, dtensor) -> ShardingDescriptor:
+        """Construct from a ``torch.distributed.tensor.DTensor``."""
+        mesh = dtensor.device_mesh
+        return cls(
+            mesh_shape=tuple(mesh.mesh.shape),
+            placements=tuple(dtensor.placements),
+            logical_shape=dtensor.shape,
+            rank_map=_mesh_to_rank_map(mesh),
+        )
+
+    @classmethod
+    def from_device_mesh(
+        cls,
+        mesh,
+        placements: Sequence,
+        logical_shape: torch.Size,
+    ) -> ShardingDescriptor:
+        """Construct from a DeviceMesh + placements + shape."""
+        return cls(
+            mesh_shape=tuple(mesh.mesh.shape),
+            placements=tuple(placements),
+            logical_shape=logical_shape,
+            rank_map=_mesh_to_rank_map(mesh),
+        )
+
+    @classmethod
+    def replicated(cls, shape: torch.Size, world_size: int) -> ShardingDescriptor:
+        """All ranks hold a full copy."""
+        from torch.distributed.tensor.placement_types import Replicate
+
+        return cls(
+            mesh_shape=(world_size,),
+            placements=(Replicate(),),
+            logical_shape=shape,
+        )
+
+    @classmethod
+    def sharded(
+        cls,
+        shape: torch.Size,
+        dim: int,
+        world_size: int,
+        rank_map: dict | None = None,
+    ) -> ShardingDescriptor:
+        """Simple 1D shard on a single dimension."""
+        from torch.distributed.tensor.placement_types import Shard
+
+        return cls(
+            mesh_shape=(world_size,),
+            placements=(Shard(dim),),
+            logical_shape=shape,
+            rank_map=rank_map,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +389,51 @@ def _compute_transfer_plan(
             )
 
     return plan
+
+
+def execute_transfer_plan(
+    plan: _TransferPlan,
+    src_tensor: Tensor | None,
+    dst_buffer: Tensor | None,
+    rank: int,
+    backend: _TransportBackend,
+) -> None:
+    """Execute a single-tensor transfer plan on this rank.
+
+    This rank participates as sender, receiver, or both, depending on
+    whether it appears in the plan's transfers.
+
+    Args:
+        plan: the precomputed TransferPlan.
+        src_tensor: this rank's local shard (if rank is a source).
+            Can be ``None`` if this rank is destination-only.
+        dst_buffer: pre-allocated buffer for received data (if rank is
+            a destination). Can be ``None`` if this rank is source-only.
+        rank: this rank's global rank ID.
+        backend: transport backend to use.
+    """
+    sends = plan.sends_for_rank(rank)
+    recvs = plan.recvs_for_rank(rank)
+
+    recv_bufs: list[tuple[Tensor, _ChunkTransfer]] = []
+    if dst_buffer is not None:
+        for transfer in recvs:
+            chunk_shape = tuple(
+                s.stop - s.start for s in transfer.global_slices
+            )
+            buf = torch.empty(
+                chunk_shape, dtype=dst_buffer.dtype, device=dst_buffer.device
+            )
+            backend.recv_tensor(buf, transfer.src_rank)
+            recv_bufs.append((buf, transfer))
+
+    if src_tensor is not None:
+        for transfer in sends:
+            chunk = src_tensor[transfer.src_slices].contiguous()
+            backend.send_tensor(chunk, transfer.dst_rank)
+
+    for buf, transfer in recv_bufs:
+        dst_buffer[transfer.dst_slices].copy_(buf)
 
 
 # ---------------------------------------------------------------------------
