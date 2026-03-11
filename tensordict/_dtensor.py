@@ -17,14 +17,11 @@ import itertools
 import json
 import struct
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol, runtime_checkable, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Protocol, runtime_checkable, Sequence
 
 import numpy as np
 import torch
 from torch import Tensor
-
-if TYPE_CHECKING:
-    from tensordict._ucxx import TensorDictPipe
 
 _has_ucxx = importlib.util.find_spec("ucxx") is not None
 
@@ -194,8 +191,9 @@ class ShardingDescriptor:
 
 
 def _chunk_slice(total_size: int, num_chunks: int, chunk_idx: int) -> slice:
-    """Return the slice for ``chunk_idx`` when splitting *total_size* into
-    *num_chunks* using ``torch.chunk`` semantics (last chunk may be smaller).
+    """Return the slice for ``chunk_idx`` when splitting into chunks.
+
+    Uses ``torch.chunk`` semantics (last chunk may be smaller).
     """
     chunk_size = (total_size + num_chunks - 1) // num_chunks
     start = chunk_idx * chunk_size
@@ -313,9 +311,9 @@ def _deduplicate_src_specs(
     if not has_replica:
         return src_specs
 
-    seen: dict[tuple[slice, ...], _ShardSpec] = {}
+    seen: dict[tuple[tuple[int, int], ...], _ShardSpec] = {}
     for spec in src_specs:
-        key = spec.slices
+        key = tuple((s.start, s.stop) for s in spec.slices)
         if key not in seen or spec.rank < seen[key].rank:
             seen[key] = spec
     return list(seen.values())
@@ -356,9 +354,7 @@ def _compute_transfer_plan(
     )
 
     # Deduplicate replicated src specs
-    src_specs_dedup = _deduplicate_src_specs(
-        src_specs, src_placements, src_mesh_shape
-    )
+    src_specs_dedup = _deduplicate_src_specs(src_specs, src_placements, src_mesh_shape)
 
     plan = _TransferPlan(global_shape=global_shape)
 
@@ -422,9 +418,7 @@ def execute_transfer_plan(
 
     if dst_buffer is not None:
         for transfer in recvs:
-            chunk_shape = tuple(
-                s.stop - s.start for s in transfer.global_slices
-            )
+            chunk_shape = tuple(s.stop - s.start for s in transfer.global_slices)
             buf = torch.empty(
                 chunk_shape, dtype=dst_buffer.dtype, device=dst_buffer.device
             )
@@ -496,9 +490,7 @@ class _UCXXBackend:
         self._endpoint = endpoint
 
     def _tensor_to_numpy(self, t: Tensor) -> np.ndarray:
-        return np.frombuffer(
-            t.contiguous().view(torch.uint8).numpy(), dtype=np.uint8
-        )
+        return np.frombuffer(t.contiguous().view(torch.uint8).numpy(), dtype=np.uint8)
 
     def send_tensor(self, tensor: Tensor, dst: int, *, tag: int = 0) -> None:
         import asyncio
@@ -627,9 +619,9 @@ class ParameterPlan:
 
 
 class ModelTransferPlan:
-    """Precomputed plan for transferring an entire model's parameters
-    between two differently-sharded meshes.
+    """Precomputed plan for transferring an entire model's parameters.
 
+    Transfers between two differently-sharded meshes.
     Designed for LLM post-training: compute once at setup, execute
     every training iteration with near-zero overhead.
 
@@ -647,7 +639,9 @@ class ModelTransferPlan:
         )
     """
 
-    def __init__(self, param_plans: list[ParameterPlan], batches: list[list[ParameterPlan]]):
+    def __init__(
+        self, param_plans: list[ParameterPlan], batches: list[list[ParameterPlan]]
+    ):
         self._param_plans = param_plans
         self._batches = batches
 
@@ -784,7 +778,6 @@ class ModelTransferPlan:
             if src_tensor is not None and pp.transform is not None:
                 src_tensor = pp.transform(src_tensor)
 
-            sends = pp.plan.sends_for_rank(rank)
             recvs = pp.plan.recvs_for_rank(rank)
 
             # Allocate dst buffer if this rank receives data
@@ -810,9 +803,7 @@ class ModelTransferPlan:
         return result
 
     @staticmethod
-    def _rank_coords_for(
-        rank: int, desc: ShardingDescriptor
-    ) -> tuple[int, ...]:
+    def _rank_coords_for(rank: int, desc: ShardingDescriptor) -> tuple[int, ...]:
         """Find the mesh coordinates for *rank* in the descriptor's mesh."""
         if desc.rank_map is not None:
             for coords, r in desc.rank_map.items():
@@ -867,7 +858,9 @@ class ModelTransferPlan:
         if n_optimal:
             lines.append(f"  Strategy C (optimal P2P): {n_optimal} params")
         if n_materialize:
-            lines.append(f"  Strategy A (materialize): {n_materialize} params (have transforms)")
+            lines.append(
+                f"  Strategy A (materialize): {n_materialize} params (have transforms)"
+            )
         if n_direct:
             lines.append(f"  Direct copy: {n_direct} params (same sharding)")
         lines.append(f"  Total transfer: {self.total_bytes / 1024**2:.1f} MB (float32)")

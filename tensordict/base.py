@@ -9462,6 +9462,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             )
 
         return _tag
+
     def dtensor_send(
         self,
         dst,
@@ -9620,7 +9621,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         dst_int = dst if isinstance(dst, int) else 0
         backend.send_object(metadata, dst_int)
-        for key, tensor in tensors:
+        for _key, tensor in tensors:
             backend.send_tensor(tensor.contiguous(), dst_int)
 
     def _dtensor_recv_materialize(self, src, *, backend) -> None:
@@ -9691,7 +9692,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         dst_int = dst if isinstance(dst, int) else 0
         backend.send_object(metadata, dst_int)
-        for key, tensor in tensors:
+        for _key, tensor in tensors:
             backend.send_tensor(tensor.contiguous(), dst_int)
 
     def _dtensor_recv_redistribute(self, src, *, backend) -> None:
@@ -9734,13 +9735,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Computes which slices of each local shard need to go to which dst
         rank, then issues targeted P2P sends for just those slices.
         """
-        from torch import distributed as dist
-
         from tensordict._dtensor import (
             _compute_transfer_plan,
             _mesh_all_ranks,
             _mesh_to_rank_map,
         )
+        from torch import distributed as dist
 
         my_rank = dist.get_rank()
 
@@ -9802,13 +9802,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Computes which slices this rank needs and from which src ranks,
         then issues targeted P2P recvs and assembles the local shard.
         """
-        from torch import distributed as dist
-
         from tensordict._dtensor import (
             _compute_transfer_plan,
             _mesh_all_ranks,
             _mesh_to_rank_map,
         )
+        from torch import distributed as dist
 
         my_rank = dist.get_rank()
 
@@ -9867,9 +9866,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     local_tensor[transfer.dst_slices] = buf
                     tag += 1
 
-                self._set_str(
-                    key, local_tensor, inplace=True, validated=True
-                )
+                self._set_str(key, local_tensor, inplace=True, validated=True)
             else:
                 # Non-DTensor: recv from the first src rank
                 first_src = _mesh_all_ranks(src_mesh)[0]
