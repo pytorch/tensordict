@@ -80,6 +80,5 @@ class VLLMSharding:
     def describe_model(self, model) -> dict[str, ShardingDescriptor]:
         """Describe all parameters in a vLLM model."""
         return {
-            name: self.describe(name, param)
-            for name, param in model.named_parameters()
+            name: self.describe(name, param) for name, param in model.named_parameters()
         }
