@@ -23,10 +23,8 @@ from tensordict._dtensor import (
     _intersect_slices,
     _ShardSpec,
     _slice_relative_to,
-    _TransferPlan,
     execute_transfer_plan,
     ModelTransferPlan,
-    ParameterPlan,
     ShardingDescriptor,
 )
 
@@ -191,15 +189,11 @@ class TestComputeLocalSlices:
     def test_2d_shard_shard(self):
         # shape [100, 200], mesh (2, 4), [Shard(0), Shard(1)]
         # rank (0, 0) -> rows 0-50, cols 0-50
-        sl = _compute_local_slices(
-            [100, 200], [2, 4], [_Shard(0), _Shard(1)], [0, 0]
-        )
+        sl = _compute_local_slices([100, 200], [2, 4], [_Shard(0), _Shard(1)], [0, 0])
         assert sl == (slice(0, 50), slice(0, 50))
 
         # rank (1, 3) -> rows 50-100, cols 150-200
-        sl = _compute_local_slices(
-            [100, 200], [2, 4], [_Shard(0), _Shard(1)], [1, 3]
-        )
+        sl = _compute_local_slices([100, 200], [2, 4], [_Shard(0), _Shard(1)], [1, 3])
         assert sl == (slice(50, 100), slice(150, 200))
 
     def test_2d_shard_replicate(self):
@@ -229,9 +223,7 @@ class TestComputeAllLocalSlices:
         assert specs[1].rank == 20
 
     def test_2d_mesh(self):
-        specs = _compute_all_local_slices(
-            [100, 200], [2, 2], [_Shard(0), _Shard(1)]
-        )
+        specs = _compute_all_local_slices([100, 200], [2, 2], [_Shard(0), _Shard(1)])
         assert len(specs) == 4
         # rank 0 = coords (0,0), rank 1 = coords (0,1), etc.
         assert specs[0].slices == (slice(0, 50), slice(0, 100))
@@ -560,8 +552,7 @@ class TestTransferPlan:
         )
         # src ranks 2,3 have empty shards -> no transfers from them
         transfers_with_data = [
-            t for t in plan.transfers
-            if all(s.start < s.stop for s in t.global_slices)
+            t for t in plan.transfers if all(s.start < s.stop for s in t.global_slices)
         ]
         assert len(transfers_with_data) == 2
         src_ranks = sorted(t.src_rank for t in transfers_with_data)
@@ -595,9 +586,9 @@ class TestTransferPlanSimulation:
         # Verify
         expected = list(full.chunk(2))
         for i in range(2):
-            assert torch.equal(dst_shards[i], expected[i]), (
-                f"dst rank {i}: expected {expected[i]}, got {dst_shards[i]}"
-            )
+            assert torch.equal(
+                dst_shards[i], expected[i]
+            ), f"dst rank {i}: expected {expected[i]}, got {dst_shards[i]}"
 
     def test_2d_to_1d_simulation(self):
         """Simulate [Shard(0), Shard(1)] on 2x2 -> [Shard(0)] on 2."""
@@ -607,8 +598,8 @@ class TestTransferPlanSimulation:
         top = full[:5]
         bottom = full[5:]
         src_shards = {
-            0: top[:, :10],   # (0-5, 0-10)
-            1: top[:, 10:],   # (0-5, 10-20)
+            0: top[:, :10],  # (0-5, 0-10)
+            1: top[:, 10:],  # (0-5, 10-20)
             2: bottom[:, :10],  # (5-10, 0-10)
             3: bottom[:, 10:],  # (5-10, 10-20)
         }
@@ -679,9 +670,9 @@ class TestTransferPlanSimulation:
             dst_buffers[t.dst_rank][t.dst_slices[0]] = src_data
 
         for i in range(2):
-            assert torch.equal(dst_buffers[i], dst_shards[i]), (
-                f"rank {i}: expected {dst_shards[i]}, got {dst_buffers[i]}"
-            )
+            assert torch.equal(
+                dst_buffers[i], dst_shards[i]
+            ), f"rank {i}: expected {dst_shards[i]}, got {dst_buffers[i]}"
 
 
 # ---------------------------------------------------------------------------
@@ -924,9 +915,7 @@ class TestExecuteTransferPlan:
 
         # Only rank 0 sends (dedup)
         for rank in range(2):
-            execute_transfer_plan(
-                plan, full.clone(), None, rank, mock.for_rank(rank)
-            )
+            execute_transfer_plan(plan, full.clone(), None, rank, mock.for_rank(rank))
 
         dst_buffers = [torch.zeros(25) for _ in range(4)]
         for rank in range(4):
@@ -945,8 +934,15 @@ class TestExecuteTransferPlan:
 
 
 class TestModelTransferPlan:
-    def _make_descriptors(self, name, shape, src_placements, dst_placements,
-                          src_mesh_shape, dst_mesh_shape):
+    def _make_descriptors(
+        self,
+        name,
+        shape,
+        src_placements,
+        dst_placements,
+        src_mesh_shape,
+        dst_mesh_shape,
+    ):
         """Helper to build src/dst descriptors for a single param."""
         src_desc = ShardingDescriptor(
             mesh_shape=src_mesh_shape,
@@ -963,8 +959,12 @@ class TestModelTransferPlan:
     def test_build_single_param(self):
         """Build a plan for one parameter."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(4,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(src_params, dst_params)
         assert len(plan.param_plans) == 1
@@ -977,8 +977,12 @@ class TestModelTransferPlan:
     def test_build_same_sharding(self):
         """Same sharding on both sides -> direct_copy strategy."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(2,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(2,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(src_params, dst_params)
         assert plan.param_plans[0].strategy == "direct_copy"
@@ -986,11 +990,16 @@ class TestModelTransferPlan:
     def test_build_with_transform(self):
         """Parameter with transform -> materialize strategy."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(4,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(
-            src_params, dst_params,
+            src_params,
+            dst_params,
             transforms={"weight": lambda t: t[:90]},
         )
         assert plan.param_plans[0].strategy == "materialize"
@@ -998,11 +1007,13 @@ class TestModelTransferPlan:
     def test_name_mapping_dict(self):
         """Name mapping via dict."""
         src = ShardingDescriptor(
-            mesh_shape=(2,), placements=(_Shard(0),),
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
             logical_shape=torch.Size([100]),
         )
         dst = ShardingDescriptor(
-            mesh_shape=(2,), placements=(_Shard(0),),
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
             logical_shape=torch.Size([100]),
         )
         plan = ModelTransferPlan.build(
@@ -1017,11 +1028,13 @@ class TestModelTransferPlan:
     def test_name_mapping_callable(self):
         """Name mapping via callable."""
         src = ShardingDescriptor(
-            mesh_shape=(2,), placements=(_Shard(0),),
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
             logical_shape=torch.Size([100]),
         )
         dst = ShardingDescriptor(
-            mesh_shape=(2,), placements=(_Shard(0),),
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
             logical_shape=torch.Size([100]),
         )
         plan = ModelTransferPlan.build(
@@ -1038,7 +1051,8 @@ class TestModelTransferPlan:
         for i in range(5):
             name = f"layer.{i}.weight"
             desc = ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
             )
             src_params[name] = desc
@@ -1047,7 +1061,9 @@ class TestModelTransferPlan:
         # 100 float32 elements = 400 bytes per param
         # buffer_size=800 -> 2 params per batch -> 3 batches for 5 params
         plan = ModelTransferPlan.build(
-            src_params, dst_params, buffer_size=800,
+            src_params,
+            dst_params,
+            buffer_size=800,
         )
         assert len(plan.batches) == 3
         assert len(plan.batches[0]) == 2
@@ -1057,8 +1073,12 @@ class TestModelTransferPlan:
     def test_total_bytes(self):
         """total_bytes computes sum of transfer sizes."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(4,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(src_params, dst_params)
         # 4 transfers of 25 elements each -> 100 elements * 4 bytes
@@ -1067,8 +1087,12 @@ class TestModelTransferPlan:
     def test_per_rank_bytes(self):
         """per_rank_bytes tracks bytes per rank."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(4,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(src_params, dst_params)
         prb = plan.per_rank_bytes
@@ -1079,8 +1103,12 @@ class TestModelTransferPlan:
     def test_summary(self):
         """summary() returns a human-readable string."""
         src_params, dst_params = self._make_descriptors(
-            "weight", [100], [_Shard(0)], [_Shard(0)],
-            src_mesh_shape=(4,), dst_mesh_shape=(2,),
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
         )
         plan = ModelTransferPlan.build(src_params, dst_params)
         s = plan.summary()
@@ -1098,14 +1126,16 @@ class TestModelTransferPlan:
 
         src_params = {
             "w": ShardingDescriptor(
-                mesh_shape=(4,), placements=(_Shard(0),),
+                mesh_shape=(4,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=src_rank_map,
             )
         }
         dst_params = {
             "w": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=dst_rank_map,
             )
@@ -1115,9 +1145,7 @@ class TestModelTransferPlan:
 
         # Senders (src ranks 0-3)
         for rank in range(4):
-            mtp.execute(
-                {"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank)
-            )
+            mtp.execute({"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank))
 
         # Receivers (dst ranks 10-11)
         results = {}
@@ -1139,14 +1167,16 @@ class TestModelTransferPlan:
 
         src_params = {
             "w": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=src_rank_map,
             )
         }
         dst_params = {
             "w": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=dst_rank_map,
             )
@@ -1158,16 +1188,15 @@ class TestModelTransferPlan:
             return t
 
         mtp = ModelTransferPlan.build(
-            src_params, dst_params,
+            src_params,
+            dst_params,
             transforms={"w": truncate},
         )
         assert mtp.param_plans[0].strategy == "materialize"
 
         mock = _MockBackend()
         for rank in range(2):
-            mtp.execute(
-                {"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank)
-            )
+            mtp.execute({"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank))
         assert len(transform_called) == 2
 
     def test_multiple_params(self):
@@ -1177,24 +1206,28 @@ class TestModelTransferPlan:
 
         src_params = {
             "weight": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=src_rank_map,
             ),
             "bias": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([20]),
                 rank_map=src_rank_map,
             ),
         }
         dst_params = {
             "weight": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([100]),
                 rank_map=dst_rank_map,
             ),
             "bias": ShardingDescriptor(
-                mesh_shape=(2,), placements=(_Shard(0),),
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
                 logical_shape=torch.Size([20]),
                 rank_map=dst_rank_map,
             ),
@@ -1286,10 +1319,12 @@ class TestVLLMSharding:
         from tensordict.dtensor_adapters.vllm import VLLMSharding
 
         adapter = VLLMSharding(tp_size=2, tp_rank=0)
-        model = _MockModel({
-            "qkv.weight": _MockParam([384, 1024], output_dim=0),
-            "norm.weight": _MockParam([1024]),
-        })
+        model = _MockModel(
+            {
+                "qkv.weight": _MockParam([384, 1024], output_dim=0),
+                "norm.weight": _MockParam([1024]),
+            }
+        )
         descs = adapter.describe_model(model)
         assert len(descs) == 2
         assert descs["qkv.weight"].logical_shape == torch.Size([768, 1024])

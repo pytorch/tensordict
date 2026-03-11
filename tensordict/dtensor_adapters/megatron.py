@@ -17,7 +17,7 @@ are split across EP ranks, creating a 2D sharding (EP x TP).
 
 from __future__ import annotations
 
-from typing import Callable, Sequence
+from typing import Callable
 
 import torch
 
@@ -47,7 +47,9 @@ class MegatronSharding:
         self._tp_size = dist.get_world_size(tp_group)
         self._tp_group = tp_group
         self._tp_ranks = list(range(dist.get_world_size(tp_group)))
-        self._tp_rank_map = {(i,): dist.get_global_rank(tp_group, i) for i in self._tp_ranks}
+        self._tp_rank_map = {
+            (i,): dist.get_global_rank(tp_group, i) for i in self._tp_ranks
+        }
 
         self._ep_group = ep_group
         self._ep_size = dist.get_world_size(ep_group) if ep_group is not None else 1

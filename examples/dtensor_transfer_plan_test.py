@@ -12,10 +12,7 @@ Usage:
 
 import torch
 
-from tensordict._dtensor import (
-    _compute_all_local_slices,
-    _compute_transfer_plan,
-)
+from tensordict._dtensor import _compute_all_local_slices, _compute_transfer_plan
 from torch.distributed.tensor.placement_types import Replicate, Shard
 
 
@@ -52,9 +49,9 @@ def test_shard4_to_shard2():
 
     expected = list(full.chunk(2))
     for i in range(2):
-        assert torch.equal(dst_shards[i], expected[i]), (
-            f"rank {i}: expected {expected[i]}, got {dst_shards[i]}"
-        )
+        assert torch.equal(
+            dst_shards[i], expected[i]
+        ), f"rank {i}: expected {expected[i]}, got {dst_shards[i]}"
     print("  PASSED\n")
 
 
@@ -78,8 +75,7 @@ def test_2d_to_1d():
     print(f"  Number of transfers: {len(plan.transfers)}")
     for t in plan.transfers:
         print(
-            f"    rank {t.src_rank} -> rank {t.dst_rank}: "
-            f"global {t.global_slices}"
+            f"    rank {t.src_rank} -> rank {t.dst_rank}: " f"global {t.global_slices}"
         )
 
     top = full[:5]
@@ -134,8 +130,7 @@ def test_dp_tp_to_tp_only():
     print("\n  Transfers:")
     for t in plan.transfers:
         print(
-            f"    rank {t.src_rank} -> rank {t.dst_rank}: "
-            f"global {t.global_slices}"
+            f"    rank {t.src_rank} -> rank {t.dst_rank}: " f"global {t.global_slices}"
         )
 
     src_shards = {s.rank: full[s.slices].clone() for s in src_specs}
@@ -148,9 +143,9 @@ def test_dp_tp_to_tp_only():
     for s in dst_specs:
         expected = full[s.slices]
         actual = dst_buffers[s.rank]
-        assert torch.equal(actual, expected), (
-            f"rank {s.rank}: mismatch!\n  expected: {expected}\n  got: {actual}"
-        )
+        assert torch.equal(
+            actual, expected
+        ), f"rank {s.rank}: mismatch!\n  expected: {expected}\n  got: {actual}"
     print("  PASSED\n")
 
 
@@ -159,8 +154,6 @@ def test_replicate_to_shard():
     print("=" * 60)
     print("Test: Replicate on 4 ranks -> Shard(0) on 2 ranks")
     print("=" * 60)
-
-    full = torch.arange(100, dtype=torch.float32)
 
     plan = _compute_transfer_plan(
         global_shape=[100],
@@ -173,12 +166,11 @@ def test_replicate_to_shard():
     print(f"  Number of transfers: {len(plan.transfers)}")
     for t in plan.transfers:
         print(
-            f"    rank {t.src_rank} -> rank {t.dst_rank}: "
-            f"global {t.global_slices}"
+            f"    rank {t.src_rank} -> rank {t.dst_rank}: " f"global {t.global_slices}"
         )
-    assert all(t.src_rank == 0 for t in plan.transfers), (
-        "Expected deduplication to use only rank 0 as source"
-    )
+    assert all(
+        t.src_rank == 0 for t in plan.transfers
+    ), "Expected deduplication to use only rank 0 as source"
     print("  PASSED\n")
 
 
