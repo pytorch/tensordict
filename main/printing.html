@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Welcome to the TensorDict Documentation! &mdash; tensordict main documentation</title>
+  <title>Printing and Display &mdash; tensordict main documentation</title>
   
 
   
@@ -36,7 +36,8 @@
   <link rel="stylesheet" href="_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Manipulating the shape of a TensorDict" href="tutorials/tensordict_shapes.html" />
+    <link rel="next" title="API Reference" href="reference/index.html" />
+    <link rel="prev" title="Saving TensorDict and tensorclass objects" href="saving.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -272,12 +273,12 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a></li>
-<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and Display</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Printing and Display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a></li>
 </ul>
 
@@ -311,7 +312,7 @@
   <ul class="pytorch-breadcrumbs">
     
       <li>
-        <a href="#">
+        <a href="index.html">
           
             Docs
           
@@ -319,13 +320,13 @@
       </li>
 
         
-      <li>Welcome to the TensorDict Documentation!</li>
+      <li>Printing and Display</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="_sources/index.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+            <a href="_sources/printing.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -351,215 +352,215 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="welcome-to-the-tensordict-documentation">
-<h1>Welcome to the TensorDict Documentation!<a class="headerlink" href="#welcome-to-the-tensordict-documentation" title="Permalink to this heading">¶</a></h1>
-<p><cite>TensorDict</cite> is a dictionary-like class that inherits properties from tensors,
-such as indexing, shape operations, casting to device etc.</p>
-<p>You can install tensordict directly from PyPI (see more about installation
-instructions in the dedicated section below):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ pip install tensordict
+  <section id="printing-and-display">
+<h1>Printing and Display<a class="headerlink" href="#printing-and-display" title="Permalink to this heading">¶</a></h1>
+<section id="why-printing-a-tensordict-is-more-useful-than-printing-a-tensor">
+<h2>Why printing a TensorDict is more useful than printing a tensor<a class="headerlink" href="#why-printing-a-tensordict-is-more-useful-than-printing-a-tensor" title="Permalink to this heading">¶</a></h2>
+<p>When working with PyTorch tensors, calling <code class="docutils literal notranslate"><span class="pre">print(tensor)</span></code> dumps the raw
+numerical content.  In practice, however, most <code class="docutils literal notranslate"><span class="pre">print</span></code> calls during debugging
+are motivated by a single question: <em>what does this tensor look like?</em>  You want
+its shape, dtype, device, maybe whether it requires a gradient – not a wall of
+floating-point numbers.</p>
+<p>Because a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> groups multiple tensors under named
+keys, its <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> gives you exactly that – a structured, at-a-glance
+summary of every tensor it contains:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">(</span><span class="mi">32</span><span class="p">,)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">32</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([32]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
-<p>The main purpose of TensorDict is to make code-bases more <em>readable</em> and <em>modular</em>
-by abstracting away tailored operations:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">tensordict</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">dataset</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># the model reads and writes tensordicts</span>
-<span class="gp">... </span>    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="n">loss</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
-<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
-</pre></div>
-</div>
-<p>With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
-Each individual step of the training loop (data collection and transform, model
-prediction, loss computation etc.)
-can be tailored to the use case at hand without impacting the others.
-For instance, the above example can be easily used across classification and segmentation tasks, among many others.</p>
+<p>No data is printed, no truncation ellipses, no guessing at dimensionality.
+One glance tells you the names, shapes, dtypes and devices of everything in
+the batch.</p>
 </section>
-<section id="installation">
-<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h1>
-<p>Tensordict releases are synced with PyTorch, so make sure you always enjoy the latest
-features of the library with the <a class="reference external" href="https://pytorch.org/get-started/locally/">most recent version of PyTorch</a> (although core features
-are guaranteed to be backward compatible with pytorch&gt;=1.13).
-Nightly releases can be installed via</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ pip install tensordict-nightly
+<section id="configuring-the-display-with-set-printoptions">
+<h2>Configuring the display with <code class="docutils literal notranslate"><span class="pre">set_printoptions</span></code><a class="headerlink" href="#configuring-the-display-with-set-printoptions" title="Permalink to this heading">¶</a></h2>
+<p>By default, every attribute is shown for backward compatibility.  In many
+situations, though, some of those attributes are noise.  For instance, if all
+your work is on CPU and nothing is shared, <code class="docutils literal notranslate"><span class="pre">device=cpu</span></code> and
+<code class="docutils literal notranslate"><span class="pre">is_shared=False</span></code> are repeated on every line without adding information.</p>
+<p><a class="reference internal" href="reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_printoptions</span></code></a> lets you control exactly which attributes
+appear.  It works as a <strong>global setter</strong>, a <strong>context manager</strong> or a
+<strong>decorator</strong>, following the same pattern as <a class="reference internal" href="reference/generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>
+and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.set_printoptions.html#torch.set_printoptions" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_printoptions()</span></code></a>.</p>
+<section id="global-configuration">
+<h3>Global configuration<a class="headerlink" href="#global-configuration" title="Permalink to this heading">¶</a></h3>
+<p>Call <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code> to change the defaults for the
+rest of the process:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_printoptions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_printoptions</span><span class="p">(</span><span class="n">show_device</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        image: Tensor(shape=torch.Size([32, 3, 64, 64]), dtype=torch.float32),</span>
+<span class="go">        label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},</span>
+<span class="go">    batch_size=torch.Size([32]))</span>
 </pre></div>
 </div>
-<p>or via a <cite>git clone</cite> if you’re willing to contribute to the library:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ cd path/to/root
-$ git clone https://github.com/pytorch/tensordict
-$ cd tensordict
-$ pip install -e .
+</section>
+<section id="scoped-configuration-context-manager">
+<h3>Scoped configuration (context manager)<a class="headerlink" href="#scoped-configuration-context-manager" title="Permalink to this heading">¶</a></h3>
+<p>Use the context-manager form when you only want the change for a specific
+block of code.  The previous settings are automatically restored on exit:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_printoptions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_printoptions</span><span class="p">(</span><span class="n">show_dtype</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># dtype and is_shared hidden</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># back to defaults</span>
+</pre></div>
+</div>
+</section>
+<section id="decorator">
+<h3>Decorator<a class="headerlink" href="#decorator" title="Permalink to this heading">¶</a></h3>
+<p>You can also decorate a function so that every <code class="docutils literal notranslate"><span class="pre">repr</span></code> call inside it uses
+the specified options:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@set_printoptions</span><span class="p">(</span><span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">summarise</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="available-options">
+<h3>Available options<a class="headerlink" href="#available-options" title="Permalink to this heading">¶</a></h3>
+<p><strong>TensorDict-level</strong> (these control lines in the outer <code class="docutils literal notranslate"><span class="pre">TensorDict(...)</span></code>
+block):</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_batch_size</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">batch_size=</span></code> line.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_device</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">device=</span></code> line.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_is_shared</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">is_shared=</span></code> line.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tensor-level</strong> (these control what appears inside each
+<code class="docutils literal notranslate"><span class="pre">Tensor(...)</span></code> field descriptor):</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_shape</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">shape=</span></code> attribute.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_field_device</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">device=</span></code> attribute.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_dtype</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">dtype=</span></code> attribute.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_field_is_shared</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Show the <code class="docutils literal notranslate"><span class="pre">is_shared=</span></code> attribute.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Extended attributes</strong> (off by default – opt-in for deeper debugging):</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_grad</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Show <code class="docutils literal notranslate"><span class="pre">requires_grad=</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_is_contiguous</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Show <code class="docutils literal notranslate"><span class="pre">is_contiguous=</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">show_is_view</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Show <code class="docutils literal notranslate"><span class="pre">is_view=</span></code> (whether <code class="docutils literal notranslate"><span class="pre">._base</span></code> is set).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">show_storage_size</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Show <code class="docutils literal notranslate"><span class="pre">storage_size=</span></code> (bytes).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plain</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Append a short value summary
+(mean/std for floats, min/max for ints).</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="querying-the-current-settings">
+<h3>Querying the current settings<a class="headerlink" href="#querying-the-current-settings" title="Permalink to this heading">¶</a></h3>
+<p><a class="reference internal" href="reference/generated/tensordict.get_printoptions.html#tensordict.get_printoptions" title="tensordict.get_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_printoptions()</span></code></a> returns a dict with the current values:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_printoptions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">get_printoptions</span><span class="p">()</span>
+<span class="go">{&#39;show_batch_size&#39;: True, &#39;show_device&#39;: True, ...}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="reconstructing-a-tensordict-from-its-printed-representation">
+<h2>Reconstructing a TensorDict from its printed representation<a class="headerlink" href="#reconstructing-a-tensordict-from-its-printed-representation" title="Permalink to this heading">¶</a></h2>
+<p>When debugging, it is common to receive a TensorDict repr as a string – for
+example, pasted from a log file or a colleague’s terminal.
+<a class="reference internal" href="reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string" title="tensordict.parse_tensor_dict_string"><code class="xref py py-func docutils literal notranslate"><span class="pre">parse_tensor_dict_string()</span></code></a> can reconstruct a dummy
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> from that string.  The resulting object has the
+correct structure, batch size, device and dtypes, but all tensor values are
+replaced by zeros (since the repr does not contain actual data):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_tensor_dict_string</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;TensorDict(</span>
+<span class="gp">... </span><span class="s2">    fields={</span>
+<span class="gp">... </span><span class="s2">        image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="gp">... </span><span class="s2">        label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="gp">... </span><span class="s2">    batch_size=torch.Size([32]),</span>
+<span class="gp">... </span><span class="s2">    device=cpu,</span>
+<span class="gp">... </span><span class="s2">    is_shared=False)&quot;&quot;&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">parse_tensor_dict_string</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([32])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([32, 3, 64, 64])</span>
 </pre></div>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>If you’re using <strong>uv</strong> with a <strong>PyTorch nightly</strong> installed from the PyTorch nightly wheel index,
-prefer installing tensordict editable with <code class="docutils literal notranslate"><span class="pre">--no-deps</span></code> (or configure uv to use the nightly wheel index),
-otherwise uv may re-resolve and replace the existing nightly <code class="docutils literal notranslate"><span class="pre">torch</span></code> with a stable build from PyPI.</p>
+<p><a class="reference internal" href="reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string" title="tensordict.parse_tensor_dict_string"><code class="xref py py-func docutils literal notranslate"><span class="pre">parse_tensor_dict_string()</span></code></a> currently only works with the
+default (<code class="docutils literal notranslate"><span class="pre">plain</span></code>) print format – the one that includes <code class="docutils literal notranslate"><span class="pre">shape=</span></code>,
+<code class="docutils literal notranslate"><span class="pre">device=</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype=</span></code> and <code class="docutils literal notranslate"><span class="pre">is_shared=</span></code> for every field.
+If attributes have been hidden via <a class="reference internal" href="reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_printoptions</span></code></a>,
+the regex parser will not find the expected fields and reconstruction will
+fail.  Support for non-default formats will be added in a follow-up PR.</p>
 </div>
 </section>
-<section id="tutorials">
-<h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this heading">¶</a></h1>
-<section id="basics">
-<h2>Basics<a class="headerlink" href="#basics" title="Permalink to this heading">¶</a></h2>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
-</ul>
-</div>
-</section>
-<section id="tensordict-nn">
-<h2>tensordict.nn<a class="headerlink" href="#tensordict-nn" title="Permalink to this heading">¶</a></h2>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional Programming with TensorDict</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
-</ul>
-</div>
-</section>
-<section id="dataloading">
-<h2>Dataloading<a class="headerlink" href="#dataloading" title="Permalink to this heading">¶</a></h2>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
-</ul>
-</div>
-</section>
-</section>
-<section id="contents">
-<h1>Contents<a class="headerlink" href="#contents" title="Permalink to this heading">¶</a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#motivation">Motivation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#features">Features</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#escaping-shape-operations-unbatchedtensor">Escaping shape operations: UnbatchedTensor</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#non-tensor-data">Non-tensor data</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#creating-a-tensordict-with-non-tensor-data">Creating a TensorDict with Non-Tensor Data</a></li>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#accessing-non-tensor-data">Accessing Non-Tensor Data</a></li>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#batched-non-tensor-data">Batched Non-Tensor Data</a></li>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#stacked-non-tensor-data">Stacked Non-Tensor Data</a></li>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#stacking-tensordicts-with-non-tensor-data">Stacking TensorDicts with Non-Tensor Data</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#named-dimensions">Named dimensions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#nested-tensordicts">Nested TensorDicts</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#lazy-evaluation">Lazy evaluation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#lazy-pre-allocation">Lazy pre-allocation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#tensordictmodule">TensorDictModule</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="overview.html#jacobian-and-hessian-computation">Jacobian and Hessian computation</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#prerequisites">Prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#consolidate-and-fast-serialization"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#point-to-point-send-recv">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#async-point-to-point-isend-irecv">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#cold-start-initialization-init-remote-from-remote-init">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#broadcast">Broadcast</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#all-reduce">All-reduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#reduce">Reduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#all-gather">All-gather</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#scatter">Scatter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#quick-reference">Quick reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#high-performance-streaming-with-ucxx">High-performance streaming with UCXX</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#installing-ucxx">Installing UCXX</a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#tensordictpipe-the-two-phase-protocol"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#establishing-a-connection">Establishing a connection</a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#async-iteration">Async iteration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#cpu-and-cuda-transfers">CPU and CUDA transfers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#unified-api-with-send-recv">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#one-to-many-tensordictserver">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="distributed.html#benchmarks">Benchmarks</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="distributed.html#shared-storage-workflows-memory-mapped">Shared-storage workflows (memory-mapped)</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="fx.html#tracing-a-tensordictmodule">Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="fx.html#tracing-a-tensordictsequential">Tracing a <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="saving.html#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#consolidated-serialization">Consolidated serialization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
-<li class="toctree-l2"><a class="reference internal" href="saving.html#legacy-torchsnapshot-compatibility">Legacy: TorchSnapshot compatibility</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and Display</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="printing.html#why-printing-a-tensordict-is-more-useful-than-printing-a-tensor">Why printing a TensorDict is more useful than printing a tensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="printing.html#configuring-the-display-with-set-printoptions">Configuring the display with <code class="docutils literal notranslate"><span class="pre">set_printoptions</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="printing.html#global-configuration">Global configuration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="printing.html#scoped-configuration-context-manager">Scoped configuration (context manager)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="printing.html#decorator">Decorator</a></li>
-<li class="toctree-l3"><a class="reference internal" href="printing.html#available-options">Available options</a></li>
-<li class="toctree-l3"><a class="reference internal" href="printing.html#querying-the-current-settings">Querying the current settings</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="printing.html#reconstructing-a-tensordict-from-its-printed-representation">Reconstructing a TensorDict from its printed representation</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="reference/td.html">tensordict package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html">TensorDictBase</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.TensorDict.html">TensorDict</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html">LazyStackedTensorDict</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html">PersistentTensorDict</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.TensorDictParams.html">TensorDictParams</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/generated/tensordict.get_defaults_to_none.html">get_defaults_to_none</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#constructors-and-handlers">Constructors and handlers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#tensordict-as-a-context-manager">TensorDict as a context manager</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#memory-mapped-tensors">Memory-mapped tensors</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#pointwise-operations">Pointwise Operations</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#gradient-computation-with-torch-autograd-grad">Gradient computation with <code class="docutils literal notranslate"><span class="pre">torch.autograd.grad</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/td.html#utils">Utils</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="reference/nn.html">tensordict.nn package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/nn.html#type-safe-tensorclass-modules">Type-Safe TensorClass Modules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/nn.html#ensembles">Ensembles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/nn.html#compiling-tensordictmodules">Compiling TensorDictModules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/nn.html#distributions">Distributions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/nn.html#utils">Utils</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="reference/tc.html">tensorclass</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/tc.html#serialization">Serialization</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/tc.html#edge-cases">Edge cases</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/tc.html#auto-casting">Auto-casting</a></li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</div>
-</section>
-<section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
-<ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
-</ul>
 </section>
 
 
@@ -570,8 +571,10 @@ otherwise uv may re-resolve and replace the existing nightly <code class="docuti
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tutorials/tensordict_shapes.html" class="btn btn-neutral float-right" title="Manipulating the shape of a TensorDict" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="reference/index.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
+      
+        <a href="saving.html" class="btn btn-neutral" title="Saving TensorDict and tensorclass objects" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -603,16 +606,19 @@ otherwise uv may re-resolve and replace the existing nightly <code class="docuti
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Welcome to the TensorDict Documentation!</a></li>
-<li><a class="reference internal" href="#installation">Installation</a></li>
-<li><a class="reference internal" href="#tutorials">Tutorials</a><ul>
-<li><a class="reference internal" href="#basics">Basics</a></li>
-<li><a class="reference internal" href="#tensordict-nn">tensordict.nn</a></li>
-<li><a class="reference internal" href="#dataloading">Dataloading</a></li>
+<li><a class="reference internal" href="#">Printing and Display</a><ul>
+<li><a class="reference internal" href="#why-printing-a-tensordict-is-more-useful-than-printing-a-tensor">Why printing a TensorDict is more useful than printing a tensor</a></li>
+<li><a class="reference internal" href="#configuring-the-display-with-set-printoptions">Configuring the display with <code class="docutils literal notranslate"><span class="pre">set_printoptions</span></code></a><ul>
+<li><a class="reference internal" href="#global-configuration">Global configuration</a></li>
+<li><a class="reference internal" href="#scoped-configuration-context-manager">Scoped configuration (context manager)</a></li>
+<li><a class="reference internal" href="#decorator">Decorator</a></li>
+<li><a class="reference internal" href="#available-options">Available options</a></li>
+<li><a class="reference internal" href="#querying-the-current-settings">Querying the current settings</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#contents">Contents</a></li>
-<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+<li><a class="reference internal" href="#reconstructing-a-tensordict-from-its-printed-representation">Reconstructing a TensorDict from its printed representation</a></li>
+</ul>
+</li>
 </ul>
 
             </div>

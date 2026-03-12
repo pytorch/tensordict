@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+get_printoptions
+================
+
+.. autoclass:: get_printoptions
+    :members:
+    :inherited-members:

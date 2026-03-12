@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3839+g9b158640e.d20260304)
+                  main (0.11.0.dev3865+g1533cca24.d20260312)
                 </div>
               
             
@@ -278,6 +278,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
 </ul>
 
@@ -740,7 +741,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 236.81it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 236.88it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -789,10 +790,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 714.62it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 718.10it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 183.22it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 188.83it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -817,7 +818,7 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 384.14it/s]ImageNetData(
+100%|██████████| 153/153 [00:00&lt;00:00, 388.04it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -830,14 +831,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 318.17it/s]
-One iteration over dataloader done! Rate: 890.0303 fps, time:  0.2472s
-One iteration over tensorclass dataloader done! Rate: 1849.1662 fps, time:  0.1190s
-One iteration over val data done! Rate: 529.6206 fps, time:  0.2436s
-One iteration over tensorclass val data done! Rate: 19689.4183 fps, time:  0.0066s
+100%|██████████| 153/153 [00:00&lt;00:00, 323.42it/s]
+One iteration over dataloader done! Rate: 896.9392 fps, time:  0.2453s
+One iteration over tensorclass dataloader done! Rate: 1476.2462 fps, time:  0.1490s
+One iteration over val data done! Rate: 506.6405 fps, time:  0.2546s
+One iteration over tensorclass val data done! Rate: 17967.2317 fps, time:  0.0072s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.668 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.701 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>

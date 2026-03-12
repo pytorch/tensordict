@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3839+g9b158640e.d20260304)
+                  main (0.11.0.dev3865+g1533cca24.d20260312)
                 </div>
               
             
@@ -278,6 +278,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
 </ul>
 
@@ -673,19 +674,19 @@ like <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 1, 2, 2],
-        [3, 1, 2, 2],
-        [2, 0, 3, 1]])
+ tensor([[0, 2, 1, 1],
+        [1, 2, 1, 0],
+        [1, 0, 1, 0]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.4577, 0.8874, 0.2718, 0.3048],
-        [0.9614, 0.7846, 0.2444, 0.0309],
-        [0.7543, 0.1040, 0.2860, 0.5663]])
+ tensor([[0.0013, 0.9607, 0.7138, 0.2689],
+        [0.3431, 0.7575, 0.5274, 0.1169],
+        [0.0716, 0.5495, 0.8285, 0.6284]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.8874, 0.8874, 0.2718, 0.2718],
-        [0.0309, 0.7846, 0.2444, 0.2444],
-        [0.2860, 0.7543, 0.5663, 0.1040]])
+ tensor([[0.0013, 0.7138, 0.9607, 0.9607],
+        [0.7575, 0.5274, 0.7575, 0.3431],
+        [0.5495, 0.0716, 0.5495, 0.0716]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

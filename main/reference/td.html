@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3839+g9b158640e.d20260304)
+                  main (0.11.0.dev3865+g1533cca24.d20260312)
                 </div>
               
             
@@ -278,6 +278,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
 </ul>
 
@@ -704,6 +705,12 @@ and return another one (for instance via <a class="reference internal" href="gen
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.set_list_to_stack.html#tensordict.set_list_to_stack" title="tensordict.set_list_to_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_list_to_stack</span></code></a>(mode)</p></td>
 <td><p>Context manager and decorator to control the behavior of list handling in TensorDict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_printoptions</span></code></a>(**kwargs)</p></td>
+<td><p>Controls which attributes appear in TensorDict's <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> output.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.get_printoptions.html#tensordict.get_printoptions" title="tensordict.get_printoptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_printoptions</span></code></a>()</p></td>
+<td><p>Returns the current TensorDict print options as a dict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.list_to_stack.html#tensordict.list_to_stack" title="tensordict.list_to_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_to_stack</span></code></a>([allow_none])</p></td>
 <td><p>Retrieves the current setting for list-to-stack conversion in TensorDict.</p></td>

@@ -288,4 +288,6 @@ Utils
     set_capture_non_tensor_stack
     set_lazy_legacy
     set_list_to_stack
+    set_printoptions
+    get_printoptions
     list_to_stack
