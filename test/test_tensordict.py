@@ -10109,6 +10109,223 @@ class TestTensorDictRepr:
         assert repr(stacked_td) == expected
 
 
+class TestSetPrintoptions:
+    """Tests for :class:`tensordict.set_printoptions` and :func:`tensordict.get_printoptions`."""
+
+    def test_get_printoptions_returns_copy(self):
+        from tensordict import get_printoptions
+
+        opts = get_printoptions()
+        assert isinstance(opts, dict)
+        assert "show_device" in opts
+        opts["show_device"] = not opts["show_device"]
+        assert get_printoptions()["show_device"] != opts["show_device"]
+
+    def test_default_repr_unchanged(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        r = repr(td)
+        assert "batch_size=" in r
+        assert "device=" in r
+        assert "is_shared=" in r
+        assert "shape=torch.Size([3, 4])" in r
+        assert "dtype=torch.float32" in r
+
+    def test_hide_device(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_device=False):
+            r = repr(td)
+        assert "\n    device=" not in r
+        assert "batch_size=" in r
+        assert "is_shared=" in r
+
+    def test_hide_is_shared(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_is_shared=False):
+            r = repr(td)
+        assert "\n    is_shared=" not in r
+        assert "batch_size=" in r
+        assert "\n    device=" in r
+
+    def test_hide_batch_size(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_batch_size=False):
+            r = repr(td)
+        assert "batch_size=" not in r
+        assert "\n    device=" in r
+
+    def test_hide_dtype(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_dtype=False):
+            r = repr(td)
+        assert "dtype=" not in r
+        assert "shape=" in r
+
+    def test_hide_field_device(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_field_device=False):
+            r = repr(td)
+        assert "Tensor(shape=" in r
+        # td-level device still visible
+        assert "\n    device=" in r
+
+    def test_hide_field_is_shared(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_field_is_shared=False):
+            r = repr(td)
+        assert "Tensor(" in r
+        # Tensor-level is_shared gone, but TD-level is_shared still present
+        assert "is_shared=False)" in r  # TD-level
+        fields_line = [line for line in r.split("\n") if "Tensor(" in line][0]
+        assert "is_shared=" not in fields_line
+
+    def test_hide_multiple(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_dtype=False,
+            show_field_is_shared=False,
+        ):
+            r = repr(td)
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+        assert "dtype=" not in r
+
+    def test_context_manager_restores(self):
+        from tensordict import get_printoptions, set_printoptions
+
+        before = get_printoptions()
+        with set_printoptions(show_device=False, show_is_shared=False):
+            inner = get_printoptions()
+            assert inner["show_device"] is False
+            assert inner["show_is_shared"] is False
+        after = get_printoptions()
+        assert after == before
+
+    def test_global_set(self):
+        from tensordict import get_printoptions, set_printoptions
+
+        before = get_printoptions()
+        ctx = set_printoptions(show_is_shared=False)
+        ctx.set()
+        try:
+            assert get_printoptions()["show_is_shared"] is False
+            td = TensorDict({"a": torch.randn(2)})
+            assert "\n    is_shared=" not in repr(td)
+        finally:
+            ctx.__exit__(None, None, None)
+        assert get_printoptions() == before
+
+    def test_show_grad(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, requires_grad=True)})
+        with set_printoptions(show_grad=True):
+            r = repr(td)
+        assert "requires_grad=True" in r
+
+    def test_show_is_contiguous(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_is_contiguous=True):
+            r = repr(td)
+        assert "is_contiguous=True" in r
+
+    def test_show_is_view(self):
+        from tensordict import set_printoptions
+
+        base = torch.randn(3, 4)
+        td = TensorDict({"a": base[::2]})
+        with set_printoptions(show_is_view=True):
+            r = repr(td)
+        assert "is_view=True" in r
+
+    def test_show_storage_size(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_storage_size=True):
+            r = repr(td)
+        assert "storage_size=" in r
+
+    def test_plain_mode(self):
+        from tensordict import set_printoptions
+
+        td = TensorDict({"a": torch.ones(10)})
+        with set_printoptions(plain=True):
+            r = repr(td)
+        assert "mean=" in r
+
+    def test_lazy_stacked_respects_options(self):
+        from tensordict import set_printoptions
+
+        td1 = TensorDict({"a": torch.randn(3)})
+        td2 = TensorDict({"a": torch.randn(3)})
+        stacked = LazyStackedTensorDict.lazy_stack([td1, td2])
+        with set_printoptions(show_device=False, show_is_shared=False):
+            r = repr(stacked)
+        assert "stack_dim=" in r
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+
+    def test_tensorclass_respects_options(self):
+        from tensordict import set_printoptions, tensorclass
+
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        obj = MyClass(x=torch.randn(3, 4), batch_size=[3])
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_field_device=False,
+            show_field_is_shared=False,
+        ):
+            r = repr(obj)
+        assert "MyClass(" in r
+        assert "device=" not in r
+        assert "is_shared=" not in r
+
+    def test_unknown_option_raises(self):
+        from tensordict import set_printoptions
+
+        with pytest.raises(TypeError, match="Unknown printoptions"):
+            set_printoptions(nonexistent_option=True)
+
+    def test_decorator_usage(self):
+        from tensordict import set_printoptions
+
+        @set_printoptions(show_device=False, show_is_shared=False)
+        def my_func():
+            td = TensorDict({"a": torch.randn(2)})
+            r = repr(td)
+            assert "\n    device=" not in r
+            assert "\n    is_shared=" not in r
+            return r
+
+        my_func()
+        td = TensorDict({"a": torch.randn(2)})
+        r = repr(td)
+        assert "\n    device=" in r
+        assert "\n    is_shared=" in r
+
+
 @pytest.mark.parametrize(
     "td_name",
     [

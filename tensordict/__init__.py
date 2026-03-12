@@ -60,6 +60,7 @@ from tensordict.utils import (
     assert_allclose_td,
     assert_close,
     capture_non_tensor_stack,
+    get_printoptions,
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
@@ -69,6 +70,7 @@ from tensordict.utils import (
     set_capture_non_tensor_stack,
     set_lazy_legacy,
     set_list_to_stack,
+    set_printoptions,
     unravel_key,
     unravel_key_list,
 )
@@ -159,6 +161,8 @@ __all__ = [
     "set_lazy_legacy",
     "list_to_stack",
     "set_list_to_stack",
+    "set_printoptions",
+    "get_printoptions",
     # TensorClass components
     "tensorclass",
     "MetaData",
