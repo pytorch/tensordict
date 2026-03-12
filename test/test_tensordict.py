@@ -35,6 +35,7 @@ from packaging import version
 from tensordict import (
     capture_non_tensor_stack,
     get_defaults_to_none,
+    get_printoptions,
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
@@ -42,6 +43,8 @@ from tensordict import (
     PersistentTensorDict,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
+    set_printoptions,
+    tensorclass,
     TensorClass,
     TensorDict,
     UnbatchedTensor,
@@ -9664,8 +9667,6 @@ class TestTensorDictRepr:
         )
 
     def nested_tensorclass(self, device, dtype):
-        from tensordict import tensorclass
-
         @tensorclass
         class MyClass:
             X: torch.Tensor
@@ -10113,8 +10114,6 @@ class TestSetPrintoptions:
     """Tests for :class:`tensordict.set_printoptions` and :func:`tensordict.get_printoptions`."""
 
     def test_get_printoptions_returns_copy(self):
-        from tensordict import get_printoptions
-
         opts = get_printoptions()
         assert isinstance(opts, dict)
         assert "show_device" in opts
@@ -10131,8 +10130,6 @@ class TestSetPrintoptions:
         assert "dtype=torch.float32" in r
 
     def test_hide_device(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_device=False):
             r = repr(td)
@@ -10141,8 +10138,6 @@ class TestSetPrintoptions:
         assert "is_shared=" in r
 
     def test_hide_is_shared(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_is_shared=False):
             r = repr(td)
@@ -10151,8 +10146,6 @@ class TestSetPrintoptions:
         assert "\n    device=" in r
 
     def test_hide_batch_size(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_batch_size=False):
             r = repr(td)
@@ -10160,8 +10153,6 @@ class TestSetPrintoptions:
         assert "\n    device=" in r
 
     def test_hide_dtype(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_dtype=False):
             r = repr(td)
@@ -10169,8 +10160,6 @@ class TestSetPrintoptions:
         assert "shape=" in r
 
     def test_hide_field_device(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_field_device=False):
             r = repr(td)
@@ -10179,8 +10168,6 @@ class TestSetPrintoptions:
         assert "\n    device=" in r
 
     def test_hide_field_is_shared(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_field_is_shared=False):
             r = repr(td)
@@ -10191,8 +10178,6 @@ class TestSetPrintoptions:
         assert "is_shared=" not in fields_line
 
     def test_hide_multiple(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(
             show_device=False,
@@ -10206,8 +10191,6 @@ class TestSetPrintoptions:
         assert "dtype=" not in r
 
     def test_context_manager_restores(self):
-        from tensordict import get_printoptions, set_printoptions
-
         before = get_printoptions()
         with set_printoptions(show_device=False, show_is_shared=False):
             inner = get_printoptions()
@@ -10217,8 +10200,6 @@ class TestSetPrintoptions:
         assert after == before
 
     def test_global_set(self):
-        from tensordict import get_printoptions, set_printoptions
-
         before = get_printoptions()
         ctx = set_printoptions(show_is_shared=False)
         ctx.set()
@@ -10231,24 +10212,18 @@ class TestSetPrintoptions:
         assert get_printoptions() == before
 
     def test_show_grad(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, requires_grad=True)})
         with set_printoptions(show_grad=True):
             r = repr(td)
         assert "requires_grad=True" in r
 
     def test_show_is_contiguous(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_is_contiguous=True):
             r = repr(td)
         assert "is_contiguous=True" in r
 
     def test_show_is_view(self):
-        from tensordict import set_printoptions
-
         base = torch.randn(3, 4)
         td = TensorDict({"a": base[::2]})
         with set_printoptions(show_is_view=True):
@@ -10256,24 +10231,18 @@ class TestSetPrintoptions:
         assert "is_view=True" in r
 
     def test_show_storage_size(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.randn(3, 4)})
         with set_printoptions(show_storage_size=True):
             r = repr(td)
         assert "storage_size=" in r
 
     def test_plain_mode(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"a": torch.ones(10)})
         with set_printoptions(plain=True):
             r = repr(td)
         assert "mean=" in r
 
     def test_lazy_stacked_respects_options(self):
-        from tensordict import set_printoptions
-
         td1 = TensorDict({"a": torch.randn(3)})
         td2 = TensorDict({"a": torch.randn(3)})
         stacked = LazyStackedTensorDict.lazy_stack([td1, td2])
@@ -10284,8 +10253,6 @@ class TestSetPrintoptions:
         assert "\n    is_shared=" not in r
 
     def test_tensorclass_respects_options(self):
-        from tensordict import set_printoptions, tensorclass
-
         @tensorclass
         class MyClass:
             x: torch.Tensor
@@ -10303,14 +10270,10 @@ class TestSetPrintoptions:
         assert "is_shared=" not in r
 
     def test_unknown_option_raises(self):
-        from tensordict import set_printoptions
-
         with pytest.raises(TypeError, match="Unknown printoptions"):
             set_printoptions(nonexistent_option=True)
 
     def test_decorator_usage(self):
-        from tensordict import set_printoptions
-
         @set_printoptions(show_device=False, show_is_shared=False)
         def my_func():
             td = TensorDict({"a": torch.randn(2)})
@@ -10332,8 +10295,6 @@ class TestSetPrintoptions:
         assert keys_in_order == ["a", "b", "c"]
 
     def test_sort_keys_insertion(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
         with set_printoptions(sort_keys="insertion"):
             r = repr(td)
@@ -10341,8 +10302,6 @@ class TestSetPrintoptions:
         assert keys_in_order == ["c", "a", "b"]
 
     def test_sort_keys_callable(self):
-        from tensordict import set_printoptions
-
         td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
         with set_printoptions(sort_keys=lambda s: s[::-1]):
             r = repr(td)
@@ -10357,8 +10316,6 @@ class TestSetPrintoptions:
         assert keys2 == ["ya", "za", "xb"]
 
     def test_sort_keys_restores(self):
-        from tensordict import get_printoptions, set_printoptions
-
         before = get_printoptions()["sort_keys"]
         with set_printoptions(sort_keys="insertion"):
             assert get_printoptions()["sort_keys"] == "insertion"
@@ -14700,8 +14657,6 @@ class TestUnbatchedTensor:
         assert result["a"].shape == (4, 3, 5)
 
     def test_unbatched_tensorclass_attr_returns_unbatched(self):
-        from tensordict import tensorclass
-
         @tensorclass
         class MyClass:
             config: torch.Tensor
