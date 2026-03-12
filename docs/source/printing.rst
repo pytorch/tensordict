@@ -69,7 +69,7 @@ Use the context-manager form when you only want the change for a specific
 block of code.  The previous settings are automatically restored on exit:
 
     >>> from tensordict import set_printoptions
-    >>> with set_printoptions(show_tensor_dtype=False, show_is_shared=False):
+    >>> with set_printoptions(show_dtype=False, show_is_shared=False):
     ...     print(td)  # dtype and is_shared hidden
     >>> print(td)  # back to defaults
 
@@ -100,14 +100,14 @@ Option                Default      Description
 **Tensor-level** (these control what appears inside each
 ``Tensor(...)`` field descriptor):
 
-==========================  ===========  ============================================
-Option                      Default      Description
-==========================  ===========  ============================================
-``show_shape``              ``True``     Show the ``shape=`` attribute.
-``show_tensor_device``      ``True``     Show the ``device=`` attribute.
-``show_tensor_dtype``       ``True``     Show the ``dtype=`` attribute.
-``show_tensor_is_shared``   ``True``     Show the ``is_shared=`` attribute.
-==========================  ===========  ============================================
+========================  ===========  ============================================
+Option                    Default      Description
+========================  ===========  ============================================
+``show_shape``            ``True``     Show the ``shape=`` attribute.
+``show_field_device``     ``True``     Show the ``device=`` attribute.
+``show_dtype``            ``True``     Show the ``dtype=`` attribute.
+``show_field_is_shared``  ``True``     Show the ``is_shared=`` attribute.
+========================  ===========  ============================================
 
 **Extended attributes** (off by default -- opt-in for deeper debugging):
 

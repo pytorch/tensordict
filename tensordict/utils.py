@@ -1376,11 +1376,11 @@ def _tensor_repr_fields(tensor: Tensor) -> list[str]:
     parts: list[str] = []
     if opts["show_shape"]:
         parts.append(f"shape={_shape(tensor)}")
-    if opts["show_tensor_device"]:
+    if opts["show_field_device"]:
         parts.append(f"device={_device(tensor)}")
-    if opts["show_tensor_dtype"]:
+    if opts["show_dtype"]:
         parts.append(f"dtype={_dtype(tensor)}")
-    if opts["show_tensor_is_shared"]:
+    if opts["show_field_is_shared"]:
         parts.append(f"is_shared={_is_shared(tensor)}")
     if opts["show_grad"]:
         parts.append(f"requires_grad={tensor.requires_grad}")
@@ -1406,11 +1406,11 @@ def _tensor_repr_fields_custom(shape, device, dtype, is_shared) -> list[str]:
     parts: list[str] = []
     if opts["show_shape"]:
         parts.append(f"shape={shape}")
-    if opts["show_tensor_device"]:
+    if opts["show_field_device"]:
         parts.append(f"device={device}")
-    if opts["show_tensor_dtype"]:
+    if opts["show_dtype"]:
         parts.append(f"dtype={dtype}")
-    if opts["show_tensor_is_shared"]:
+    if opts["show_field_is_shared"]:
         parts.append(f"is_shared={is_shared}")
     return parts
 
@@ -1807,9 +1807,9 @@ _REPR_OPTIONS = {
     "show_device": True,
     "show_is_shared": True,
     "show_shape": True,
-    "show_tensor_device": True,
-    "show_tensor_dtype": True,
-    "show_tensor_is_shared": True,
+    "show_field_device": True,
+    "show_dtype": True,
+    "show_field_is_shared": True,
     "show_grad": False,
     "show_is_contiguous": False,
     "show_is_view": False,
@@ -1835,11 +1835,11 @@ class set_printoptions(_DecoratorContextManager):
             Defaults to ``True``.
         show_shape (bool, optional): Show ``shape`` in per-tensor field descriptors.
             Defaults to ``True``.
-        show_tensor_device (bool, optional): Show ``device`` in per-tensor field
+        show_field_device (bool, optional): Show ``device`` in per-tensor field
             descriptors. Defaults to ``True``.
-        show_tensor_dtype (bool, optional): Show ``dtype`` in per-tensor field
+        show_dtype (bool, optional): Show ``dtype`` in per-tensor field
             descriptors. Defaults to ``True``.
-        show_tensor_is_shared (bool, optional): Show ``is_shared`` in per-tensor
+        show_field_is_shared (bool, optional): Show ``is_shared`` in per-tensor
             field descriptors. Defaults to ``True``.
         show_grad (bool, optional): Show ``requires_grad`` in per-tensor field
             descriptors. Defaults to ``False``.
@@ -1860,7 +1860,7 @@ class set_printoptions(_DecoratorContextManager):
         >>> set_printoptions(show_device=False, show_is_shared=False).set()
         >>> print(td)
         >>> # Context manager
-        >>> with set_printoptions(show_tensor_dtype=False):
+        >>> with set_printoptions(show_dtype=False):
         ...     print(td)
         >>> # Decorator
         >>> @set_printoptions(show_is_shared=False)

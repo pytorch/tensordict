@@ -10159,30 +10159,30 @@ class TestSetPrintoptions:
         assert "batch_size=" not in r
         assert "\n    device=" in r
 
-    def test_hide_tensor_dtype(self):
+    def test_hide_dtype(self):
         from tensordict import set_printoptions
 
         td = TensorDict({"a": torch.randn(3, 4)})
-        with set_printoptions(show_tensor_dtype=False):
+        with set_printoptions(show_dtype=False):
             r = repr(td)
         assert "dtype=" not in r
         assert "shape=" in r
 
-    def test_hide_tensor_device(self):
+    def test_hide_field_device(self):
         from tensordict import set_printoptions
 
         td = TensorDict({"a": torch.randn(3, 4)})
-        with set_printoptions(show_tensor_device=False):
+        with set_printoptions(show_field_device=False):
             r = repr(td)
         assert "Tensor(shape=" in r
         # td-level device still visible
         assert "\n    device=" in r
 
-    def test_hide_tensor_is_shared(self):
+    def test_hide_field_is_shared(self):
         from tensordict import set_printoptions
 
         td = TensorDict({"a": torch.randn(3, 4)})
-        with set_printoptions(show_tensor_is_shared=False):
+        with set_printoptions(show_field_is_shared=False):
             r = repr(td)
         assert "Tensor(" in r
         # Tensor-level is_shared gone, but TD-level is_shared still present
@@ -10197,8 +10197,8 @@ class TestSetPrintoptions:
         with set_printoptions(
             show_device=False,
             show_is_shared=False,
-            show_tensor_dtype=False,
-            show_tensor_is_shared=False,
+            show_dtype=False,
+            show_field_is_shared=False,
         ):
             r = repr(td)
         assert "\n    device=" not in r
@@ -10294,8 +10294,8 @@ class TestSetPrintoptions:
         with set_printoptions(
             show_device=False,
             show_is_shared=False,
-            show_tensor_device=False,
-            show_tensor_is_shared=False,
+            show_field_device=False,
+            show_field_is_shared=False,
         ):
             r = repr(obj)
         assert "MyClass(" in r
