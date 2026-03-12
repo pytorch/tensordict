@@ -63,6 +63,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
+    _REPR_OPTIONS,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -2274,20 +2275,17 @@ def _repr(self) -> str:
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
 
-    medatada_fields = []
+    metadata_fields = []
 
-    if "batch_size" not in self.__expected_keys__:
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        medatada_fields.append(batch_size_str)
-    elif "shape" not in self.__expected_keys__:
-        batch_size_str = indent(f"shape={self.shape}", 4 * " ")
-        medatada_fields.append(batch_size_str)
-    if "device" not in self.__expected_keys__:
-        device_str = indent(f"device={self.device}", 4 * " ")
-        medatada_fields.append(device_str)
-
-    is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-    medatada_fields.append(is_shared_str)
+    if _REPR_OPTIONS["show_batch_size"]:
+        if "batch_size" not in self.__expected_keys__:
+            metadata_fields.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+        elif "shape" not in self.__expected_keys__:
+            metadata_fields.append(indent(f"shape={self.shape}", 4 * " "))
+    if _REPR_OPTIONS["show_device"] and "device" not in self.__expected_keys__:
+        metadata_fields.append(indent(f"device={self.device}", 4 * " "))
+    if _REPR_OPTIONS["show_is_shared"]:
+        metadata_fields.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
 
     if len(non_tensor_fields) > 0:
         non_tensor_field_str = indent(
@@ -2295,13 +2293,13 @@ def _repr(self) -> str:
             4 * " ",
         )
         if field_str:
-            string = ",\n".join(field_str + [non_tensor_field_str, *medatada_fields])
+            string = ",\n".join(field_str + [non_tensor_field_str, *metadata_fields])
         else:
-            string = ",\n".join([non_tensor_field_str, *medatada_fields])
+            string = ",\n".join([non_tensor_field_str, *metadata_fields])
     elif field_str:
-        string = ",\n".join(field_str + medatada_fields)
-    elif len(medatada_fields) > 0:
-        string = ",\n".join(medatada_fields)
+        string = ",\n".join(field_str + metadata_fields)
+    elif len(metadata_fields) > 0:
+        string = ",\n".join(metadata_fields)
     else:
         string = ""
     return f"{type(self).__name__}({string})"

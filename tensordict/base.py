@@ -81,6 +81,7 @@ from tensordict.utils import (
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
+    _REPR_OPTIONS,
     _rebuild_njt_from_njt,
     _set_max_batch_size,
     _shape,
@@ -553,11 +554,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def __repr__(self) -> str:
         try:
             fields = _td_fields(self)
-            field_str = indent(f"fields={{{fields}}}", 4 * " ")
-            batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-            device_str = indent(f"device={self.device}", 4 * " ")
-            is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            parts = [indent(f"fields={{{fields}}}", 4 * " ")]
+            if _REPR_OPTIONS["show_batch_size"]:
+                parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+            if _REPR_OPTIONS["show_device"]:
+                parts.append(indent(f"device={self.device}", 4 * " "))
+            if _REPR_OPTIONS["show_is_shared"]:
+                parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
+            string = ",\n".join(parts)
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
             #  that has no attribute (no _tensordict or no _batch_size).

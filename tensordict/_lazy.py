@@ -66,6 +66,7 @@ from tensordict.utils import (
     _parse_to,
     _recursive_unbind_list,
     _renamed_inplace_method,
+    _REPR_OPTIONS,
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
@@ -3512,24 +3513,20 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __repr__(self):
         fields = _td_fields(self)
-        field_str = indent(f"fields={{{fields}}}", 4 * " ")
-        exclusive_fields_str = indent(
-            f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "
-        )
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        device_str = indent(f"device={self.device}", 4 * " ")
-        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-        stack_dim = indent(f"stack_dim={self.stack_dim}", 4 * " ")
-        string = ",\n".join(
-            [
-                field_str,
-                exclusive_fields_str,
-                batch_size_str,
-                device_str,
-                is_shared_str,
-                stack_dim,
-            ]
-        )
+        parts = [
+            indent(f"fields={{{fields}}}", 4 * " "),
+            indent(
+                f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "
+            ),
+        ]
+        if _REPR_OPTIONS["show_batch_size"]:
+            parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+        if _REPR_OPTIONS["show_device"]:
+            parts.append(indent(f"device={self.device}", 4 * " "))
+        if _REPR_OPTIONS["show_is_shared"]:
+            parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
+        parts.append(indent(f"stack_dim={self.stack_dim}", 4 * " "))
+        string = ",\n".join(parts)
         return f"{type(self).__name__}(\n{string})"
 
     def _exclusive_keys(self):
