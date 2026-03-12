@@ -111,16 +111,19 @@ Option                    Default      Description
 
 **Extended attributes** (off by default -- opt-in for deeper debugging):
 
-======================  ===========  =================================================
-Option                  Default      Description
-======================  ===========  =================================================
-``show_grad``           ``False``    Show ``requires_grad=``.
-``show_is_contiguous``  ``False``    Show ``is_contiguous=``.
-``show_is_view``        ``False``    Show ``is_view=`` (whether ``._base`` is set).
-``show_storage_size``   ``False``    Show ``storage_size=`` (bytes).
-``plain``               ``False``    Append a short value summary
-                                     (mean/std for floats, min/max for ints).
-======================  ===========  =================================================
+======================  ==================  =============================================
+Option                  Default             Description
+======================  ==================  =============================================
+``show_grad``           ``False``            Show ``requires_grad=``.
+``show_is_contiguous``  ``False``            Show ``is_contiguous=``.
+``show_is_view``        ``False``            Show ``is_view=`` (whether ``._base`` is set).
+``show_storage_size``   ``False``            Show ``storage_size=`` (bytes).
+``plain``               ``False``            Append a short value summary
+                                             (mean/std for floats, min/max for ints).
+``sort_keys``           ``"alphabetical"``   Key ordering: ``"alphabetical"`` (default),
+                                             ``"insertion"`` (dict order), or a callable
+                                             passed as ``key`` to :func:`sorted`.
+======================  ==================  =============================================
 
 Querying the current settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

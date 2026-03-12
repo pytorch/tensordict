@@ -1474,8 +1474,14 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 )
             strs.append(sep.join([key, substr]))
 
+    sort_keys = _REPR_OPTIONS["sort_keys"]
+    if sort_keys == "alphabetical":
+        strs = sorted(strs)
+    elif callable(sort_keys):
+        strs = sorted(strs, key=sort_keys)
+
     return indent(
-        "\n" + ",\n".join(sorted(strs)),
+        "\n" + ",\n".join(strs),
         4 * " ",
     )
 
@@ -1815,6 +1821,7 @@ _REPR_OPTIONS = {
     "show_is_view": False,
     "show_storage_size": False,
     "plain": False,
+    "sort_keys": "alphabetical",
 }
 
 _REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
@@ -1851,6 +1858,10 @@ class set_printoptions(_DecoratorContextManager):
             per-tensor field descriptors. Defaults to ``False``.
         plain (bool, optional): When ``True``, include a short summary of the
             actual tensor values in the field descriptors. Defaults to ``False``.
+        sort_keys (str or callable, optional): Controls the order of keys in the
+            repr.  ``"alphabetical"`` (default) sorts keys lexicographically.
+            ``"insertion"`` preserves the order in which keys were added.
+            A callable is passed as the ``key`` argument to :func:`sorted`.
 
     Examples:
         >>> import torch
@@ -1869,7 +1880,7 @@ class set_printoptions(_DecoratorContextManager):
 
     """
 
-    def __init__(self, **kwargs: bool) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
         unknown = set(kwargs) - _REPR_OPTIONS_KEYS
         if unknown:
