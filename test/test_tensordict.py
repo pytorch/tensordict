@@ -10291,27 +10291,37 @@ class TestSetPrintoptions:
     def test_sort_keys_alphabetical_default(self):
         td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
         r = repr(td)
-        keys_in_order = [line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line]
+        keys_in_order = [
+            line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line
+        ]
         assert keys_in_order == ["a", "b", "c"]
 
     def test_sort_keys_insertion(self):
         td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
         with set_printoptions(sort_keys="insertion"):
             r = repr(td)
-        keys_in_order = [line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line]
+        keys_in_order = [
+            line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line
+        ]
         assert keys_in_order == ["c", "a", "b"]
 
     def test_sort_keys_callable(self):
         td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
         with set_printoptions(sort_keys=lambda s: s[::-1]):
             r = repr(td)
-        keys_in_order = [line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line]
+        keys_in_order = [
+            line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line
+        ]
         # reversed-string sort: "a"→"a", "b"→"b", "c"→"c" — same as alphabetical here
         # use a more interesting example
-        td2 = TensorDict({"xb": torch.randn(2), "ya": torch.randn(2), "za": torch.randn(2)})
+        td2 = TensorDict(
+            {"xb": torch.randn(2), "ya": torch.randn(2), "za": torch.randn(2)}
+        )
         with set_printoptions(sort_keys=lambda s: s[::-1]):
             r2 = repr(td2)
-        keys2 = [line.strip().split(":")[0] for line in r2.split("\n") if "Tensor(" in line]
+        keys2 = [
+            line.strip().split(":")[0] for line in r2.split("\n") if "Tensor(" in line
+        ]
         # sorted by reversed key: "xb"→"bx", "ya"→"ay", "za"→"az"  →  "ya","za","xb"
         assert keys2 == ["ya", "za", "xb"]
 
