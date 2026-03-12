@@ -10194,7 +10194,12 @@ class TestSetPrintoptions:
         from tensordict import set_printoptions
 
         td = TensorDict({"a": torch.randn(3, 4)})
-        with set_printoptions(show_device=False, show_is_shared=False, show_tensor_dtype=False, show_tensor_is_shared=False):
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_tensor_dtype=False,
+            show_tensor_is_shared=False,
+        ):
             r = repr(td)
         assert "\n    device=" not in r
         assert "\n    is_shared=" not in r
@@ -10286,7 +10291,12 @@ class TestSetPrintoptions:
             x: torch.Tensor
 
         obj = MyClass(x=torch.randn(3, 4), batch_size=[3])
-        with set_printoptions(show_device=False, show_is_shared=False, show_tensor_device=False, show_tensor_is_shared=False):
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_tensor_device=False,
+            show_tensor_is_shared=False,
+        ):
             r = repr(obj)
         assert "MyClass(" in r
         assert "device=" not in r

@@ -3515,9 +3515,7 @@ class LazyStackedTensorDict(TensorDictBase):
         fields = _td_fields(self)
         parts = [
             indent(f"fields={{{fields}}}", 4 * " "),
-            indent(
-                f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "
-            ),
+            indent(f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "),
         ]
         if _REPR_OPTIONS["show_batch_size"]:
             parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))

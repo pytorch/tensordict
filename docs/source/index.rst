@@ -108,6 +108,7 @@ Contents
    distributed
    fx
    saving
+   printing
    reference/index
 
 Indices and tables
