@@ -192,6 +192,8 @@ T = TypeVar("T", bound="TensorCollection")
 
 if TYPE_CHECKING:
     from typing import Self
+
+    from tensordict._td import TensorDict
 else:
     Self = Any
 
@@ -13950,7 +13952,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if lock:
                 result.lock_()
 
-    def to_tensordict(self, *, retain_none: bool | None = None) -> Self:
+    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
         """Returns a regular TensorDict instance from the TensorDictBase.
 
         Args:
