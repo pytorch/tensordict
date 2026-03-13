@@ -18,7 +18,7 @@ try:
     from typing import dataclass_transform
 except ImportError:
 
-    def dataclass_transform(*args, **kwargs):
+    def dataclass_transform(*args, **kwargs):  # noqa: D103
         def _identity(cls):
             return cls
 
@@ -153,7 +153,6 @@ def _make_init(cls: type) -> callable:
     non_blocking, lock).
     """
     required_keys = cls.__required_keys__
-    optional_keys = cls.__optional_keys__
     expected_keys = cls.__expected_keys__
 
     def __init__(

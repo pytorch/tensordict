@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
-from typing import NotRequired
+try:
+    from typing import NotRequired
+except ImportError:
+    from typing_extensions import NotRequired
 
 import pytest
 import torch
