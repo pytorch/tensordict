@@ -75,6 +75,9 @@ class UnbatchedTensor(torch.Tensor):
             tensor_repr = repr(self.as_subclass(torch.Tensor))
         return f"UnbatchedTensor({tensor_repr})"
 
+    def __reduce_ex__(self, protocol):
+        return (UnbatchedTensor, (self.as_subclass(torch.Tensor),))
+
     @classmethod
     def _stack_non_tensor(
         cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
