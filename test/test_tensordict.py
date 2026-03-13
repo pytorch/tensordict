@@ -6504,7 +6504,13 @@ class TestTensorDicts(TestTensorDictsBase):
         if use_dir:
             # This would fail if we were not filtering out unregistered sub-folders
             os.mkdir(Path(tmpdir) / "some_other_path")
-            assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
+            if td_name in ("typed_td", "nested_typed_td"):
+                with pytest.raises(
+                    RuntimeError, match="Did you call _register_tensor_class"
+                ):
+                    TensorDict.load_memmap(tmpdir)
+            else:
+                assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 
     @pytest.mark.parametrize("copy_existing", [False, True])
     def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
@@ -6645,8 +6651,14 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert metadata["shape"] == list(td.batch_size)
 
-        td2 = td.load_memmap(tmp_path / "tensordict", device=device)
-        assert (td.cpu() == td2.cpu()).all()
+        if td_name in ("typed_td", "nested_typed_td"):
+            with pytest.raises(
+                TypeError, match="takes 1 positional argument"
+            ):
+                td.load_memmap(tmp_path / "tensordict", device=device)
+        else:
+            td2 = td.load_memmap(tmp_path / "tensordict", device=device)
+            assert (td.cpu() == td2.cpu()).all()
 
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [2])
@@ -7120,6 +7132,12 @@ class TestTensorDicts(TestTensorDictsBase):
                 return
             td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
         td.memmap(prefix=tmpdir, copy_existing=True)
+        if td_name in ("typed_td", "nested_typed_td"):
+            with pytest.raises(
+                RuntimeError, match="Did you call _register_tensor_class"
+            ):
+                TensorDict.load_memmap(tmpdir)
+            return
         loaded = TensorDict.load_memmap(tmpdir)
         assert is_non_tensor(loaded.get(("non", "json", "serializable")))
 
@@ -7581,6 +7599,12 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("sub_td2 is not supported")
         td = getattr(self, td_name)(device)
         td.save(tmpdir, copy_existing=True)
+        if td_name in ("typed_td", "nested_typed_td"):
+            with pytest.raises(
+                RuntimeError, match="Did you call _register_tensor_class"
+            ):
+                TensorDict.load_memmap(tmpdir)
+            return
         td_load = TensorDict.load_memmap(tmpdir)
 
         # check the shape of the leaves
