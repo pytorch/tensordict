@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3865+g1533cca24.d20260312)
+                  main (0.11.0.dev3871+g8c84dcb21.d20260313)
                 </div>
               
             
@@ -360,7 +360,7 @@
 <h1>set_printoptions<a class="headerlink" href="#set-printoptions" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_printoptions">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_printoptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_printoptions" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_printoptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_printoptions" title="Permalink to this definition">¶</a></dt>
 <dd><p>Controls which attributes appear in TensorDict’s <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> output.</p>
 <p>Can be used as a global setter (via <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code>), a context manager, or a
 decorator.  Follows the same pattern as <a class="reference internal" href="tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>.</p>
@@ -391,6 +391,10 @@ descriptors. Defaults to <code class="docutils literal notranslate"><span class=
 per-tensor field descriptors. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>plain</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">True</span></code>, include a short summary of the
 actual tensor values in the field descriptors. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>sort_keys</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#callable" title="(in Python v3.14)"><em>callable</em></a><em>, </em><em>optional</em>) – Controls the order of keys in the
+repr.  <code class="docutils literal notranslate"><span class="pre">&quot;alphabetical&quot;</span></code> (default) sorts keys lexicographically.
+<code class="docutils literal notranslate"><span class="pre">&quot;insertion&quot;</span></code> preserves the order in which keys were added.
+A callable is passed as the <code class="docutils literal notranslate"><span class="pre">key</span></code> argument to <a class="reference external" href="https://docs.python.org/3/library/functions.html#sorted" title="(in Python v3.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">sorted()</span></code></a>.</p></li>
 </ul>
 </dd>
 </dl>
