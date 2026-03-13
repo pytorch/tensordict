@@ -10,7 +10,6 @@ from collections.abc import Sequence
 from typing import Any, ClassVar
 
 import torch
-
 from tensordict._td import TensorDict
 from tensordict.base import NO_DEFAULT
 

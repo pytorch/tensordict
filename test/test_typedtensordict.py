@@ -15,10 +15,10 @@ import torch
 from tensordict import TensorDict, TypedTensorDict
 from torch import Tensor
 
-
 # ---------------------------------------------------------------------------
 # Fixture classes
 # ---------------------------------------------------------------------------
+
 
 class PredictorState(TypedTensorDict):
     eta: Tensor
@@ -54,6 +54,7 @@ class ShadowFrozenClass(TypedTensorDict["shadow", "frozen"]):
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 class TestConstruction:
     def test_basic_construction(self):
@@ -120,6 +121,7 @@ class TestConstruction:
 # ---------------------------------------------------------------------------
 # Field access
 # ---------------------------------------------------------------------------
+
 
 class TestFieldAccess:
     def test_attribute_access(self):
@@ -190,6 +192,7 @@ class TestFieldAccess:
 # Spreading (**state)
 # ---------------------------------------------------------------------------
 
+
 class TestSpreading:
     def test_spread_to_dict(self):
         state = PredictorState(
@@ -239,6 +242,7 @@ class TestSpreading:
 # Inheritance
 # ---------------------------------------------------------------------------
 
+
 class TestInheritance:
     def test_isinstance(self):
         obs = ObservedState(
@@ -261,8 +265,15 @@ class TestInheritance:
         )
         assert SurvivalState.__expected_keys__ == frozenset(
             {
-                "eta", "X", "beta", "y", "mu", "noise",
-                "event_time", "indicator", "observed_time",
+                "eta",
+                "X",
+                "beta",
+                "y",
+                "mu",
+                "noise",
+                "event_time",
+                "indicator",
+                "observed_time",
             }
         )
 
@@ -295,6 +306,7 @@ class TestInheritance:
 # ---------------------------------------------------------------------------
 # NotRequired
 # ---------------------------------------------------------------------------
+
 
 class TestNotRequired:
     def test_optional_omitted(self):
@@ -338,6 +350,7 @@ class TestNotRequired:
 # ---------------------------------------------------------------------------
 # TensorDict operations
 # ---------------------------------------------------------------------------
+
 
 class TestTensorDictOps:
     @pytest.fixture
@@ -427,9 +440,11 @@ class TestTensorDictOps:
 # Class options
 # ---------------------------------------------------------------------------
 
+
 class TestClassOptions:
     def test_shadow_blocks_by_default(self):
         with pytest.raises(AttributeError, match="shadows a TensorDict attribute"):
+
             class Bad(TypedTensorDict):
                 clone: Tensor
 
@@ -495,6 +510,7 @@ class TestClassOptions:
 # Edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
     def test_empty_subclass(self):
         class Empty(TypedTensorDict):
@@ -506,6 +522,7 @@ class TestEdgeCases:
 
     def test_safe_shadow_data_without_option(self):
         """'data' is in _SAFE_SHADOW_NAMES so it works without shadow=True."""
+
         class WithData(TypedTensorDict):
             data: Tensor
             x: Tensor

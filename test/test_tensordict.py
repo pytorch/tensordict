@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-
 import functools
 import gc
 import importlib.util
@@ -27,11 +26,9 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
-
 from tensordict import (
     capture_non_tensor_stack,
     get_defaults_to_none,
@@ -56,7 +53,6 @@ from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
-
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import (
     MetaData,
@@ -6652,9 +6648,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert metadata["shape"] == list(td.batch_size)
 
         if td_name in ("typed_td", "nested_typed_td"):
-            with pytest.raises(
-                TypeError, match="takes 1 positional argument"
-            ):
+            with pytest.raises(TypeError, match="takes 1 positional argument"):
                 td.load_memmap(tmp_path / "tensordict", device=device)
         else:
             td2 = td.load_memmap(tmp_path / "tensordict", device=device)
