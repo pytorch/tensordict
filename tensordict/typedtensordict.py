@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import typing
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
@@ -61,7 +60,7 @@ def _get_td_dir() -> frozenset[str]:
 def _is_not_required(tp: Any) -> bool:
     """Check whether a type annotation is NotRequired[T]."""
     origin = getattr(tp, "__origin__", None)
-    if origin is typing.NotRequired:
+    if origin is NotRequired:
         return True
     origin = getattr(tp, "__class__", None)
     if origin is not None and getattr(origin, "__name__", None) == "_SpecialForm":
