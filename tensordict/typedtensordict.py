@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
@@ -88,8 +89,6 @@ def _resolve_own_hints(cls: type) -> dict[str, Any]:
     ``__annotate__`` and may not appear in ``cls.__dict__`` until first
     access through the descriptor.
     """
-    import sys
-
     own_raw = cls.__dict__.get("__annotations__", None)
     if own_raw is None:
         # Python 3.14+ (PEP 749): annotations are lazily evaluated.
