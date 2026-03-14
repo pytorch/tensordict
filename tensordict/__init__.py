@@ -56,6 +56,7 @@ from tensordict.tensorclass import (
     tensorclass,
     TensorClass,
 )
+from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
@@ -161,7 +162,6 @@ __all__ = [
     "set_lazy_legacy",
     "list_to_stack",
     "set_list_to_stack",
-    "set_printoptions",
     "get_printoptions",
     # TensorClass components
     "tensorclass",
