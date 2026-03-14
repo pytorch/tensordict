@@ -83,10 +83,23 @@ def _resolve_own_hints(cls: type) -> dict[str, Any]:
     annotations``) using the module's global namespace instead of calling
     ``get_type_hints``, which traverses the full MRO and can fail on
     TensorDict's internal annotations.
+
+    On Python 3.14+ (PEP 749), annotations are lazily evaluated via
+    ``__annotate__`` and may not appear in ``cls.__dict__`` until first
+    access through the descriptor.
     """
     import sys
 
-    own_raw = cls.__dict__.get("__annotations__", {})
+    own_raw = cls.__dict__.get("__annotations__", None)
+    if own_raw is None:
+        # Python 3.14+ (PEP 749): annotations are lazily evaluated.
+        annotate_fn = cls.__dict__.get("__annotate__", None)
+        if annotate_fn is None:
+            return {}
+        try:
+            return dict(annotate_fn(1))  # 1 = annotationlib.Format.VALUE
+        except Exception:
+            return {}
     if not own_raw:
         return {}
 
