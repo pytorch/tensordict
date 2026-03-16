@@ -10,6 +10,8 @@ try:
 except ImportError:
     from typing_extensions import NotRequired
 
+import tempfile
+
 import pytest
 import torch
 from tensordict import lazy_stack, TensorDict, TypedTensorDict
@@ -630,8 +632,6 @@ class TestFromTensordict:
         assert state.eta.shape == (2, 3)
 
     def test_from_tensordict_memmap(self):
-        import tempfile
-
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()
             td_mm = td.memmap_(tmpdir)
