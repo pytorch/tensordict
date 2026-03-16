@@ -474,7 +474,11 @@ def _cat(
             names = list_of_tensordicts[0].names
         # if we have a TD subclass, use _new_unsafe bc we know it exists. Otherwise, use
         #  TensorDict's one
-        if issubclass(tdtype, TensorDict) or _is_tensorclass(tdtype):
+        if (
+            issubclass(tdtype, TensorDict)
+            or _is_tensorclass(tdtype)
+            or hasattr(tdtype, "_wrap_td")
+        ):
             clz = tdtype
         else:
             clz = TensorDict
@@ -613,7 +617,7 @@ def _stack(
     if is_tc:
         list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
         clz = type(list_of_tensordicts_orig[0])
-    elif issubclass(td_types[0], TensorDict):
+    elif issubclass(td_types[0], TensorDict) or hasattr(td_types[0], "_wrap_td"):
         clz = td_types[0]
     else:
         clz = TensorDict

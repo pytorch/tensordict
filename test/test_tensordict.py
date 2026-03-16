@@ -7554,7 +7554,7 @@ class TestTensorDicts(TestTensorDictsBase):
         exp_instance = (
             LazyStackedTensorDict
             if isinstance(td, LazyStackedTensorDict)
-            else TensorDict
+            else TensorDictBase
         )
         assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
