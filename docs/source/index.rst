@@ -109,6 +109,7 @@ Contents
    distributed
    fx
    saving
+   storage
    printing
    reference/index
 

@@ -69,3 +69,13 @@ class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
         lock: bool = False,
         **kwargs: Any,
     ) -> None: ...
+    @classmethod
+    def from_schema(
+        cls,
+        schema: dict[str, tuple[list[int] | torch.Size, torch.dtype]],
+        *,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        storage: str | None = None,
+        device: DeviceType | None = None,
+        **kwargs: Any,
+    ) -> Self: ...
