@@ -17,8 +17,7 @@ import pytest
 import torch
 from tensordict import TensorClass, TensorDict, TypedTensorDict
 from tensordict._lazy import LazyStackedTensorDict
-from tensordict.persistent import _has_h5 as _has_h5py
-from tensordict.persistent import PersistentTensorDict
+from tensordict.persistent import _has_h5 as _has_h5py, PersistentTensorDict
 from tensordict.store._store import _has_redis, TensorDictStore
 from torch import Tensor
 
@@ -236,7 +235,9 @@ class TestTypedTensorDictCompat:
     def test_from_h5_data(self, tmp_path):
         h5 = _make_h5(tmp_path)
         materialized = h5.to_tensordict()
-        ttd = MyTTD(a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size)
+        ttd = MyTTD(
+            a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size
+        )
         assert isinstance(ttd, MyTTD)
         assert ttd.a.shape == (BATCH, FEAT_A)
 
@@ -244,13 +245,17 @@ class TestTypedTensorDictCompat:
     def test_from_redis_data(self):
         store = _make_redis()
         materialized = store.to_tensordict()
-        ttd = MyTTD(a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size)
+        ttd = MyTTD(
+            a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size
+        )
         assert isinstance(ttd, MyTTD)
 
     def test_from_lazy_stack_data(self):
         ls = _make_lazy_stacked()
         materialized = ls.to_tensordict()
-        ttd = MyTTD(a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size)
+        ttd = MyTTD(
+            a=materialized["a"], b=materialized["b"], batch_size=materialized.batch_size
+        )
         assert isinstance(ttd, MyTTD)
 
     # --- Operations on TypedTensorDict ---

@@ -2113,7 +2113,9 @@ def _update_(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = type(self).from_dict(input_dict_or_td, batch_size=self.batch_size)
+        input_dict_or_td = type(self).from_dict(
+            input_dict_or_td, batch_size=self.batch_size
+        )
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2142,7 +2144,9 @@ def _update_at_(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = type(self).from_dict(input_dict_or_td, batch_size=self.batch_size)
+        input_dict_or_td = type(self).from_dict(
+            input_dict_or_td, batch_size=self.batch_size
+        )
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {

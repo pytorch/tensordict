@@ -121,7 +121,7 @@ The table below summarises which operations work on each combination.
    assignment or ``update()``.
 
 Building a TensorClass on each backend
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **In-memory TensorDict** -- the default and simplest case:
 
@@ -274,7 +274,7 @@ but interoperates with other backends through conversion or stacking.
      - --
 
 Constructing TypedTensorDict from other backends
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Since ``TypedTensorDict`` is an in-memory ``TensorDict``, loading data from a
 remote or persistent backend requires materialising the data first:
@@ -335,7 +335,7 @@ Lazy stacking also works.  Indexing a ``LazyStackedTensorDict`` of
    True
 
 Saving TypedTensorDict to persistent backends
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Since ``TypedTensorDict`` is a ``TensorDict``, it can be saved to HDF5, Redis,
 or memory-mapped storage directly:
