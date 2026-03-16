@@ -152,7 +152,7 @@ For more details on the memory-mapped API (``memmap_``, ``memmap_like``,
 
 
 HDF5 (``storage="h5"``)
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 HDF5-backed storage is provided by :class:`~tensordict.PersistentTensorDict`.
 Each tensor becomes an HDF5 dataset; nested keys become HDF5 groups.  This is
@@ -193,7 +193,7 @@ Keyword arguments forwarded by ``from_schema``:
 
 
 Shared memory (``storage="shared"``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Shared-memory tensors allow zero-copy access across processes on the same
 machine.  This is the fastest option for single-node multi-process setups
@@ -220,7 +220,7 @@ No additional keyword arguments are required.
 
 
 Redis / Dragonfly (``storage="redis"``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :class:`~tensordict.store.TensorDictStore` stores tensors as raw bytes on a
 Redis-compatible server (Redis, Dragonfly, KeyDB).  This enables cross-node
@@ -262,7 +262,7 @@ You can also connect to an existing store from another process:
 
 
 Pre-allocation patterns
-------------------------
+-----------------------
 
 Pre-allocating large storage and filling it iteratively avoids allocating the
 full dataset in process memory.  All backends support the same pattern via
