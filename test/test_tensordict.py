@@ -14996,6 +14996,133 @@ class TestFreeThreading:
         # If we get here without segfault, the test passes
 
 
+class TestFromSchema:
+    """Tests for TensorDictBase.from_schema with various storage backends."""
+
+    SCHEMA = {
+        "obs": ([4, 4], torch.float32),
+        "action": ([2], torch.int64),
+        "reward": ([], torch.float32),
+    }
+    BATCH = [8]
+
+    def test_default_storage(self):
+        td = TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH)
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == torch.Size(self.BATCH)
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["obs"].dtype == torch.float32
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["action"].dtype == torch.int64
+        assert td["reward"].shape == torch.Size([8])
+        assert (td["obs"] == 0).all()
+        assert (td["action"] == 0).all()
+        assert (td["reward"] == 0).all()
+
+    def test_default_storage_no_batch(self):
+        td = TensorDict.from_schema({"x": ([3], torch.float32)})
+        assert td.batch_size == torch.Size(())
+        assert td["x"].shape == torch.Size([3])
+
+    def test_default_storage_write_read(self):
+        td = TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH)
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_memmap_storage(self, tmp_path):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="memmap", prefix=str(tmp_path)
+        )
+        assert td.is_memmap()
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+        assert isinstance(td["obs"], MemoryMappedTensor)
+
+    def test_memmap_storage_write_read(self, tmp_path):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="memmap", prefix=str(tmp_path)
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
+    def test_h5_storage(self, tmp_path):
+        filename = str(tmp_path / "test.h5")
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="h5", filename=filename
+        )
+        assert isinstance(td, PersistentTensorDict)
+        assert td.batch_size == torch.Size(self.BATCH)
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
+    def test_h5_storage_write_read(self, tmp_path):
+        filename = str(tmp_path / "test.h5")
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="h5", filename=filename
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_shared_storage(self):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="shared"
+        )
+        assert td.is_shared()
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+        assert (td["obs"] == 0).all()
+
+    def test_shared_storage_write_read(self):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="shared"
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_unknown_storage_raises(self):
+        with pytest.raises(ValueError, match="Unknown storage backend"):
+            TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH, storage="foobar")
+
+    def test_callable_from_base(self, tmp_path):
+        td = TensorDictBase.from_schema(
+            {"x": ([3], torch.float32)},
+            batch_size=[4],
+            storage="memmap",
+            prefix=str(tmp_path),
+        )
+        assert td.is_memmap()
+        assert td["x"].shape == torch.Size([4, 3])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
