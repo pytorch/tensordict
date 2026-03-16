@@ -251,6 +251,18 @@ This works with any backend: ``PersistentTensorDict`` (H5),
 ``TensorDict``, etc.  See the :doc:`../compatibility` page for full
 details and examples.
 
+Pass ``check=False`` to wrap an empty or partially-filled backend (e.g. a
+pre-allocated ``TensorDictStore``).  Missing fields will raise at access
+time rather than at wrap time:
+
+.. code-block:: python
+
+  >>> store = TensorDictStore(batch_size=[100_000], host="redis-node")
+  >>> state = PredictorState.from_tensordict(store, check=False)
+
+See :ref:`pre-allocating on Redis <compat-redis-prealloc>` in the
+compatibility guide for the full workflow.
+
 TensorDict operations
 ---------------------
 

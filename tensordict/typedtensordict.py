@@ -425,7 +425,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # Public constructor: wrap with key validation
     # ------------------------------------------------------------------
     @classmethod
-    def from_tensordict(cls, td: TensorDictBase) -> TypedTensorDict:
+    def from_tensordict(cls, td: TensorDictBase, *, check: bool = True) -> TypedTensorDict:
         """Wrap an existing TensorDictBase backend as a TypedTensorDict.
 
         The ``td`` is stored directly (no copy); mutations through the
@@ -435,18 +435,26 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             td: Any ``TensorDictBase`` instance (``TensorDict``,
                 ``PersistentTensorDict``, ``LazyStackedTensorDict``, etc.).
 
+        Keyword Args:
+            check (bool): If ``True`` (default), validate that all required
+                fields are present in ``td``.  Set to ``False`` to wrap an
+                empty or partially-filled backend (e.g. a pre-allocated
+                ``TensorDictStore``); missing fields will raise at access time
+                rather than wrap time.
+
         Raises:
-            TypeError: If required fields are missing from ``td``.
+            TypeError: If ``check=True`` and required fields are missing.
 
         Returns:
             A new ``TypedTensorDict`` instance backed by ``td``.
         """
-        missing = cls.__required_keys__ - set(td.keys())
-        if missing:
-            missing_str = ", ".join(sorted(missing))
-            raise TypeError(
-                f"{cls.__name__}.from_tensordict() missing required field(s): {missing_str}"
-            )
+        if check:
+            missing = cls.__required_keys__ - set(td.keys())
+            if missing:
+                missing_str = ", ".join(sorted(missing))
+                raise TypeError(
+                    f"{cls.__name__}.from_tensordict() missing required field(s): {missing_str}"
+                )
         obj = cls.__new__(cls)
         obj._source = td
         return obj

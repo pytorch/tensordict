@@ -671,6 +671,39 @@ class TestFromTensordict:
         assert isinstance(stacked, PredictorState)
         assert stacked.batch_size == torch.Size([2, 5])
 
+    def test_from_tensordict_check_false_empty(self):
+        """Wrapping an empty TD with check=False succeeds."""
+        td = TensorDict({}, batch_size=[5])
+        state = PredictorState.from_tensordict(td, check=False)
+        assert isinstance(state, PredictorState)
+        assert state.batch_size == torch.Size([5])
+        assert len(list(state.keys())) == 0
+
+    def test_from_tensordict_check_false_partial(self):
+        """Wrapping a partially-filled TD with check=False succeeds."""
+        td = TensorDict({"eta": torch.randn(5, 3)}, batch_size=[5])
+        state = PredictorState.from_tensordict(td, check=False)
+        assert isinstance(state, PredictorState)
+        assert state.eta.shape == (5, 3)
+        with pytest.raises(AttributeError, match="declared but not set"):
+            _ = state.X
+
+    def test_from_tensordict_check_false_then_fill(self):
+        """Fill fields iteratively after wrapping with check=False."""
+        td = TensorDict({}, batch_size=[5])
+        state = PredictorState.from_tensordict(td, check=False)
+        state["eta"] = torch.randn(5, 3)
+        state["X"] = torch.randn(5, 4)
+        state["beta"] = torch.randn(5, 1)
+        assert state.eta.shape == (5, 3)
+        assert set(state.keys()) == {"eta", "X", "beta"}
+
+    def test_from_tensordict_check_true_rejects_empty(self):
+        """Default check=True rejects empty TD."""
+        td = TensorDict({}, batch_size=[5])
+        with pytest.raises(TypeError, match="missing required field"):
+            PredictorState.from_tensordict(td)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

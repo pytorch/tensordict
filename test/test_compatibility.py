@@ -508,5 +508,109 @@ class TestTypedTensorDictWrapping:
         assert isinstance(items[0], MyTTD)
 
 
+# ===================================================================
+# TensorDictStore.empty + TypedTensorDict pre-allocation workflow
+# ===================================================================
+
+
+@pytest.mark.skipif(not _has_redis, reason="redis not available")
+class TestTensorDictStoreFromSchema:
+    """Test TensorDictStore.from_schema() pre-allocation."""
+
+    def test_from_schema_creates_keys(self):
+        store = TensorDictStore.from_schema(
+            {"a": ([FEAT_A], torch.float32), "b": ([FEAT_B], torch.float32)},
+            batch_size=[BATCH],
+        )
+        try:
+            assert set(store.keys()) == {"a", "b"}
+            assert store["a"].shape == torch.Size([BATCH, FEAT_A])
+            assert store["b"].shape == torch.Size([BATCH, FEAT_B])
+            assert (store["a"] == 0).all()
+        finally:
+            store._run_sync(store._client.flushdb())
+
+    def test_from_schema_write_and_read(self):
+        store = TensorDictStore.from_schema(
+            {"a": ([FEAT_A], torch.float32), "b": ([FEAT_B], torch.float32)},
+            batch_size=[BATCH],
+        )
+        try:
+            store[0] = TensorDict(
+                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+            )
+            assert (store[0]["a"] == 1).all()
+            assert (store[1]["a"] == 0).all()
+        finally:
+            store._run_sync(store._client.flushdb())
+
+    def test_from_schema_with_typed_td(self):
+        store = TensorDictStore.from_schema(
+            {"a": ([FEAT_A], torch.float32), "b": ([FEAT_B], torch.float32)},
+            batch_size=[BATCH],
+        )
+        try:
+            ttd = MyTTD.from_tensordict(store)
+            assert isinstance(ttd, MyTTD)
+            assert ttd.a.shape == torch.Size([BATCH, FEAT_A])
+
+            ttd[0] = TensorDict(
+                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+            )
+            assert (ttd[0].a == 1).all()
+        finally:
+            store._run_sync(store._client.flushdb())
+
+    def test_from_schema_scalar_shape(self):
+        store = TensorDictStore.from_schema(
+            {"reward": ([], torch.float32)},
+            batch_size=[BATCH],
+        )
+        try:
+            assert store["reward"].shape == torch.Size([BATCH])
+        finally:
+            store._run_sync(store._client.flushdb())
+
+
+@pytest.mark.skipif(not _has_redis, reason="redis not available")
+class TestTypedTDPreallocationWorkflow:
+    """End-to-end test of the pre-allocation + iterative fill pattern."""
+
+    def test_preallocate_and_fill(self):
+        store = TensorDictStore.from_schema(
+            {"a": ([FEAT_A], torch.float32), "b": ([FEAT_B], torch.float32)},
+            batch_size=[BATCH],
+        )
+        try:
+            ttd = MyTTD.from_tensordict(store)
+            for i in range(BATCH):
+                ttd[i] = TensorDict(
+                    a=torch.full([FEAT_A], float(i)),
+                    b=torch.full([FEAT_B], float(i)),
+                    batch_size=[],
+                )
+            for i in range(BATCH):
+                assert (ttd[i].a == float(i)).all()
+                assert (ttd[i].b == float(i)).all()
+        finally:
+            store._run_sync(store._client.flushdb())
+
+    def test_deferred_validation_then_fill(self):
+        """Wrap empty store with check=False, then fill."""
+        store = TensorDictStore(batch_size=[BATCH])
+        try:
+            ttd = MyTTD.from_tensordict(store, check=False)
+            assert isinstance(ttd, MyTTD)
+            assert len(list(ttd.keys())) == 0
+
+            ttd[0] = TensorDict(
+                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+            )
+            assert (ttd[0].a == 1).all()
+            assert set(ttd.keys()) == {"a", "b"}
+        finally:
+            store._run_sync(store._client.flushdb())
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -390,6 +390,63 @@ Lazy stacking also works.  Indexing a ``LazyStackedTensorDict`` of
    >>> isinstance(ls[0], State)
    True
 
+.. _compat-redis-prealloc:
+
+Pre-allocating on Redis and filling iteratively
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A common pattern for shared replay buffers or distributed data stores is to
+pre-allocate storage on a remote server (Redis / Dragonfly / KeyDB) and fill
+it one sample at a time, without ever loading the full dataset into RAM.
+
+``TensorDictStore.from_schema`` creates keys with known shapes and dtypes
+directly on the server using ``SETRANGE`` (zero-filled by the server; no
+tensor data passes through Python):
+
+.. code-block:: python
+
+   >>> import torch
+   >>> from tensordict import TensorDict, TypedTensorDict
+   >>> from tensordict.store import TensorDictStore
+   >>> from torch import Tensor
+   >>>
+   >>> class Replay(TypedTensorDict):
+   ...     obs: Tensor
+   ...     action: Tensor
+   ...     reward: Tensor
+   >>>
+   >>> # Pre-allocate 100k entries directly on Redis -- no RAM used
+   >>> store = TensorDictStore.from_schema(
+   ...     {"obs": ([84, 84, 3], torch.uint8),
+   ...      "action": ([4], torch.float32),
+   ...      "reward": ([], torch.float32)},
+   ...     batch_size=[100_000],
+   ...     host="redis-node",
+   ... )
+   >>>
+   >>> # Wrap with typed access
+   >>> replay = Replay.from_tensordict(store)
+   >>>
+   >>> # Fill iteratively -- each write goes directly to Redis
+   >>> for i, sample in enumerate(data_stream):
+   ...     replay[i] = Replay(
+   ...         obs=sample.obs, action=sample.action, reward=sample.reward,
+   ...         batch_size=[],
+   ...     )
+
+If the store is initially empty (no keys registered yet), use ``check=False``
+to skip the key-presence validation and fill keys on the fly:
+
+.. code-block:: python
+
+   >>> store = TensorDictStore(batch_size=[100_000], host="redis-node")
+   >>> replay = Replay.from_tensordict(store, check=False)
+   >>>
+   >>> # First indexed write auto-creates each key via SETRANGE
+   >>> replay[0] = Replay(obs=obs_0, action=act_0, reward=r_0, batch_size=[])
+   >>> # Subsequent writes fill in the pre-allocated storage
+   >>> replay[1] = Replay(obs=obs_1, action=act_1, reward=r_1, batch_size=[])
+
 
 TensorClass vs TypedTensorDict
 ------------------------------
