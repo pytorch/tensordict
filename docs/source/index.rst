@@ -105,6 +105,7 @@ Contents
    :maxdepth: 3
 
    overview
+   compatibility
    distributed
    fx
    saving
