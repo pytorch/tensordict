@@ -425,7 +425,9 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # Public constructor: wrap with key validation
     # ------------------------------------------------------------------
     @classmethod
-    def from_tensordict(cls, td: TensorDictBase, *, check: bool = True) -> TypedTensorDict:
+    def from_tensordict(
+        cls, td: TensorDictBase, *, check: bool = True
+    ) -> TypedTensorDict:
         """Wrap an existing TensorDictBase backend as a TypedTensorDict.
 
         The ``td`` is stored directly (no copy); mutations through the

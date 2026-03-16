@@ -537,7 +537,9 @@ class TestTensorDictStoreFromSchema:
         )
         try:
             store[0] = TensorDict(
-                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+                a=torch.ones(FEAT_A),
+                b=torch.ones(FEAT_B),
+                batch_size=[],
             )
             assert (store[0]["a"] == 1).all()
             assert (store[1]["a"] == 0).all()
@@ -555,7 +557,9 @@ class TestTensorDictStoreFromSchema:
             assert ttd.a.shape == torch.Size([BATCH, FEAT_A])
 
             ttd[0] = TensorDict(
-                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+                a=torch.ones(FEAT_A),
+                b=torch.ones(FEAT_B),
+                batch_size=[],
             )
             assert (ttd[0].a == 1).all()
         finally:
@@ -604,7 +608,9 @@ class TestTypedTDPreallocationWorkflow:
             assert len(list(ttd.keys())) == 0
 
             ttd[0] = TensorDict(
-                a=torch.ones(FEAT_A), b=torch.ones(FEAT_B), batch_size=[],
+                a=torch.ones(FEAT_A),
+                b=torch.ones(FEAT_B),
+                batch_size=[],
             )
             assert (ttd[0].a == 1).all()
             assert set(ttd.keys()) == {"a", "b"}
