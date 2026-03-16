@@ -1551,7 +1551,9 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
                     )
                 # Handle parameterized generics (e.g., TensorDict[str, Tensor])
                 if origin is not None and isinstance(origin, type):
-                    return issubclass(origin, _TensorTypes) or _is_tensor_collection(origin)
+                    return issubclass(origin, _TensorTypes) or _is_tensor_collection(
+                        origin
+                    )
                 return False
 
             for key, val in cls._type_hints.items():
