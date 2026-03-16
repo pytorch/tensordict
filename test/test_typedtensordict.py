@@ -520,16 +520,13 @@ class TestEdgeCases:
         assert e.batch_size == torch.Size([3])
         assert len(e.keys()) == 0
 
-    def test_safe_shadow_data_without_option(self):
-        """'data' is in _SAFE_SHADOW_NAMES so it works without shadow=True."""
+    def test_data_requires_shadow(self):
+        """'data' shadows a TensorDict attribute and requires shadow=True."""
+        with pytest.raises(AttributeError, match="shadows a TensorDict attribute"):
 
-        class WithData(TypedTensorDict):
-            data: Tensor
-            x: Tensor
-
-        wd = WithData(data=torch.randn(3, 2), x=torch.randn(3, 4), batch_size=[3])
-        assert wd.data.shape == (3, 2)
-        assert wd.x.shape == (3, 4)
+            class WithData(TypedTensorDict):
+                data: Tensor
+                x: Tensor
 
     def test_batch_iter(self):
         """__iter__ on TypedTensorDict iterates over batch dimension."""

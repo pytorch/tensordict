@@ -14,6 +14,7 @@ from tensordict._td import TensorDict
 from tensordict.base import NO_DEFAULT
 
 try:
+    # Python 3.11+ (PEP 681)
     from typing import dataclass_transform
 except ImportError:
 
@@ -25,12 +26,10 @@ except ImportError:
 
 
 try:
+    # Python 3.11+ (PEP 655)
     from typing import NotRequired
 except ImportError:
     from typing_extensions import NotRequired  # noqa: F401
-
-# Fields on TensorDict that are safe to shadow without the "shadow" option.
-_SAFE_SHADOW_NAMES = frozenset({"_is_non_tensor", "data"})
 
 # Annotation names that are class-level metadata, not user fields.
 _META_FIELDS = frozenset(
@@ -262,7 +261,7 @@ class _TypedTensorDictMeta(type(TensorDict)):
         if not cls._shadow:
             td_dir = _get_td_dir()
             for attr in expected:
-                if attr in td_dir and attr not in _SAFE_SHADOW_NAMES:
+                if attr in td_dir:
                     raise AttributeError(
                         f"Field '{attr}' shadows a TensorDict attribute. "
                         f"Use TypedTensorDict['shadow'] to allow this."
@@ -273,9 +272,9 @@ class _TypedTensorDictMeta(type(TensorDict)):
         cls.__optional_keys__ = optional
 
         # Generate properties for fields that clash with TensorDict attributes
-        # so they override the parent's version. When shadow=False, only
-        # _SAFE_SHADOW_NAMES fields (like "data") get properties; the rest
-        # were already rejected above.
+        # so they override the parent's version. When shadow=False these
+        # fields were already rejected above, so this only runs when
+        # shadow=True.
         td_dir = _get_td_dir()
         for attr in expected:
             if attr in td_dir:
