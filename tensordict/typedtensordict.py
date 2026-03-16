@@ -164,6 +164,7 @@ def _make_init(cls: type) -> callable:
 
     def __init__(
         self,
+        _source: dict | None = None,
         *,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: torch.device | str | int | None = None,
@@ -172,6 +173,17 @@ def _make_init(cls: type) -> callable:
         lock: bool = False,
         **kwargs: Any,
     ) -> None:
+        if _source is not None:
+            TensorDict.__init__(
+                self,
+                source=_source,
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                non_blocking=non_blocking,
+                lock=lock,
+            )
+            return
         # NOTE: the natural spelling here is ``required_keys - kwargs.keys()``
         # and ``kwargs.keys() - expected_keys``, but torch.compile / Dynamo
         # cannot trace ``frozenset.__sub__(dict_keys)`` and raises
