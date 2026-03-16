@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
-from functools import cache
 from typing import Any, ClassVar
 
 import torch
 from tensordict._td import TensorDict
 from tensordict.base import NO_DEFAULT, TensorDictBase
+from tensordict.utils import _as_context_manager, cache
 
 try:
     # Python 3.11+ (PEP 681)
@@ -473,6 +473,17 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
                 raise AttributeError(
                     f"'{type(self).__name__}' has field '{name}' declared but not set"
                 ) from None
+        # Delegate internal TensorDictBase attributes to the backing source
+        # (e.g. _last_op, _last_op_queue, _cache, …).
+        try:
+            source = self.__dict__["_source"]
+        except KeyError:
+            pass
+        else:
+            try:
+                return getattr(source, name)
+            except AttributeError:
+                pass
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute {name!r}"
         )
@@ -534,13 +545,19 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     def is_locked(self, value: bool) -> None:
         self._source.is_locked = value
 
+    @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
         self._source.lock_(*args, **kwargs)
         return self
 
+    @_as_context_manager("is_locked")
     def unlock_(self, *args, **kwargs):
         self._source.unlock_(*args, **kwargs)
+        self._erase_cache()
         return self
+
+    def _erase_cache(self):
+        self._cache = None
 
     # ------------------------------------------------------------------
     # _select / _exclude: special handling for inplace
@@ -567,6 +584,23 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             self._source._exclude(*keys, inplace=True, set_shared=set_shared)
             return self
         result = self._source._exclude(*keys, inplace=False, set_shared=set_shared)
+        return type(self)._wrap_td(result)
+
+    def _memmap_(self, *args, inplace=True, **kwargs):
+        result = self._source._memmap_(*args, inplace=inplace, **kwargs)
+        if inplace:
+            return self
+        if result is None:
+            return None
+        return type(self)._wrap_td(result)
+
+    def where(self, condition, other, *, out=None, **kwargs):
+        unwrapped_out = out._source if isinstance(out, TypedTensorDict) else out
+        result = self._source.where(condition, other, out=unwrapped_out, **kwargs)
+        if result is None:
+            return None
+        if out is not None:
+            return out
         return type(self)._wrap_td(result)
 
     # ------------------------------------------------------------------
@@ -613,10 +647,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             out=unwrapped_out,
             **constructor_kwargs,
         )
-        if inplace or out is not None:
-            return self if inplace else out
         if result is None:
             return None
+        if inplace or out is not None:
+            return self if inplace else out
         return type(self)._wrap_td(result)
 
     def _multithread_apply_flat(
@@ -677,10 +711,10 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             futures=futures,
             **kwargs,
         )
-        if inplace or out is not None:
-            return self if inplace else out
         if result is None:
             return None
+        if inplace or out is not None:
+            return self if inplace else out
         return type(self)._wrap_td(result)
 
     # ------------------------------------------------------------------
@@ -888,7 +922,6 @@ _WRAP_DELEGATES = [
 # In-place: delegate to _source, return self
 _INPLACE_DELEGATES = [
     "share_memory_",
-    "_memmap_",
     "detach_",
     "masked_fill_",
 ]
