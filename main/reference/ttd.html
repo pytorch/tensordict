@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3894+gd8f32e428.d20260316)
+                  main (0.11.0.dev3904+g173c2bda2.d20260316)
                 </div>
               
             
@@ -357,11 +357,12 @@
               
   <section id="typedtensordict">
 <h1>TypedTensorDict<a class="headerlink" href="#typedtensordict" title="Permalink to this heading">¶</a></h1>
-<p><a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a> is a <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> subclass
-with typed field declarations. It brings <code class="docutils literal notranslate"><span class="pre">TypedDict</span></code>-style class definitions to
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>: you declare fields as class annotations and get typed construction,
-typed attribute access, inheritance, <code class="docutils literal notranslate"><span class="pre">NotRequired</span></code> fields, and <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading
-– all while keeping every <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> operation available.</p>
+<p><a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a> is a <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass
+with typed field declarations and backend composition.  It brings <code class="docutils literal notranslate"><span class="pre">TypedDict</span></code>-style
+class definitions to <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>: you declare fields as class annotations and get
+typed construction, typed attribute access, inheritance, <code class="docutils literal notranslate"><span class="pre">NotRequired</span></code> fields,
+<code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading, and the ability to wrap any <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> backend
+(H5, Redis, lazy stacks, etc.) via <code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TypedTensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
@@ -403,9 +404,9 @@ typed attribute access, inheritance, <code class="docutils literal notranslate">
 </div>
 <p>Each stage inherits the previous one’s fields and adds new ones. The
 <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading pattern lets transition functions stay short regardless
-of how many fields the state has. And because <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> <strong>is</strong> a
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>, every operation – <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">.clone()</span></code>, slicing,
-<code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>, <code class="docutils literal notranslate"><span class="pre">memmap</span></code> – works at every stage.</p>
+of how many fields the state has. And because <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> inherits
+from <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>, every operation – <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">.clone()</span></code>,
+slicing, <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>, <code class="docutils literal notranslate"><span class="pre">memmap</span></code> – works at every stage.</p>
 </section>
 <section id="typedtensordict-vs-tensorclass">
 <h2>TypedTensorDict vs TensorClass<a class="headerlink" href="#typedtensordict-vs-tensorclass" title="Permalink to this heading">¶</a></h2>
@@ -427,34 +428,38 @@ in the underlying model:</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Inherits from</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> directly</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> (delegates to <code class="docutils literal notranslate"><span class="pre">_source</span></code>)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">TensorCollection</span></code> (wraps a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> internally)</p></td>
 </tr>
-<tr class="row-odd"><td><p>Inheritance</p></td>
+<tr class="row-odd"><td><p>Can wrap any backend</p></td>
+<td><p>Yes (<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>)</p></td>
+<td><p>Yes (<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p>Inheritance</p></td>
 <td><p>Standard Python (<code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">Child(Parent):</span> <span class="pre">...</span></code>)</p></td>
 <td><p>Supported via metaclass</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading</p></td>
 <td><p>Works natively (<code class="docutils literal notranslate"><span class="pre">MutableMapping</span></code>)</p></td>
 <td><p>Requires manual field-by-field repacking</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">state[&quot;key&quot;]</span></code></p></td>
-<td><p>Works natively (<code class="docutils literal notranslate"><span class="pre">TensorDict.__getitem__</span></code>)</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">state[&quot;key&quot;]</span></code></p></td>
+<td><p>Works natively (<code class="docutils literal notranslate"><span class="pre">TensorDictBase.__getitem__</span></code>)</p></td>
 <td><p>Raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> – use <code class="docutils literal notranslate"><span class="pre">state.key</span></code> or <code class="docutils literal notranslate"><span class="pre">state.get(&quot;key&quot;)</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NotRequired</span></code> fields</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NotRequired</span></code> fields</p></td>
 <td><p>Supported</p></td>
 <td><p>Not supported</p></td>
 </tr>
-<tr class="row-odd"><td><p>Non-tensor fields</p></td>
+<tr class="row-even"><td><p>Non-tensor fields</p></td>
 <td><p>Not supported (tensor-only)</p></td>
 <td><p>Supported (strings, ints, arbitrary objects)</p></td>
 </tr>
-<tr class="row-even"><td><p>Custom methods</p></td>
+<tr class="row-odd"><td><p>Custom methods</p></td>
 <td><p>Supported (regular class methods)</p></td>
 <td><p>Supported (regular class methods)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator</p></td>
 <td><p>Not needed (uses metaclass via inheritance)</p></td>
 <td><p>Required (or <code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">Foo(TensorClass):</span> <span class="pre">...</span></code>)</p></td>
 </tr>
@@ -463,8 +468,9 @@ in the underlying model:</p>
 <p><strong>When to use which:</strong></p>
 <ul class="simple">
 <li><p>Use <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> when you have a typed pipeline with progressive state
-accumulation, need <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading, or want direct <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>
-interop without a wrapper layer.</p></li>
+accumulation, need <code class="docutils literal notranslate"><span class="pre">**state</span></code> spreading, want standard Python inheritance
+for schema composition, or need to wrap persistent backends while keeping
+full <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> API compatibility.</p></li>
 <li><p>Use <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> when you need non-tensor fields (strings, metadata),
 custom <code class="docutils literal notranslate"><span class="pre">__init__</span></code> logic, or your codebase already uses <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code>
 extensively.</p></li>
@@ -559,7 +565,7 @@ no transition function needs updating.</p>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;shadow&quot;</span></code> – Allow field names that clash with <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> attributes.
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;shadow&quot;</span></code> – Allow field names that clash with <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> attributes.
 Without this, conflicting names raise <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> at class definition
 time.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;frozen&quot;</span></code> – Lock the <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> after construction (read-only).</p></li>
@@ -570,9 +576,42 @@ time.</p></li>
 <p>Options propagate through inheritance: a subclass of a <code class="docutils literal notranslate"><span class="pre">&quot;frozen&quot;</span></code> class is
 also frozen.</p>
 </section>
+<section id="backend-composition-from-tensordict">
+<h2>Backend composition (<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>)<a class="headerlink" href="#backend-composition-from-tensordict" title="Permalink to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> can wrap any <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> backend via
+<code class="docutils literal notranslate"><span class="pre">from_tensordict(td)</span></code>.  The backend is stored live (zero-copy); mutations
+through the typed wrapper go directly to the underlying storage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">eta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">X</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">beta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">PredictorState</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">eta</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([5, 3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">eta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># writes to td</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;eta&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>This works with any backend: <code class="docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code> (H5),
+<code class="docutils literal notranslate"><span class="pre">TensorDictStore</span></code> (Redis), <code class="docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code>, memory-mapped
+<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>, etc.  See the <a class="reference internal" href="../compatibility.html"><span class="doc">Cross-class compatibility</span></a> page for full
+details and examples.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">check=False</span></code> to wrap an empty or partially-filled backend (e.g. a
+pre-allocated <code class="docutils literal notranslate"><span class="pre">TensorDictStore</span></code>).  Missing fields will raise at access
+time rather than at wrap time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">PredictorState</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="../compatibility.html#compat-redis-prealloc"><span class="std std-ref">pre-allocating on Redis</span></a> in the
+compatibility guide for the full workflow.</p>
+</section>
 <section id="tensordict-operations">
 <h2>TensorDict operations<a class="headerlink" href="#tensordict-operations" title="Permalink to this heading">¶</a></h2>
-<p>Every <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> operation works on <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> instances:</p>
+<p>Every <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> operation works on <code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> instances:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">PredictorState</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">eta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">X</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">beta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
@@ -589,7 +628,7 @@ also frozen.</p>
 </div>
 <p>This includes <code class="docutils literal notranslate"><span class="pre">.memmap()</span></code>, <code class="docutils literal notranslate"><span class="pre">.apply()</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>,
 <code class="docutils literal notranslate"><span class="pre">.unbind()</span></code>, <code class="docutils literal notranslate"><span class="pre">.select()</span></code>, <code class="docutils literal notranslate"><span class="pre">.exclude()</span></code>, <code class="docutils literal notranslate"><span class="pre">.update()</span></code>, and all other
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> methods.</p>
+<code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> methods.</p>
 </section>
 <section id="type-checking">
 <h2>Type checking<a class="headerlink" href="#type-checking" title="Permalink to this heading">¶</a></h2>
@@ -606,8 +645,8 @@ narrowing without a dedicated type checker plugin. For typed access, prefer
 dot notation (<code class="docutils literal notranslate"><span class="pre">state.eta</span></code>).</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>([source, batch_size, ...])</p></td>
-<td><p>A TensorDict subclass with typed field declarations.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A TensorDictBase subclass with typed field declarations and backend composition.</p></td>
 </tr>
 </tbody>
 </table>
@@ -664,6 +703,7 @@ dot notation (<code class="docutils literal notranslate"><span class="pre">state
 <li><a class="reference internal" href="#notrequired-fields">NotRequired fields</a></li>
 <li><a class="reference internal" href="#spreading-state">Spreading (<code class="docutils literal notranslate"><span class="pre">**state</span></code>)</a></li>
 <li><a class="reference internal" href="#class-options">Class options</a></li>
+<li><a class="reference internal" href="#backend-composition-from-tensordict">Backend composition (<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>)</a></li>
 <li><a class="reference internal" href="#tensordict-operations">TensorDict operations</a></li>
 <li><a class="reference internal" href="#type-checking">Type checking</a></li>
 </ul>
