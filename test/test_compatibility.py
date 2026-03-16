@@ -11,8 +11,6 @@ matrix between typed container wrappers and TensorDictBase backends.
 
 from __future__ import annotations
 
-import tempfile
-
 import pytest
 import torch
 from tensordict import TensorClass, TensorDict, TypedTensorDict
