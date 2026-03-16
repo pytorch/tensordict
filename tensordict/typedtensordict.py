@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 import torch
 from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
-from tensordict.base import NO_DEFAULT, _register_tensor_class
+from tensordict.base import _register_tensor_class, NO_DEFAULT
 
 try:
     # Python 3.11+ (PEP 681)
@@ -172,6 +172,12 @@ def _make_init(cls: type) -> callable:
         lock: bool = False,
         **kwargs: Any,
     ) -> None:
+        # NOTE: the natural spelling here is ``required_keys - kwargs.keys()``
+        # and ``kwargs.keys() - expected_keys``, but torch.compile / Dynamo
+        # cannot trace ``frozenset.__sub__(dict_keys)`` and raises
+        # ``Unsupported: unsupported operand type(s) for __sub__``.
+        # We use set comprehensions as a compile-friendly workaround.
+        # See TODO/dynamo_frozenset_sub.md for a repro.
         missing = {k for k in required_keys if k not in kwargs}
         if missing:
             missing_str = ", ".join(sorted(missing))
@@ -284,6 +290,11 @@ class _TypedTensorDictMeta(type(TensorDict)):
         if "__init__" not in namespace:
             cls.__init__ = _make_init(cls)
 
+        # Register with pytree so Dynamo can flatten/unflatten instances
+        # during torch.compile tracing.  Without this, Dynamo falls back to
+        # generic Python tracing for TensorDict subclass operations and hits
+        # graph breaks (e.g. _has_mps -> torch.backends.mps.is_available()).
+        # See TODO/dynamo_td_subclass_pytree.md for details.
         _register_tensor_class(cls)
         try:
             _register_td_node(cls)

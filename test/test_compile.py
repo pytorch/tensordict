@@ -772,9 +772,7 @@ class TestTTD:
 
         call_squeeze_c = torch.compile(call_squeeze, fullgraph=True, mode=mode)
         call_unsqueeze_c = torch.compile(call_unsqueeze, fullgraph=True, mode=mode)
-        data = _TTDState(
-            a=torch.randn(1, 3), b=torch.randn(1, 3), batch_size=[1, 3]
-        )
+        data = _TTDState(a=torch.randn(1, 3), b=torch.randn(1, 3), batch_size=[1, 3])
         result_squeeze_c = call_squeeze_c(data)
         assert result_squeeze_c.shape == torch.Size([3])
         result_unsqueeze_c = call_unsqueeze_c(result_squeeze_c)
@@ -850,6 +848,70 @@ class TestTTD:
         compiled = add_self_c(data.clone())
         assert (eager["a"] == compiled["a"]).all()
         assert (eager["b"] == compiled["b"]).all()
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+class TestTTDImprovements:
+    """Tests that probe known Dynamo limitations we work around.
+
+    Each test uses the *ideal* code path that we'd prefer.  They are marked
+    ``xfail(strict=True)`` so that CI **fails** when PyTorch fixes the
+    upstream issue -- that's the signal to remove the workaround and
+    simplify our code.
+
+    See the corresponding ``TODO/*.md`` files for upstream context.
+    """
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Dynamo cannot trace frozenset.__sub__(dict_keys). "
+            "See TODO/dynamo_frozenset_sub.md"
+        ),
+    )
+    def test_frozenset_sub_dict_keys(self):
+        """frozenset - dict.keys() should be traceable by Dynamo."""
+        required = frozenset({"a", "b"})
+
+        def fn(**kwargs):
+            missing = required - kwargs.keys()
+            if missing:
+                raise TypeError(f"missing: {missing}")
+            return kwargs["a"] + kwargs["b"]
+
+        fn_c = torch.compile(fn, fullgraph=True)
+        result = fn_c(a=torch.tensor(1.0), b=torch.tensor(2.0))
+        assert result == 3.0
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "TensorDict subclass arithmetic hits _has_mps graph break "
+            "without explicit pytree registration. "
+            "See TODO/dynamo_td_subclass_pytree.md"
+        ),
+    )
+    def test_td_subclass_arithmetic_without_registration(self):
+        """A plain TensorDict subclass should work under compile without pytree registration."""
+
+        class BareSubclass(TensorDict):
+            pass
+
+        # deliberately do NOT register:
+        # _register_tensor_class(BareSubclass)
+        # _register_td_node(BareSubclass)
+
+        def add_one(td):
+            return td + 1
+
+        # device="cpu" is required to trigger the _has_mps graph break
+        # (without a device, empty() takes a different path that avoids it)
+        data = BareSubclass({"a": torch.zeros(3)}, batch_size=[3], device="cpu")
+        add_one_c = torch.compile(add_one, fullgraph=True)
+        result = add_one_c(data)
+        assert (result["a"] == 1).all()
 
 
 @tensorclass
