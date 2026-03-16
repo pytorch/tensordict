@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3904+g173c2bda2.d20260316)
+                  main (0.11.0.dev3909+g4df757c2b.d20260316)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../storage.html">Storing large heterogeneous data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../printing.html">Printing and Display</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
 </ul>
@@ -2812,6 +2813,71 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p>The sending process should have called <cite>~.init_remote</cite> to send the metadata and content.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.from_schema">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_schema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.10)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.14)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.10)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.from_schema" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pre-allocate a zero-filled TensorDict from a schema.</p>
+<p>Creates a <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> whose storage backend is selected
+by <code class="docutils literal notranslate"><span class="pre">storage</span></code>.  Each entry in <code class="docutils literal notranslate"><span class="pre">schema</span></code> maps a field name to an
+<code class="docutils literal notranslate"><span class="pre">(element_shape,</span> <span class="pre">dtype)</span></code> pair; the full stored shape is
+<code class="docutils literal notranslate"><span class="pre">[*batch_size,</span> <span class="pre">*element_shape]</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schema</strong> – Mapping from field name to <code class="docutils literal notranslate"><span class="pre">(element_shape,</span> <span class="pre">dtype)</span></code>.
+<code class="docutils literal notranslate"><span class="pre">element_shape</span></code> is the per-element shape (excluding
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>).</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>batch_size</strong> – Overall batch dimensions prepended to every element
+shape.  Defaults to <code class="docutils literal notranslate"><span class="pre">()</span></code>.</p></li>
+<li><p><strong>storage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><em>None</em></a>) – <p>Backend selector:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> – plain <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with regular tensors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code> – memory-mapped tensors on disk.
+Pass <code class="docutils literal notranslate"><span class="pre">prefix=&lt;dir&gt;</span></code> in <em>kwargs</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code> – HDF5 via <a class="reference internal" href="#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>.
+Pass <code class="docutils literal notranslate"><span class="pre">filename=&lt;path&gt;</span></code> in <em>kwargs</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> – CPU shared-memory tensors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;redis&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;dragonfly&quot;</span></code> – delegates to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictStore.from_schema()</span></code>.</p></li>
+</ul>
+</p></li>
+<li><p><strong>device</strong> – Device for the resulting tensors (ignored by some
+backends).</p></li>
+<li><p><strong>**kwargs</strong> – Backend-specific arguments forwarded to the
+underlying constructor (e.g. <code class="docutils literal notranslate"><span class="pre">prefix</span></code> for memmap,
+<code class="docutils literal notranslate"><span class="pre">filename</span></code> for h5, <code class="docutils literal notranslate"><span class="pre">host</span></code>/<code class="docutils literal notranslate"><span class="pre">port</span></code> for redis).</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass instance with
+pre-allocated (zero-filled) keys.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1000</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;obs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([1000, 84, 84, 3])</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">d</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td_mm</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">prefix</span><span class="o">=</span><span class="n">d</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">td_mm</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">()</span>
+</pre></div>
 </div>
 </dd></dl>
 

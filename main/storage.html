@@ -1,0 +1,1142 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Storing large heterogeneous data &mdash; tensordict main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Printing and Display" href="printing.html" />
+    <link rel="prev" title="Saving TensorDict and tensorclass objects" href="saving.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="active docs-active">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  main (0.11.0.dev3909+g4df757c2b.d20260316)
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional Programming with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="compatibility.html">Cross-class compatibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Storing large heterogeneous data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and Display</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>Storing large heterogeneous data</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="_sources/storage.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+          
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="storing-large-heterogeneous-data">
+<span id="storage"></span><h1>Storing large heterogeneous data<a class="headerlink" href="#storing-large-heterogeneous-data" title="Permalink to this heading">¶</a></h1>
+<p>TensorDict can back its data by several storage backends so that large
+datasets never need to live entirely in process memory.  This page explains
+how to choose a backend, declare a schema up-front, read and write data,
+store non-tensor values, and combine everything with typed wrappers
+(<a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>).</p>
+<nav class="contents local" id="on-this-page">
+<p class="topic-title">On this page</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#quick-overview" id="id1">Quick overview</a></p></li>
+<li><p><a class="reference internal" href="#declaring-a-schema-with-from-schema" id="id2">Declaring a schema with <code class="docutils literal notranslate"><span class="pre">from_schema</span></code></a></p></li>
+<li><p><a class="reference internal" href="#backend-details" id="id3">Backend details</a></p>
+<ul>
+<li><p><a class="reference internal" href="#memory-mapped-tensors-storage-memmap" id="id4">Memory-mapped tensors (<code class="docutils literal notranslate"><span class="pre">storage=&quot;memmap&quot;</span></code>)</a></p></li>
+<li><p><a class="reference internal" href="#hdf5-storage-h5" id="id5">HDF5 (<code class="docutils literal notranslate"><span class="pre">storage=&quot;h5&quot;</span></code>)</a></p></li>
+<li><p><a class="reference internal" href="#shared-memory-storage-shared" id="id6">Shared memory (<code class="docutils literal notranslate"><span class="pre">storage=&quot;shared&quot;</span></code>)</a></p></li>
+<li><p><a class="reference internal" href="#redis-dragonfly-storage-redis" id="id7">Redis / Dragonfly (<code class="docutils literal notranslate"><span class="pre">storage=&quot;redis&quot;</span></code>)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#pre-allocation-patterns" id="id8">Pre-allocation patterns</a></p></li>
+<li><p><a class="reference internal" href="#non-tensor-data" id="id9">Non-tensor data</a></p></li>
+<li><p><a class="reference internal" href="#typed-wrappers" id="id10">Typed wrappers</a></p>
+<ul>
+<li><p><a class="reference internal" href="#using-typedtensordict" id="id11">Using TypedTensorDict</a></p></li>
+<li><p><a class="reference internal" href="#using-tensorclass" id="id12">Using TensorClass</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#choosing-a-backend" id="id13">Choosing a backend</a></p></li>
+</ul>
+</nav>
+<section id="quick-overview">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Quick overview</a><a class="headerlink" href="#quick-overview" title="Permalink to this heading">¶</a></h2>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 23%" />
+<col style="width: 23%" />
+<col style="width: 17%" />
+<col style="width: 17%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Backend</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">storage=</span></code></p></th>
+<th class="head"><p>Result type</p></th>
+<th class="head"><p>Persistence</p></th>
+<th class="head"><p>Multi-process</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Regular tensors</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a></p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p>Memory-mapped</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code></p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a></p></td>
+<td><p>On disk</p></td>
+<td><p>Yes (NFS)</p></td>
+</tr>
+<tr class="row-even"><td><p>HDF5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code></p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a></p></td>
+<td><p>On disk</p></td>
+<td><p>Limited</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shared memory</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code></p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a></p></td>
+<td><p>No</p></td>
+<td><p>Yes (same node)</p></td>
+</tr>
+<tr class="row-even"><td><p>Redis / Dragonfly</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;redis&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictStore</span></code></p></td>
+<td><p>Server</p></td>
+<td><p>Yes (network)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="declaring-a-schema-with-from-schema">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink">Declaring a schema with <code class="docutils literal notranslate"><span class="pre">from_schema</span></code></a><a class="headerlink" href="#declaring-a-schema-with-from-schema" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.from_schema" title="tensordict.TensorDictBase.from_schema"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_schema()</span></code></a> creates a pre-allocated,
+zero-filled <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> from a dictionary that maps
+field names to <code class="docutils literal notranslate"><span class="pre">(element_shape,</span> <span class="pre">dtype)</span></code> pairs.  The <code class="docutils literal notranslate"><span class="pre">storage</span></code> keyword
+selects which backend is used.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">}</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;obs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([100000, 84, 84, 3])</span>
+</pre></div>
+</div>
+<p>Each element shape is prepended by <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, so a scalar reward with
+<code class="docutils literal notranslate"><span class="pre">batch_size=[N]</span></code> yields a tensor of shape <code class="docutils literal notranslate"><span class="pre">(N,)</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">storage</span></code> keyword selects the backend:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Memory-mapped tensors on disk</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/replay&quot;</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># HDF5 file</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;h5&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;/data/replay.h5&quot;</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Shared memory (single-node multi-process)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Redis server (multi-node)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;redis&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Extra keyword arguments are forwarded to the backend constructor.  See each
+backend section below for details.</p>
+</section>
+<section id="backend-details">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Backend details</a><a class="headerlink" href="#backend-details" title="Permalink to this heading">¶</a></h2>
+<section id="memory-mapped-tensors-storage-memmap">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">Memory-mapped tensors (<code class="docutils literal notranslate"><span class="pre">storage=&quot;memmap&quot;</span></code>)</a><a class="headerlink" href="#memory-mapped-tensors-storage-memmap" title="Permalink to this heading">¶</a></h3>
+<p>Memory-mapped tensors live in per-key <code class="docutils literal notranslate"><span class="pre">.memmap</span></code> files on disk, accessed via
+<a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>.  The OS page cache keeps frequently
+accessed regions in RAM while allowing the dataset to far exceed physical
+memory.</p>
+<p><strong>Pre-allocating from a schema</strong> uses the expand trick internally – each
+value starts as <code class="docutils literal notranslate"><span class="pre">torch.zeros(()).expand(shape)</span></code>, which allocates no memory,
+and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> then creates the on-disk
+files.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span><span class="o">,</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">d</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1_000</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">prefix</span><span class="o">=</span><span class="n">d</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="c1"># Fill iteratively -- each write goes directly to disk</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Keyword arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">prefix</span></code> – directory where <code class="docutils literal notranslate"><span class="pre">.memmap</span></code> files are stored.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Memory-mapped TensorDicts are locked after creation.  Use
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDictBase.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDictBase.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a> for in-place writes, or index
+assignment (<code class="docutils literal notranslate"><span class="pre">td[i]</span> <span class="pre">=</span> <span class="pre">...</span></code>) which is always in-place.</p>
+</div>
+<p>For more details on the memory-mapped API (<code class="docutils literal notranslate"><span class="pre">memmap_</span></code>, <code class="docutils literal notranslate"><span class="pre">memmap_like</span></code>,
+<code class="docutils literal notranslate"><span class="pre">load_memmap</span></code>, directory layout, <code class="docutils literal notranslate"><span class="pre">meta.json</span></code>), see <a class="reference internal" href="saving.html#saving"><span class="std std-ref">Saving TensorDict and tensorclass objects</span></a>.</p>
+</section>
+<section id="hdf5-storage-h5">
+<h3><a class="toc-backref" href="#id5" role="doc-backlink">HDF5 (<code class="docutils literal notranslate"><span class="pre">storage=&quot;h5&quot;</span></code>)</a><a class="headerlink" href="#hdf5-storage-h5" title="Permalink to this heading">¶</a></h3>
+<p>HDF5-backed storage is provided by <a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>.
+Each tensor becomes an HDF5 dataset; nested keys become HDF5 groups.  This is
+useful for datasets that must be portable and inspectable with standard tools
+like <code class="docutils literal notranslate"><span class="pre">h5py</span></code> or <code class="docutils literal notranslate"><span class="pre">HDFView</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span><span class="o">,</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.h5&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)},</span>
+<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;h5&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">filename</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+</pre></div>
+</div>
+<p>You can also load an existing file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Or convert an in-memory TensorDict:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td_mem</span><span class="p">,</span> <span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Keyword arguments forwarded by <code class="docutils literal notranslate"><span class="pre">from_schema</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">filename</span></code> (required) – path to the HDF5 file.</p></li>
+</ul>
+</section>
+<section id="shared-memory-storage-shared">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">Shared memory (<code class="docutils literal notranslate"><span class="pre">storage=&quot;shared&quot;</span></code>)</a><a class="headerlink" href="#shared-memory-storage-shared" title="Permalink to this heading">¶</a></h3>
+<p>Shared-memory tensors allow zero-copy access across processes on the same
+machine.  This is the fastest option for single-node multi-process setups
+(e.g. multi-worker dataloading).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1000</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>No additional keyword arguments are required.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Shared-memory TensorDicts are locked.  Use in-place operations for writes
+(<code class="docutils literal notranslate"><span class="pre">set_()</span></code>, <code class="docutils literal notranslate"><span class="pre">update_()</span></code>, index assignment).</p>
+</div>
+</section>
+<section id="redis-dragonfly-storage-redis">
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">Redis / Dragonfly (<code class="docutils literal notranslate"><span class="pre">storage=&quot;redis&quot;</span></code>)</a><a class="headerlink" href="#redis-dragonfly-storage-redis" title="Permalink to this heading">¶</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictStore</span></code> stores tensors as raw bytes on a
+Redis-compatible server (Redis, Dragonfly, KeyDB).  This enables cross-node
+shared data stores and replay buffers without a shared file system.</p>
+<p><code class="docutils literal notranslate"><span class="pre">from_schema</span></code> on the base class delegates to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">from_schema()</span></code>, which uses
+server-side <code class="docutils literal notranslate"><span class="pre">SETRANGE</span></code> to pre-allocate storage without sending tensor data
+through Python:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;redis&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Keyword arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">host</span></code> – server hostname (default <code class="docutils literal notranslate"><span class="pre">&quot;localhost&quot;</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">port</span></code> – server port (default <code class="docutils literal notranslate"><span class="pre">6379</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">db</span></code> – database number (default <code class="docutils literal notranslate"><span class="pre">0</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">unix_socket_path</span></code> – Unix domain socket (alternative to host/port).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prefix</span></code> – key namespace (default <code class="docutils literal notranslate"><span class="pre">&quot;tensordict&quot;</span></code>).</p></li>
+</ul>
+<p>You can also connect to an existing store from another process:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_store</span><span class="p">(</span><span class="n">td_id</span><span class="o">=</span><span class="s2">&quot;&lt;id&gt;&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="pre-allocation-patterns">
+<h2><a class="toc-backref" href="#id8" role="doc-backlink">Pre-allocation patterns</a><a class="headerlink" href="#pre-allocation-patterns" title="Permalink to this heading">¶</a></h2>
+<p>Pre-allocating large storage and filling it iteratively avoids allocating the
+full dataset in process memory.  All backends support the same pattern via
+<code class="docutils literal notranslate"><span class="pre">from_schema</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;image&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1_000_000</span><span class="p">],</span> <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/buffer&quot;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data_stream</span><span class="p">):</span>  
+<span class="gp">... </span>    <span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">image</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]</span>
+<span class="gp">... </span>    <span class="p">)</span>
+</pre></div>
+</div>
+<p>The expand trick used internally ensures that no temporary allocation happens
+regardless of dataset size.</p>
+<p>For memory-mapped storage you can also pre-allocate manually using
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datum</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>                   <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">datum</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">)</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="s2">&quot;/data/buffer&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="non-tensor-data">
+<h2><a class="toc-backref" href="#id9" role="doc-backlink">Non-tensor data</a><a class="headerlink" href="#non-tensor-data" title="Permalink to this heading">¶</a></h2>
+<p>Each backend stores non-tensor values (strings, Python objects) using its
+own mechanism:</p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 40%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Backend</p></th>
+<th class="head"><p>Serialisation</p></th>
+<th class="head"><p>Access pattern</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>memmap</p></td>
+<td><p>JSON in <code class="docutils literal notranslate"><span class="pre">meta.json</span></code>; pickle fallback (<code class="docutils literal notranslate"><span class="pre">other.pickle</span></code>)</p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> wrapper</p></td>
+</tr>
+<tr class="row-odd"><td><p>HDF5</p></td>
+<td><p>HDF5 string/opaque datasets</p></td>
+<td><p><a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> wrapper on read</p></td>
+</tr>
+<tr class="row-even"><td><p>Redis</p></td>
+<td><p>JSON string or pickle bytes in Redis <code class="docutils literal notranslate"><span class="pre">SET</span></code></p></td>
+<td><p>Transparent via metadata hash</p></td>
+</tr>
+</tbody>
+</table>
+<p>For <strong>memmap</strong>, non-tensor data is serialised via tensorclass’s
+<a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">NonTensorData</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mm</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/tmp/example&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/tmp/example&quot;</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>  
+<span class="go">&#39;cat&#39;</span>
+</pre></div>
+</div>
+<p>For <strong>HDF5</strong>, non-tensor values are stored as HDF5 string or opaque datasets:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s2">&quot;data.h5&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+</pre></div>
+</div>
+<p>For <strong>Redis</strong>, non-tensor data is transparently serialised as JSON (falling
+back to pickle for non-JSON-serialisable objects):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+</pre></div>
+</div>
+</section>
+<section id="typed-wrappers">
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">Typed wrappers</a><a class="headerlink" href="#typed-wrappers" title="Permalink to this heading">¶</a></h2>
+<p>Both <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>
+can wrap any backend via <code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>.  Combined with <code class="docutils literal notranslate"><span class="pre">from_schema</span></code>,
+this gives you typed, pre-allocated, backend-agnostic data stores.</p>
+<section id="using-typedtensordict">
+<h3><a class="toc-backref" href="#id11" role="doc-backlink">Using TypedTensorDict</a><a class="headerlink" href="#using-typedtensordict" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TypedTensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Replay</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="p">:</span> <span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="p">:</span> <span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="n">Tensor</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pre-allocate with any backend, then wrap</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10_000</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/replay&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span> <span class="o">=</span> <span class="n">Replay</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span><span class="o">.</span><span class="n">obs</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([10000, 4])</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Fill iteratively with full type-safety</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Replay</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">action</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="using-tensorclass">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">Using TensorClass</a><a class="headerlink" href="#using-tensorclass" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Transition</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="p">:</span> <span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="p">:</span> <span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="nb">float</span>  <span class="c1"># non-tensor field</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10_000</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tc</span> <span class="o">=</span> <span class="n">Transition</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">non_tensordict</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">})</span>  
+</pre></div>
+</div>
+<p>Unlike <a class="reference internal" href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a>
+supports non-tensor fields (strings, numbers, arbitrary Python objects).
+See <a class="reference internal" href="compatibility.html#compat-redis-prealloc"><span class="std std-ref">the compatibility page</span></a> for the full
+backend-support matrix.</p>
+</section>
+</section>
+<section id="choosing-a-backend">
+<h2><a class="toc-backref" href="#id13" role="doc-backlink">Choosing a backend</a><a class="headerlink" href="#choosing-a-backend" title="Permalink to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Memory-mapped</strong> – best for large on-disk datasets where you want
+memory-efficient random access (replay buffers, offline RL, large
+datasets that exceed RAM).  Works across processes via NFS.</p></li>
+<li><p><strong>HDF5</strong> – best when you need a portable, self-describing file format
+inspectable with standard tools.  Good for archival.</p></li>
+<li><p><strong>Shared memory</strong> – best for single-node multi-process workloads
+(multi-worker dataloading, parallel envs).  Fastest IPC but data does not
+persist.</p></li>
+<li><p><strong>Redis</strong> – best for multi-node shared data stores (distributed replay
+buffers, parameter servers).  Requires a running server.</p></li>
+<li><p><strong>Plain tensors</strong> – best for small datasets that fit in memory.  No
+overhead, full PyTorch API.</p></li>
+</ul>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="printing.html" class="btn btn-neutral float-right" title="Printing and Display" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="saving.html" class="btn btn-neutral" title="Saving TensorDict and tensorclass objects" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Storing large heterogeneous data</a><ul>
+<li><a class="reference internal" href="#quick-overview">Quick overview</a></li>
+<li><a class="reference internal" href="#declaring-a-schema-with-from-schema">Declaring a schema with <code class="docutils literal notranslate"><span class="pre">from_schema</span></code></a></li>
+<li><a class="reference internal" href="#backend-details">Backend details</a><ul>
+<li><a class="reference internal" href="#memory-mapped-tensors-storage-memmap">Memory-mapped tensors (<code class="docutils literal notranslate"><span class="pre">storage=&quot;memmap&quot;</span></code>)</a></li>
+<li><a class="reference internal" href="#hdf5-storage-h5">HDF5 (<code class="docutils literal notranslate"><span class="pre">storage=&quot;h5&quot;</span></code>)</a></li>
+<li><a class="reference internal" href="#shared-memory-storage-shared">Shared memory (<code class="docutils literal notranslate"><span class="pre">storage=&quot;shared&quot;</span></code>)</a></li>
+<li><a class="reference internal" href="#redis-dragonfly-storage-redis">Redis / Dragonfly (<code class="docutils literal notranslate"><span class="pre">storage=&quot;redis&quot;</span></code>)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#pre-allocation-patterns">Pre-allocation patterns</a></li>
+<li><a class="reference internal" href="#non-tensor-data">Non-tensor data</a></li>
+<li><a class="reference internal" href="#typed-wrappers">Typed wrappers</a><ul>
+<li><a class="reference internal" href="#using-typedtensordict">Using TypedTensorDict</a></li>
+<li><a class="reference internal" href="#using-tensorclass">Using TensorClass</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#choosing-a-backend">Choosing a backend</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+         <script src="_static/jquery.js"></script>
+         <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="_static/doctools.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title" class="active">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

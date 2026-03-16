@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3904+g173c2bda2.d20260316)
+                  main (0.11.0.dev3909+g4df757c2b.d20260316)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
 </ul>
@@ -675,19 +676,19 @@ like <a class="reference external" href="https://docs.pytorch.org/docs/stable/ge
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[3, 0, 0, 0],
-        [0, 2, 1, 3],
-        [1, 2, 2, 1]])
+ tensor([[0, 1, 3, 0],
+        [3, 1, 1, 0],
+        [0, 0, 0, 3]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.3351, 0.8838, 0.9727, 0.4227],
-        [0.4528, 0.2436, 0.5972, 0.9636],
-        [0.3352, 0.6955, 0.0208, 0.5882]])
+ tensor([[0.4721, 0.0218, 0.0299, 0.1819],
+        [0.7103, 0.7584, 0.9325, 0.3652],
+        [0.6122, 0.6145, 0.6529, 0.6758]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.4227, 0.3351, 0.3351, 0.3351],
-        [0.4528, 0.5972, 0.2436, 0.9636],
-        [0.6955, 0.0208, 0.0208, 0.6955]])
+ tensor([[0.4721, 0.0218, 0.1819, 0.4721],
+        [0.3652, 0.7584, 0.7584, 0.7103],
+        [0.6122, 0.6122, 0.6122, 0.6758]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

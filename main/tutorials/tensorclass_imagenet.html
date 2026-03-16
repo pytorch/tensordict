@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3904+g173c2bda2.d20260316)
+                  main (0.11.0.dev3909+g4df757c2b.d20260316)
                 </div>
               
             
@@ -279,6 +279,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
 </ul>
@@ -742,7 +743,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 231.65it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 239.00it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -791,10 +792,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 709.22it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 709.32it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 167.28it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 184.93it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -818,7 +819,8 @@ ImageNetData(
     batch_size=torch.Size([64]),
     device=None,
     is_shared=False)
-ImageNetData(
+
+100%|██████████| 153/153 [00:00&lt;00:00, 388.23it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -831,14 +833,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 315.75it/s]
-One iteration over dataloader done! Rate: 887.9790 fps, time:  0.2478s
-One iteration over tensorclass dataloader done! Rate: 1895.6021 fps, time:  0.1161s
-One iteration over val data done! Rate: 524.4776 fps, time:  0.2460s
-One iteration over tensorclass val data done! Rate: 19766.3835 fps, time:  0.0065s
+100%|██████████| 153/153 [00:00&lt;00:00, 320.37it/s]
+One iteration over dataloader done! Rate: 899.3818 fps, time:  0.2446s
+One iteration over tensorclass dataloader done! Rate: 1665.5900 fps, time:  0.1321s
+One iteration over val data done! Rate: 539.2125 fps, time:  0.2392s
+One iteration over tensorclass val data done! Rate: 20535.3429 fps, time:  0.0063s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.679 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.676 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>
