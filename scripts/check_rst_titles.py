@@ -139,7 +139,7 @@ def main() -> int:
     for path in sorted(paths):
         for lineno, title, title_len, marker_len in handler(path):
             verb = "fixed" if args.fix else "found"
-            print(
+            print(  # noqa: T201
                 f"{path}:{lineno}: title/underline length mismatch ({verb}): "
                 f"title {title_len!r} != marker {marker_len!r}  "
                 f"({title!r})"
