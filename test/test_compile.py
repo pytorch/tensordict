@@ -26,6 +26,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictParams,
+    TypedTensorDict,
 )
 
 from tensordict._unbatched import UnbatchedTensor
@@ -521,6 +522,334 @@ class TestTD:
     #     _ = locked_op_c(td)
     #     td_op_c = locked_op_c(td)
     #     assert (td_op == td_op_c).all()
+
+
+class _TTDState(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", [None, "reduce-overhead"])
+class TestTTD:
+    def test_tensor_output(self, mode):
+        def add_one(td):
+            return td["a"] + 1
+
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        assert (add_one(data) == 1).all()
+        assert (add_one_c(data) == 1).all()
+        assert (add_one_c(data + 1) == 2).all()
+
+    def test_tensor_output_attr(self, mode):
+        def add_one(td):
+            return td.a + 1
+
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        assert (add_one(data) == 1).all()
+        assert (add_one_c(data) == 1).all()
+
+    def test_construct(self, mode):
+        def fn(a, b):
+            td = _TTDState(a=a, b=b, batch_size=[3])
+            return td["a"] + td["b"]
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        a = torch.randn(3)
+        b = torch.randn(3)
+        torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
+    def test_td_output(self, mode):
+        def add_one(td):
+            td["a"] = td["a"] + 1
+            return td
+
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        assert add_one(data.clone())["a"].eq(1).all()
+        assert add_one_c(data.clone())["a"].eq(1).all()
+        assert add_one_c(data) is data
+
+    @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
+    def test_index(self, index_type, mode):
+        if index_type == "slice":
+
+            def index_fn(td):
+                return td[:2] + 1
+
+        elif index_type == "tensor":
+
+            def index_fn(td):
+                return td[torch.tensor([0, 1])] + 1
+
+        elif index_type == "int":
+
+            def index_fn(td):
+                return td[0] + 1
+
+        index_fn_c = torch.compile(index_fn, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
+        if index_type == "int":
+            assert (index_fn_c(data)["a"] == 1).all()
+            assert index_fn_c(data).shape == torch.Size([])
+        else:
+            assert (index_fn_c(data)["a"] == torch.arange(1, 3)).all()
+            assert index_fn_c(data).shape == torch.Size([2])
+
+    def test_stack(self, mode):
+        def stack_tds(td0, td1):
+            return torch.stack([td0, td1])
+
+        stack_tds_c = torch.compile(stack_tds, fullgraph=True, mode=mode)
+        d0 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
+        d1 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
+        assert (stack_tds(d0, d1) == stack_tds_c(d0, d1)).all()
+
+    def test_cat(self, mode):
+        def cat_tds(td0, td1):
+            return torch.cat([td0, td1])
+
+        cat_tds_c = torch.compile(cat_tds, fullgraph=True, mode=mode)
+        d0 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
+        d1 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
+        assert (cat_tds(d0, d1) == cat_tds_c(d0, d1)).all()
+
+    def test_reshape(self, mode):
+        def reshape(td):
+            return td.reshape(2, 2)
+
+        reshape_c = torch.compile(reshape, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
+        data_reshape = reshape(data)
+        _ = reshape_c(data)
+        data_reshape_c = reshape_c(data)
+        assert (data_reshape == data_reshape_c).all()
+
+    def test_view(self, mode):
+        def view(td):
+            return td.view(2, 2).clear_refs_for_compile_()
+
+        view_c = torch.compile(view, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
+        data_view = view(data)
+        _ = view_c(data)
+        data_view_c = view_c(data)
+        assert (data_view == data_view_c).all()
+
+    def test_transpose(self, mode):
+        def transpose(td):
+            return td.transpose(0, 1).clear_refs_for_compile_()
+
+        transpose_c = torch.compile(transpose, fullgraph=True, mode=mode)
+        data = _TTDState(
+            a=torch.arange(6).view(2, 3),
+            b=torch.arange(6).view(2, 3),
+            batch_size=[2, 3],
+        )
+        data_t = transpose(data)
+        _ = transpose_c(data)
+        data_t_c = transpose_c(data)
+        assert (data_t == data_t_c).all()
+
+    def test_unbind(self, mode):
+        def unbind(td):
+            return td.unbind(0)
+
+        unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
+        assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    def test_items(self, mode):
+        def items(td):
+            keys, vals = zip(*td.items(True, True))
+            return keys, vals
+
+        items_c = torch.compile(items, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+        assert keys == keys_c
+
+        def assert_eq(x, y):
+            assert (x == y).all()
+
+        torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
+
+    @pytest.mark.parametrize("recurse", [True, False])
+    @pytest.mark.parametrize("lock", [True, False])
+    def test_clone(self, recurse, lock, mode):
+        def clone(td):
+            return td.clone(recurse=recurse)
+
+        clone_c = torch.compile(clone, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        if lock:
+            data = data.lock_()
+        data_c = clone(data)
+        _ = clone_c(data)
+        data_c_c = clone_c(data)
+        assert_close(data_c, data_c_c)
+        assert clone_c(data) is not data
+        if recurse:
+            assert clone_c(data)["a"] is not data["a"]
+        else:
+            assert clone_c(data)["a"] is data["a"]
+
+    def test_flatten_keys(self, mode):
+        def flatten_keys(td):
+            return td.flatten_keys().clear_refs_for_compile_()
+
+        flatten_keys_c = torch.compile(flatten_keys, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        data_f = flatten_keys(data)
+        _ = flatten_keys_c(data)
+        data_f_c = flatten_keys_c(data)
+        assert_close(data_f, data_f_c)
+
+    def test_pop(self, mode):
+        def pop_a(td):
+            return td.pop("a")
+
+        pop_a_c = torch.compile(pop_a, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.tensor(1), b=torch.tensor(2), batch_size=[])
+        result = pop_a(data.clone())
+        assert result == 1
+        result_c = pop_a_c(data.clone())
+        assert result_c == 1
+
+    def test_select(self, mode):
+        def select_a(td):
+            return td.select("a", strict=False)
+
+        select_a_c = torch.compile(select_a, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.tensor(1), b=torch.tensor(2), batch_size=[])
+        result_c = select_a_c(data)
+        assert "a" in result_c.keys()
+        assert "b" not in result_c.keys()
+
+    def test_exclude(self, mode):
+        def exclude_b(td):
+            return td.exclude("b")
+
+        exclude_b_c = torch.compile(exclude_b, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.tensor(1), b=torch.tensor(2), batch_size=[])
+        result_c = exclude_b_c(data)
+        assert "a" in result_c.keys()
+        assert "b" not in result_c.keys()
+
+    def test_all_any(self, mode):
+        def call_all(td):
+            return td.all(dim=0)
+
+        def call_any(td):
+            return td.any(dim=0)
+
+        call_all_c = torch.compile(call_all, fullgraph=True, mode=mode)
+        call_any_c = torch.compile(call_any, fullgraph=True, mode=mode)
+        data = _TTDState(
+            a=torch.tensor([[True, False], [True, True]]),
+            b=torch.tensor([[False, False], [True, True]]),
+            batch_size=[2, 2],
+        )
+        result_all = call_all(data)
+        result_all_c = call_all_c(data)
+        assert (result_all["a"] == result_all_c["a"]).all()
+
+        result_any = call_any(data)
+        result_any_c = call_any_c(data)
+        assert (result_any["a"] == result_any_c["a"]).all()
+
+    def test_squeeze_unsqueeze(self, mode):
+        def call_squeeze(td):
+            return td.squeeze(0)
+
+        def call_unsqueeze(td):
+            return td.unsqueeze(0)
+
+        call_squeeze_c = torch.compile(call_squeeze, fullgraph=True, mode=mode)
+        call_unsqueeze_c = torch.compile(call_unsqueeze, fullgraph=True, mode=mode)
+        data = _TTDState(
+            a=torch.randn(1, 3), b=torch.randn(1, 3), batch_size=[1, 3]
+        )
+        result_squeeze_c = call_squeeze_c(data)
+        assert result_squeeze_c.shape == torch.Size([3])
+        result_unsqueeze_c = call_unsqueeze_c(result_squeeze_c)
+        assert result_unsqueeze_c.shape == torch.Size([1, 3])
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="cuda required to test device casting"
+    )
+    @pytest.mark.parametrize("has_device", [True, False])
+    def test_to(self, has_device, mode):
+        device = f"{cur_device}:0"
+
+        def test_to_device(td):
+            return td.to(device)
+
+        data = _TTDState(
+            a=torch.randn(3),
+            b=torch.randn(3),
+            batch_size=[3],
+            device="cpu" if has_device else None,
+        )
+        test_to_device_c = torch.compile(test_to_device, fullgraph=True, mode=mode)
+        _ = test_to_device_c(data)
+        td_device_c = test_to_device_c(data)
+        assert td_device_c.batch_size == data.batch_size
+        assert td_device_c.device == torch.device(device)
+
+    @pytest.mark.skipif(
+        is_npu_available(),
+        reason="torch.device in torch.compile is not supported on NPU currently.",
+    )
+    def test_lock(self, mode):
+        def locked_op(td):
+            td2 = td + 1
+            td3 = td + td2
+            return td3.clear_refs_for_compile_()
+
+        data = _TTDState(
+            a=torch.randn(3),
+            b=torch.randn(3),
+            batch_size=[3],
+            lock=True,
+        )
+        locked_op_c = torch.compile(locked_op, fullgraph=True, mode=mode)
+        td_op = locked_op(data)
+        with (
+            pytest.warns(UserWarning, match="Using lock_")
+            if mode is None
+            else contextlib.nullcontext()
+        ):
+            _ = locked_op_c(data)
+        td_op_c = locked_op_c(data)
+        assert (td_op == td_op_c).all()
+
+    def test_arithmetic(self, mode):
+        def add_one(td):
+            return td + 1
+
+        data = _TTDState(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        eager = add_one(data.clone())
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
+        compiled = add_one_c(data.clone())
+        assert (eager["a"] == compiled["a"]).all()
+        assert (eager["b"] == compiled["b"]).all()
+
+    def test_arithmetic_self(self, mode):
+        def add_self(td):
+            return td + td
+
+        data = _TTDState(a=torch.ones(3), b=torch.ones(3), batch_size=[3])
+        eager = add_self(data.clone())
+        add_self_c = torch.compile(add_self, fullgraph=True, mode=mode)
+        compiled = add_self_c(data.clone())
+        assert (eager["a"] == compiled["a"]).all()
+        assert (eager["b"] == compiled["b"]).all()
 
 
 @tensorclass

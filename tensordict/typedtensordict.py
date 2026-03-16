@@ -10,8 +10,9 @@ from collections.abc import Sequence
 from typing import Any, ClassVar
 
 import torch
+from tensordict._pytree import _register_td_node
 from tensordict._td import TensorDict
-from tensordict.base import NO_DEFAULT
+from tensordict.base import NO_DEFAULT, _register_tensor_class
 
 try:
     # Python 3.11+ (PEP 681)
@@ -171,19 +172,19 @@ def _make_init(cls: type) -> callable:
         lock: bool = False,
         **kwargs: Any,
     ) -> None:
-        missing = required_keys - kwargs.keys()
+        missing = {k for k in required_keys if k not in kwargs}
         if missing:
             missing_str = ", ".join(sorted(missing))
             raise TypeError(
                 f"{type(self).__name__}() missing required field(s): {missing_str}"
             )
-        source = {k: v for k, v in kwargs.items() if k in expected_keys}
-        extra = {k: v for k, v in kwargs.items() if k not in expected_keys}
+        extra = {k for k in kwargs if k not in expected_keys}
         if extra:
             extra_str = ", ".join(sorted(extra))
             raise TypeError(
                 f"{type(self).__name__}() got unexpected field(s): {extra_str}"
             )
+        source = {k: v for k, v in kwargs.items() if k in expected_keys}
         TensorDict.__init__(
             self,
             source=source,
@@ -282,6 +283,12 @@ class _TypedTensorDictMeta(type(TensorDict)):
 
         if "__init__" not in namespace:
             cls.__init__ = _make_init(cls)
+
+        _register_tensor_class(cls)
+        try:
+            _register_td_node(cls)
+        except ValueError:
+            pass
 
         return cls
 
