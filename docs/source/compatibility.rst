@@ -15,7 +15,7 @@ Architecture overview
    TensorCollection
    ├── TensorDictBase
    │   ├── TensorDict                 (in-memory)
-   │   │   └── TypedTensorDict        (typed fields, IS-A TensorDict)
+   │   ├── TypedTensorDict            (typed fields, wraps any TensorDictBase)
    │   ├── PersistentTensorDict       (HDF5-backed)
    │   ├── TensorDictStore            (Redis / Dragonfly / KeyDB)
    │   └── LazyStackedTensorDict      (lazy stack of heterogeneous TDs)
@@ -26,8 +26,11 @@ Two patterns exist for adding typed field declarations:
 
 - **TensorClass** wraps any ``TensorDictBase`` via ``from_tensordict(td)``.
   It delegates all storage to the wrapped object.
-- **TypedTensorDict** *is* a ``TensorDict``.  It stores data in-memory and
-  interoperates with other backends through conversion or stacking.
+- **TypedTensorDict** wraps any ``TensorDictBase`` via ``from_tensordict(td)``,
+  similar to ``TensorClass``.  Direct construction creates a ``TensorDict``
+  internally.  Unlike ``TensorClass``, it inherits from ``TensorDictBase``
+  directly, supports ``**state`` spreading natively, and uses standard
+  Python inheritance for schema composition.
 
 TensorClass + backends
 ----------------------
@@ -205,109 +208,162 @@ enforce schemas, but they compose without conflict:
 TypedTensorDict + backends
 --------------------------
 
-``TypedTensorDict`` is a ``TensorDict`` subclass.  It stores data in-memory
-but interoperates with other backends through conversion or stacking.
+``TypedTensorDict.from_tensordict(td)`` accepts any ``TensorDictBase`` subclass,
+just like ``TensorClass``.  The backend is stored live (no copy) -- mutations
+through the ``TypedTensorDict`` go directly to the underlying backend.
+
+.. code-block:: python
+
+   from tensordict import TypedTensorDict
+   from torch import Tensor
+
+   class State(TypedTensorDict):
+       x: Tensor
+       y: Tensor
+
+   state = State.from_tensordict(some_backend)
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 12 12 12 12 12
+   :widths: 22 10 10 10 10 10 10 10 10
 
-   * - Pattern
+   * - Backend
      - Build
      - Read
      - Write
      - Index
+     - Clone
      - Stack
-   * - Direct construction
+     - Iter
+     - Update
+   * - ``TensorDict``
      - yes
      - yes
      - yes
      - yes
      - yes
-   * - From H5 (materialise then construct)
+     - yes
+     - yes
+     - yes
+   * - ``PersistentTensorDict`` (H5)
      - yes
      - yes
      - yes
      - yes
      - yes
-   * - From Redis (materialise then construct)
+     - yes
+     - yes
+     - yes
+   * - ``TensorDictStore`` (Redis)
      - yes
      - yes
      - yes
      - yes
      - yes
-   * - From lazy stack (materialise then construct)
+     - yes
+     - yes
+     - yes
+   * - ``LazyStackedTensorDict``
      - yes
      - yes
      - yes
      - yes
      - yes
-   * - ``torch.stack`` (dense)
      - yes
      - yes
      - yes
-     - yes
-     - --
-   * - ``LazyStackedTensorDict`` of TTDs
-     - yes
-     - yes
-     - yes
-     - yes
-     - --
-   * - ``memmap_()``
+   * - ``TensorDict`` (memmap)
      - yes
      - yes
      - set\_()
      - yes
      - yes
-   * - To H5 (``PersistentTensorDict.from_dict``)
      - yes
      - yes
-     - H5 rules
-     - yes
-     - --
-   * - To Redis (``TensorDictStore.from_tensordict``)
-     - yes
-     - yes
-     - yes
-     - yes
-     - --
+     - update\_()
 
-Constructing TypedTensorDict from other backends
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. note::
 
-Since ``TypedTensorDict`` is an in-memory ``TensorDict``, loading data from a
-remote or persistent backend requires materialising the data first:
+   Memory-mapped TensorDicts are locked after ``memmap_()``.  Use
+   ``set_()`` and ``update_()`` for in-place writes instead of attribute
+   assignment or ``update()``.
+
+Building a TypedTensorDict on each backend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**In-memory TensorDict** -- the default (direct construction creates one
+internally):
 
 .. code-block:: python
 
    >>> import torch
-   >>> from tensordict import TypedTensorDict
+   >>> from tensordict import TensorDict, TypedTensorDict
    >>> from torch import Tensor
    >>>
    >>> class State(TypedTensorDict):
    ...     x: Tensor
    ...     y: Tensor
+   >>>
+   >>> state = State(x=torch.randn(4, 3), y=torch.randn(4, 5), batch_size=[4])
+   >>> state.x.shape
+   torch.Size([4, 3])
 
-**From HDF5**:
+**Wrapping an existing TensorDict** via ``from_tensordict`` (zero-copy):
+
+.. code-block:: python
+
+   >>> td = TensorDict(x=torch.randn(4, 3), y=torch.randn(4, 5), batch_size=[4])
+   >>> state = State.from_tensordict(td)
+   >>> state.x.shape  # reads from td
+   torch.Size([4, 3])
+   >>> state.x = torch.ones(4, 3)  # writes to td
+   >>> (td["x"] == 1).all()
+   True
+
+**HDF5 (PersistentTensorDict)**:
 
 .. code-block:: python
 
    >>> from tensordict import PersistentTensorDict
    >>>
    >>> h5 = PersistentTensorDict.from_h5("data.h5")
-   >>> local = h5.to_tensordict()
-   >>> state = State(x=local["x"], y=local["y"], batch_size=local.batch_size)
+   >>> state = State.from_tensordict(h5)
+   >>> state.x.shape  # reads from HDF5
+   torch.Size([4, 3])
 
-**From a lazy stack**:
+**Redis (TensorDictStore)**:
+
+.. code-block:: python
+
+   >>> from tensordict.store import TensorDictStore
+   >>>
+   >>> store = TensorDictStore.from_tensordict(td, host="localhost")
+   >>> state = State.from_tensordict(store)
+   >>> state.x.shape  # fetched from Redis
+   torch.Size([4, 3])
+
+**Lazy stack**:
 
 .. code-block:: python
 
    >>> from tensordict import lazy_stack
    >>>
-   >>> ls = lazy_stack([td1, td2], dim=0)
-   >>> local = ls.to_tensordict()
-   >>> state = State(x=local["x"], y=local["y"], batch_size=local.batch_size)
+   >>> tds = [TensorDict(x=torch.randn(3), y=torch.randn(5)) for _ in range(4)]
+   >>> ls = lazy_stack(tds, dim=0)
+   >>> state = State.from_tensordict(ls)
+   >>> state[0].x.shape
+   torch.Size([3])
+
+**Memory-mapped TensorDict**:
+
+.. code-block:: python
+
+   >>> td_mmap = td.memmap_("/tmp/my_memmap")
+   >>> state = State.from_tensordict(td_mmap)
+   >>> state.x.shape
+   torch.Size([4, 3])
+   >>> # memmap TDs are locked -- use in-place operations:
+   >>> state.set_("x", torch.ones(4, 3))
 
 Stacking TypedTensorDicts
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -334,30 +390,12 @@ Lazy stacking also works.  Indexing a ``LazyStackedTensorDict`` of
    >>> isinstance(ls[0], State)
    True
 
-Saving TypedTensorDict to persistent backends
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Since ``TypedTensorDict`` is a ``TensorDict``, it can be saved to HDF5, Redis,
-or memory-mapped storage directly:
-
-.. code-block:: python
-
-   >>> # To HDF5
-   >>> from tensordict import PersistentTensorDict
-   >>> h5 = PersistentTensorDict.from_dict(state, filename="state.h5")
-   >>>
-   >>> # To memmap
-   >>> state.memmap_("/tmp/state_mmap")
-   >>>
-   >>> # To Redis
-   >>> from tensordict.store import TensorDictStore
-   >>> store = TensorDictStore.from_tensordict(state, host="localhost")
-
 
 TensorClass vs TypedTensorDict
 ------------------------------
 
-Both enforce typed schemas but differ architecturally:
+Both enforce typed schemas and can wrap any ``TensorDictBase`` backend, but
+they differ architecturally:
 
 .. list-table::
    :header-rows: 1
@@ -366,12 +404,12 @@ Both enforce typed schemas but differ architecturally:
    * - Aspect
      - ``TensorClass``
      - ``TypedTensorDict``
-   * - Relationship to ``TensorDict``
-     - Wraps a ``TensorDictBase`` (HAS-A)
-     - Is a ``TensorDict`` (IS-A)
+   * - Relationship to ``TensorDictBase``
+     - Wraps a ``TensorDictBase`` (HAS-A via ``TensorCollection``)
+     - Is a ``TensorDictBase`` (IS-A, delegates to ``_source``)
    * - Can wrap non-TensorDict backends
      - Yes (H5, Redis, lazy stack, etc.)
-     - No (in-memory only; convert first)
+     - Yes (H5, Redis, lazy stack, etc.)
    * - ``**state`` spreading
      - Field-by-field repacking
      - Natively (``MutableMapping``)
@@ -380,15 +418,19 @@ Both enforce typed schemas but differ architecturally:
      - Not supported (tensor-only)
    * - Backend stays live
      - Yes (writes go to original backend)
-     - No (data is in-memory after construction)
+     - Yes (writes go to original backend)
+   * - Python inheritance
+     - Not supported
+     - Supported (standard class hierarchy)
    * - Composable with each other
      - Yes (``TC.from_tensordict(ttd)`` works)
-     - N/A
+     - Yes (``TTD.from_tensordict(tc._tensordict)`` works)
 
-When a ``TensorClass`` wraps a persistent backend (H5, Redis), writes through
-the ``TensorClass`` go directly to that backend.  When a ``TypedTensorDict`` is
-constructed from persistent data, the data is copied into memory.
+Both wrappers keep the backend alive -- mutations through the typed wrapper go
+directly to the underlying storage.  Direct construction (without
+``from_tensordict``) creates an in-memory ``TensorDict`` as the backend.
 
-Choose ``TensorClass`` when you need live access to a remote or on-disk backend
-with typed field access.  Choose ``TypedTensorDict`` when you want typed,
-in-memory state with ``**state`` spreading and standard Python inheritance.
+Choose ``TensorClass`` when you need non-tensor fields or want to integrate
+with existing tensorclass-based APIs.  Choose ``TypedTensorDict`` when you
+want native ``**state`` spreading, standard Python inheritance for schema
+composition, and full ``TensorDictBase`` API compatibility.

@@ -3,11 +3,12 @@
 TypedTensorDict
 ===============
 
-:class:`~tensordict.TypedTensorDict` is a :class:`~tensordict.TensorDict` subclass
-with typed field declarations. It brings ``TypedDict``-style class definitions to
-``TensorDict``: you declare fields as class annotations and get typed construction,
-typed attribute access, inheritance, ``NotRequired`` fields, and ``**state`` spreading
--- all while keeping every ``TensorDict`` operation available.
+:class:`~tensordict.TypedTensorDict` is a :class:`~tensordict.TensorDictBase` subclass
+with typed field declarations and backend composition.  It brings ``TypedDict``-style
+class definitions to ``TensorDict``: you declare fields as class annotations and get
+typed construction, typed attribute access, inheritance, ``NotRequired`` fields,
+``**state`` spreading, and the ability to wrap any ``TensorDictBase`` backend
+(H5, Redis, lazy stacks, etc.) via ``from_tensordict``.
 
 .. code-block:: python
 
@@ -54,9 +55,9 @@ Typed pipelines often build up state one step at a time:
 
 Each stage inherits the previous one's fields and adds new ones. The
 ``**state`` spreading pattern lets transition functions stay short regardless
-of how many fields the state has. And because ``TypedTensorDict`` **is** a
-``TensorDict``, every operation -- ``.to(device)``, ``.clone()``, slicing,
-``torch.stack``, ``memmap`` -- works at every stage.
+of how many fields the state has. And because ``TypedTensorDict`` inherits
+from ``TensorDictBase``, every operation -- ``.to(device)``, ``.clone()``,
+slicing, ``torch.stack``, ``memmap`` -- works at every stage.
 
 TypedTensorDict vs TensorClass
 ------------------------------
@@ -74,8 +75,11 @@ in the underlying model:
      - ``TypedTensorDict``
      - ``TensorClass``
    * - Inherits from
-     - ``TensorDict`` directly
+     - ``TensorDictBase`` (delegates to ``_source``)
      - ``TensorCollection`` (wraps a ``TensorDict`` internally)
+   * - Can wrap any backend
+     - Yes (``from_tensordict``)
+     - Yes (``from_tensordict``)
    * - Inheritance
      - Standard Python (``class Child(Parent): ...``)
      - Supported via metaclass
@@ -83,7 +87,7 @@ in the underlying model:
      - Works natively (``MutableMapping``)
      - Requires manual field-by-field repacking
    * - ``state["key"]``
-     - Works natively (``TensorDict.__getitem__``)
+     - Works natively (``TensorDictBase.__getitem__``)
      - Raises ``ValueError`` -- use ``state.key`` or ``state.get("key")``
    * - ``NotRequired`` fields
      - Supported
@@ -101,8 +105,9 @@ in the underlying model:
 **When to use which:**
 
 - Use ``TypedTensorDict`` when you have a typed pipeline with progressive state
-  accumulation, need ``**state`` spreading, or want direct ``TensorDict``
-  interop without a wrapper layer.
+  accumulation, need ``**state`` spreading, want standard Python inheritance
+  for schema composition, or need to wrap persistent backends while keeping
+  full ``TensorDictBase`` API compatibility.
 
 - Use ``TensorClass`` when you need non-tensor fields (strings, metadata),
   custom ``__init__`` logic, or your codebase already uses ``@tensorclass``
@@ -208,7 +213,7 @@ Class options
   class Combined(TypedTensorDict["shadow", "frozen"]):
       data: Tensor
 
-- ``"shadow"`` -- Allow field names that clash with ``TensorDict`` attributes.
+- ``"shadow"`` -- Allow field names that clash with ``TensorDictBase`` attributes.
   Without this, conflicting names raise ``AttributeError`` at class definition
   time.
 - ``"frozen"`` -- Lock the ``TensorDict`` after construction (read-only).
@@ -219,10 +224,37 @@ Class options
 Options propagate through inheritance: a subclass of a ``"frozen"`` class is
 also frozen.
 
+Backend composition (``from_tensordict``)
+-----------------------------------------
+
+``TypedTensorDict`` can wrap any ``TensorDictBase`` backend via
+``from_tensordict(td)``.  The backend is stored live (zero-copy); mutations
+through the typed wrapper go directly to the underlying storage:
+
+.. code-block:: python
+
+  >>> from tensordict import TensorDict
+  >>>
+  >>> td = TensorDict(
+  ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
+  ...     batch_size=[5],
+  ... )
+  >>> state = PredictorState.from_tensordict(td)
+  >>> state.eta.shape
+  torch.Size([5, 3])
+  >>> state.eta = torch.ones(5, 3)  # writes to td
+  >>> (td["eta"] == 1).all()
+  True
+
+This works with any backend: ``PersistentTensorDict`` (H5),
+``TensorDictStore`` (Redis), ``LazyStackedTensorDict``, memory-mapped
+``TensorDict``, etc.  See the :doc:`../compatibility` page for full
+details and examples.
+
 TensorDict operations
 ---------------------
 
-Every ``TensorDict`` operation works on ``TypedTensorDict`` instances:
+Every ``TensorDictBase`` operation works on ``TypedTensorDict`` instances:
 
 .. code-block:: python
 
@@ -241,7 +273,7 @@ Every ``TensorDict`` operation works on ``TypedTensorDict`` instances:
 
 This includes ``.memmap()``, ``.apply()``, ``torch.cat``, ``torch.stack``,
 ``.unbind()``, ``.select()``, ``.exclude()``, ``.update()``, and all other
-``TensorDict`` methods.
+``TensorDictBase`` methods.
 
 Type checking
 -------------

@@ -12,7 +12,8 @@ except ImportError:
 
 import pytest
 import torch
-from tensordict import TensorDict, TypedTensorDict
+from tensordict import lazy_stack, TensorDict, TypedTensorDict
+from tensordict.base import TensorDictBase
 from torch import Tensor
 
 # ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ class TestConstruction:
         )
         assert isinstance(state, PredictorState)
         assert isinstance(state, TypedTensorDict)
-        assert isinstance(state, TensorDict)
+        assert isinstance(state, TensorDictBase)
         assert state.batch_size == torch.Size([5])
 
     def test_missing_required_field(self):
@@ -256,7 +257,7 @@ class TestInheritance:
         assert isinstance(obs, ObservedState)
         assert isinstance(obs, PredictorState)
         assert isinstance(obs, TypedTensorDict)
-        assert isinstance(obs, TensorDict)
+        assert isinstance(obs, TensorDictBase)
 
     def test_field_accumulation(self):
         assert PredictorState.__expected_keys__ == frozenset({"eta", "X", "beta"})
@@ -443,7 +444,7 @@ class TestTensorDictOps:
 
 class TestClassOptions:
     def test_shadow_blocks_by_default(self):
-        with pytest.raises(AttributeError, match="shadows a TensorDict attribute"):
+        with pytest.raises(AttributeError, match="shadows a TensorDictBase attribute"):
 
             class Bad(TypedTensorDict):
                 clone: Tensor
@@ -521,8 +522,8 @@ class TestEdgeCases:
         assert len(e.keys()) == 0
 
     def test_data_requires_shadow(self):
-        """'data' shadows a TensorDict attribute and requires shadow=True."""
-        with pytest.raises(AttributeError, match="shadows a TensorDict attribute"):
+        """'data' shadows a TensorDictBase attribute and requires shadow=True."""
+        with pytest.raises(AttributeError, match="shadows a TensorDictBase attribute"):
 
             class WithData(TypedTensorDict):
                 data: Tensor
@@ -567,6 +568,108 @@ class TestEdgeCases:
         )
         r = repr(state)
         assert "PredictorState" in r or "TensorDict" in r
+
+
+# ---------------------------------------------------------------------------
+# from_tensordict
+# ---------------------------------------------------------------------------
+
+
+class TestFromTensordict:
+    def _make_td(self):
+        return TensorDict(
+            {
+                "eta": torch.randn(5, 3),
+                "X": torch.randn(5, 4),
+                "beta": torch.randn(5, 1),
+            },
+            batch_size=[5],
+        )
+
+    def test_from_tensordict_basic(self):
+        td = self._make_td()
+        state = PredictorState.from_tensordict(td)
+        assert isinstance(state, PredictorState)
+        assert isinstance(state, TensorDictBase)
+        assert state.batch_size == torch.Size([5])
+        assert state.eta.shape == (5, 3)
+        assert state._source is td
+
+    def test_from_tensordict_missing_key(self):
+        td = TensorDict({"eta": torch.randn(5, 3)}, batch_size=[5])
+        with pytest.raises(TypeError, match="missing required field"):
+            PredictorState.from_tensordict(td)
+
+    def test_from_tensordict_extra_keys(self):
+        td = TensorDict(
+            {
+                "eta": torch.randn(5, 3),
+                "X": torch.randn(5, 4),
+                "beta": torch.randn(5, 1),
+                "extra": torch.randn(5),
+            },
+            batch_size=[5],
+        )
+        state = PredictorState.from_tensordict(td)
+        assert isinstance(state, PredictorState)
+        assert "extra" in state.keys()
+
+    def test_from_tensordict_lazy_stack(self):
+        td1 = TensorDict(
+            {"eta": torch.randn(3), "X": torch.randn(4), "beta": torch.randn(1)},
+            batch_size=[],
+        )
+        td2 = TensorDict(
+            {"eta": torch.randn(3), "X": torch.randn(4), "beta": torch.randn(1)},
+            batch_size=[],
+        )
+        ls = lazy_stack([td1, td2])
+        state = PredictorState.from_tensordict(ls)
+        assert isinstance(state, PredictorState)
+        assert state.batch_size == torch.Size([2])
+        assert state.eta.shape == (2, 3)
+
+    def test_from_tensordict_memmap(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            td = self._make_td()
+            td_mm = td.memmap_(tmpdir)
+            state = PredictorState.from_tensordict(td_mm)
+            assert isinstance(state, PredictorState)
+            assert state._is_memmap
+            assert state.eta.shape == (5, 3)
+
+    def test_from_tensordict_live_link(self):
+        """Mutations through the TypedTensorDict are reflected in the source."""
+        td = self._make_td()
+        state = PredictorState.from_tensordict(td)
+        new_eta = torch.ones(5, 3)
+        state.eta = new_eta
+        assert (td["eta"] == 1).all()
+
+    def test_from_tensordict_operations(self):
+        td = self._make_td()
+        state = PredictorState.from_tensordict(td)
+
+        cloned = state.clone()
+        assert isinstance(cloned, PredictorState)
+
+        indexed = state[0]
+        assert isinstance(indexed, PredictorState)
+        assert indexed.batch_size == torch.Size([])
+
+        expanded = state.expand(2, 5)
+        assert isinstance(expanded, PredictorState)
+        assert expanded.batch_size == torch.Size([2, 5])
+
+    def test_from_tensordict_stack(self):
+        td = self._make_td()
+        s1 = PredictorState.from_tensordict(td)
+        s2 = PredictorState.from_tensordict(self._make_td())
+        stacked = torch.stack([s1, s2])
+        assert isinstance(stacked, PredictorState)
+        assert stacked.batch_size == torch.Size([2, 5])
 
 
 if __name__ == "__main__":

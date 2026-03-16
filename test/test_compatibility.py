@@ -11,12 +11,11 @@ matrix between typed container wrappers and TensorDictBase backends.
 
 from __future__ import annotations
 
-import tempfile
-
 import pytest
 import torch
 from tensordict import TensorClass, TensorDict, TypedTensorDict
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict.base import TensorDictBase
 from tensordict.persistent import _has_h5 as _has_h5py, PersistentTensorDict
 from tensordict.store._store import _has_redis, TensorDictStore
 from torch import Tensor
@@ -228,7 +227,7 @@ class TestTypedTensorDictCompat:
         td = _make_base_td()
         ttd = MyTTD(a=td["a"], b=td["b"], batch_size=td.batch_size)
         assert isinstance(ttd, MyTTD)
-        assert isinstance(ttd, TensorDict)
+        assert isinstance(ttd, TensorDictBase)
         assert ttd.a.shape == (BATCH, FEAT_A)
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
@@ -390,6 +389,123 @@ class TestTensorClassTypedTDOverlap:
         tc2 = MyTC.from_tensordict(ttd2)
         stacked = torch.stack([tc1, tc2], dim=0)
         assert stacked.batch_size[0] == 2
+
+
+# ===================================================================
+# TypedTensorDict.from_tensordict() wrapping various backends
+# ===================================================================
+
+
+# Backends that TypedTensorDict can wrap via from_tensordict
+TTD_WRAP_BACKENDS_NO_INFRA = ["tensordict", "lazy_stacked"]
+TTD_WRAP_BACKENDS_H5 = ["h5"] if _has_h5py else []
+TTD_WRAP_BACKENDS_REDIS = ["redis"] if _has_redis else []
+TTD_WRAP_BACKENDS_MEMMAP = ["memmap"]
+TTD_WRAP_ALL_BACKENDS = (
+    TTD_WRAP_BACKENDS_NO_INFRA
+    + TTD_WRAP_BACKENDS_MEMMAP
+    + TTD_WRAP_BACKENDS_H5
+    + TTD_WRAP_BACKENDS_REDIS
+)
+
+
+class TestTypedTensorDictWrapping:
+    """Test MyTTD.from_tensordict(backend) for each backend."""
+
+    @pytest.fixture(params=TTD_WRAP_ALL_BACKENDS)
+    def backend_td(self, request, tmp_path):
+        return request.param, _get_backend(request.param, tmp_path)
+
+    def test_construction(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        assert isinstance(ttd, MyTTD)
+        assert isinstance(ttd, TensorDictBase)
+        assert ttd.batch_size[0] == BATCH
+
+    def test_attr_read(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        assert ttd.a.shape[-1] == FEAT_A
+        assert ttd.b.shape[-1] == FEAT_B
+
+    def test_attr_write(self, backend_td):
+        name, td = backend_td
+        if name == "memmap":
+            pytest.skip("memmap TDs are locked; use set_() for in-place writes")
+        ttd = MyTTD.from_tensordict(td)
+        ttd.a = torch.ones_like(ttd.a)
+        assert (ttd.a == 1).all()
+
+    def test_attr_write_inplace_memmap(self, tmp_path):
+        td = _make_memmap(tmp_path)
+        ttd = MyTTD.from_tensordict(td)
+        ttd.set_("a", torch.ones_like(ttd.a))
+        assert (ttd.a == 1).all()
+
+    def test_index(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        item = ttd[0]
+        assert isinstance(item, MyTTD)
+        assert item.a.shape[-1] == FEAT_A
+
+    def test_slice(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        sliced = ttd[0:2]
+        assert isinstance(sliced, MyTTD)
+        assert sliced.batch_size[0] == 2
+
+    def test_clone(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        cloned = ttd.clone()
+        assert isinstance(cloned, MyTTD)
+        assert cloned.a.shape == ttd.a.shape
+
+    def test_update(self, backend_td):
+        name, td = backend_td
+        if name == "memmap":
+            pytest.skip("memmap TDs are locked; use update_() for in-place writes")
+        ttd = MyTTD.from_tensordict(td)
+        ttd.update({"a": torch.ones(BATCH, FEAT_A)})
+        assert (ttd.a == 1).all()
+
+    def test_update_inplace_memmap(self, tmp_path):
+        td = _make_memmap(tmp_path)
+        ttd = MyTTD.from_tensordict(td)
+        ttd.update_({"a": torch.ones(BATCH, FEAT_A)})
+        assert (ttd.a == 1).all()
+
+    def test_stack(self, backend_td):
+        name, td = backend_td
+        ttd1 = MyTTD.from_tensordict(td)
+        td2 = (
+            _get_backend(name, None)
+            if name not in ("h5", "memmap")
+            else _make_tensordict()
+        )
+        ttd2 = MyTTD.from_tensordict(td2)
+        stacked = torch.stack([ttd1, ttd2])
+        assert isinstance(stacked, MyTTD)
+        assert stacked.batch_size[0] == 2
+
+    def test_live_link(self, backend_td):
+        """Mutations through TypedTensorDict reflect in the original backend."""
+        name, td = backend_td
+        if name == "memmap":
+            pytest.skip("memmap TDs are locked")
+        ttd = MyTTD.from_tensordict(td)
+        ttd.a = torch.ones_like(ttd.a)
+        assert (td["a"] == 1).all()
+
+    def test_iterate(self, backend_td):
+        name, td = backend_td
+        ttd = MyTTD.from_tensordict(td)
+        items = list(ttd)
+        assert len(items) == BATCH
+        assert isinstance(items[0], MyTTD)
 
 
 if __name__ == "__main__":
