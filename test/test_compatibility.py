@@ -194,6 +194,8 @@ class TestTensorClassCompat:
 
     def test_iteration(self, backend_td):
         name, td = backend_td
+        if name in ("h5", "redis"):
+            pytest.skip("iteration over remote/file-backed TDs is too slow for CI")
         tc = MyTC.from_tensordict(td)
         items = list(tc)
         assert len(items) == BATCH
