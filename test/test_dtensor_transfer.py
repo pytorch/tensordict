@@ -23,7 +23,6 @@ from tensordict._dtensor import (
     _intersect_slices,
     _ShardSpec,
     _slice_relative_to,
-    _TransferPlan,
     execute_transfer_plan,
     ShardingDescriptor,
 )
@@ -171,15 +170,11 @@ class TestComputeLocalSlices:
     def test_2d_shard_shard(self):
         # shape [100, 200], mesh (2, 4), [Shard(0), Shard(1)]
         # rank (0, 0) -> rows 0-50, cols 0-50
-        sl = _compute_local_slices(
-            [100, 200], [2, 4], [_Shard(0), _Shard(1)], [0, 0]
-        )
+        sl = _compute_local_slices([100, 200], [2, 4], [_Shard(0), _Shard(1)], [0, 0])
         assert sl == (slice(0, 50), slice(0, 50))
 
         # rank (1, 3) -> rows 50-100, cols 150-200
-        sl = _compute_local_slices(
-            [100, 200], [2, 4], [_Shard(0), _Shard(1)], [1, 3]
-        )
+        sl = _compute_local_slices([100, 200], [2, 4], [_Shard(0), _Shard(1)], [1, 3])
         assert sl == (slice(50, 100), slice(150, 200))
 
     def test_2d_shard_replicate(self):
@@ -209,9 +204,7 @@ class TestComputeAllLocalSlices:
         assert specs[1].rank == 20
 
     def test_2d_mesh(self):
-        specs = _compute_all_local_slices(
-            [100, 200], [2, 2], [_Shard(0), _Shard(1)]
-        )
+        specs = _compute_all_local_slices([100, 200], [2, 2], [_Shard(0), _Shard(1)])
         assert len(specs) == 4
         # rank 0 = coords (0,0), rank 1 = coords (0,1), etc.
         assert specs[0].slices == (slice(0, 50), slice(0, 100))
@@ -540,8 +533,7 @@ class TestTransferPlan:
         )
         # src ranks 2,3 have empty shards -> no transfers from them
         transfers_with_data = [
-            t for t in plan.transfers
-            if all(s.start < s.stop for s in t.global_slices)
+            t for t in plan.transfers if all(s.start < s.stop for s in t.global_slices)
         ]
         assert len(transfers_with_data) == 2
         src_ranks = sorted(t.src_rank for t in transfers_with_data)
@@ -575,9 +567,9 @@ class TestTransferPlanSimulation:
         # Verify
         expected = list(full.chunk(2))
         for i in range(2):
-            assert torch.equal(dst_shards[i], expected[i]), (
-                f"dst rank {i}: expected {expected[i]}, got {dst_shards[i]}"
-            )
+            assert torch.equal(
+                dst_shards[i], expected[i]
+            ), f"dst rank {i}: expected {expected[i]}, got {dst_shards[i]}"
 
     def test_2d_to_1d_simulation(self):
         """Simulate [Shard(0), Shard(1)] on 2x2 -> [Shard(0)] on 2."""
@@ -587,8 +579,8 @@ class TestTransferPlanSimulation:
         top = full[:5]
         bottom = full[5:]
         src_shards = {
-            0: top[:, :10],   # (0-5, 0-10)
-            1: top[:, 10:],   # (0-5, 10-20)
+            0: top[:, :10],  # (0-5, 0-10)
+            1: top[:, 10:],  # (0-5, 10-20)
             2: bottom[:, :10],  # (5-10, 0-10)
             3: bottom[:, 10:],  # (5-10, 10-20)
         }
@@ -659,9 +651,9 @@ class TestTransferPlanSimulation:
             dst_buffers[t.dst_rank][t.dst_slices[0]] = src_data
 
         for i in range(2):
-            assert torch.equal(dst_buffers[i], dst_shards[i]), (
-                f"rank {i}: expected {dst_shards[i]}, got {dst_buffers[i]}"
-            )
+            assert torch.equal(
+                dst_buffers[i], dst_shards[i]
+            ), f"rank {i}: expected {dst_shards[i]}, got {dst_buffers[i]}"
 
 
 # ---------------------------------------------------------------------------
@@ -904,9 +896,7 @@ class TestExecuteTransferPlan:
 
         # Only rank 0 sends (dedup)
         for rank in range(2):
-            execute_transfer_plan(
-                plan, full.clone(), None, rank, mock.for_rank(rank)
-            )
+            execute_transfer_plan(plan, full.clone(), None, rank, mock.for_rank(rank))
 
         dst_buffers = [torch.zeros(25) for _ in range(4)]
         for rank in range(4):
