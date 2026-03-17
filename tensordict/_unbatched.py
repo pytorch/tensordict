@@ -149,6 +149,9 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         def numpy(self, *, force=False):
             return self._data.numpy(force=force)
 
+        def tolist(self):
+            return self._data.tolist()
+
         def __repr__(self):
             return f"UnbatchedTensor({self._data!r})"
 

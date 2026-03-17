@@ -14682,6 +14682,11 @@ class TestUnbatchedTensor:
         assert ut.shape == data.shape
         assert ut.data_ptr() == data.data_ptr()
 
+    def test_unbatched_tolist(self):
+        data = torch.tensor([1, 2, 3])
+        ut = UnbatchedTensor(data)
+        assert ut.tolist() == [1, 2, 3]
+
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
             {"query": ["str1", "str2", "str3", "str4"]},
