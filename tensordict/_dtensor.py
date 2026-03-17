@@ -490,7 +490,22 @@ class _TorchDistributedBackend:
 
 
 class _UCXXBackend:
-    """Transport backend using UCXX endpoints."""
+    """Transport backend using UCXX endpoints.
+
+    This backend operates on a single pre-established UCXX endpoint
+    (i.e. a single peer connection). The ``dst`` / ``src`` / ``tag``
+    parameters on :meth:`send_tensor` and :meth:`recv_tensor` are
+    accepted for protocol compatibility but are **not used** — all
+    data is routed through ``self._endpoint``.  Multi-peer transfers
+    (e.g. Strategy C with many dst ranks) require one ``_UCXXBackend``
+    instance per peer.
+
+    .. warning::
+        Each public method calls :func:`asyncio.run`, which creates a
+        new event loop. This will raise ``RuntimeError`` if called from
+        within an already-running event loop (e.g. inside vLLM's async
+        engine).
+    """
 
     def __init__(self, endpoint):
         self._endpoint = endpoint
@@ -755,6 +770,7 @@ class ModelTransferPlan:
         src_tensors: dict[str, Tensor],
         rank: int,
         backend: _TransportBackend,
+        device: torch.device | str | None = None,
     ) -> dict[str, Tensor]:
         """Execute the precomputed plan.
 
@@ -771,6 +787,9 @@ class ModelTransferPlan:
                 destination-only ranks.
             rank: this rank's global rank ID.
             backend: transport backend to use.
+            device: device for destination buffers. Inferred from
+                *src_tensors* when possible; falls back to CPU if ``None``
+                and no source tensor is available on this rank.
 
         Returns:
             ``{dst_name: local_tensor}`` with received data on destination
@@ -800,7 +819,10 @@ class ModelTransferPlan:
                 )
                 local_shape = tuple(s.stop - s.start for s in dst_shape)
                 dtype = src_tensor.dtype if src_tensor is not None else torch.float32
-                dst_buffer = torch.zeros(local_shape, dtype=dtype)
+                _device = device
+                if _device is None and src_tensor is not None:
+                    _device = src_tensor.device
+                dst_buffer = torch.zeros(local_shape, dtype=dtype, device=_device)
 
             execute_transfer_plan(pp.plan, src_tensor, dst_buffer, rank, backend)
 
