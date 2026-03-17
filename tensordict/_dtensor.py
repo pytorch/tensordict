@@ -19,7 +19,6 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable, Sequence
 
-import numpy as np
 import torch
 from torch import Tensor
 
@@ -480,16 +479,33 @@ class _TorchDistributedBackend:
         length = int(length_t.item())
         data_t = torch.empty(length, dtype=torch.uint8, device="cuda")
         dist.recv(data_t, src=src, group=self.group)
-        return json.loads(bytes(data_t.cpu().numpy()))
+        return json.loads(bytes(data_t.cpu().tolist()))
 
 
 class _UCXXBackend:
-    """Transport backend using UCXX endpoints."""
+    """Transport backend using UCXX endpoints.
+
+    This backend operates on a single pre-established UCXX endpoint
+    (i.e. a single peer connection). The ``dst`` / ``src`` / ``tag``
+    parameters on :meth:`send_tensor` and :meth:`recv_tensor` are
+    accepted for protocol compatibility but are **not used** — all
+    data is routed through ``self._endpoint``.  Multi-peer transfers
+    (e.g. Strategy C with many dst ranks) require one ``_UCXXBackend``
+    instance per peer.
+
+    .. warning::
+        Each public method calls :func:`asyncio.run`, which creates a
+        new event loop. This will raise ``RuntimeError`` if called from
+        within an already-running event loop (e.g. inside vLLM's async
+        engine).
+    """
 
     def __init__(self, endpoint):
         self._endpoint = endpoint
 
-    def _tensor_to_numpy(self, t: Tensor) -> np.ndarray:
+    def _tensor_to_numpy(self, t: Tensor):
+        import numpy as np
+
         return np.frombuffer(t.contiguous().view(torch.uint8).numpy(), dtype=np.uint8)
 
     def send_tensor(self, tensor: Tensor, dst: int, *, tag: int = 0) -> None:
@@ -527,12 +543,16 @@ class _UCXXBackend:
         return asyncio.run(self._arecv_object())
 
     async def _asend_object(self, obj: Any) -> None:
+        import numpy as np
+
         data = json.dumps(obj).encode("utf-8")
         length = struct.pack("<Q", len(data))
         await self._endpoint.send(np.frombuffer(length, dtype=np.uint8))
         await self._endpoint.send(np.frombuffer(data, dtype=np.uint8).copy())
 
     async def _arecv_object(self) -> Any:
+        import numpy as np
+
         len_buf = np.empty(8, dtype=np.uint8)
         await self._endpoint.recv(len_buf)
         length = struct.unpack("<Q", len_buf.tobytes())[0]
@@ -749,6 +769,7 @@ class ModelTransferPlan:
         src_tensors: dict[str, Tensor],
         rank: int,
         backend: _TransportBackend,
+        device: torch.device | str | None = None,
     ) -> dict[str, Tensor]:
         """Execute the precomputed plan.
 
@@ -765,6 +786,9 @@ class ModelTransferPlan:
                 destination-only ranks.
             rank: this rank's global rank ID.
             backend: transport backend to use.
+            device: device for destination buffers. Inferred from
+                *src_tensors* when possible; falls back to CPU if ``None``
+                and no source tensor is available on this rank.
 
         Returns:
             ``{dst_name: local_tensor}`` with received data on destination
@@ -793,7 +817,10 @@ class ModelTransferPlan:
                 )
                 local_shape = tuple(s.stop - s.start for s in dst_shape)
                 dtype = src_tensor.dtype if src_tensor is not None else torch.float32
-                dst_buffer = torch.zeros(local_shape, dtype=dtype)
+                _device = device
+                if _device is None and src_tensor is not None:
+                    _device = src_tensor.device
+                dst_buffer = torch.zeros(local_shape, dtype=dtype, device=_device)
 
             execute_transfer_plan(pp.plan, src_tensor, dst_buffer, rank, backend)
 

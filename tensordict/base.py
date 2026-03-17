@@ -9726,7 +9726,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # -- Strategy A: materialize-and-reshard ----------------------------
 
     def _dtensor_send_materialize(self, dst, *, backend) -> None:
-        """Send by materializing DTensors to full tensors first."""
+        """Send by materializing DTensors to full tensors first.
+
+        .. warning::
+            For any DTensor values, this calls ``full_tensor()`` which is
+            a **collective** operation — all ranks in the source mesh
+            must participate. Calling this method from a single rank
+            while other mesh ranks are idle will deadlock.  Pre-materialize
+            tensors before calling :meth:`dtensor_send` if only one rank
+            should perform the send.
+        """
         metadata = {}
         tensors = []
         for key in self.sorted_keys:
@@ -9829,10 +9838,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
             backend.send_tensor(tensor.contiguous(), dst_int)
 
     def _dtensor_recv_redistribute(self, src, *, backend) -> None:
-        """Receive local shards and reconstruct DTensors.
+        """Receive local shards and placement metadata.
 
-        Uses DTensor.from_local() with the sender's placements, then the
-        caller can redistribute() to target placements if needed.
+        Receives the sender's local shard (or plain tensor) and stores
+        it directly.  The caller can wrap with ``DTensor.from_local()``
+        and ``redistribute()`` afterwards if needed.
         """
         src_int = src if isinstance(src, int) else 0
         metadata = backend.recv_object(src_int)
@@ -9859,6 +9869,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 shape = torch.Size(meta["shape"])
                 buf = torch.empty(shape, dtype=dtype, **kwargs)
                 backend.recv_tensor(buf, src_int)
+                self._set_str(key, buf, inplace=False, validated=True)
 
     # -- Strategy C: optimal P2P transfer --------------------------------
 
