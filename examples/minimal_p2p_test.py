@@ -2,6 +2,7 @@
 """Minimal NCCL P2P test to verify send/recv works."""
 
 import json
+
 import torch
 import torch.distributed as dist
 
