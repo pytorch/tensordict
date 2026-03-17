@@ -1257,3 +1257,75 @@ class TestModelTransferPlan:
             assert "bias" in result
             assert torch.equal(result["weight"], list(full_w.chunk(2))[i])
             assert torch.equal(result["bias"], list(full_b.chunk(2))[i])
+
+
+# ---------------------------------------------------------------------------
+# Framework adapter tests (with mock parameters)
+# ---------------------------------------------------------------------------
+
+
+class _MockParam:
+    """Mock parameter for adapter tests."""
+
+    def __init__(self, shape, **attrs):
+        self.shape = shape
+        self.data = torch.zeros(shape)
+        for k, v in attrs.items():
+            setattr(self, k, v)
+
+    def named_parameters(self):
+        raise NotImplementedError
+
+
+class _MockModel:
+    """Mock model that yields named parameters."""
+
+    def __init__(self, params: dict):
+        self._params = params
+
+    def named_parameters(self):
+        return iter(self._params.items())
+
+
+class TestVLLMSharding:
+    def test_column_parallel(self):
+        from tensordict.dtensor_adapters.vllm import VLLMSharding
+
+        adapter = VLLMSharding(tp_size=4, tp_rank=0)
+        param = _MockParam([256, 1024], output_dim=0)
+        desc = adapter.describe("linear.weight", param)
+        assert desc.mesh_shape == (4,)
+        assert desc.logical_shape == torch.Size([1024, 1024])
+
+    def test_row_parallel(self):
+        from tensordict.dtensor_adapters.vllm import VLLMSharding
+
+        adapter = VLLMSharding(tp_size=2, tp_rank=0)
+        param = _MockParam([1024, 512], input_dim=1)
+        desc = adapter.describe("linear.weight", param)
+        assert desc.mesh_shape == (2,)
+        assert desc.logical_shape == torch.Size([1024, 1024])
+
+    def test_replicated(self):
+        from tensordict.dtensor_adapters.vllm import VLLMSharding
+
+        adapter = VLLMSharding(tp_size=4, tp_rank=0)
+        param = _MockParam([100])
+        desc = adapter.describe("norm.weight", param)
+        assert desc.mesh_shape == (4,)
+        assert desc.logical_shape == torch.Size([100])
+
+    def test_describe_model(self):
+        from tensordict.dtensor_adapters.vllm import VLLMSharding
+
+        adapter = VLLMSharding(tp_size=2, tp_rank=0)
+        model = _MockModel(
+            {
+                "qkv.weight": _MockParam([384, 1024], output_dim=0),
+                "norm.weight": _MockParam([1024]),
+            }
+        )
+        descs = adapter.describe_model(model)
+        assert len(descs) == 2
+        assert descs["qkv.weight"].logical_shape == torch.Size([768, 1024])
+        assert descs["norm.weight"].logical_shape == torch.Size([1024])
