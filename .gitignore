@@ -159,5 +159,8 @@ rn.md
 0.8/0.9
 scratch/*
 
+# Local TODO notes (never committed)
+TODO/
+
 # Auto-generated version file (setuptools_scm)
 tensordict/_version.py
