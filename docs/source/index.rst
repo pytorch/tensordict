@@ -105,9 +105,12 @@ Contents
    :maxdepth: 3
 
    overview
+   compatibility
    distributed
    fx
    saving
+   storage
+   printing
    reference/index
 
 Indices and tables

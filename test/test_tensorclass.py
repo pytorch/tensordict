@@ -3505,6 +3505,16 @@ class TestTensorOnly:
                 b: torch.Tensor
                 c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
 
+    @pytest.mark.skipif(PY9, reason="3.9 not supported for type checks")
+    def test_tensor_only_parameterized_generic(self):
+        # Regression test for GitHub issue #1658:
+        # tensor_only=True should accept parameterized generics like TensorDict[str, Tensor]
+        @tensorclass(tensor_only=True)
+        class TensorOnlyGeneric:
+            a: torch.Tensor
+            b: TensorDict[str, torch.Tensor]
+            c: TensorDict[str, torch.Tensor] | None = None
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
