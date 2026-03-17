@@ -17,6 +17,7 @@ from tensordict import (
     PersistentTensorDict,
     tensorclass,
     TensorDict,
+    TypedTensorDict,
     UnbatchedTensor,
 )
 from tensordict._lazy import LazyStackedTensorDict
@@ -396,6 +397,50 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["td_with_unbatched", device]]
         TYPES_DEVICES_NOLAZY += [["td_with_unbatched", device]]
+
+    @classmethod
+    def typed_td(cls, device):
+        return _TypedTD(
+            a=torch.randn(4, 3, 2, 1, 5),
+            b=torch.randn(4, 3, 2, 1, 10),
+            c=torch.randint(10, (4, 3, 2, 1, 3)),
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["typed_td", device]]
+        TYPES_DEVICES_NOLAZY += [["typed_td", device]]
+
+    @classmethod
+    def nested_typed_td(cls, device):
+        return _NestedTypedTD(
+            a=torch.randn(4, 3, 2, 1, 5),
+            b=torch.randn(4, 3, 2, 1, 10),
+            c=torch.randint(10, (4, 3, 2, 1, 3)),
+            my_nested_td=TensorDict(
+                {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["nested_typed_td", device]]
+        TYPES_DEVICES_NOLAZY += [["nested_typed_td", device]]
+
+
+class _TypedTD(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor
+    c: torch.Tensor
+
+
+class _NestedTypedTD(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor
+    c: torch.Tensor
+    my_nested_td: TensorDict
 
 
 def expand_list(list_of_tensors, *dims):

@@ -55,6 +55,7 @@ from tensordict.tensorclass import (
     TensorClass,
     tensorclass,
 )
+from tensordict.typedtensordict import TypedTensorDict
 from tensordict.utils import (
     assert_allclose_td,
     assert_close,
@@ -81,6 +82,7 @@ __all__ = [
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
+    "TypedTensorDict",
     "MemoryMappedTensor",
     "PersistentTensorDict",
     "NestedKey",

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-
 import functools
 import gc
 import importlib.util
@@ -27,14 +26,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
-
 from tensordict import (
     capture_non_tensor_stack,
     get_defaults_to_none,
+    get_printoptions,
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
@@ -42,6 +40,8 @@ from tensordict import (
     PersistentTensorDict,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
+    set_printoptions,
+    tensorclass,
     TensorClass,
     TensorDict,
     UnbatchedTensor,
@@ -53,14 +53,12 @@ from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
-
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import (
     MetaData,
     NonTensorData,
     NonTensorDataBase,
     NonTensorStack,
-    tensorclass,
 )
 from tensordict.utils import (
     _getitem_batch_size,
@@ -7556,7 +7554,7 @@ class TestTensorDicts(TestTensorDictsBase):
         exp_instance = (
             LazyStackedTensorDict
             if isinstance(td, LazyStackedTensorDict)
-            else TensorDict
+            else TensorDictBase
         )
         assert isinstance(td_reshape, exp_instance)
         assert td_reshape.shape.numel() == td.shape.numel()
@@ -9664,8 +9662,6 @@ class TestTensorDictRepr:
         )
 
     def nested_tensorclass(self, device, dtype):
-        from tensordict import tensorclass
-
         @tensorclass
         class MyClass:
             X: torch.Tensor
@@ -10107,6 +10103,220 @@ class TestTensorDictRepr:
     is_shared={is_shared},
     stack_dim={stacked_td.stack_dim})"""
         assert repr(stacked_td) == expected
+
+
+class TestSetPrintoptions:
+    """Tests for :class:`tensordict.set_printoptions` and :func:`tensordict.get_printoptions`."""
+
+    def test_get_printoptions_returns_copy(self):
+        opts = get_printoptions()
+        assert isinstance(opts, dict)
+        assert "show_device" in opts
+        opts["show_device"] = not opts["show_device"]
+        assert get_printoptions()["show_device"] != opts["show_device"]
+
+    def test_default_repr_unchanged(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        r = repr(td)
+        assert "batch_size=" in r
+        assert "device=" in r
+        assert "is_shared=" in r
+        assert "shape=torch.Size([3, 4])" in r
+        assert "dtype=torch.float32" in r
+
+    def test_hide_device(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_device=False):
+            r = repr(td)
+        assert "\n    device=" not in r
+        assert "batch_size=" in r
+        assert "is_shared=" in r
+
+    def test_hide_is_shared(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_is_shared=False):
+            r = repr(td)
+        assert "\n    is_shared=" not in r
+        assert "batch_size=" in r
+        assert "\n    device=" in r
+
+    def test_hide_batch_size(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_batch_size=False):
+            r = repr(td)
+        assert "batch_size=" not in r
+        assert "\n    device=" in r
+
+    def test_hide_dtype(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_dtype=False):
+            r = repr(td)
+        assert "dtype=" not in r
+        assert "shape=" in r
+
+    def test_hide_field_device(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_field_device=False):
+            r = repr(td)
+        assert "Tensor(shape=" in r
+        # td-level device still visible
+        assert "\n    device=" in r
+
+    def test_hide_field_is_shared(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_field_is_shared=False):
+            r = repr(td)
+        assert "Tensor(" in r
+        # Tensor-level is_shared gone, but TD-level is_shared still present
+        assert "is_shared=False)" in r  # TD-level
+        fields_line = [line for line in r.split("\n") if "Tensor(" in line][0]
+        assert "is_shared=" not in fields_line
+
+    def test_hide_multiple(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_dtype=False,
+            show_field_is_shared=False,
+        ):
+            r = repr(td)
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+        assert "dtype=" not in r
+
+    def test_context_manager_restores(self):
+        before = get_printoptions()
+        with set_printoptions(show_device=False, show_is_shared=False):
+            inner = get_printoptions()
+            assert inner["show_device"] is False
+            assert inner["show_is_shared"] is False
+        after = get_printoptions()
+        assert after == before
+
+    def test_global_set(self):
+        before = get_printoptions()
+        ctx = set_printoptions(show_is_shared=False)
+        ctx.set()
+        try:
+            assert get_printoptions()["show_is_shared"] is False
+            td = TensorDict({"a": torch.randn(2)})
+            assert "\n    is_shared=" not in repr(td)
+        finally:
+            ctx.__exit__(None, None, None)
+        assert get_printoptions() == before
+
+    def test_show_grad(self):
+        td = TensorDict({"a": torch.randn(3, requires_grad=True)})
+        with set_printoptions(show_grad=True):
+            r = repr(td)
+        assert "requires_grad=True" in r
+
+    def test_show_is_contiguous(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_is_contiguous=True):
+            r = repr(td)
+        assert "is_contiguous=True" in r
+
+    def test_show_is_view(self):
+        base = torch.randn(3, 4)
+        td = TensorDict({"a": base[::2]})
+        with set_printoptions(show_is_view=True):
+            r = repr(td)
+        assert "is_view=True" in r
+
+    def test_show_storage_size(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(show_storage_size=True):
+            r = repr(td)
+        assert "storage_size=" in r
+
+    def test_plain_mode(self):
+        td = TensorDict({"a": torch.ones(10)})
+        with set_printoptions(plain=True):
+            r = repr(td)
+        assert "mean=" in r
+
+    def test_lazy_stacked_respects_options(self):
+        td1 = TensorDict({"a": torch.randn(3)})
+        td2 = TensorDict({"a": torch.randn(3)})
+        stacked = LazyStackedTensorDict.lazy_stack([td1, td2])
+        with set_printoptions(show_device=False, show_is_shared=False):
+            r = repr(stacked)
+        assert "stack_dim=" in r
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+
+    def test_tensorclass_respects_options(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        obj = MyClass(x=torch.randn(3, 4), batch_size=[3])
+        with set_printoptions(
+            show_device=False,
+            show_is_shared=False,
+            show_field_device=False,
+            show_field_is_shared=False,
+        ):
+            r = repr(obj)
+        assert "MyClass(" in r
+        assert "device=" not in r
+        assert "is_shared=" not in r
+
+    def test_unknown_option_raises(self):
+        with pytest.raises(TypeError, match="Unknown printoptions"):
+            set_printoptions(nonexistent_option=True)
+
+    def test_decorator_usage(self):
+        @set_printoptions(show_device=False, show_is_shared=False)
+        def my_func():
+            td = TensorDict({"a": torch.randn(2)})
+            r = repr(td)
+            assert "\n    device=" not in r
+            assert "\n    is_shared=" not in r
+            return r
+
+        my_func()
+        td = TensorDict({"a": torch.randn(2)})
+        r = repr(td)
+        assert "\n    device=" in r
+        assert "\n    is_shared=" in r
+
+    def test_sort_keys_alphabetical_default(self):
+        td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
+        r = repr(td)
+        keys_in_order = [
+            line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line
+        ]
+        assert keys_in_order == ["a", "b", "c"]
+
+    def test_sort_keys_insertion(self):
+        td = TensorDict({"c": torch.randn(2), "a": torch.randn(2), "b": torch.randn(2)})
+        with set_printoptions(sort_keys="insertion"):
+            r = repr(td)
+        keys_in_order = [
+            line.strip().split(":")[0] for line in r.split("\n") if "Tensor(" in line
+        ]
+        assert keys_in_order == ["c", "a", "b"]
+
+    def test_sort_keys_callable(self):
+        td2 = TensorDict(
+            {"xb": torch.randn(2), "ya": torch.randn(2), "za": torch.randn(2)}
+        )
+        with set_printoptions(sort_keys=lambda s: s[::-1]):
+            r2 = repr(td2)
+        keys2 = [
+            line.strip().split(":")[0] for line in r2.split("\n") if "Tensor(" in line
+        ]
+        # sorted by reversed key: "xb"→"bx", "ya"→"ay", "za"→"az"  →  "ya","za","xb"
+        assert keys2 == ["ya", "za", "xb"]
+
+    def test_sort_keys_restores(self):
+        before = get_printoptions()["sort_keys"]
+        with set_printoptions(sort_keys="insertion"):
+            assert get_printoptions()["sort_keys"] == "insertion"
+        assert get_printoptions()["sort_keys"] == before
 
 
 @pytest.mark.parametrize(
@@ -14444,8 +14654,6 @@ class TestUnbatchedTensor:
         assert result["a"].shape == (4, 3, 5)
 
     def test_unbatched_tensorclass_attr_returns_unbatched(self):
-        from tensordict import tensorclass
-
         @tensorclass
         class MyClass:
             config: torch.Tensor
@@ -14786,6 +14994,133 @@ class TestFreeThreading:
         for t in threads:
             t.join()
         # If we get here without segfault, the test passes
+
+
+class TestFromSchema:
+    """Tests for TensorDictBase.from_schema with various storage backends."""
+
+    SCHEMA = {
+        "obs": ([4, 4], torch.float32),
+        "action": ([2], torch.int64),
+        "reward": ([], torch.float32),
+    }
+    BATCH = [8]
+
+    def test_default_storage(self):
+        td = TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH)
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == torch.Size(self.BATCH)
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["obs"].dtype == torch.float32
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["action"].dtype == torch.int64
+        assert td["reward"].shape == torch.Size([8])
+        assert (td["obs"] == 0).all()
+        assert (td["action"] == 0).all()
+        assert (td["reward"] == 0).all()
+
+    def test_default_storage_no_batch(self):
+        td = TensorDict.from_schema({"x": ([3], torch.float32)})
+        assert td.batch_size == torch.Size(())
+        assert td["x"].shape == torch.Size([3])
+
+    def test_default_storage_write_read(self):
+        td = TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH)
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_memmap_storage(self, tmp_path):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="memmap", prefix=str(tmp_path)
+        )
+        assert td.is_memmap()
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+        assert isinstance(td["obs"], MemoryMappedTensor)
+
+    def test_memmap_storage_write_read(self, tmp_path):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="memmap", prefix=str(tmp_path)
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
+    def test_h5_storage(self, tmp_path):
+        filename = str(tmp_path / "test.h5")
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="h5", filename=filename
+        )
+        assert isinstance(td, PersistentTensorDict)
+        assert td.batch_size == torch.Size(self.BATCH)
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not available")
+    def test_h5_storage_write_read(self, tmp_path):
+        filename = str(tmp_path / "test.h5")
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="h5", filename=filename
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_shared_storage(self):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="shared"
+        )
+        assert td.is_shared()
+        assert td["obs"].shape == torch.Size([8, 4, 4])
+        assert td["action"].shape == torch.Size([8, 2])
+        assert td["reward"].shape == torch.Size([8])
+        assert (td["obs"] == 0).all()
+
+    def test_shared_storage_write_read(self):
+        td = TensorDict.from_schema(
+            self.SCHEMA, batch_size=self.BATCH, storage="shared"
+        )
+        td[0] = TensorDict(
+            obs=torch.ones(4, 4),
+            action=torch.ones(2, dtype=torch.int64),
+            reward=torch.tensor(1.0),
+            batch_size=[],
+        )
+        assert (td[0]["obs"] == 1).all()
+        assert (td[1]["obs"] == 0).all()
+
+    def test_unknown_storage_raises(self):
+        with pytest.raises(ValueError, match="Unknown storage backend"):
+            TensorDict.from_schema(self.SCHEMA, batch_size=self.BATCH, storage="foobar")
+
+    def test_callable_from_base(self, tmp_path):
+        td = TensorDictBase.from_schema(
+            {"x": ([3], torch.float32)},
+            batch_size=[4],
+            storage="memmap",
+            prefix=str(tmp_path),
+        )
+        assert td.is_memmap()
+        assert td["x"].shape == torch.Size([4, 3])
 
 
 if __name__ == "__main__":
