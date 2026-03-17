@@ -17,14 +17,10 @@ import itertools
 import json
 import struct
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable, Sequence, TYPE_CHECKING
+from typing import Any, Protocol, runtime_checkable, Sequence
 
-import numpy as np
 import torch
 from torch import Tensor
-
-if TYPE_CHECKING:
-    from tensordict._ucxx import TensorDictPipe
 
 _has_ucxx = importlib.util.find_spec("ucxx") is not None
 
@@ -194,8 +190,9 @@ class ShardingDescriptor:
 
 
 def _chunk_slice(total_size: int, num_chunks: int, chunk_idx: int) -> slice:
-    """Return the slice for ``chunk_idx`` when splitting *total_size* into
-    *num_chunks* using ``torch.chunk`` semantics (last chunk may be smaller).
+    """Return the slice for ``chunk_idx`` when splitting into chunks.
+
+    Uses ``torch.chunk`` semantics (last chunk may be smaller).
     """
     chunk_size = (total_size + num_chunks - 1) // num_chunks
     start = chunk_idx * chunk_size
@@ -313,9 +310,9 @@ def _deduplicate_src_specs(
     if not has_replica:
         return src_specs
 
-    seen: dict[tuple[slice, ...], _ShardSpec] = {}
+    seen: dict[tuple[tuple[int, int], ...], _ShardSpec] = {}
     for spec in src_specs:
-        key = spec.slices
+        key = tuple((s.start, s.stop) for s in spec.slices)
         if key not in seen or spec.rank < seen[key].rank:
             seen[key] = spec
     return list(seen.values())
@@ -356,9 +353,7 @@ def _compute_transfer_plan(
     )
 
     # Deduplicate replicated src specs
-    src_specs_dedup = _deduplicate_src_specs(
-        src_specs, src_placements, src_mesh_shape
-    )
+    src_specs_dedup = _deduplicate_src_specs(src_specs, src_placements, src_mesh_shape)
 
     plan = _TransferPlan(global_shape=global_shape)
 
@@ -418,9 +413,7 @@ def execute_transfer_plan(
     recv_bufs: list[tuple[Tensor, _ChunkTransfer]] = []
     if dst_buffer is not None:
         for transfer in recvs:
-            chunk_shape = tuple(
-                s.stop - s.start for s in transfer.global_slices
-            )
+            chunk_shape = tuple(s.stop - s.start for s in transfer.global_slices)
             buf = torch.empty(
                 chunk_shape, dtype=dst_buffer.dtype, device=dst_buffer.device
             )
@@ -490,7 +483,7 @@ class _TorchDistributedBackend:
         length = int(length_t.item())
         data_t = torch.empty(length, dtype=torch.uint8, device="cuda")
         dist.recv(data_t, src=src, group=self.group)
-        return json.loads(bytes(data_t.cpu().numpy()))
+        return json.loads(bytes(data_t.cpu().tolist()))
 
 
 class _UCXXBackend:
@@ -514,10 +507,10 @@ class _UCXXBackend:
     def __init__(self, endpoint):
         self._endpoint = endpoint
 
-    def _tensor_to_numpy(self, t: Tensor) -> np.ndarray:
-        return np.frombuffer(
-            t.contiguous().view(torch.uint8).numpy(), dtype=np.uint8
-        )
+    def _tensor_to_numpy(self, t: Tensor):
+        import numpy as np
+
+        return np.frombuffer(t.contiguous().view(torch.uint8).numpy(), dtype=np.uint8)
 
     def send_tensor(self, tensor: Tensor, dst: int, *, tag: int = 0) -> None:
         import asyncio
@@ -554,12 +547,16 @@ class _UCXXBackend:
         return asyncio.run(self._arecv_object())
 
     async def _asend_object(self, obj: Any) -> None:
+        import numpy as np
+
         data = json.dumps(obj).encode("utf-8")
         length = struct.pack("<Q", len(data))
         await self._endpoint.send(np.frombuffer(length, dtype=np.uint8))
         await self._endpoint.send(np.frombuffer(data, dtype=np.uint8).copy())
 
     async def _arecv_object(self) -> Any:
+        import numpy as np
+
         len_buf = np.empty(8, dtype=np.uint8)
         await self._endpoint.recv(len_buf)
         length = struct.unpack("<Q", len_buf.tobytes())[0]
