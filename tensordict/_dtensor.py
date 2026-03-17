@@ -494,7 +494,22 @@ class _TorchDistributedBackend:
 
 
 class _UCXXBackend:
-    """Transport backend using UCXX endpoints."""
+    """Transport backend using UCXX endpoints.
+
+    This backend operates on a single pre-established UCXX endpoint
+    (i.e. a single peer connection). The ``dst`` / ``src`` / ``tag``
+    parameters on :meth:`send_tensor` and :meth:`recv_tensor` are
+    accepted for protocol compatibility but are **not used** — all
+    data is routed through ``self._endpoint``.  Multi-peer transfers
+    (e.g. Strategy C with many dst ranks) require one ``_UCXXBackend``
+    instance per peer.
+
+    .. warning::
+        Each public method calls :func:`asyncio.run`, which creates a
+        new event loop. This will raise ``RuntimeError`` if called from
+        within an already-running event loop (e.g. inside vLLM's async
+        engine).
+    """
 
     def __init__(self, endpoint):
         self._endpoint = endpoint
