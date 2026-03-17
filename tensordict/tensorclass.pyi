@@ -505,6 +505,16 @@ class TensorClass:
     @classmethod
     def from_h5(cls, filename, mode: str = "r") -> Self: ...
     @classmethod
+    def from_schema(
+        cls,
+        schema: dict[str, tuple[list[int] | torch.Size, torch.dtype]],
+        *,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        storage: str | None = None,
+        device: DeviceType | None = None,
+        **kwargs: Any,
+    ) -> Self: ...
+    @classmethod
     def from_module(
         cls,
         module,

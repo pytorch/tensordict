@@ -82,6 +82,7 @@ from tensordict.utils import (
     _proc_init,
     _prune_selected_keys,
     _rebuild_njt_from_njt,
+    _REPR_OPTIONS,
     _set_max_batch_size,
     _shape,
     _split_tensordict,
@@ -553,11 +554,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def __repr__(self) -> str:
         try:
             fields = _td_fields(self)
-            field_str = indent(f"fields={{{fields}}}", 4 * " ")
-            batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-            device_str = indent(f"device={self.device}", 4 * " ")
-            is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            parts = [indent(f"fields={{{fields}}}", 4 * " ")]
+            if _REPR_OPTIONS["show_batch_size"]:
+                parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+            if _REPR_OPTIONS["show_device"]:
+                parts.append(indent(f"device={self.device}", 4 * " "))
+            if _REPR_OPTIONS["show_is_shared"]:
+                parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
+            string = ",\n".join(parts)
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
             #  that has no attribute (no _tensordict or no _batch_size).
@@ -3035,6 +3039,135 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_h5"))
             result.auto_batch_size_(batch_dims=batch_dims)
         return result
+
+    @classmethod
+    def from_schema(
+        cls,
+        schema: dict[str, tuple[list[int] | torch.Size, torch.dtype]],
+        *,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        storage: str | None = None,
+        device=None,
+        **kwargs,
+    ) -> TensorDictBase:
+        """Pre-allocate a zero-filled TensorDict from a schema.
+
+        Creates a :class:`TensorDictBase` whose storage backend is selected
+        by ``storage``.  Each entry in ``schema`` maps a field name to an
+        ``(element_shape, dtype)`` pair; the full stored shape is
+        ``[*batch_size, *element_shape]``.
+
+        Args:
+            schema: Mapping from field name to ``(element_shape, dtype)``.
+                ``element_shape`` is the per-element shape (excluding
+                ``batch_size``).
+
+        Keyword Args:
+            batch_size: Overall batch dimensions prepended to every element
+                shape.  Defaults to ``()``.
+            storage (str or None): Backend selector:
+
+                - ``None`` -- plain :class:`TensorDict` with regular tensors.
+                - ``"memmap"`` -- memory-mapped tensors on disk.
+                  Pass ``prefix=<dir>`` in *kwargs*.
+                - ``"h5"`` -- HDF5 via :class:`PersistentTensorDict`.
+                  Pass ``filename=<path>`` in *kwargs*.
+                - ``"shared"`` -- CPU shared-memory tensors.
+                - ``"redis"`` / ``"dragonfly"`` -- delegates to
+                  :meth:`TensorDictStore.from_schema`.
+
+            device: Device for the resulting tensors (ignored by some
+                backends).
+            **kwargs: Backend-specific arguments forwarded to the
+                underlying constructor (e.g. ``prefix`` for memmap,
+                ``filename`` for h5, ``host``/``port`` for redis).
+
+        Returns:
+            A new :class:`TensorDictBase` subclass instance with
+            pre-allocated (zero-filled) keys.
+
+        Examples:
+            >>> td = TensorDict.from_schema(
+            ...     {"obs": ([84, 84, 3], torch.uint8),
+            ...      "reward": ([], torch.float32)},
+            ...     batch_size=[1000],
+            ... )
+            >>> td["obs"].shape
+            torch.Size([1000, 84, 84, 3])
+
+            >>> import tempfile
+            >>> with tempfile.TemporaryDirectory() as d:
+            ...     td_mm = TensorDict.from_schema(
+            ...         {"obs": ([4], torch.float32)},
+            ...         batch_size=[8],
+            ...         storage="memmap",
+            ...         prefix=d,
+            ...     )
+            ...     assert td_mm.is_memmap()
+
+        """
+        from tensordict._td import TensorDict
+
+        if batch_size is None:
+            batch_size = torch.Size(())
+        else:
+            batch_size = torch.Size(batch_size)
+
+        def _full_shape(elem_shape):
+            return [*batch_size, *elem_shape]
+
+        if storage is None:
+            source = {
+                key: torch.zeros(_full_shape(es), dtype=dt, device=device)
+                for key, (es, dt) in schema.items()
+            }
+            return TensorDict(source, batch_size=batch_size, device=device)
+
+        if storage == "memmap":
+            source = {
+                key: torch.zeros((), dtype=dt).expand(_full_shape(es))
+                for key, (es, dt) in schema.items()
+            }
+            td = TensorDict(source, batch_size=batch_size)
+            prefix = kwargs.pop("prefix", None)
+            return td.memmap_like(prefix, **kwargs)
+
+        if storage == "h5":
+            from tensordict.persistent import PersistentTensorDict
+
+            source = {
+                key: torch.zeros((), dtype=dt).expand(_full_shape(es))
+                for key, (es, dt) in schema.items()
+            }
+            filename = kwargs.pop("filename")
+            return PersistentTensorDict.from_dict(
+                source, filename, batch_size=batch_size, device=device, **kwargs
+            )
+
+        if storage == "shared":
+            source = {
+                key: torch.zeros(_full_shape(es), dtype=dt, device=device)
+                for key, (es, dt) in schema.items()
+            }
+            return TensorDict(
+                source, batch_size=batch_size, device=device
+            ).share_memory_()
+
+        if storage in ("redis", "dragonfly"):
+            from tensordict.store._store import TensorDictStore
+
+            return TensorDictStore.from_schema(
+                schema,
+                batch_size=batch_size,
+                backend=storage,
+                device=device,
+                **kwargs,
+            )
+
+        raise ValueError(
+            f"Unknown storage backend {storage!r}. Expected one of "
+            f"None, 'memmap', 'h5', 'shared', 'redis', 'dragonfly'."
+        )
 
     # Module interaction
     @classmethod
