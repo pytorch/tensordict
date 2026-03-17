@@ -227,6 +227,8 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "data_ptr",
     "depth",
     "dim",
+    "dtensor_recv",
+    "dtensor_send",
     "dtype",
     "entry_class",
     "get_item_shape",
