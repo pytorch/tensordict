@@ -2233,6 +2233,114 @@ class TensorDictStore(TensorDictBase):
         return out
 
     @classmethod
+    def from_schema(
+        cls,
+        schema: dict[str, tuple[list[int] | torch.Size, torch.dtype]],
+        *,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        backend: STORE_BACKENDS = "redis",
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        unix_socket_path: str | None = None,
+        prefix: str = "tensordict",
+        device=None,
+        **kwargs,
+    ) -> TensorDictStore:
+        """Pre-allocate zero-filled keys on the remote store without using RAM.
+
+        Creates a new :class:`TensorDictStore` and registers each key in
+        ``schema`` with its shape and dtype.  Storage is allocated directly
+        on the server using ``SETRANGE`` (the server zero-fills the bytes);
+        no tensor data passes through Python or host RAM.
+
+        This is useful for large replay buffers or shared data structures
+        where you know the schema up front and want to fill iteratively.
+
+        Args:
+            schema: Mapping from field name to ``(element_shape, dtype)``.
+                ``element_shape`` is the per-element shape (excluding
+                ``batch_size``).  The full stored shape is
+                ``[*batch_size, *element_shape]``.
+
+        Keyword Args:
+            batch_size: Overall batch size of the store.
+            backend (str): Store backend.  Defaults to ``"redis"``.
+            host (str): Server hostname.  Defaults to ``"localhost"``.
+            port (int): Server port.  Defaults to ``6379``.
+            db (int): Database number.  Defaults to ``0``.
+            unix_socket_path (str, optional): Unix socket path.
+            prefix (str): Key namespace.  Defaults to ``"tensordict"``.
+            device: Device override for retrieved tensors.
+            **kwargs: Extra connection kwargs passed to the Redis client.
+
+        Returns:
+            A new ``TensorDictStore`` with pre-allocated (zero-filled) keys.
+
+        Examples:
+            >>> store = TensorDictStore.from_schema(
+            ...     {"obs": ([84, 84, 3], torch.uint8),
+            ...      "action": ([4], torch.float32),
+            ...      "reward": ([], torch.float32)},
+            ...     batch_size=[100_000],
+            ...     host="localhost",
+            ... )
+            >>> store["obs"].shape
+            torch.Size([100000, 84, 84, 3])
+            >>> store[0] = TensorDict(obs=..., action=..., reward=..., batch_size=[])
+        """
+        connect_kwargs = dict(kwargs)
+        if unix_socket_path is not None:
+            connect_kwargs["unix_socket_path"] = unix_socket_path
+        else:
+            connect_kwargs["host"] = host
+            connect_kwargs["port"] = port
+        connect_kwargs["db"] = db
+
+        out = cls(
+            backend=backend,
+            batch_size=batch_size,
+            device=device,
+            prefix=prefix,
+            **connect_kwargs,
+        )
+
+        async def _preallocate():
+            pipe = out._client.pipeline()
+            for key, (elem_shape, dtype) in schema.items():
+                if isinstance(elem_shape, torch.Size):
+                    elem_shape = list(elem_shape)
+                else:
+                    elem_shape = list(elem_shape)
+                full_shape = list(out._batch_size) + elem_shape
+                dummy = torch.tensor([], dtype=dtype)
+                elem_size = dummy.element_size()
+                numel = 1
+                for s in full_shape:
+                    numel *= s
+                total_bytes = numel * elem_size
+
+                key_path = out._full_key_path(key)
+                if total_bytes > 0:
+                    pipe.setrange(out._data_key(key_path), total_bytes - 1, b"\x00")
+                meta = {
+                    "shape": json.dumps(full_shape),
+                    "dtype": _dtype_to_str(dtype),
+                }
+                pipe.hset(out._meta_key(key_path), mapping=meta)
+                pipe.sadd(out._keys_registry_key, key_path)
+                if out._meta_cache is not None:
+                    out._meta_cache[key_path] = (full_shape, dtype)
+                if out._keys_cache[0] is not None:
+                    out._keys_cache[0].add(key_path)
+            await pipe.execute()
+
+        out._run_sync(_preallocate())
+        # Invalidate keys cache so next keys() call fetches fresh data
+        out._keys_cache[0] = None
+        return out
+
+    @classmethod
     def from_store(
         cls,
         *,
