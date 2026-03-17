@@ -255,6 +255,8 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "numel",
     "numpy",
     "param_count",
+    "dtensor_recv",
+    "dtensor_send",
     "pop",
     "recv",
     "reduce",
