@@ -40,11 +40,15 @@ from tensordict._dtensor import (
     _slice_relative_to as slice_relative_to,
     _TransferPlan as TransferPlan,
     execute_transfer_plan,
+    ModelTransferPlan,
+    ParameterPlan,
     ShardingDescriptor,
 )
 
 __all__ = [
     "ChunkTransfer",
+    "ModelTransferPlan",
+    "ParameterPlan",
     "ShardingDescriptor",
     "ShardSpec",
     "TransferPlan",

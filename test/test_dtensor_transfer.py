@@ -24,6 +24,7 @@ from tensordict._dtensor import (
     _ShardSpec,
     _slice_relative_to,
     execute_transfer_plan,
+    ModelTransferPlan,
     ShardingDescriptor,
 )
 
@@ -45,6 +46,12 @@ class _Shard:
     def is_partial(self):
         return False
 
+    def __eq__(self, other):
+        return isinstance(other, _Shard) and self.dim == other.dim
+
+    def __hash__(self):
+        return hash(("Shard", self.dim))
+
     def __repr__(self):
         return f"Shard({self.dim})"
 
@@ -58,6 +65,12 @@ class _Replicate:
     def is_partial(self):
         return False
 
+    def __eq__(self, other):
+        return isinstance(other, _Replicate)
+
+    def __hash__(self):
+        return hash("Replicate")
+
     def __repr__(self):
         return "Replicate()"
 
@@ -70,6 +83,12 @@ class _Partial:
 
     def is_partial(self):
         return True
+
+    def __eq__(self, other):
+        return isinstance(other, _Partial)
+
+    def __hash__(self):
+        return hash("Partial")
 
     def __repr__(self):
         return "Partial()"
@@ -907,3 +926,334 @@ class TestExecuteTransferPlan:
         expected = list(full.chunk(4))
         for i in range(4):
             assert torch.equal(dst_buffers[i], expected[i])
+
+
+# ---------------------------------------------------------------------------
+# ModelTransferPlan
+# ---------------------------------------------------------------------------
+
+
+class TestModelTransferPlan:
+    def _make_descriptors(
+        self,
+        name,
+        shape,
+        src_placements,
+        dst_placements,
+        src_mesh_shape,
+        dst_mesh_shape,
+    ):
+        """Helper to build src/dst descriptors for a single param."""
+        src_desc = ShardingDescriptor(
+            mesh_shape=src_mesh_shape,
+            placements=tuple(src_placements),
+            logical_shape=torch.Size(shape),
+        )
+        dst_desc = ShardingDescriptor(
+            mesh_shape=dst_mesh_shape,
+            placements=tuple(dst_placements),
+            logical_shape=torch.Size(shape),
+        )
+        return {name: src_desc}, {name: dst_desc}
+
+    def test_build_single_param(self):
+        """Build a plan for one parameter."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        assert len(plan.param_plans) == 1
+        pp = plan.param_plans[0]
+        assert pp.src_name == "weight"
+        assert pp.dst_name == "weight"
+        assert pp.strategy == "optimal"
+        assert len(pp.plan.transfers) == 4
+
+    def test_build_same_sharding(self):
+        """Same sharding on both sides -> direct_copy strategy."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(2,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        assert plan.param_plans[0].strategy == "direct_copy"
+
+    def test_build_with_transform(self):
+        """Parameter with transform -> materialize strategy."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(
+            src_params,
+            dst_params,
+            transforms={"weight": lambda t: t[:90]},
+        )
+        assert plan.param_plans[0].strategy == "materialize"
+
+    def test_name_mapping_dict(self):
+        """Name mapping via dict."""
+        src = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+        )
+        dst = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+        )
+        plan = ModelTransferPlan.build(
+            {"megatron.weight": src},
+            {"hf.weight": dst},
+            name_mapping={"megatron.weight": "hf.weight"},
+        )
+        pp = plan.param_plans[0]
+        assert pp.src_name == "megatron.weight"
+        assert pp.dst_name == "hf.weight"
+
+    def test_name_mapping_callable(self):
+        """Name mapping via callable."""
+        src = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+        )
+        dst = ShardingDescriptor(
+            mesh_shape=(2,),
+            placements=(_Shard(0),),
+            logical_shape=torch.Size([100]),
+        )
+        plan = ModelTransferPlan.build(
+            {"module.weight": src},
+            {"model.weight": dst},
+            name_mapping=lambda n: n.replace("module.", "model."),
+        )
+        assert plan.param_plans[0].dst_name == "model.weight"
+
+    def test_batching(self):
+        """Small buffer_size forces multiple batches."""
+        src_params = {}
+        dst_params = {}
+        for i in range(5):
+            name = f"layer.{i}.weight"
+            desc = ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+            )
+            src_params[name] = desc
+            dst_params[name] = desc
+
+        # 100 float32 elements = 400 bytes per param
+        # buffer_size=800 -> 2 params per batch -> 3 batches for 5 params
+        plan = ModelTransferPlan.build(
+            src_params,
+            dst_params,
+            buffer_size=800,
+        )
+        assert len(plan.batches) == 3
+        assert len(plan.batches[0]) == 2
+        assert len(plan.batches[1]) == 2
+        assert len(plan.batches[2]) == 1
+
+    def test_total_bytes(self):
+        """total_bytes computes sum of transfer sizes."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        # 4 transfers of 25 elements each -> 100 elements * 4 bytes
+        assert plan.total_bytes == 400
+
+    def test_per_rank_bytes(self):
+        """per_rank_bytes tracks bytes per rank."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        prb = plan.per_rank_bytes
+        # src ranks 0-3 each send 25 elements = 100 bytes
+        for r in range(4):
+            assert r in prb
+
+    def test_summary(self):
+        """summary() returns a human-readable string."""
+        src_params, dst_params = self._make_descriptors(
+            "weight",
+            [100],
+            [_Shard(0)],
+            [_Shard(0)],
+            src_mesh_shape=(4,),
+            dst_mesh_shape=(2,),
+        )
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        s = plan.summary()
+        assert "ModelTransferPlan" in s
+        assert "1 parameters" in s
+        assert "optimal" in s.lower() or "Strategy C" in s
+
+    def test_execute_shard4_to_shard2(self):
+        """End-to-end execute with mock backend, non-overlapping rank maps."""
+        full = torch.arange(100, dtype=torch.float32)
+        src_shards = list(full.chunk(4))
+
+        src_rank_map = {(0,): 0, (1,): 1, (2,): 2, (3,): 3}
+        dst_rank_map = {(0,): 10, (1,): 11}
+
+        src_params = {
+            "w": ShardingDescriptor(
+                mesh_shape=(4,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=src_rank_map,
+            )
+        }
+        dst_params = {
+            "w": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=dst_rank_map,
+            )
+        }
+        mtp = ModelTransferPlan.build(src_params, dst_params)
+        mock = _MockBackend()
+
+        # Senders (src ranks 0-3)
+        for rank in range(4):
+            mtp.execute({"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank))
+
+        # Receivers (dst ranks 10-11)
+        results = {}
+        for i, rank in enumerate([10, 11]):
+            r = mtp.execute({}, rank=rank, backend=mock.for_rank(rank))
+            results[i] = r["w"]
+
+        expected = list(full.chunk(2))
+        for i in range(2):
+            assert torch.equal(results[i], expected[i])
+
+    def test_execute_with_transform(self):
+        """Execute with a per-parameter transform."""
+        full = torch.arange(100, dtype=torch.float32)
+        src_shards = list(full.chunk(2))
+
+        src_rank_map = {(0,): 0, (1,): 1}
+        dst_rank_map = {(0,): 10, (1,): 11}
+
+        src_params = {
+            "w": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=src_rank_map,
+            )
+        }
+        dst_params = {
+            "w": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=dst_rank_map,
+            )
+        }
+        transform_called = []
+
+        def truncate(t):
+            transform_called.append(True)
+            return t
+
+        mtp = ModelTransferPlan.build(
+            src_params,
+            dst_params,
+            transforms={"w": truncate},
+        )
+        assert mtp.param_plans[0].strategy == "materialize"
+
+        mock = _MockBackend()
+        for rank in range(2):
+            mtp.execute({"w": src_shards[rank]}, rank=rank, backend=mock.for_rank(rank))
+        assert len(transform_called) == 2
+
+    def test_multiple_params(self):
+        """Build and execute with multiple parameters."""
+        src_rank_map = {(0,): 0, (1,): 1}
+        dst_rank_map = {(0,): 10, (1,): 11}
+
+        src_params = {
+            "weight": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=src_rank_map,
+            ),
+            "bias": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([20]),
+                rank_map=src_rank_map,
+            ),
+        }
+        dst_params = {
+            "weight": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([100]),
+                rank_map=dst_rank_map,
+            ),
+            "bias": ShardingDescriptor(
+                mesh_shape=(2,),
+                placements=(_Shard(0),),
+                logical_shape=torch.Size([20]),
+                rank_map=dst_rank_map,
+            ),
+        }
+        plan = ModelTransferPlan.build(src_params, dst_params)
+        assert len(plan.param_plans) == 2
+
+        mock = _MockBackend()
+        full_w = torch.arange(100, dtype=torch.float32)
+        full_b = torch.arange(20, dtype=torch.float32)
+
+        # Send phase (src ranks 0-1)
+        for rank in range(2):
+            plan.execute(
+                {
+                    "weight": list(full_w.chunk(2))[rank],
+                    "bias": list(full_b.chunk(2))[rank],
+                },
+                rank=rank,
+                backend=mock.for_rank(rank),
+            )
+
+        # Recv phase (dst ranks 10-11)
+        for i, rank in enumerate([10, 11]):
+            result = plan.execute({}, rank=rank, backend=mock.for_rank(rank))
+            assert "weight" in result
+            assert "bias" in result
+            assert torch.equal(result["weight"], list(full_w.chunk(2))[i])
+            assert torch.equal(result["bias"], list(full_b.chunk(2))[i])
