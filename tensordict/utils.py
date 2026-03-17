@@ -1361,27 +1361,62 @@ def assert_close(
     return True
 
 
+def _plain_summary(tensor: Tensor) -> str:
+    """Short value summary for ``plain`` print mode."""
+    if isinstance(tensor, UninitializedTensorMixin) or tensor.numel() == 0:
+        return "[]"
+    if tensor.is_floating_point() or tensor.is_complex():
+        return f"mean={tensor.to(torch.float64).mean().item():.4g}, std={tensor.to(torch.float64).std().item():.4g}"
+    return f"min={tensor.min().item()}, max={tensor.max().item()}"
+
+
+def _tensor_repr_fields(tensor: Tensor) -> list[str]:
+    """Build the list of ``key=value`` strings for a single tensor descriptor."""
+    opts = _REPR_OPTIONS
+    parts: list[str] = []
+    if opts["show_shape"]:
+        parts.append(f"shape={_shape(tensor)}")
+    if opts["show_field_device"]:
+        parts.append(f"device={_device(tensor)}")
+    if opts["show_dtype"]:
+        parts.append(f"dtype={_dtype(tensor)}")
+    if opts["show_field_is_shared"]:
+        parts.append(f"is_shared={_is_shared(tensor)}")
+    if opts["show_grad"]:
+        parts.append(f"requires_grad={tensor.requires_grad}")
+    if opts["show_is_contiguous"]:
+        parts.append(f"is_contiguous={tensor.is_contiguous()}")
+    if opts["show_is_view"]:
+        parts.append(f"is_view={tensor._base is not None}")
+    if opts["show_storage_size"]:
+        parts.append(f"storage_size={tensor.untyped_storage().nbytes()}")
+    if opts["plain"]:
+        parts.append(_plain_summary(tensor))
+    return parts
+
+
 def _get_repr(tensor: Tensor) -> str:
-    s = ", ".join(
-        [
-            f"shape={_shape(tensor)}",
-            f"device={_device(tensor)}",
-            f"dtype={_dtype(tensor)}",
-            f"is_shared={_is_shared(tensor)}",
-        ]
-    )
+    s = ", ".join(_tensor_repr_fields(tensor))
     return f"{type(tensor).__name__}({s})"
 
 
+def _tensor_repr_fields_custom(shape, device, dtype, is_shared) -> list[str]:
+    """Build the list of ``key=value`` strings for a tensor descriptor with explicit values."""
+    opts = _REPR_OPTIONS
+    parts: list[str] = []
+    if opts["show_shape"]:
+        parts.append(f"shape={shape}")
+    if opts["show_field_device"]:
+        parts.append(f"device={device}")
+    if opts["show_dtype"]:
+        parts.append(f"dtype={dtype}")
+    if opts["show_field_is_shared"]:
+        parts.append(f"is_shared={is_shared}")
+    return parts
+
+
 def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
-    s = ", ".join(
-        [
-            f"shape={shape}",
-            f"device={device}",
-            f"dtype={dtype}",
-            f"is_shared={is_shared}",
-        ]
-    )
+    s = ", ".join(_tensor_repr_fields_custom(shape, device, dtype, is_shared))
     return f"{cls.__name__}({s})"
 
 
@@ -1439,8 +1474,14 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 )
             strs.append(sep.join([key, substr]))
 
+    sort_keys = _REPR_OPTIONS["sort_keys"]
+    if sort_keys == "alphabetical":
+        strs = sorted(strs)
+    elif callable(sort_keys):
+        strs = sorted(strs, key=sort_keys)
+
     return indent(
-        "\n" + ",\n".join(sorted(strs)),
+        "\n" + ",\n".join(strs),
         4 * " ",
     )
 
@@ -1764,6 +1805,112 @@ def _getitem_batch_size(batch_size, index):
     if batch_size[count:]:
         out.extend(batch_size[count:])
     return torch.Size(out)
+
+
+# Repr / print options
+_REPR_OPTIONS = {
+    "show_batch_size": True,
+    "show_device": True,
+    "show_is_shared": True,
+    "show_shape": True,
+    "show_field_device": True,
+    "show_dtype": True,
+    "show_field_is_shared": True,
+    "show_grad": False,
+    "show_is_contiguous": False,
+    "show_is_view": False,
+    "show_storage_size": False,
+    "plain": False,
+    "sort_keys": "alphabetical",
+}
+
+_REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
+
+
+class set_printoptions(_DecoratorContextManager):
+    """Controls which attributes appear in TensorDict's ``__repr__`` output.
+
+    Can be used as a global setter (via :meth:`set`), a context manager, or a
+    decorator.  Follows the same pattern as :class:`set_lazy_legacy`.
+
+    Keyword Args:
+        show_batch_size (bool, optional): Show ``batch_size`` in TensorDict repr.
+            Defaults to ``True``.
+        show_device (bool, optional): Show ``device`` in TensorDict repr.
+            Defaults to ``True``.
+        show_is_shared (bool, optional): Show ``is_shared`` in TensorDict repr.
+            Defaults to ``True``.
+        show_shape (bool, optional): Show ``shape`` in per-tensor field descriptors.
+            Defaults to ``True``.
+        show_field_device (bool, optional): Show ``device`` in per-tensor field
+            descriptors. Defaults to ``True``.
+        show_dtype (bool, optional): Show ``dtype`` in per-tensor field
+            descriptors. Defaults to ``True``.
+        show_field_is_shared (bool, optional): Show ``is_shared`` in per-tensor
+            field descriptors. Defaults to ``True``.
+        show_grad (bool, optional): Show ``requires_grad`` in per-tensor field
+            descriptors. Defaults to ``False``.
+        show_is_contiguous (bool, optional): Show ``is_contiguous`` in per-tensor
+            field descriptors. Defaults to ``False``.
+        show_is_view (bool, optional): Show ``is_view`` in per-tensor field
+            descriptors. Defaults to ``False``.
+        show_storage_size (bool, optional): Show ``storage_size`` (in bytes) in
+            per-tensor field descriptors. Defaults to ``False``.
+        plain (bool, optional): When ``True``, include a short summary of the
+            actual tensor values in the field descriptors. Defaults to ``False``.
+        sort_keys (str or callable, optional): Controls the order of keys in the
+            repr.  ``"alphabetical"`` (default) sorts keys lexicographically.
+            ``"insertion"`` preserves the order in which keys were added.
+            A callable is passed as the ``key`` argument to :func:`sorted`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, set_printoptions
+        >>> td = TensorDict({"x": torch.randn(3, 4)})
+        >>> # Global
+        >>> set_printoptions(show_device=False, show_is_shared=False).set()
+        >>> print(td)
+        >>> # Context manager
+        >>> with set_printoptions(show_dtype=False):
+        ...     print(td)
+        >>> # Decorator
+        >>> @set_printoptions(show_is_shared=False)
+        ... def my_func(td):
+        ...     print(td)
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__()
+        unknown = set(kwargs) - _REPR_OPTIONS_KEYS
+        if unknown:
+            raise TypeError(
+                f"Unknown printoptions: {unknown}. Valid options: {sorted(_REPR_OPTIONS_KEYS)}"
+            )
+        self._kwargs = kwargs
+
+    def clone(self) -> set_printoptions:
+        return type(self)(**self._kwargs)
+
+    def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
+        global _REPR_OPTIONS
+        self._old = dict(_REPR_OPTIONS)
+        _REPR_OPTIONS.update(self._kwargs)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _REPR_OPTIONS
+        _REPR_OPTIONS.update(self._old)
+
+
+def get_printoptions() -> dict:
+    """Returns the current TensorDict print options as a dict.
+
+    See :class:`set_printoptions` for details on each option.
+    """
+    return dict(_REPR_OPTIONS)
 
 
 # Lazy classes control (legacy feature)

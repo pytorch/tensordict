@@ -63,6 +63,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
+    _REPR_OPTIONS,
     _td_fields,
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
@@ -1548,6 +1549,11 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
                         t is None or t is NoneType or is_tensor_or_optional_tensor(t)
                         for t in args
                     )
+                # Handle parameterized generics (e.g., TensorDict[str, Tensor])
+                if origin is not None and isinstance(origin, type):
+                    return issubclass(origin, _TensorTypes) or _is_tensor_collection(
+                        origin
+                    )
                 return False
 
             for key, val in cls._type_hints.items():
@@ -2062,7 +2068,7 @@ def _update(
     if is_leaf is None:
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = self.from_dict(input_dict_or_td, auto_batch_size=False)
+        input_dict_or_td = type(self).from_dict(input_dict_or_td, auto_batch_size=False)
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2112,7 +2118,9 @@ def _update_(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
+        input_dict_or_td = type(self).from_dict(
+            input_dict_or_td, batch_size=self.batch_size
+        )
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2141,7 +2149,9 @@ def _update_at_(
     non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
-        input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
+        input_dict_or_td = type(self).from_dict(
+            input_dict_or_td, batch_size=self.batch_size
+        )
 
     if is_tensorclass(input_dict_or_td):
         non_tensordict = {
@@ -2274,20 +2284,17 @@ def _repr(self) -> str:
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
 
-    medatada_fields = []
+    metadata_fields = []
 
-    if "batch_size" not in self.__expected_keys__:
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        medatada_fields.append(batch_size_str)
-    elif "shape" not in self.__expected_keys__:
-        batch_size_str = indent(f"shape={self.shape}", 4 * " ")
-        medatada_fields.append(batch_size_str)
-    if "device" not in self.__expected_keys__:
-        device_str = indent(f"device={self.device}", 4 * " ")
-        medatada_fields.append(device_str)
-
-    is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-    medatada_fields.append(is_shared_str)
+    if _REPR_OPTIONS["show_batch_size"]:
+        if "batch_size" not in self.__expected_keys__:
+            metadata_fields.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+        elif "shape" not in self.__expected_keys__:
+            metadata_fields.append(indent(f"shape={self.shape}", 4 * " "))
+    if _REPR_OPTIONS["show_device"] and "device" not in self.__expected_keys__:
+        metadata_fields.append(indent(f"device={self.device}", 4 * " "))
+    if _REPR_OPTIONS["show_is_shared"]:
+        metadata_fields.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
 
     if len(non_tensor_fields) > 0:
         non_tensor_field_str = indent(
@@ -2295,13 +2302,13 @@ def _repr(self) -> str:
             4 * " ",
         )
         if field_str:
-            string = ",\n".join(field_str + [non_tensor_field_str, *medatada_fields])
+            string = ",\n".join(field_str + [non_tensor_field_str, *metadata_fields])
         else:
-            string = ",\n".join([non_tensor_field_str, *medatada_fields])
+            string = ",\n".join([non_tensor_field_str, *metadata_fields])
     elif field_str:
-        string = ",\n".join(field_str + medatada_fields)
-    elif len(medatada_fields) > 0:
-        string = ",\n".join(medatada_fields)
+        string = ",\n".join(field_str + metadata_fields)
+    elif len(metadata_fields) > 0:
+        string = ",\n".join(metadata_fields)
     else:
         string = ""
     return f"{type(self).__name__}({string})"
