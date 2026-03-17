@@ -9789,7 +9789,89 @@ class TensorDictBase(MutableMapping, TensorCollection):
             backend.recv_tensor(buf, src_int)
             self._set_str(key, buf, inplace=False, validated=True)
 
-    # -- Strategy B / C stubs (implemented in later PRs) ----------------
+    # -- Strategy B: local-shard + redistribute -------------------------
+
+    def _dtensor_send_redistribute(self, dst, *, backend) -> None:
+        """Send local shards + placement metadata.
+
+        The receiver will reconstruct DTensors with the sender's placements
+        and then redistribute() to its own target placements.
+        """
+        metadata = {}
+        tensors = []
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                raise NotImplementedError(
+                    "Nested TensorDicts in dtensor_send are not yet supported."
+                )
+            if hasattr(value, "placements"):
+                local = value.to_local()
+                placements_str = [str(p) for p in value.placements]
+                mesh_tensor = value.device_mesh.mesh.tolist()
+                mesh_dim_names = (
+                    list(value.device_mesh.mesh_dim_names)
+                    if value.device_mesh.mesh_dim_names is not None
+                    else None
+                )
+                metadata[key] = {
+                    "is_dtensor": True,
+                    "global_shape": list(value.shape),
+                    "local_shape": list(local.shape),
+                    "dtype": str(value.dtype),
+                    "placements": placements_str,
+                    "mesh": mesh_tensor,
+                    "mesh_dim_names": mesh_dim_names,
+                }
+                tensors.append((key, local))
+            else:
+                metadata[key] = {
+                    "is_dtensor": False,
+                    "shape": list(value.shape),
+                    "dtype": str(value.dtype),
+                }
+                tensors.append((key, value))
+
+        dst_int = dst if isinstance(dst, int) else 0
+        backend.send_object(metadata, dst_int)
+        for _key, tensor in tensors:
+            backend.send_tensor(tensor.contiguous(), dst_int)
+
+    def _dtensor_recv_redistribute(self, src, *, backend) -> None:
+        """Receive local shards and placement metadata.
+
+        Receives the sender's local shard (or plain tensor) and stores
+        it directly.  The caller can wrap with ``DTensor.from_local()``
+        and ``redistribute()`` afterwards if needed.
+        """
+        src_int = src if isinstance(src, int) else 0
+        metadata = backend.recv_object(src_int)
+
+        device = self.device
+        if device is None:
+            for key in self.sorted_keys:
+                v = self._get_str(key, NO_DEFAULT)
+                if hasattr(v, "device"):
+                    device = v.device
+                    break
+
+        for key, meta in metadata.items():
+            dtype = getattr(torch, meta["dtype"].replace("torch.", ""))
+            kwargs = {}
+            if device is not None:
+                kwargs["device"] = device
+            if meta["is_dtensor"]:
+                local_shape = torch.Size(meta["local_shape"])
+                buf = torch.empty(local_shape, dtype=dtype, **kwargs)
+                backend.recv_tensor(buf, src_int)
+                self._set_str(key, buf, inplace=False, validated=True)
+            else:
+                shape = torch.Size(meta["shape"])
+                buf = torch.empty(shape, dtype=dtype, **kwargs)
+                backend.recv_tensor(buf, src_int)
+                self._set_str(key, buf, inplace=False, validated=True)
+
+    # -- Strategy C stub (implemented in later PR) ----------------------
 
     def init_remote(
         self,
