@@ -9725,7 +9725,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # -- Strategy A: materialize-and-reshard ----------------------------
 
     def _dtensor_send_materialize(self, dst, *, backend) -> None:
-        """Send by materializing DTensors to full tensors first."""
+        """Send by materializing DTensors to full tensors first.
+
+        .. warning::
+            For any DTensor values, this calls ``full_tensor()`` which is
+            a **collective** operation — all ranks in the source mesh
+            must participate. Calling this method from a single rank
+            while other mesh ranks are idle will deadlock.  Pre-materialize
+            tensors before calling :meth:`dtensor_send` if only one rank
+            should perform the send.
+        """
         metadata = {}
         tensors = []
         for key in self.sorted_keys:
