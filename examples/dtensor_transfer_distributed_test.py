@@ -22,11 +22,10 @@ Strategy C (optimal): uses compute_transfer_plan to determine the minimal
 
 import torch
 import torch.distributed as dist
-from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor import Shard
-from torch.distributed.tensor import distribute_tensor
 
 from tensordict import TensorDict
+from torch.distributed.device_mesh import DeviceMesh
+from torch.distributed.tensor import distribute_tensor, Shard
 
 
 def log(msg: str):
@@ -54,9 +53,7 @@ def test_strategy_a_materialize():
     mesh = DeviceMesh("cuda", torch.arange(world_size))
 
     torch.manual_seed(42)
-    full_a = torch.arange(
-        world_size * 10, dtype=torch.float32, device="cuda"
-    )
+    full_a = torch.arange(world_size * 10, dtype=torch.float32, device="cuda")
     full_b = torch.randn(4, world_size * 8, dtype=torch.float32, device="cuda")
 
     dt_a = distribute_tensor(full_a, mesh, [Shard(0)])
@@ -120,9 +117,7 @@ def test_strategy_b_redistribute():
 
     mesh = DeviceMesh("cuda", torch.arange(world_size))
 
-    full_tensor = torch.arange(
-        world_size * 12, dtype=torch.float32, device="cuda"
-    )
+    full_tensor = torch.arange(world_size * 12, dtype=torch.float32, device="cuda")
     dt = distribute_tensor(full_tensor, mesh, [Shard(0)])
     td_src = TensorDict(weight=dt)
 
@@ -151,9 +146,9 @@ def test_strategy_b_redistribute():
 
         expected_local = list(full_tensor.chunk(world_size))[0]
         received = td_recv["weight"]
-        assert torch.allclose(received, expected_local), (
-            f"weight mismatch: got {received}, expected {expected_local}"
-        )
+        assert torch.allclose(
+            received, expected_local
+        ), f"weight mismatch: got {received}, expected {expected_local}"
         log("  Verification PASSED!")
 
     dist.barrier()
@@ -332,8 +327,10 @@ def main():
 
     torch.cuda.set_device(rank % torch.cuda.device_count())
 
-    log(f"Initialized: world_size={world_size}, "
-        f"device=cuda:{rank % torch.cuda.device_count()}")
+    log(
+        f"Initialized: world_size={world_size}, "
+        f"device=cuda:{rank % torch.cuda.device_count()}"
+    )
 
     test_plain_tensor()
     test_strategy_a_materialize()
