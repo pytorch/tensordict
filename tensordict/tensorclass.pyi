@@ -1072,6 +1072,26 @@ class TensorClass:
         init_tag: int = 0,
         pseudo_rand: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None: ...
+    def dtensor_send(
+        self,
+        dst,
+        *,
+        dst_mesh=None,
+        dst_placements=None,
+        strategy: str = "auto",
+        transport: str = "auto",
+        group=None,
+    ) -> None: ...
+    def dtensor_recv(
+        self,
+        src,
+        *,
+        src_mesh=None,
+        src_placements=None,
+        strategy: str = "auto",
+        transport: str = "auto",
+        group=None,
+    ) -> None: ...
     async def asend(self, dst: "TensorDictPipe") -> None: ...  # noqa: F821
     async def arecv(
         self,
