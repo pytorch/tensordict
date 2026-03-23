@@ -10318,6 +10318,46 @@ class TestSetPrintoptions:
             assert get_printoptions()["sort_keys"] == "insertion"
         assert get_printoptions()["sort_keys"] == before
 
+    def test_verbose_false(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(verbose=False):
+            r = repr(td)
+        assert "shape=" in r
+        assert "batch_size=" in r
+        assert "dtype=" not in r
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+        fields_line = [line for line in r.split("\n") if "Tensor(" in line][0]
+        assert "device=" not in fields_line
+        assert "is_shared=" not in fields_line
+
+    def test_verbose_false_explicit_override(self):
+        td = TensorDict({"a": torch.randn(3, 4)})
+        with set_printoptions(verbose=False, show_dtype=True):
+            r = repr(td)
+        assert "shape=" in r
+        assert "dtype=" in r
+        assert "\n    device=" not in r
+        assert "\n    is_shared=" not in r
+
+    def test_verbose_true_is_noop(self):
+        before = get_printoptions()
+        with set_printoptions(verbose=True):
+            td = TensorDict({"a": torch.randn(3, 4)})
+            after = get_printoptions()
+            repr(td)  # noqa
+        assert before == after
+
+    def test_verbose_false_restores(self):
+        before = get_printoptions()
+        with set_printoptions(verbose=False):
+            opts = get_printoptions()
+            assert opts["show_device"] is False
+            assert opts["show_dtype"] is False
+            assert opts["show_shape"] is True
+            assert opts["show_batch_size"] is True
+        assert get_printoptions() == before
+
 
 @pytest.mark.parametrize(
     "td_name",
