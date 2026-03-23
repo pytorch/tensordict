@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3922+g32d9fb65c.d20260317)
+                  main (0.11.0.dev3948+gfb51ac71e.d20260323)
                 </div>
               
             
@@ -362,13 +362,19 @@
 <h1>set_printoptions<a class="headerlink" href="#set-printoptions" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_printoptions">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_printoptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_printoptions" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_printoptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_printoptions" title="Permalink to this definition">¶</a></dt>
 <dd><p>Controls which attributes appear in TensorDict’s <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> output.</p>
 <p>Can be used as a global setter (via <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code>), a context manager, or a
 decorator.  Follows the same pattern as <a class="reference internal" href="tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>verbose</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Shortcut to control multiple options at once.
+When <code class="docutils literal notranslate"><span class="pre">False</span></code>, disables <code class="docutils literal notranslate"><span class="pre">show_device</span></code>, <code class="docutils literal notranslate"><span class="pre">show_is_shared</span></code>,
+<code class="docutils literal notranslate"><span class="pre">show_field_device</span></code>, <code class="docutils literal notranslate"><span class="pre">show_dtype</span></code>, and <code class="docutils literal notranslate"><span class="pre">show_field_is_shared</span></code>,
+leaving only shape information visible.  Explicit keyword arguments
+take precedence over <code class="docutils literal notranslate"><span class="pre">verbose</span></code>.  <code class="docutils literal notranslate"><span class="pre">verbose=True</span></code> (the default)
+has no effect — individual options keep their current values.</p></li>
 <li><p><strong>show_batch_size</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Show <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> in TensorDict repr.
 Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>show_device</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Show <code class="docutils literal notranslate"><span class="pre">device</span></code> in TensorDict repr.
@@ -413,6 +419,12 @@ A callable is passed as the <code class="docutils literal notranslate"><span cla
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Decorator</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@set_printoptions</span><span class="p">(</span><span class="n">show_is_shared</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">my_func</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Compact shapes-only output</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_printoptions</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Shapes-only but keep dtype visible</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_printoptions</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 </pre></div>
 </div>

@@ -83,6 +83,32 @@ the specified options:
     ... def summarise(td):
     ...     print(td)
 
+Compact shapes-only display (``verbose=False``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you mainly care about shapes and find the other attributes noisy, pass
+``verbose=False`` to hide device, dtype, and is_shared information in one shot:
+
+    >>> with set_printoptions(verbose=False):
+    ...     print(td)
+    TensorDict(
+        fields={
+            image: Tensor(shape=torch.Size([32, 3, 64, 64])),
+            label: Tensor(shape=torch.Size([32]))},
+        batch_size=torch.Size([32]))
+
+``verbose=True`` (the default) is a no-op and preserves backward
+compatibility.  Explicit keyword arguments always take precedence over
+``verbose``, so you can mix the two:
+
+    >>> with set_printoptions(verbose=False, show_dtype=True):
+    ...     print(td)
+    TensorDict(
+        fields={
+            image: Tensor(shape=torch.Size([32, 3, 64, 64]), dtype=torch.float32),
+            label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
+        batch_size=torch.Size([32]))
+
 Available options
 ~~~~~~~~~~~~~~~~~
 
@@ -108,6 +134,17 @@ Option                    Default      Description
 ``show_dtype``            ``True``     Show the ``dtype=`` attribute.
 ``show_field_is_shared``  ``True``     Show the ``is_shared=`` attribute.
 ========================  ===========  ============================================
+
+**Shortcut**:
+
+====================  ===========  ===================================================
+Option                Default      Description
+====================  ===========  ===================================================
+``verbose``           ``True``     When ``False``, hides ``show_device``,
+                                   ``show_is_shared``, ``show_field_device``,
+                                   ``show_dtype``, and ``show_field_is_shared``.
+                                   Explicit keyword arguments override ``verbose``.
+====================  ===========  ===================================================
 
 **Extended attributes** (off by default -- opt-in for deeper debugging):
 
