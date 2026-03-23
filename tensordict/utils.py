@@ -1827,6 +1827,15 @@ _REPR_OPTIONS = {
 _REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
 
 
+_VERBOSE_FALSE_OVERRIDES = {
+    "show_device": False,
+    "show_is_shared": False,
+    "show_field_device": False,
+    "show_dtype": False,
+    "show_field_is_shared": False,
+}
+
+
 class set_printoptions(_DecoratorContextManager):
     """Controls which attributes appear in TensorDict's ``__repr__`` output.
 
@@ -1834,6 +1843,12 @@ class set_printoptions(_DecoratorContextManager):
     decorator.  Follows the same pattern as :class:`set_lazy_legacy`.
 
     Keyword Args:
+        verbose (bool, optional): Shortcut to control multiple options at once.
+            When ``False``, disables ``show_device``, ``show_is_shared``,
+            ``show_field_device``, ``show_dtype``, and ``show_field_is_shared``,
+            leaving only shape information visible.  Explicit keyword arguments
+            take precedence over ``verbose``.  ``verbose=True`` (the default)
+            has no effect — individual options keep their current values.
         show_batch_size (bool, optional): Show ``batch_size`` in TensorDict repr.
             Defaults to ``True``.
         show_device (bool, optional): Show ``device`` in TensorDict repr.
@@ -1877,16 +1892,26 @@ class set_printoptions(_DecoratorContextManager):
         >>> @set_printoptions(show_is_shared=False)
         ... def my_func(td):
         ...     print(td)
+        >>> # Compact shapes-only output
+        >>> with set_printoptions(verbose=False):
+        ...     print(td)
+        >>> # Shapes-only but keep dtype visible
+        >>> with set_printoptions(verbose=False, show_dtype=True):
+        ...     print(td)
 
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, *, verbose: bool = True, **kwargs) -> None:
         super().__init__()
         unknown = set(kwargs) - _REPR_OPTIONS_KEYS
         if unknown:
             raise TypeError(
                 f"Unknown printoptions: {unknown}. Valid options: {sorted(_REPR_OPTIONS_KEYS)}"
             )
+        if not verbose:
+            merged = dict(_VERBOSE_FALSE_OVERRIDES)
+            merged.update(kwargs)
+            kwargs = merged
         self._kwargs = kwargs
 
     def clone(self) -> set_printoptions:
