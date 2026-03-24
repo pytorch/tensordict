@@ -3122,6 +3122,13 @@ class TestGeneric:
         assert td[0]["a"] == 0
         assert td[1]["a"] == "another string"
 
+    @set_list_to_stack(True)
+    def test_set_list_empty(self):
+        td = TensorDict()
+        td["key"] = []
+        assert isinstance(td["key"], torch.Tensor)
+        assert td["key"].shape == torch.Size([0])
+
     @pytest.fixture
     def _set_list_none(self):
         import tensordict.utils
