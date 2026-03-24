@@ -2176,6 +2176,8 @@ def list_to_stack(allow_none=False):
 def _convert_list_to_stack(
     a_list: list[Any],
 ) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack, bool]:  # noqa
+    if not a_list:
+        return torch.tensor(a_list), False
     # First, check elements and determine if there are lists within
     nontensor = True
     if all(isinstance(elt, list) for elt in a_list):
