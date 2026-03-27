@@ -2152,6 +2152,39 @@ class TestGuardCount:
         ), "clone() must produce independent data"
 
 
+class TestNestedCompileRegion:
+    def test_nested_compile_region_td(self):
+        """TensorDict can be passed through nested_compile_region (gh-1667)."""
+        torch._dynamo.reset_code_caches()
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(4, 4)
+
+            def forward(self, td):
+                acc = torch.zeros(td["x"].shape[0])
+                for _ in range(3):
+                    td, step = self._step(td)
+                    acc = acc + step
+                return acc
+
+            @torch.compiler.nested_compile_region
+            def _step(self, td):
+                x = self.linear(td["x"])
+                td = td.clone()
+                td["x"] = x
+                return td, x.sum(dim=-1)
+
+        model = Model()
+        td = TensorDict({"x": torch.randn(2, 4)}, batch_size=[2])
+
+        eager_result = model(td)
+        compiled = torch.compile(model)
+        compiled_result = compiled(td)
+        torch.testing.assert_close(eager_result, compiled_result)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

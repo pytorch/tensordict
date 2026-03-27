@@ -718,6 +718,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if func not in TD_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, TensorDictBase)) or _is_tensorclass(t) for t in types
         ):
+            from torch._ops import HigherOrderOperator
+
+            if isinstance(func, HigherOrderOperator):
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **kwargs)
             return NotImplemented
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
