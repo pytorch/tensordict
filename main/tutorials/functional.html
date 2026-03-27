@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3948+gfb51ac71e.d20260323)
+                  main (0.11.0.dev3952+g31b5ef553.d20260327)
                 </div>
               
             
@@ -363,9 +363,9 @@ to download the full example code.</p>
 <span id="sphx-glr-tutorials-functional-py"></span><h1>Functional Programming with TensorDict<a class="headerlink" href="#functional-programming-with-tensordict" title="Permalink to this heading">¶</a></h1>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
 <p>In this tutorial you will learn how to use <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> for
-functional-style programming with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, including
-parameter swapping, model ensembling with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a>, and
-functional calls with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functional_call()</span></code></a>.</p>
+functional-style programming with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, including
+parameter swapping, model ensembling with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a>, and
+functional calls with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functional_call()</span></code></a>.</p>
 <section id="tensordict-as-a-parameter-container">
 <h2>TensorDict as a parameter container<a class="headerlink" href="#tensordict-as-a-parameter-container" title="Permalink to this heading">¶</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_module()</span></code></a> extracts the parameters of a module into a
@@ -434,18 +434,18 @@ exit.</p>
         [0.],
         [0.],
         [0.]])
-Output with original params: tensor([[-0.1392],
-        [ 0.0118],
-        [-0.1392],
-        [-0.1392],
-        [-0.0556]], grad_fn=&lt;AddmmBackward0&gt;)
+Output with original params: tensor([[ 0.0128],
+        [ 0.0883],
+        [ 0.3108],
+        [ 0.0799],
+        [-0.0128]], grad_fn=&lt;AddmmBackward0&gt;)
 </pre></div>
 </div>
 </section>
 <section id="model-ensembling-with-torch-vmap">
 <h2>Model ensembling with <code class="docutils literal notranslate"><span class="pre">torch.vmap</span></code><a class="headerlink" href="#model-ensembling-with-torch-vmap" title="Permalink to this heading">¶</a></h2>
 <p>Because <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> supports batching and stacking, we can stack
-multiple parameter configurations and use <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to run the
+multiple parameter configurations and use <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to run the
 model across all of them in a single vectorized call.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">params_ones</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">apply_</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">))</span>
 <span class="n">params_stack</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="torch.stack" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">stack</span></a><span class="p">([</span><span class="n">params_zero</span><span class="p">,</span> <span class="n">params_ones</span><span class="p">,</span> <span class="n">params</span><span class="p">])</span>
@@ -472,7 +472,7 @@ Output shape: torch.Size([3, 5, 1])
 </section>
 <section id="functional-calls-with-torch-func">
 <h2>Functional calls with <code class="docutils literal notranslate"><span class="pre">torch.func</span></code><a class="headerlink" href="#functional-calls-with-torch-func" title="Permalink to this heading">¶</a></h2>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functional_call()</span></code></a> works with the state-dict extracted
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functional_call()</span></code></a> works with the state-dict extracted
 by <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_module()</span></code></a>. Because <code class="docutils literal notranslate"><span class="pre">from_module</span></code> returns a
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with the same structure as a state-dict, we can
 convert it to a regular dict and pass it directly.</p>
@@ -489,7 +489,7 @@ convert it to a regular dict and pass it directly.</p>
 </pre></div>
 </div>
 <p>The combination of <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_module()</span></code></a>,
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to_module" title="tensordict.TensorDict.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> makes it
+<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.to_module" title="tensordict.TensorDict.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> makes it
 straightforward to do things like compute per-sample gradients, run
 model ensembles, or implement meta-learning inner loops – all without
 leaving the standard PyTorch API.</p>

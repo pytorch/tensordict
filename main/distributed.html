@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.11.0.dev3948+gfb51ac71e.d20260323)
+                  main (0.11.0.dev3952+g31b5ef553.d20260327)
                 </div>
               
             
@@ -356,7 +356,7 @@
               
   <section id="tensordict-in-distributed-settings">
 <span id="distributed"></span><h1>TensorDict in distributed settings<a class="headerlink" href="#tensordict-in-distributed-settings" title="Permalink to this heading">¶</a></h1>
-<p>TensorDict integrates with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a> to send, receive,
+<p>TensorDict integrates with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.11)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a> to send, receive,
 broadcast, reduce, gather and scatter collections of tensors with a single
 method call.  It also supports shared-storage workflows where nodes access
 the same memory-mapped files on a shared filesystem.</p>
@@ -392,7 +392,7 @@ the same memory-mapped files on a shared filesystem.</p>
 <section id="prerequisites">
 <h2><a class="toc-backref" href="#id1" role="doc-backlink">Prerequisites</a><a class="headerlink" href="#prerequisites" title="Permalink to this heading">¶</a></h2>
 <p>All collective and point-to-point APIs below require a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> to be set up.  Refer to the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> to be set up.  Refer to the
 <a class="reference external" href="https://pytorch.org/docs/stable/distributed.html">PyTorch distributed documentation</a>
 for details.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
