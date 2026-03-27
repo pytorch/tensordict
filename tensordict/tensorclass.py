@@ -943,6 +943,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls, TensorDictBase)) for t in types
         ):
+            from torch._ops import HigherOrderOperator
+
+            if isinstance(func, HigherOrderOperator):
+                if kwargs is None:
+                    kwargs = {}
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **kwargs)
             return NotImplemented
 
         if kwargs is None:
@@ -3899,6 +3906,13 @@ class NonTensorDataBase(TensorClass):
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls)) for t in types
         ):
+            from torch._ops import HigherOrderOperator
+
+            if isinstance(func, HigherOrderOperator):
+                if kwargs is None:
+                    kwargs = {}
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **kwargs)
             return NotImplemented
 
         escape_conversion = func in (torch.stack,)

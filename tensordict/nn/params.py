@@ -512,6 +512,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
+            from torch._ops import HigherOrderOperator
+
+            if isinstance(func, HigherOrderOperator):
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **kwargs)
             return NotImplemented
         return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
