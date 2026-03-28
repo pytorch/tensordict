@@ -1,10 +1,10 @@
-# Flaky Test Report - 2026-03-27
+# Flaky Test Report - 2026-03-28
 
 ## Summary
 
 - **Flaky tests**: 19
 - **Newly flaky** (last 7 days): 0
-- **Total tests analyzed**: 46016
+- **Total tests analyzed**: 46017
 - **CI runs analyzed**: 30
 
 ---
@@ -13,9 +13,9 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 48.2% (27/56) | 27 | 0.96 | 2026-03-04 |
-| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 48.2% (27/56) | 27 | 0.96 | 2026-03-04 |
-| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 48.2% (27/56) | 27 | 0.96 | 2026-03-04 |
+| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 44.6% (25/56) | 25 | 0.89 | 2026-03-04 |
+| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 44.6% (25/56) | 25 | 0.89 | 2026-03-04 |
+| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 44.6% (25/56) | 25 | 0.89 | 2026-03-04 |
 | `...estTensorDictMP::test_chunksize_num_chunks[None-2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
 | `...estTensorDictMP::test_chunksize_num_chunks[4-None-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
 | `...TensorDictMP::test_chunksize_num_chunks[None-None-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
@@ -45,4 +45,4 @@
 
 ---
 
-*Generated at 2026-03-27T06:34:14.203646+00:00*
+*Generated at 2026-03-28T06:28:30.425310+00:00*
