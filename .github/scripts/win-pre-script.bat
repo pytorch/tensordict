@@ -16,13 +16,16 @@ if errorlevel 1 (
     echo Successfully installed pybind11.
 )
 
-:: Install setuptools_scm which is required for building with --no-isolation
-%CONDA_RUN% pip install setuptools_scm
+:: Install setuptools_scm which is required for building with --no-isolation.
+:: setuptools>=82 removed pkg_resources and no longer vendors `packaging`;
+:: PyTorch imports `from packaging.version import Version` at init time,
+:: so the standalone package must be present.
+%CONDA_RUN% pip install setuptools_scm packaging
 
 :: Check if the installation was successful
 if errorlevel 1 (
-    echo Failed to install setuptools_scm.
+    echo Failed to install setuptools_scm or packaging.
     exit /b 1
 ) else (
-    echo Successfully installed setuptools_scm.
+    echo Successfully installed setuptools_scm and packaging.
 )
