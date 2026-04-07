@@ -1,4 +1,4 @@
-# Flaky Test Report - 2026-04-06
+# Flaky Test Report - 2026-04-07
 
 ## Summary
 
@@ -13,25 +13,25 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 41.1% (23/56) | 23 | 0.82 | 2026-03-04 |
-| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 41.1% (23/56) | 23 | 0.82 | 2026-03-04 |
-| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 41.1% (23/56) | 23 | 0.82 | 2026-03-04 |
-| `...estTensorDictMP::test_chunksize_num_chunks[None-2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...estTensorDictMP::test_chunksize_num_chunks[4-None-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...TensorDictMP::test_chunksize_num_chunks[None-None-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[-2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[-1-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[0-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[1-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `test.test_tensordict.TestTensorDictMP::test_map[3-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...ensordict.TestTensorDictMP::test_map_exception[-2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...ensordict.TestTensorDictMP::test_map_exception[-1-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...tensordict.TestTensorDictMP::test_map_exception[0-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...tensordict.TestTensorDictMP::test_map_exception[1-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...tensordict.TestTensorDictMP::test_map_exception[2-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...tensordict.TestTensorDictMP::test_map_exception[3-td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
-| `...nsordict.TestTensorDictMP::test_sharing_locked_td[td_with_unbatched-device34]` | 14.3% (8/56) | 8 | 0.29 | 2026-03-12 |
+| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 38.9% (21/54) | 21 | 0.78 | 2026-03-04 |
+| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 38.9% (21/54) | 21 | 0.78 | 2026-03-04 |
+| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 38.9% (21/54) | 21 | 0.78 | 2026-03-04 |
+| `...estTensorDictMP::test_chunksize_num_chunks[None-2-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...estTensorDictMP::test_chunksize_num_chunks[4-None-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...TensorDictMP::test_chunksize_num_chunks[None-None-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[-2-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[-1-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[0-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[1-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[2-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `test.test_tensordict.TestTensorDictMP::test_map[3-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...ensordict.TestTensorDictMP::test_map_exception[-2-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...ensordict.TestTensorDictMP::test_map_exception[-1-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...tensordict.TestTensorDictMP::test_map_exception[0-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...tensordict.TestTensorDictMP::test_map_exception[1-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...tensordict.TestTensorDictMP::test_map_exception[2-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...tensordict.TestTensorDictMP::test_map_exception[3-td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
+| `...nsordict.TestTensorDictMP::test_sharing_locked_td[td_with_unbatched-device34]` | 14.8% (8/54) | 8 | 0.30 | 2026-03-12 |
 
 
 ---
@@ -45,4 +45,4 @@
 
 ---
 
-*Generated at 2026-04-06T06:48:04.923984+00:00*
+*Generated at 2026-04-07T06:40:31.283212+00:00*
