@@ -1,0 +1,1349 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>TensorDict in distributed settings &mdash; tensordict 0.12 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tracing TensorDictModule" href="fx.html" />
+    <link rel="prev" title="Cross-class compatibility" href="compatibility.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="active docs-active">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.12
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional Programming with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="compatibility.html">Cross-class compatibility</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="storage.html">Storing large heterogeneous data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and Display</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>TensorDict in distributed settings</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="_sources/distributed.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+          
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="tensordict-in-distributed-settings">
+<span id="distributed"></span><h1>TensorDict in distributed settings<a class="headerlink" href="#tensordict-in-distributed-settings" title="Permalink to this heading">¶</a></h1>
+<p>TensorDict integrates with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.11)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a> to send, receive,
+broadcast, reduce, gather and scatter collections of tensors with a single
+method call.  It also supports shared-storage workflows where nodes access
+the same memory-mapped files on a shared filesystem.</p>
+<nav class="contents local" id="on-this-page">
+<p class="topic-title">On this page</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#prerequisites" id="id1">Prerequisites</a></p></li>
+<li><p><a class="reference internal" href="#consolidate-and-fast-serialization" id="id2"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></p></li>
+<li><p><a class="reference internal" href="#point-to-point-send-recv" id="id3">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#async-point-to-point-isend-irecv" id="id4">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#cold-start-initialization-init-remote-from-remote-init" id="id5">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></p></li>
+<li><p><a class="reference internal" href="#broadcast" id="id6">Broadcast</a></p></li>
+<li><p><a class="reference internal" href="#all-reduce" id="id7">All-reduce</a></p></li>
+<li><p><a class="reference internal" href="#reduce" id="id8">Reduce</a></p></li>
+<li><p><a class="reference internal" href="#all-gather" id="id9">All-gather</a></p></li>
+<li><p><a class="reference internal" href="#scatter" id="id10">Scatter</a></p></li>
+<li><p><a class="reference internal" href="#quick-reference" id="id11">Quick reference</a></p></li>
+<li><p><a class="reference internal" href="#high-performance-streaming-with-ucxx" id="id12">High-performance streaming with UCXX</a></p>
+<ul>
+<li><p><a class="reference internal" href="#installing-ucxx" id="id13">Installing UCXX</a></p></li>
+<li><p><a class="reference internal" href="#tensordictpipe-the-two-phase-protocol" id="id14"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a></p></li>
+<li><p><a class="reference internal" href="#establishing-a-connection" id="id15">Establishing a connection</a></p></li>
+<li><p><a class="reference internal" href="#async-iteration" id="id16">Async iteration</a></p></li>
+<li><p><a class="reference internal" href="#cpu-and-cuda-transfers" id="id17">CPU and CUDA transfers</a></p></li>
+<li><p><a class="reference internal" href="#unified-api-with-send-recv" id="id18">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></p></li>
+<li><p><a class="reference internal" href="#one-to-many-tensordictserver" id="id19">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a></p></li>
+<li><p><a class="reference internal" href="#benchmarks" id="id20">Benchmarks</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#shared-storage-workflows-memory-mapped" id="id21">Shared-storage workflows (memory-mapped)</a></p></li>
+</ul>
+</nav>
+<section id="prerequisites">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Prerequisites</a><a class="headerlink" href="#prerequisites" title="Permalink to this heading">¶</a></h2>
+<p>All collective and point-to-point APIs below require a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> to be set up.  Refer to the
+<a class="reference external" href="https://pytorch.org/docs/stable/distributed.html">PyTorch distributed documentation</a>
+for details.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="consolidate-and-fast-serialization">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a><a class="headerlink" href="#consolidate-and-fast-serialization" title="Permalink to this heading">¶</a></h2>
+<p>Several distributed primitives (<em>broadcast</em>, <em>all_gather</em>, <em>scatter</em>,
+<em>init_remote / from_remote_init</em>, and <em>consolidated send / recv</em>) rely on
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>, which packs every leaf tensor
+into a single contiguous storage buffer.  This turns an arbitrarily nested
+TensorDict into <strong>one</strong> message on the wire:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">td_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># td_c._consolidated[&quot;storage&quot;]  – a single flat uint8 tensor</span>
+<span class="c1"># td_c._consolidated[&quot;metadata&quot;] – a dict describing how to reconstruct the tree</span>
+</pre></div>
+</div>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">metadata=True</span></code> so that the receiving side can reconstruct the full
+tree structure.</p>
+</section>
+<section id="point-to-point-send-recv">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a><a class="headerlink" href="#point-to-point-send-recv" title="Permalink to this heading">¶</a></h2>
+<p>The simplest pattern sends a TensorDict from one rank to another.
+The receiver must already hold a TensorDict with matching structure so that
+incoming tensors can be written in-place:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">td</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><strong>Consolidated mode</strong> sends the entire TensorDict as a single tensor message
+instead of one message per leaf.  This is more efficient when
+the TensorDict has many small tensors:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0  – sender</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">consolidated</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># rank 1  – receiver (must already be consolidated)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">consolidated</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a> for the full API.</p>
+</section>
+<section id="async-point-to-point-isend-irecv">
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a><a class="headerlink" href="#async-point-to-point-isend-irecv" title="Permalink to this heading">¶</a></h2>
+<p>Non-blocking variants let you overlap communication with computation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0</span>
+<span class="n">td</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1</span>
+<span class="n">futures</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">return_premature</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># ... do other work ...</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.isend" title="tensordict.TensorDictBase.isend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isend()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.irecv" title="tensordict.TensorDictBase.irecv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">irecv()</span></code></a> for the full API.</p>
+</section>
+<section id="cold-start-initialization-init-remote-from-remote-init">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a><a class="headerlink" href="#cold-start-initialization-init-remote-from-remote-init" title="Permalink to this heading">¶</a></h2>
+<p>When the receiving rank does <strong>not</strong> know the structure of the TensorDict in
+advance, <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> sends both the metadata <em>and</em> the content so that
+the receiver can reconstruct the full object from scratch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0  – sender</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">84</span><span class="p">),</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">init_remote</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># rank 1  – receiver</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_remote_init</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># fully reconstructed, including nested structure</span>
+</pre></div>
+</div>
+<p>This is handy during setup / warm-up: the first call uses <code class="docutils literal notranslate"><span class="pre">init_remote</span></code>
+/ <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code> to establish the schema, and subsequent transfers
+use the faster <code class="docutils literal notranslate"><span class="pre">send(consolidated=True)</span></code> / <code class="docutils literal notranslate"><span class="pre">recv(consolidated=True)</span></code>
+path.</p>
+<p>Two transport modes are available:</p>
+<ul class="simple">
+<li><p><strong>Point-to-point</strong> (default): only sender and receiver participate.</p></li>
+<li><p><strong>Broadcast</strong> (<code class="docutils literal notranslate"><span class="pre">use_broadcast=True</span></code>): delegates to
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.  All ranks in the group
+must participate.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># all ranks</span>
+<span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">td</span><span class="o">.</span><span class="n">init_remote</span><span class="p">(</span><span class="n">use_broadcast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_remote_init</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">use_broadcast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> objects are preserved across the wire: the receiving side
+will automatically reconstruct the original tensorclass type.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.init_remote" title="tensordict.TensorDictBase.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.from_remote_init" title="tensordict.TensorDictBase.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a> for the full API.</p>
+</section>
+<section id="broadcast">
+<h2><a class="toc-backref" href="#id6" role="doc-backlink">Broadcast</a><a class="headerlink" href="#broadcast" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a> sends a consolidated
+TensorDict from <em>one</em> rank to <em>all</em> ranks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">src</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">)</span>
+<span class="c1"># all ranks now hold the same td</span>
+</pre></div>
+</div>
+<p>Internally this broadcasts the metadata via
+<code class="docutils literal notranslate"><span class="pre">dist.broadcast_object_list</span></code> followed by the storage via
+<code class="docutils literal notranslate"><span class="pre">dist.broadcast</span></code>.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.</p>
+</section>
+<section id="all-reduce">
+<h2><a class="toc-backref" href="#id7" role="doc-backlink">All-reduce</a><a class="headerlink" href="#all-reduce" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_reduce" title="tensordict.TensorDictBase.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a> reduces every leaf tensor
+across all ranks in-place:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">td</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+<span class="c1"># td[&quot;a&quot;] is now the sum across all ranks</span>
+</pre></div>
+</div>
+<p>Supports <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code> to return a list of futures.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_reduce" title="tensordict.TensorDictBase.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a>.</p>
+</section>
+<section id="reduce">
+<h2><a class="toc-backref" href="#id8" role="doc-backlink">Reduce</a><a class="headerlink" href="#reduce" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.reduce" title="tensordict.TensorDictBase.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a> is like <code class="docutils literal notranslate"><span class="pre">all_reduce</span></code> but only
+the destination rank receives the result:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.reduce" title="tensordict.TensorDictBase.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a>.</p>
+</section>
+<section id="all-gather">
+<h2><a class="toc-backref" href="#id9" role="doc-backlink">All-gather</a><a class="headerlink" href="#all-gather" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_gather" title="tensordict.TensorDictBase.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a> gathers TensorDict instances
+from every rank and returns a list (one per rank):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">local_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="n">all_tds</span> <span class="o">=</span> <span class="n">local_td</span><span class="o">.</span><span class="n">all_gather</span><span class="p">()</span>
+<span class="c1"># len(all_tds) == world_size</span>
+</pre></div>
+</div>
+<p>Uses consolidated transport: each rank consolidates its TensorDict,
+metadata is gathered with <code class="docutils literal notranslate"><span class="pre">dist.all_gather_object</span></code>, and storage buffers
+are gathered with <code class="docutils literal notranslate"><span class="pre">dist.all_gather</span></code>.</p>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.all_gather" title="tensordict.TensorDictBase.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a>.</p>
+</section>
+<section id="scatter">
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">Scatter</a><a class="headerlink" href="#scatter" title="Permalink to this heading">¶</a></h2>
+<p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.scatter" title="tensordict.TensorDictBase.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a> distributes <em>different</em>
+TensorDict instances from one rank to all other ranks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">src</span><span class="p">:</span>
+    <span class="n">tds</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)]</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">tds</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">src</span><span class="p">,</span> <span class="n">tensordicts</span><span class="o">=</span><span class="n">tds</span><span class="p">)</span>
+<span class="c1"># each rank receives its own td</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.scatter" title="tensordict.TensorDictBase.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a>.</p>
+</section>
+<section id="quick-reference">
+<h2><a class="toc-backref" href="#id11" role="doc-backlink">Quick reference</a><a class="headerlink" href="#quick-reference" title="Permalink to this heading">¶</a></h2>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Transport</p></th>
+<th class="head"><p>Participants</p></th>
+<th class="head"><p>Use case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.send" title="tensordict.LazyStackedTensorDict.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.recv" title="tensordict.LazyStackedTensorDict.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a></p></td>
+<td><p>point-to-point</p></td>
+<td><p>2 ranks</p></td>
+<td><p>Steady-state data transfer (supports <code class="docutils literal notranslate"><span class="pre">consolidated=True</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.isend" title="tensordict.LazyStackedTensorDict.isend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isend()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.irecv" title="tensordict.LazyStackedTensorDict.irecv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">irecv()</span></code></a></p></td>
+<td><p>point-to-point (async)</p></td>
+<td><p>2 ranks</p></td>
+<td><p>Overlapping communication and computation</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.init_remote" title="tensordict.LazyStackedTensorDict.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> / <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.from_remote_init" title="tensordict.LazyStackedTensorDict.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a></p></td>
+<td><p>point-to-point or broadcast</p></td>
+<td><p>2 ranks (or all)</p></td>
+<td><p>Cold-start: receiver doesn’t know the schema</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.broadcast" title="tensordict.LazyStackedTensorDict.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>One-to-all (same data)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.scatter" title="tensordict.LazyStackedTensorDict.scatter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatter()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>One-to-all (different data per rank)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.all_gather" title="tensordict.LazyStackedTensorDict.all_gather"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_gather()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>All-to-all gather</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.all_reduce" title="tensordict.LazyStackedTensorDict.all_reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all_reduce()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>In-place reduce (e.g. gradient averaging)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.reduce" title="tensordict.LazyStackedTensorDict.reduce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reduce()</span></code></a></p></td>
+<td><p>collective</p></td>
+<td><p>all ranks</p></td>
+<td><p>Reduce to single rank</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="high-performance-streaming-with-ucxx">
+<h2><a class="toc-backref" href="#id12" role="doc-backlink">High-performance streaming with UCXX</a><a class="headerlink" href="#high-performance-streaming-with-ucxx" title="Permalink to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> primitives above operate within a process group
+and are ideal for collective communication patterns.  For <strong>persistent
+point-to-point streaming</strong> — such as a data-producer on one node
+continuously feeding batches to a trainer on another —
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> provides a higher-performance
+alternative built on <a class="reference external" href="https://github.com/rapidsai/ucxx">UCXX</a>, the
+Python bindings for <a class="reference external" href="https://openucx.org/">UCX</a>.</p>
+<p>Key advantages over <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> send/recv:</p>
+<ul class="simple">
+<li><p><strong>No process group required</strong> — connect directly by IP and port.</p></li>
+<li><p><strong>Zero-allocation steady-state</strong> — after the first send establishes
+the schema, subsequent sends transmit only the raw storage buffer
+with no metadata, no allocation, and no parsing on the receiver.</p></li>
+<li><p><strong>InfiniBand / RDMA</strong> — UCX auto-selects the fastest available
+transport (TCP, InfiniBand verbs, RoCE).</p></li>
+<li><p><strong>GPUDirect RDMA</strong> — when tensors live on CUDA, the consolidated
+buffer is sent directly from GPU memory over RDMA, matching NCCL
+throughput without CPU staging.</p></li>
+<li><p><strong>Async-native</strong> — built on <a class="reference external" href="https://docs.python.org/3/library/asyncio.html#module-asyncio" title="(in Python v3.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">asyncio</span></code></a>, with synchronous wrappers
+for convenience.</p></li>
+</ul>
+<section id="installing-ucxx">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">Installing UCXX</a><a class="headerlink" href="#installing-ucxx" title="Permalink to this heading">¶</a></h3>
+<p>UCXX requires a Linux host with UCX system libraries.  Install via pip
+or conda:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># pip (CUDA 12)</span>
+pip<span class="w"> </span>install<span class="w"> </span>ucxx-cu12
+
+<span class="c1"># pip (CUDA 13)</span>
+pip<span class="w"> </span>install<span class="w"> </span>ucxx-cu13
+
+<span class="c1"># conda</span>
+conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>-c<span class="w"> </span>rapidsai<span class="w"> </span>ucxx
+</pre></div>
+</div>
+<p>For InfiniBand support the host needs <code class="docutils literal notranslate"><span class="pre">rdma-core</span></code> (or MOFED 5.0+) and
+a Linux kernel ≥ 5.6.  For GPUDirect RDMA, the <code class="docutils literal notranslate"><span class="pre">nvidia_peermem</span></code> kernel
+module must be loaded.  Verify with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># check IB devices</span>
+ibstat
+
+<span class="c1"># check GPUDirect RDMA</span>
+lsmod<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>nvidia_peermem
+</pre></div>
+</div>
+<p>UCX picks up transports automatically.  You can control transport
+selection with environment variables:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># let UCX auto-select (recommended)</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_TLS</span><span class="o">=</span>all
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_NET_DEVICES</span><span class="o">=</span>all
+
+<span class="c1"># restrict to TCP only (useful for debugging)</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">UCX_TLS</span><span class="o">=</span>tcp
+</pre></div>
+</div>
+</section>
+<section id="tensordictpipe-the-two-phase-protocol">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a><a class="headerlink" href="#tensordictpipe-the-two-phase-protocol" title="Permalink to this heading">¶</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> wraps a UCXX endpoint into a
+typed channel that understands TensorDict’s consolidated layout.  It
+implements a <strong>two-phase protocol</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong>Handshake (first send)</strong> — the sender consolidates the TensorDict,
+transmits the consolidation metadata (keys, dtypes, shapes, byte
+offsets — serialized as JSON) followed by the raw storage buffer.
+The receiver allocates a single flat tensor and rebuilds a TensorDict
+whose leaves are views into that buffer.</p></li>
+<li><p><strong>Steady-state (subsequent sends with same schema)</strong> — the sender
+sends a one-byte “same schema” flag followed by just the raw buffer.
+The receiver overwrites its pre-allocated storage in-place.  No
+allocation, no metadata parsing, no deserialization.</p></li>
+</ol>
+<p>When the schema changes (e.g. different keys or shapes), the pipe
+automatically falls back to the handshake phase.</p>
+</section>
+<section id="establishing-a-connection">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">Establishing a connection</a><a class="headerlink" href="#establishing-a-connection" title="Permalink to this heading">¶</a></h3>
+<p>One side listens, the other connects:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._ucxx</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPipe</span>
+
+<span class="c1"># --- node A (receiver) ---</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">receiver</span><span class="p">():</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
+
+    <span class="c1"># first receive: handshake — allocates buffer, builds TensorDict</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># TensorDict with the sender&#39;s keys/shapes/dtypes</span>
+
+    <span class="c1"># steady-state: zero-alloc receive into the same buffer</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+        <span class="n">train</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+
+<span class="c1"># --- node B (sender) ---</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">sender</span><span class="p">():</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">&quot;10.0.1.1&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">dataloader</span><span class="p">:</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">]},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">B</span><span class="p">])</span>
+        <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The pipe also supports synchronous usage and context managers:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># synchronous</span>
+<span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+
+<span class="c1"># context manager</span>
+<span class="k">async</span> <span class="k">with</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">pipe</span><span class="p">:</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="async-iteration">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">Async iteration</a><a class="headerlink" href="#async-iteration" title="Permalink to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> implements the async iterator protocol, so you can
+consume incoming TensorDicts with <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">for</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">13337</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">pipe</span><span class="p">:</span>
+    <span class="n">train</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The iterator yields the received TensorDict on each iteration,
+automatically reusing the buffer after the first handshake.</p>
+</section>
+<section id="cpu-and-cuda-transfers">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">CPU and CUDA transfers</a><a class="headerlink" href="#cpu-and-cuda-transfers" title="Permalink to this heading">¶</a></h3>
+<p>The pipe is <strong>device-aware</strong>.  When the sender’s TensorDict contains
+CUDA tensors, the consolidated buffer lives on GPU and is transferred
+directly over RDMA (GPUDirect) without touching host memory.  The
+receiver automatically allocates its buffer on the same device:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sender — data on GPU</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1024</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># sends from GPU memory</span>
+
+<span class="c1"># receiver — automatically receives into GPU memory</span>
+<span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>  <span class="c1"># cuda:0</span>
+</pre></div>
+</div>
+<p>You can override the receiver’s device by passing <code class="docutils literal notranslate"><span class="pre">device=</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>  <span class="c1"># force receive onto CPU</span>
+</pre></div>
+</div>
+</section>
+<section id="unified-api-with-send-recv">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a><a class="headerlink" href="#unified-api-with-send-recv" title="Permalink to this heading">¶</a></h3>
+<p>The <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a> methods accept a
+<code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> in place of a rank integer:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># works with torch.distributed</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># works with UCXX — same API, different transport</span>
+<span class="n">td</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="n">pipe</span><span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">pipe</span><span class="p">)</span>
+
+<span class="c1"># async variants</span>
+<span class="k">await</span> <span class="n">td</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">td</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This makes it easy to switch between <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> and UCXX
+without changing application logic.</p>
+</section>
+<section id="one-to-many-tensordictserver">
+<h3><a class="toc-backref" href="#id19" role="doc-backlink">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a><a class="headerlink" href="#one-to-many-tensordictserver" title="Permalink to this heading">¶</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictServer</span></code> accepts multiple incoming
+connections, yielding a separate <code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code> for each client:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._ucxx</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictServer</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_client</span><span class="p">(</span><span class="n">pipe</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">pipe</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+<span class="k">async</span> <span class="k">with</span> <span class="n">TensorDictServer</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">serve</span><span class="p">(</span><span class="n">handle_client</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Or using the async iterator interface:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">with</span> <span class="n">TensorDictServer</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="n">server</span><span class="p">:</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="n">handle_client</span><span class="p">(</span><span class="n">pipe</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="benchmarks">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">Benchmarks</a><a class="headerlink" href="#benchmarks" title="Permalink to this heading">¶</a></h3>
+<p>The numbers below were measured on a two-node cluster with NVIDIA H200
+GPUs and 400 Gb/s InfiniBand (<code class="docutils literal notranslate"><span class="pre">nvidia_peermem</span></code> loaded for GPUDirect
+RDMA).  Each transfer is a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> whose leaves are packed into a
+single contiguous <code class="docutils literal notranslate"><span class="pre">float32</span></code> buffer of the indicated size.  Latencies
+are averages over 50 steady-state iterations after warm-up (UCXX “first
+send” includes the one-off metadata handshake).  The benchmark script is
+at <code class="docutils literal notranslate"><span class="pre">benchmarks/distributed/bench_transport.py</span></code>.</p>
+<p><strong>CPU — gloo (TCP) vs UCXX (InfiniBand)</strong></p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 43%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Size</p></th>
+<th class="head"><p>Method</p></th>
+<th class="head"><p>Latency</p></th>
+<th class="head"><p>Throughput</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>900 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 KB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>212 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>105 µs</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>963 µs</p></td>
+<td><p>2.18 GB/s</p></td>
+</tr>
+<tr class="row-even"><td><p>1 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>903 µs</p></td>
+<td><p>2.32 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>682 µs</strong></p></td>
+<td><p><strong>3.08 GB/s</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>87 ms</p></td>
+<td><p>2.40 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (consolidated)</p></td>
+<td><p>87 ms</p></td>
+<td><p>2.42 GB/s</p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>gloo <code class="docutils literal notranslate"><span class="pre">broadcast</span></code></p></td>
+<td><p>159 ms</p></td>
+<td><p>1.32 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>37 ms</strong></p></td>
+<td><p><strong>5.71 GB/s</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>UCXX over InfiniBand is <strong>2.4× faster</strong> than the best gloo method for
+large CPU transfers.</p>
+<p><strong>CUDA — NCCL vs UCXX (GPUDirect RDMA)</strong></p>
+<table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 43%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Size</p></th>
+<th class="head"><p>Method</p></th>
+<th class="head"><p>Latency</p></th>
+<th class="head"><p>Throughput</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1 KB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>231 µs</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>1 KB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>138 µs</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>1 MB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>238 µs</p></td>
+<td><p>8.81 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>1 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>231 µs</strong></p></td>
+<td><p><strong>9.08 GB/s</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>100 MB</p></td>
+<td><p>NCCL <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> (leaf)</p></td>
+<td><p>7.50 ms</p></td>
+<td><p>27.95 GB/s</p></td>
+</tr>
+<tr class="row-odd"><td><p>100 MB</p></td>
+<td><p><strong>UCXX pipe (steady-state)</strong></p></td>
+<td><p><strong>7.47 ms</strong></p></td>
+<td><p><strong>28.08 GB/s</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>UCXX matches NCCL throughput for large CUDA transfers and is
+<strong>40% faster</strong> for small messages (138 µs vs 231 µs at 1 KB) due to
+lower per-message overhead.  Both backends use GPUDirect RDMA — the
+consolidated storage stays on GPU and goes directly over InfiniBand
+without CPU staging.</p>
+</section>
+</section>
+<section id="shared-storage-workflows-memory-mapped">
+<h2><a class="toc-backref" href="#id21" role="doc-backlink">Shared-storage workflows (memory-mapped)</a><a class="headerlink" href="#shared-storage-workflows-memory-mapped" title="Permalink to this heading">¶</a></h2>
+<p>When nodes share a filesystem (e.g. NFS), a memory-mapped TensorDict lets
+multiple processes read from and write to the same data without sending
+tensors over the network.</p>
+<p>Create a memory-mapped TensorDict with
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> or
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">MemoryMappedTensor</span>
+
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+        <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">50000</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Any process that can read <code class="docutils literal notranslate"><span class="pre">/shared/nfs/dataset</span></code> can load this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">td</span><span class="p">[:</span><span class="mi">64</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>  <span class="c1"># only reads the first 64 entries</span>
+</pre></div>
+</div>
+<p>For more details on memory-mapped serialization, see the
+<a class="reference internal" href="saving.html#saving"><span class="std std-ref">saving documentation</span></a>.</p>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="fx.html" class="btn btn-neutral float-right" title="Tracing TensorDictModule" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="compatibility.html" class="btn btn-neutral" title="Cross-class compatibility" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">TensorDict in distributed settings</a><ul>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#consolidate-and-fast-serialization"><code class="docutils literal notranslate"><span class="pre">consolidate()</span></code> and fast serialization</a></li>
+<li><a class="reference internal" href="#point-to-point-send-recv">Point-to-point: <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
+<li><a class="reference internal" href="#async-point-to-point-isend-irecv">Async point-to-point: <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></a></li>
+<li><a class="reference internal" href="#cold-start-initialization-init-remote-from-remote-init">Cold-start initialization: <code class="docutils literal notranslate"><span class="pre">init_remote</span></code> / <code class="docutils literal notranslate"><span class="pre">from_remote_init</span></code></a></li>
+<li><a class="reference internal" href="#broadcast">Broadcast</a></li>
+<li><a class="reference internal" href="#all-reduce">All-reduce</a></li>
+<li><a class="reference internal" href="#reduce">Reduce</a></li>
+<li><a class="reference internal" href="#all-gather">All-gather</a></li>
+<li><a class="reference internal" href="#scatter">Scatter</a></li>
+<li><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+<li><a class="reference internal" href="#high-performance-streaming-with-ucxx">High-performance streaming with UCXX</a><ul>
+<li><a class="reference internal" href="#installing-ucxx">Installing UCXX</a></li>
+<li><a class="reference internal" href="#tensordictpipe-the-two-phase-protocol"><code class="docutils literal notranslate"><span class="pre">TensorDictPipe</span></code>: the two-phase protocol</a></li>
+<li><a class="reference internal" href="#establishing-a-connection">Establishing a connection</a></li>
+<li><a class="reference internal" href="#async-iteration">Async iteration</a></li>
+<li><a class="reference internal" href="#cpu-and-cuda-transfers">CPU and CUDA transfers</a></li>
+<li><a class="reference internal" href="#unified-api-with-send-recv">Unified API with <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">recv</span></code></a></li>
+<li><a class="reference internal" href="#one-to-many-tensordictserver">One-to-many: <code class="docutils literal notranslate"><span class="pre">TensorDictServer</span></code></a></li>
+<li><a class="reference internal" href="#benchmarks">Benchmarks</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#shared-storage-workflows-memory-mapped">Shared-storage workflows (memory-mapped)</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+         <script src="_static/jquery.js"></script>
+         <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="_static/doctools.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title" class="active">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

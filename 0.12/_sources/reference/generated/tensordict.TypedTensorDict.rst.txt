@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+TypedTensorDict
+===============
+
+.. autoclass:: TypedTensorDict
+    :members:
+    :inherited-members:
