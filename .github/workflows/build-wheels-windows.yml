@@ -31,6 +31,7 @@ jobs:
     with:
       package-type: wheel
       os: windows
+      with-cuda: disable
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
   build:
