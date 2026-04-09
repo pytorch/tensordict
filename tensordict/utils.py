@@ -2718,6 +2718,8 @@ def unravel_keys(*keys):
     """Unravels a sequence of keys."""
     if not is_compiling():
         return unravel_keys_cpp(*keys)
+    if len(keys) == 1:
+        return unravel_key(keys[0])
     return tuple(unravel_key(key) for key in keys)
 
 
