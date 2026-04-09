@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-04-08T06:41:58.734519+00:00",
+  "generated_at": "2026-04-09T06:41:16.679570+00:00",
   "analysis_period": {
     "start": "2026-03-02",
-    "end": "2026-04-06",
+    "end": "2026-04-08",
     "runs_analyzed": 30
   },
   "summary": {
@@ -15,11 +15,11 @@
     {
       "nodeid": "test.test_tensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]",
       "executions": 54,
-      "failures": 21,
-      "failure_rate": 0.3889,
-      "flaky_score": 0.7778,
-      "passed": 33,
-      "failed": 21,
+      "failures": 17,
+      "failure_rate": 0.3148,
+      "flaky_score": 0.6296,
+      "passed": 37,
+      "failed": 17,
       "error": 0,
       "avg_duration_s": 0.003,
       "recent_failures": [
@@ -29,17 +29,17 @@
         "2026-03-04T11:27:52Z",
         "2026-03-04T11:27:52Z"
       ],
-      "first_seen_flaky": "2026-03-02T10:00:21Z",
+      "first_seen_flaky": "2026-03-02T10:06:46Z",
       "is_new": false
     },
     {
       "nodeid": "test.test_tensordict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]",
       "executions": 54,
-      "failures": 21,
-      "failure_rate": 0.3889,
-      "flaky_score": 0.7778,
-      "passed": 33,
-      "failed": 21,
+      "failures": 17,
+      "failure_rate": 0.3148,
+      "flaky_score": 0.6296,
+      "passed": 37,
+      "failed": 17,
       "error": 0,
       "avg_duration_s": 0.003,
       "recent_failures": [
@@ -49,17 +49,17 @@
         "2026-03-04T11:27:52Z",
         "2026-03-04T11:27:52Z"
       ],
-      "first_seen_flaky": "2026-03-02T10:00:21Z",
+      "first_seen_flaky": "2026-03-02T10:06:46Z",
       "is_new": false
     },
     {
       "nodeid": "test.test_tensordict.TestTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]",
       "executions": 54,
-      "failures": 21,
-      "failure_rate": 0.3889,
-      "flaky_score": 0.7778,
-      "passed": 33,
-      "failed": 21,
+      "failures": 17,
+      "failure_rate": 0.3148,
+      "flaky_score": 0.6296,
+      "passed": 37,
+      "failed": 17,
       "error": 0,
       "avg_duration_s": 0.003,
       "recent_failures": [
@@ -69,7 +69,7 @@
         "2026-03-04T11:27:52Z",
         "2026-03-04T11:27:52Z"
       ],
-      "first_seen_flaky": "2026-03-02T10:00:21Z",
+      "first_seen_flaky": "2026-03-02T10:06:46Z",
       "is_new": false
     },
     {
@@ -181,7 +181,7 @@
       "passed": 46,
       "failed": 8,
       "error": 0,
-      "avg_duration_s": 0.009,
+      "avg_duration_s": 0.008,
       "recent_failures": [
         "2026-03-04T17:03:21Z",
         "2026-03-12T21:12:10Z",
@@ -381,7 +381,7 @@
       "passed": 46,
       "failed": 8,
       "error": 0,
-      "avg_duration_s": 2.878,
+      "avg_duration_s": 2.83,
       "recent_failures": [
         "2026-03-04T17:03:21Z",
         "2026-03-12T21:12:10Z",
