@@ -42,6 +42,7 @@ from tensordict.nn import (
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from tensordict.tensorclass import TensorClass
+from tensordict.utils import unravel_keys
 
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -80,6 +81,21 @@ def test_vmap_compile():
     funcv(x, y)
     funcv_c = torch.compile(funcv, fullgraph=True)
     funcv_c(x, y)
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["a", ("b",), ("a", "b", "action"), ("c", ("d",))],
+    ids=["str", "single_tuple", "nested_tuple", "nested_wrapped"],
+)
+def test_unravel_keys_compile(key):
+    """Test that unravel_keys returns consistent results under torch.compile."""
+    eager = unravel_keys(key)
+    torch._dynamo.reset()
+    compiled = torch.compile(unravel_keys, backend="eager")(key)
+    assert (
+        eager == compiled
+    ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
 
 
 @pytest.mark.skipif(
