@@ -28,7 +28,6 @@ from tensordict import (
     TensorDictParams,
     TypedTensorDict,
 )
-from tensordict.utils import unravel_keys
 
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn import (
@@ -43,6 +42,7 @@ from tensordict.nn import (
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
 from tensordict.tensorclass import TensorClass
+from tensordict.utils import unravel_keys
 
 from torch._dynamo.testing import CompileCounterWithBackend
 from torch.utils._pytree import SUPPORTED_NODES, tree_map
@@ -93,9 +93,9 @@ def test_unravel_keys_compile(key):
     eager = unravel_keys(key)
     torch._dynamo.reset()
     compiled = torch.compile(unravel_keys, backend="eager")(key)
-    assert eager == compiled, (
-        f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
-    )
+    assert (
+        eager == compiled
+    ), f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
 
 
 @pytest.mark.skipif(
