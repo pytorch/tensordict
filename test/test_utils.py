@@ -18,7 +18,6 @@ from tensordict.utils import (
     isin,
     parse_tensor_dict_string,
     remove_duplicates,
-    unravel_keys,
 )
 
 
@@ -145,23 +144,6 @@ def test_unravel_key():
     keys_in = ["a0", ("b0",), ("c0", ("d",))]
     keys_out = [unravel_key(key_in) for key_in in keys_in]
     assert keys_out == ["a0", "b0", ("c0", "d")]
-
-
-def test_unravel_keys_compile():
-    """Test that unravel_keys returns consistent results under torch.compile."""
-    keys_in = [
-        "a",
-        ("b",),
-        ("a", "b", "action"),
-        ("c", ("d",)),
-    ]
-    for key in keys_in:
-        eager = unravel_keys(key)
-        torch._dynamo.reset()
-        compiled = torch.compile(unravel_keys, backend="eager")(key)
-        assert eager == compiled, (
-            f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
-        )
 
 
 def test_unravel_key_to_tuple():

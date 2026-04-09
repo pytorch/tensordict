@@ -28,6 +28,7 @@ from tensordict import (
     TensorDictParams,
     TypedTensorDict,
 )
+from tensordict.utils import unravel_keys
 
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.nn import (
@@ -80,6 +81,21 @@ def test_vmap_compile():
     funcv(x, y)
     funcv_c = torch.compile(funcv, fullgraph=True)
     funcv_c(x, y)
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["a", ("b",), ("a", "b", "action"), ("c", ("d",))],
+    ids=["str", "single_tuple", "nested_tuple", "nested_wrapped"],
+)
+def test_unravel_keys_compile(key):
+    """Test that unravel_keys returns consistent results under torch.compile."""
+    eager = unravel_keys(key)
+    torch._dynamo.reset()
+    compiled = torch.compile(unravel_keys, backend="eager")(key)
+    assert eager == compiled, (
+        f"unravel_keys mismatch for {key!r}: eager={eager!r}, compiled={compiled!r}"
+    )
 
 
 @pytest.mark.skipif(
