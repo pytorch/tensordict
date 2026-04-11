@@ -31,8 +31,8 @@ jobs:
     with:
       package-type: wheel
       os: macos-arm64
-      test-infra-repository: pytorch/test-infra
-      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      test-infra-repository: vmoens/test-infra
+      test-infra-ref: fix/bump-conda-pin
   build:
     needs: generate-matrix
     strategy:
@@ -49,8 +49,8 @@ jobs:
     with:
       repository: ${{ matrix.repository }}
       ref: ""
-      test-infra-repository: pytorch/test-infra
-      test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      test-infra-repository: vmoens/test-infra
+      test-infra-ref: fix/bump-conda-pin
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
       runner-type: macos-m2-15
