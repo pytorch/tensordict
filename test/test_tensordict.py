@@ -11141,6 +11141,21 @@ class TestLazyStackedTensorDict:
         assert tdload.is_consolidated()
         assert tdload["njt_lengths"]._lengths is not None
 
+        import io
+        import pickle
+
+        ragged_tensors = [
+            torch.randn(20, 10, i, device=device) for i in range(1, 5)
+        ]
+        ragged = torch.nested.as_nested_tensor(ragged_tensors, layout=torch.jagged)
+        ragged_td = TensorDict({"ragged": ragged}, batch_size=[len(ragged_tensors)])
+        ragged_td_c = ragged_td.consolidate(num_threads=num_threads)
+        buffer = io.BytesIO()
+        pickle.dump(ragged_td_c, buffer)
+        buffer.seek(0)
+        ragged_td_load = pickle.load(buffer)
+        assert ragged_td_load["ragged"]._ragged_idx == ragged._ragged_idx
+
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not is_npu_available(),
         reason="no cuda or npu device detected",

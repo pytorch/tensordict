@@ -98,7 +98,12 @@ def _rebuild_tensordict_files_consolidated(
             )
             for (key, (data, batch_size, device)) in non_tensor.items()
         }
-        for key, (dtype, local_shape, start, stop, pad) in leaves.items():
+        for key, leaf_metadata in leaves.items():
+            ragged_idx = None
+            if len(leaf_metadata) == 5:
+                dtype, local_shape, start, stop, pad = leaf_metadata
+            else:
+                dtype, local_shape, start, stop, pad, ragged_idx = leaf_metadata
             dtype = _STR_DTYPE_TO_DTYPE[dtype]
             # device = torch.device(device)
             local_shape = torch.Size(local_shape)
@@ -119,9 +124,10 @@ def _rebuild_tensordict_files_consolidated(
                 from torch.nested._internal.nested_tensor import NestedTensor
 
                 offsets = value
-                value = NestedTensor(
-                    nested_values, offsets=offsets, lengths=nested_lengths
-                )
+                nested_kwargs = {"offsets": offsets, "lengths": nested_lengths}
+                if ragged_idx is not None:
+                    nested_kwargs["_ragged_idx"] = ragged_idx
+                value = NestedTensor(nested_values, **nested_kwargs)
                 key = key.replace("<NJT_OFFSETS>", "")
             d[key] = value
         for k, v in metadata.items():
