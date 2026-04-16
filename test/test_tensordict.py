@@ -11144,9 +11144,7 @@ class TestLazyStackedTensorDict:
         import io
         import pickle
 
-        ragged_tensors = [
-            torch.randn(20, 10, i, device=device) for i in range(1, 5)
-        ]
+        ragged_tensors = [torch.randn(20, 10, i, device=device) for i in range(1, 5)]
         ragged = torch.nested.as_nested_tensor(ragged_tensors, layout=torch.jagged)
         ragged_td = TensorDict({"ragged": ragged}, batch_size=[len(ragged_tensors)])
         ragged_td_c = ragged_td.consolidate(num_threads=num_threads)
