@@ -6,7 +6,7 @@
 set -e
 
 # Read base version
-BASE_VERSION=0.12.1
+BASE_VERSION=0.12.2
 echo "Base version: $BASE_VERSION"
 
 # Only set static version for release branches and release candidate tags
