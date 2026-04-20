@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev3973+gd4603e16a.d20260409)
+                  main (0.12.0.dev3979+g9792dff3e.d20260420)
                 </div>
               
             
@@ -1276,6 +1276,20 @@ to avoid downcasting and potentially losing information.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.UnbatchedTensor.const_data_ptr">
+<span class="sig-name descname"><span class="pre">const_data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.const_data_ptr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the address of the first element of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
+<p>Unlike <a class="reference internal" href="#tensordict.UnbatchedTensor.data_ptr" title="tensordict.UnbatchedTensor.data_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>, this is guaranteed to be a read-only access
+that will not trigger copy-on-write materialization. For regular
+(non-COW) tensors, the return value is identical to <a class="reference internal" href="#tensordict.UnbatchedTensor.data_ptr" title="tensordict.UnbatchedTensor.data_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The returned pointer must not be used to mutate the tensor data.
+Use <a class="reference internal" href="#tensordict.UnbatchedTensor.data_ptr" title="tensordict.UnbatchedTensor.data_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a> when write access is needed.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.contiguous">
 <span class="sig-name descname"><span class="pre">contiguous</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">memory_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">torch.contiguous_format</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.contiguous" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a contiguous in memory tensor containing the same data as <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor. If
@@ -1461,6 +1475,13 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.data_ptr">
 <span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the address of the first element of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the tensor is a copy-on-write tensor (e.g. created via
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_lazy_clone()</span></code>), calling this method will materialize the
+copy. Use <a class="reference internal" href="#tensordict.UnbatchedTensor.const_data_ptr" title="tensordict.UnbatchedTensor.const_data_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">const_data_ptr()</span></code></a> if you only need read-only access
+to the data pointer.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
