@@ -9,9 +9,11 @@ import contextlib
 import functools
 import gc
 import importlib.util
+import io
 import json
 import os
 import pathlib
+import pickle
 import platform
 import re
 import sys
@@ -11141,9 +11143,12 @@ class TestLazyStackedTensorDict:
         assert tdload.is_consolidated()
         assert tdload["njt_lengths"]._lengths is not None
 
-        import io
-        import pickle
-
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"), reason="v2.6 required for this test"
+    )
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("num_threads", [0, 1, 4])
+    def test_consolidate_njt_ragged_idx(self, device, num_threads):
         ragged_tensors = [torch.randn(20, 10, i, device=device) for i in range(1, 5)]
         ragged = torch.nested.as_nested_tensor(ragged_tensors, layout=torch.jagged)
         ragged_td = TensorDict({"ragged": ragged}, batch_size=[len(ragged_tensors)])
