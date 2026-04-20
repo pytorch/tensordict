@@ -6450,7 +6450,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         flat_size = []
         start = 0
 
-        def add_single_value(value, key, metadata_dict, dtype, shape, flat_size):
+        def add_single_value(
+            value, key, metadata_dict, dtype, shape, flat_size, ragged_idx=None
+        ):
             nonlocal start
             n = value.element_size() * value.numel()
             if need_padding:
@@ -6463,14 +6465,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # Using sum to tell dynamo to use sym_sum
             stop = sum([start, flat_size[-1]])
             if requires_metadata:
-                metadata_dict["leaves"][key] = (
+                leaf_metadata = [
                     _DTYPE_TO_STR_DTYPE[dtype],
                     list(shape),
                     # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
-                )
+                ]
+                if ragged_idx is not None:
+                    leaf_metadata.append(ragged_idx)
+                metadata_dict["leaves"][key] = tuple(leaf_metadata)
             start = stop
 
         def assign(
@@ -6580,6 +6585,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                         offsets.dtype,
                         offsets.shape,
                         flat_size,
+                        ragged_idx=value._ragged_idx,
                     )
 
                 else:
