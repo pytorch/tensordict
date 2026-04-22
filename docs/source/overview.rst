@@ -445,6 +445,42 @@ Suppose we have some function foo() -> TensorDict and that we do something like 
 When ``i == 0`` the empty :class:`~tensordict.TensorDict` will automatically be populated with empty tensors with batch
 size N. In subsequent iterations of the loop the updates will all be written in-place.
 
+Per-leaf device and dtype casting
+---------------------------------
+
+A deviceless :class:`~tensordict.TensorDict` (``device=None``) may legitimately hold leaves on
+different devices or with different dtypes. The usual ``td.to(device)`` collapses every leaf onto a
+single device, which is not always what you want — for instance when aligning an arbitrary tensordict
+to the heterogeneous placement of another one (FSDP/TP shards, cross-rank exchanges, mixed-precision
+state dicts).
+
+Calling :meth:`~tensordict.TensorDictBase.attrs` returns a lightweight tensordict whose leaves are
+:class:`~tensordict.TensorAttrs` — one per leaf — recording each source leaf's target device, dtype
+and shape. That tensordict can be passed directly to ``to()``, which then casts each leaf of the
+caller to the attributes of the matching leaf in the spec:
+
+>>> from tensordict import TensorDict
+>>> td0 = TensorDict({"a": torch.zeros(3, device="cuda:0"),
+...                   "b": torch.zeros(3, device="cpu")}, batch_size=[3])
+>>> td2 = TensorDict({"a": torch.zeros(3, device="cpu"),
+...                   "b": torch.zeros(3, device="cuda:1")}, batch_size=[3])
+>>> td3 = td0.to(td2.attrs())   # td3["a"] is on cpu, td3["b"] is on cuda:1
+
+Copies are issued asynchronously by default. A synchronization is performed at the end only when at
+least one leaf moved D2H (device to host) — the case where the host read is not coordinated by the
+source device's stream scheduler. H2D and cross-device D2D transfers do not need an explicit sync:
+subsequent kernels on the destination device already serialize on the stream that enqueued the copy,
+so CUDA (and other accelerator runtimes) handle the dependency for you. Pass ``non_blocking=True``
+to skip the sync entirely (caller takes responsibility), or ``non_blocking=False`` to make copies
+blocking. Dtype-only specs never trigger a sync. Leaves that do not appear in the spec tensordict
+are passed through unchanged, so a partial spec can be used to retarget a subset of leaves.
+:meth:`~tensordict.TensorDictBase.attrs` also accepts a ``fields`` argument
+(``("device", "dtype", "shape")`` by default) to limit what each :class:`~tensordict.TensorAttrs`
+records, which is useful when the caller only needs to match one dimension of the spec.
+
+For background on the non-blocking / pinned-memory rules that motivate this D2H-only sync, see the
+PyTorch tutorial :external+pytorch_tutorials:doc:`A Guide on Good Usage of non_blocking and pin_memory() <intermediate/pinmem_nonblock>`.
+
 TensorDictModule
 ----------------
 

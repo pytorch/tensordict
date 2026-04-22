@@ -43,6 +43,7 @@ from tensordict import (
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_printoptions,
+    TensorAttrs,
     tensorclass,
     TensorClass,
     TensorDict,
@@ -12888,6 +12889,212 @@ class TestNamedDims(TestTensorDictsBase):
             assert tdt is td
         else:
             assert tdt is not td
+
+    def test_attrs_basic(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 4, dtype=torch.float32),
+                "b": torch.ones(3, dtype=torch.int64),
+            },
+            batch_size=[3],
+        )
+        attrs = td.attrs()
+        assert isinstance(attrs["a"], TensorAttrs)
+        assert isinstance(attrs["b"], TensorAttrs)
+        assert attrs["a"].tgt_device == td["a"].device
+        assert attrs["a"].tgt_dtype == torch.float32
+        assert attrs["a"].tgt_shape == torch.Size([3, 4])
+        assert attrs["b"].tgt_dtype == torch.int64
+        assert attrs["b"].tgt_shape == torch.Size([3])
+
+    def test_attrs_fields_subset(self):
+        td = TensorDict({"a": torch.zeros(3, dtype=torch.float32)}, batch_size=[3])
+        attrs = td.attrs(fields=("device",))
+        assert attrs["a"].tgt_device == td["a"].device
+        assert attrs["a"].tgt_dtype is None
+        assert attrs["a"].tgt_shape is None
+
+    def test_attrs_nested(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, dtype=torch.float32),
+                "sub": TensorDict(
+                    {"b": torch.zeros(3, dtype=torch.int32)}, batch_size=[3]
+                ),
+            },
+            batch_size=[3],
+        )
+        attrs = td.attrs()
+        assert isinstance(attrs["a"], TensorAttrs)
+        assert isinstance(attrs[("sub", "b")], TensorAttrs)
+        assert attrs[("sub", "b")].tgt_dtype == torch.int32
+
+    def test_to_attrs_td_dtype(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, dtype=torch.float32),
+                "b": torch.zeros(3, dtype=torch.float64),
+            },
+            batch_size=[3],
+        )
+        spec = TensorDict(
+            {
+                "a": TensorAttrs(tgt_dtype=torch.int32, batch_size=()),
+                "b": TensorAttrs(tgt_dtype=torch.int64, batch_size=()),
+            },
+            batch_size=[],
+        )
+        out = td.to(spec)
+        assert out["a"].dtype == torch.int32
+        assert out["b"].dtype == torch.int64
+        assert out["a"].device == td["a"].device
+
+    def test_to_attrs_td_missing_keys_passthrough(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, dtype=torch.float32),
+                "b": torch.zeros(3, dtype=torch.float32),
+                "c": torch.zeros(3, dtype=torch.float32),
+            },
+            batch_size=[3],
+        )
+        spec = TensorDict(
+            {"a": TensorAttrs(tgt_dtype=torch.int32, batch_size=())},
+            batch_size=[],
+        )
+        out = td.to(spec)
+        assert out["a"].dtype == torch.int32
+        assert out["b"].dtype == torch.float32
+        assert out["c"].dtype == torch.float32
+
+    def test_to_attrs_td_roundtrip(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, dtype=torch.float32),
+                "b": torch.zeros(3, dtype=torch.int64),
+            },
+            batch_size=[3],
+        )
+        out = td.to(td.attrs())
+        assert out["a"].dtype == td["a"].dtype
+        assert out["b"].dtype == td["b"].dtype
+        assert out["a"].device == td["a"].device
+        assert out["b"].device == td["b"].device
+
+    def test_to_attrs_td_extra_positional_rejected(self):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        spec = TensorDict(
+            {"a": TensorAttrs(tgt_dtype=torch.int32, batch_size=())}, batch_size=[]
+        )
+        with pytest.raises(TypeError, match="does not accept additional positional"):
+            td.to(spec, "cpu")
+
+    def test_to_attrs_td_non_blocking_pin_rejected(self):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        spec = TensorDict(
+            {"a": TensorAttrs(tgt_dtype=torch.int32, batch_size=())}, batch_size=[]
+        )
+        with pytest.raises(NotImplementedError, match="non_blocking_pin"):
+            td.to(spec, non_blocking_pin=True)
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="requires cuda for device casting"
+    )
+    def test_to_attrs_td_heterogeneous_devices(self):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, device="cuda:0"),
+                "b": torch.zeros(3, device="cpu"),
+            },
+            batch_size=[3],
+        )
+        spec = TensorDict(
+            {
+                "a": TensorAttrs(tgt_device=torch.device("cpu"), batch_size=()),
+                "b": TensorAttrs(tgt_device=torch.device("cuda:0"), batch_size=()),
+            },
+            batch_size=[],
+        )
+        out = td.to(spec)
+        assert out["a"].device.type == "cpu"
+        assert out["b"].device.type == "cuda"
+
+    def test_to_attrs_td_sync_toggle(self, monkeypatch):
+        td = TensorDict(
+            {"a": torch.zeros(3), "b": torch.zeros(3, dtype=torch.float32)},
+            batch_size=[3],
+        )
+
+        sync_calls = [0]
+        orig_sync = TensorDict._sync_all
+
+        def _spy(self):
+            sync_calls[0] += 1
+            return orig_sync(self)
+
+        monkeypatch.setattr(TensorDict, "_sync_all", _spy)
+
+        # Dtype-only spec: no device transfer at all — no sync.
+        spec_dtype_only = TensorDict(
+            {"a": TensorAttrs(tgt_dtype=torch.int32, batch_size=())},
+            batch_size=[],
+        )
+        td.to(spec_dtype_only)
+        assert sync_calls[0] == 0
+
+        # Source is CPU, target is CPU: not a D2H transfer — no sync needed.
+        spec_cpu_to_cpu = TensorDict(
+            {"a": TensorAttrs(tgt_device=torch.device("cpu"), batch_size=())},
+            batch_size=[],
+        )
+        sync_calls[0] = 0
+        td.to(spec_cpu_to_cpu)
+        assert sync_calls[0] == 0
+
+        # non_blocking=True disables the sync regardless of direction.
+        sync_calls[0] = 0
+        td.to(spec_cpu_to_cpu, non_blocking=True)
+        assert sync_calls[0] == 0
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="D2H sync path requires a non-CPU source device",
+    )
+    def test_to_attrs_td_sync_d2h_only(self, monkeypatch):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, device="cuda:0"),
+                "b": torch.zeros(3, device="cuda:0"),
+            },
+            batch_size=[3],
+        )
+
+        sync_calls = [0]
+        orig_sync = TensorDict._sync_all
+
+        def _spy(self):
+            sync_calls[0] += 1
+            return orig_sync(self)
+
+        monkeypatch.setattr(TensorDict, "_sync_all", _spy)
+
+        # D2H: source cuda, target cpu — must sync.
+        spec_d2h = TensorDict(
+            {"a": TensorAttrs(tgt_device=torch.device("cpu"), batch_size=())},
+            batch_size=[],
+        )
+        td.to(spec_d2h)
+        assert sync_calls[0] == 1
+
+        # H2D: build a CPU source and send to cuda — should not sync.
+        td_cpu = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        spec_h2d = TensorDict(
+            {"a": TensorAttrs(tgt_device=torch.device("cuda:0"), batch_size=())},
+            batch_size=[],
+        )
+        sync_calls[0] = 0
+        td_cpu.to(spec_h2d)
+        assert sync_calls[0] == 0
 
     def test_unbind(self):
         td = TensorDict(batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])

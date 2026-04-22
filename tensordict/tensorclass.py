@@ -353,6 +353,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "atleast_1d",
     "atleast_2d",
     "atleast_3d",
+    "attrs",
     "auto_batch_size_",
     "auto_device_",
     "bfloat16",
@@ -4541,6 +4542,54 @@ class MetaData(NonTensorDataBase, metaclass=_MetaDataMeta):
             )
 
         return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
+
+
+class TensorAttrs(TensorClass):
+    """Per-leaf carrier describing a tensor's attributes — device, dtype, and shape.
+
+    Mirrors the `PyTorch Tensor Attributes <https://pytorch.org/docs/stable/tensor_attributes.html>`_
+    terminology. Instances are produced by :meth:`~tensordict.TensorDictBase.attrs`
+    — one per leaf of the source tensordict — and consumed by
+    :meth:`~tensordict.TensorDictBase.to` to drive per-leaf device/dtype casting
+    when the source tensordict is heterogeneous (e.g. ``device=None`` with leaves
+    on different devices).
+
+    The field names are prefixed with ``tgt_`` to avoid shadowing the tensordict
+    attributes ``device``/``dtype``/``shape``.
+
+    Fields populated via :meth:`from_tensor` are controlled by the ``fields`` argument
+    so the API scales as new attributes are added.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict({"a": torch.zeros(3, device="cpu"),
+        ...                  "b": torch.zeros(3, dtype=torch.int32)}, batch_size=[3])
+        >>> attrs = td.attrs()
+        >>> attrs["a"].tgt_device, attrs["a"].tgt_dtype
+        (device(type='cpu'), torch.float32)
+
+    """
+
+    tgt_device: Any = None
+    tgt_dtype: Any = None
+    tgt_shape: Any = None
+
+    @classmethod
+    def from_tensor(cls, tensor, *, fields=("device", "dtype", "shape")):
+        """Build a :class:`TensorAttrs` from a tensor, populating only the requested fields.
+
+        ``fields`` accepts the short names ``"device"``, ``"dtype"``, ``"shape"``. Unrequested
+        fields remain ``None``.
+        """
+        kwargs = {}
+        if "device" in fields:
+            kwargs["tgt_device"] = tensor.device
+        if "dtype" in fields:
+            kwargs["tgt_dtype"] = tensor.dtype
+        if "shape" in fields:
+            kwargs["tgt_shape"] = torch.Size(tensor.shape)
+        return cls(batch_size=(), **kwargs)
 
 
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
