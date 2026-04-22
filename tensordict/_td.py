@@ -4017,7 +4017,7 @@ class _SubTensorDict(TensorDictBase):
     @lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -4028,6 +4028,25 @@ class _SubTensorDict(TensorDictBase):
         ignore_lock: bool = False,
         **kwargs,
     ) -> _SubTensorDict:
+        if kwargs:
+            if input_dict_or_td is None:
+                input_dict_or_td = kwargs
+            elif isinstance(input_dict_or_td, dict):
+                input_dict_or_td = {**input_dict_or_td, **kwargs}
+            else:
+                self.update(
+                    input_dict_or_td,
+                    clone=clone,
+                    inplace=inplace,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                    is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
+                    ignore_lock=ignore_lock,
+                )
+                input_dict_or_td = kwargs
+        elif input_dict_or_td is None:
+            return self
         if input_dict_or_td is self:
             # no op
             return self
@@ -4109,12 +4128,28 @@ class _SubTensorDict(TensorDictBase):
 
     def update_(
         self,
-        input_dict: dict[str, CompatibleType] | TensorCollection,
+        input_dict: dict[str, CompatibleType] | TensorCollection | None = None,
         clone: bool = False,
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        **kwargs,
     ) -> _SubTensorDict:
+        if kwargs:
+            if input_dict is None:
+                input_dict = kwargs
+            elif isinstance(input_dict, dict):
+                input_dict = {**input_dict, **kwargs}
+            else:
+                self.update_(
+                    input_dict,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+                input_dict = kwargs
+        elif input_dict is None:
+            return self
         return self.update_at_(
             input_dict,
             idx=self.idx,

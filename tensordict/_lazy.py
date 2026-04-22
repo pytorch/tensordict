@@ -3092,19 +3092,41 @@ class LazyStackedTensorDict(TensorDictBase):
     @lock_blocked
     def update(
         self,
-        input_dict_or_td: T,
+        input_dict_or_td: T | None = None,
         clone: bool = False,
+        inplace: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         non_blocking: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
+        ignore_lock: bool = False,
         **kwargs: Any,
     ) -> Self:
         # This implementation of update is compatible with exclusive keys
         # as well as vmapped lazy stacks.
         # We iterate over the tensordicts rather than iterating over the keys,
         # which requires stacking and unbinding but is also not robust to missing keys.
+        if kwargs:
+            if input_dict_or_td is None:
+                input_dict_or_td = kwargs
+            elif isinstance(input_dict_or_td, dict):
+                input_dict_or_td = {**input_dict_or_td, **kwargs}
+            else:
+                self.update(
+                    input_dict_or_td,
+                    clone=clone,
+                    inplace=inplace,
+                    keys_to_update=keys_to_update,
+                    non_blocking=non_blocking,
+                    is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
+                    ignore_lock=ignore_lock,
+                )
+                input_dict_or_td = kwargs
+            kwargs = {}
+        elif input_dict_or_td is None:
+            return self
         if input_dict_or_td is self:
             # no op
             return self
@@ -3157,11 +3179,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 td_dest.update(
                     td_source,
                     clone=clone,
+                    inplace=inplace,
                     keys_to_update=keys_to_update,
                     non_blocking=non_blocking,
                     is_leaf=is_leaf,
                     update_batch_size=update_batch_size,
-                    **kwargs,
+                    ignore_lock=ignore_lock,
                 )
             return self
 
@@ -3185,11 +3208,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 return self.update(
                     input_dict_or_td.to_lazystack(self.stack_dim),
                     clone=clone,
+                    inplace=inplace,
                     keys_to_update=keys_to_update,
                     non_blocking=non_blocking,
                     is_leaf=is_leaf,
                     update_batch_size=update_batch_size,
-                    **kwargs,
+                    ignore_lock=ignore_lock,
                 )
             # if the batch-size does not permit unbinding, let's first try to reset the batch-size.
             input_dict_or_td = input_dict_or_td.copy()
@@ -3209,10 +3233,12 @@ class LazyStackedTensorDict(TensorDictBase):
             td_dest.update(
                 td_source,
                 clone=clone,
+                inplace=inplace,
                 keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
                 is_leaf=is_leaf,
                 update_batch_size=update_batch_size,
-                **kwargs,
+                ignore_lock=ignore_lock,
             )
         if self.hook_out is not None:
             self_upd = self.hook_out(self_upd)
@@ -3222,12 +3248,30 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def update_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
         clone: bool = False,
         *,
         non_blocking: bool = False,
         **kwargs: Any,
     ) -> Self:
+        # Extract reserved kwargs that aren't user key-value pairs.
+        keys_to_update = kwargs.pop("keys_to_update", None)
+        if kwargs:
+            if input_dict_or_td is None:
+                input_dict_or_td = kwargs
+            elif isinstance(input_dict_or_td, dict):
+                input_dict_or_td = {**input_dict_or_td, **kwargs}
+            else:
+                self.update_(
+                    input_dict_or_td,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+                input_dict_or_td = kwargs
+            kwargs = {}
+        elif input_dict_or_td is None:
+            return self
         if input_dict_or_td is self:
             # no op
             return self
@@ -3244,7 +3288,12 @@ class LazyStackedTensorDict(TensorDictBase):
         for td_dest, td_source in _zip_strict(
             self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
         ):
-            td_dest.update_(td_source, clone=clone, non_blocking=non_blocking, **kwargs)
+            td_dest.update_(
+                td_source,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
         return self
 
     def update_at_(

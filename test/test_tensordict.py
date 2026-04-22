@@ -4177,6 +4177,76 @@ class TestGeneric:
         td_source = TensorDict(a=0)
         td_dest.update_(td_source)
 
+    def test_update_kwargs(self):
+        # update: kwargs create new keys
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        td.update(b=torch.ones(3))
+        assert "b" in td.keys()
+        assert (td["b"] == 1).all()
+
+        # update: kwargs overwrite existing keys
+        td.update(a=torch.ones(3))
+        assert (td["a"] == 1).all()
+
+        # update: positional + kwargs, kwargs win on conflict
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        td.update({"a": torch.ones(3) * 2, "b": torch.ones(3) * 3}, a=torch.ones(3) * 7)
+        assert (td["a"] == 7).all()
+        assert (td["b"] == 3).all()
+
+        # update: positional TensorDict + kwargs both applied, kwargs win on conflict
+        td = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3)}, batch_size=[3])
+        other = TensorDict({"a": torch.ones(3) * 2, "b": torch.ones(3) * 5}, batch_size=[3])
+        td.update(other, b=torch.ones(3) * 9)
+        assert (td["a"] == 2).all()
+        assert (td["b"] == 9).all()
+
+        # update: nested dict value via kwarg still recurses
+        td = TensorDict({}, batch_size=[3])
+        td.update(outer={"inner": torch.ones(3)})
+        assert (td["outer", "inner"] == 1).all()
+
+        # update: empty call is a no-op and returns self
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        assert td.update() is td
+        assert set(td.keys()) == {"a"}
+
+        # update_: kwargs on existing key updates in place
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        a_ref = td["a"]
+        td.update_(a=torch.ones(3))
+        assert td["a"] is a_ref
+        assert (td["a"] == 1).all()
+
+        # update_: kwargs on missing key raises KeyError
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        with pytest.raises(KeyError, match="was not found"):
+            td.update_(b=torch.ones(3))
+
+        # update_: empty call is a no-op
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        assert td.update_() is td
+
+        # update_: positional + kwargs, kwargs applied (must exist)
+        td = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3)}, batch_size=[3])
+        td.update_({"a": torch.ones(3)}, b=torch.ones(3) * 2)
+        assert (td["a"] == 1).all()
+        assert (td["b"] == 2).all()
+
+    def test_update_kwargs_lazy_stack(self):
+        td = LazyStackedTensorDict.lazy_stack(
+            [TensorDict({"a": torch.zeros(())}, batch_size=[]) for _ in range(3)]
+        )
+        td.update(b=torch.ones(3))
+        assert "b" in td.keys()
+        assert (td["b"] == 1).all()
+
+        td.update_(a=torch.ones(3))
+        assert (td["a"] == 1).all()
+
+        with pytest.raises(KeyError, match="was not found"):
+            td.update_(c=torch.ones(3))
+
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("flip", [False, True])
     def test_update_batch_size(self, flip):
