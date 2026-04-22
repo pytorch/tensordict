@@ -4196,7 +4196,9 @@ class TestGeneric:
 
         # update: positional TensorDict + kwargs both applied, kwargs win on conflict
         td = TensorDict({"a": torch.zeros(3), "b": torch.zeros(3)}, batch_size=[3])
-        other = TensorDict({"a": torch.ones(3) * 2, "b": torch.ones(3) * 5}, batch_size=[3])
+        other = TensorDict(
+            {"a": torch.ones(3) * 2, "b": torch.ones(3) * 5}, batch_size=[3]
+        )
         td.update(other, b=torch.ones(3) * 9)
         assert (td["a"] == 2).all()
         assert (td["b"] == 9).all()
