@@ -2062,7 +2062,7 @@ def _wrap_method(self, attr, func, nowarn=False):
 
 def _update(
     self,
-    input_dict_or_td: dict[str, CompatibleType] | T,
+    input_dict_or_td: dict[str, CompatibleType] | T | None = None,
     clone: bool = False,
     inplace: bool = False,
     *,
@@ -2071,7 +2071,28 @@ def _update(
     update_batch_size: bool = False,
     ignore_lock: bool = False,
     is_leaf: Callable[[Type], bool] | None = None,
+    **kwargs,
 ):
+    if kwargs:
+        if input_dict_or_td is None:
+            input_dict_or_td = kwargs
+        elif isinstance(input_dict_or_td, dict):
+            input_dict_or_td = {**input_dict_or_td, **kwargs}
+        else:
+            _update(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
+                update_batch_size=update_batch_size,
+                ignore_lock=ignore_lock,
+                is_leaf=is_leaf,
+            )
+            input_dict_or_td = kwargs
+    elif input_dict_or_td is None:
+        return self
     if is_leaf is None:
         is_leaf = _is_leaf_nontensor
     if isinstance(input_dict_or_td, dict):
@@ -2117,13 +2138,31 @@ def _update(
 
 def _update_(
     self,
-    input_dict_or_td: dict[str, CompatibleType] | T,
+    input_dict_or_td: dict[str, CompatibleType] | T | None = None,
     clone: bool = False,
     inplace: bool = False,
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
     non_blocking: bool = False,
+    **kwargs,
 ):
+    if kwargs:
+        if input_dict_or_td is None:
+            input_dict_or_td = kwargs
+        elif isinstance(input_dict_or_td, dict):
+            input_dict_or_td = {**input_dict_or_td, **kwargs}
+        else:
+            _update_(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
+            )
+            input_dict_or_td = kwargs
+    elif input_dict_or_td is None:
+        return self
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = type(self).from_dict(
             input_dict_or_td, batch_size=self.batch_size
