@@ -53,6 +53,7 @@ from tensordict.tensorclass import (
     NonTensorData,
     NonTensorDataBase,
     NonTensorStack,
+    TensorAttrs,
     tensorclass,
     TensorClass,
 )
@@ -169,6 +170,7 @@ __all__ = [
     "NonTensorData",
     "NonTensorDataBase",
     "NonTensorStack",
+    "TensorAttrs",
     # NN imports
     "as_tensordict_module",
     "TensorClassModuleBase",

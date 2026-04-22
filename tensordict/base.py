@@ -16178,6 +16178,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert td["x"].device.type == "cpu"
             >>> assert td["y"].device.type == "cpu"  # Output also restored to original device
         """
+        # Per-leaf spec: a positional tensordict argument is interpreted as an
+        # attrs tensordict whose leaves are `TensorAttrs` — each source leaf
+        # is cast to its counterpart's device/dtype.
+        if (
+            args
+            and not isinstance(args[0], Tensor)
+            and _is_tensor_collection(type(args[0]))
+        ):
+            attrs_td = args[0]
+            if len(args) > 1:
+                raise TypeError(
+                    "to(attrs_td) does not accept additional positional arguments."
+                )
+            return self._to_per_leaf(attrs_td, **kwargs)
+
         non_blocking = kwargs.pop("non_blocking", None)
 
         (
@@ -16275,6 +16290,148 @@ class TensorDictBase(MutableMapping, TensorCollection):
             and device.type != "cuda"
         ):
             self._sync_all()
+        return result
+
+    def attrs(
+        self,
+        *,
+        fields: Sequence[str] = ("device", "dtype", "shape"),
+        num_threads: int | None = None,
+    ) -> Self:
+        """Return a deviceless tensordict whose leaves are :class:`~tensordict.TensorAttrs`.
+
+        Each tensor leaf of ``self`` is replaced by a :class:`~tensordict.TensorAttrs`
+        describing the requested tensor attributes. The result is intended to be passed to
+        :meth:`to` to drive per-leaf device/dtype casting when the source tensordict
+        is heterogeneous.
+
+        Keyword Args:
+            fields (sequence of str, optional): which attributes to record on each
+                :class:`~tensordict.TensorAttrs`. Accepts any subset of
+                ``("device", "dtype", "shape")``. Attributes not listed remain ``None``.
+                Defaults to ``("device", "dtype", "shape")``.
+            num_threads (int or None, optional): number of threads to use when
+                iterating leaves. Defaults to ``None`` (single-threaded). Construction
+                of :class:`TensorAttrs` is Python-bound, so threading typically yields
+                little; exposed for symmetry with :meth:`to`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     {"a": torch.zeros(3, device="cpu"),
+            ...      "b": torch.zeros(3, dtype=torch.int32)},
+            ...     batch_size=[3],
+            ... )
+            >>> attrs = td.attrs(fields=("device", "dtype"))
+            >>> target = TensorDict(a=torch.zeros(3, device="cpu"), b=torch.zeros(3), batch_size=[3])
+            >>> out = target.to(attrs)   # casts `b` to int32 per-leaf
+            >>> out["b"].dtype
+            torch.int32
+        """
+        from tensordict.tensorclass import TensorAttrs
+
+        def _to_attrs(t):
+            return TensorAttrs.from_tensor(t, fields=fields)
+
+        return self._fast_apply(
+            _to_attrs,
+            batch_size=(),
+            device=None,
+            propagate_lock=False,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            num_threads=num_threads if num_threads is not None else 0,
+        )
+
+    def _to_per_leaf(
+        self,
+        attrs_td: TensorDictBase,
+        *,
+        non_blocking: bool | None = None,
+        non_blocking_pin: bool = False,
+        num_threads: int | None = None,
+        inplace: bool = False,
+    ) -> Self:
+        """Cast each leaf of ``self`` to the attributes recorded in ``attrs_td``.
+
+        Leaves absent from ``attrs_td`` (or whose attrs have both ``tgt_device=None``
+        and ``tgt_dtype=None``) are passed through unchanged.
+
+        When the caller does not pass ``non_blocking`` explicitly, per-leaf copies
+        are issued asynchronously. A single :meth:`_sync_all` is invoked at the end
+        only if at least one leaf went D2H (source on a CUDA/XPU/etc. device, target
+        on CPU). Async H2D copies do not need an explicit sync — subsequent kernels
+        on the destination device serialize on the same CUDA stream that queued the
+        copy, so the dependency is already honored. Only the D2H direction needs the
+        barrier because host reads are not coordinated by the device's stream scheduler.
+        """
+        from tensordict.tensorclass import TensorAttrs
+
+        if non_blocking_pin:
+            raise NotImplementedError(
+                "non_blocking_pin is not yet supported when an attrs tensordict is passed to `to()`."
+            )
+
+        if non_blocking is None:
+            sub_non_blocking = True
+            do_sync = True
+        else:
+            sub_non_blocking = non_blocking
+            do_sync = not non_blocking
+
+        def _is_attrs_leaf(cls):
+            return issubclass(cls, TensorAttrs) or _default_is_leaf(cls)
+
+        spec: dict = {}
+        for key, val in attrs_td.items(
+            include_nested=True, leaves_only=True, is_leaf=_is_attrs_leaf
+        ):
+            if isinstance(val, TensorAttrs):
+                spec[key] = val
+
+        # D2H (device-to-host) is the only transfer direction that needs an explicit
+        # sync after an async copy: host memory is outside the source device's stream
+        # scheduler, so reads after the copy call returns may observe stale data. H2D
+        # and cross-device D2D are fine — the destination's stream already serializes
+        # on the enqueued copy.
+        needs_d2h_sync = False
+
+        def _cast(name, tensor):
+            attrs = spec.get(name)
+            if attrs is None:
+                return tensor
+            target_device = attrs.tgt_device
+            target_dtype = attrs.tgt_dtype
+            if target_device is None and target_dtype is None:
+                return tensor
+            if (
+                target_device is not None
+                and target_device.type == "cpu"
+                and tensor.device.type != "cpu"
+            ):
+                nonlocal needs_d2h_sync
+                needs_d2h_sync = True
+            return tensor.to(
+                device=target_device,
+                dtype=target_dtype,
+                non_blocking=sub_non_blocking,
+            )
+
+        result = self._fast_apply(
+            _cast,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            out=self if inplace else None,
+            checked=True,
+            device=None,
+            num_threads=num_threads if num_threads is not None else 0,
+        )
+
+        if needs_d2h_sync and do_sync:
+            self._sync_all()
+
         return result
 
     def _to_consolidated(

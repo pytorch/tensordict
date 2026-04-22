@@ -170,6 +170,7 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "torch": ("https://pytorch.org/docs/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pytorch_tutorials": ("https://docs.pytorch.org/tutorials/", None),
 }
 
 

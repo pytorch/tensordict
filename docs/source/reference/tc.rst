@@ -283,6 +283,7 @@ Here is an example:
     NonTensorData
     MetaData
     NonTensorStack
+    TensorAttrs
     UnbatchedTensor
     from_dataclass
 
