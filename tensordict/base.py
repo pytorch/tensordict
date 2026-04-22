@@ -8120,7 +8120,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
     @lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T,
+        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -8129,6 +8129,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
         ignore_lock: bool = False,
+        **kwargs,
     ) -> Self:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
 
@@ -8136,8 +8137,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             such blocks hoping to catch and patch errors that occur during the execution.
 
         Args:
-            input_dict_or_td (TensorDictBase or dict): input data to be written
-                in self.
+            input_dict_or_td (TensorDictBase or dict, optional): input data to be written
+                in self. If ``None``, only the keyword arguments are used.
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set.
                 Defaults to ``False``.
@@ -8175,10 +8176,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ignore_lock (bool, optional): if ``True``, any tensordict can be updated regardless of its locked status.
                 Defaults to `False`.
 
+            **kwargs: additional key-value pairs to write into ``self`` as top-level entries. When both
+                ``input_dict_or_td`` and ``kwargs`` are provided, kwargs win on key conflict.
+
         .. note:: When updating a :class:`~tensordict.LazyStackedTensorDict` with N elements with another
             :class:`~tensordict.LazyStackedTensorDict` with M elements, with M > N, along the stack dimension,
             the ``update`` method will append copies of the extra tensordicts to the dest (self) lazy stack.
             This allows users to rely on ``update`` to increment lazy stacks progressively.
+
+        .. note:: Keyword arguments are treated as top-level keys only. Nested structures still work when
+            the kwarg value is itself a dict or tensor collection (e.g. ``td.update(outer={"inner": val})``).
+            For deeper tuple keys, use the positional dict form: ``td.update({("a", "b"): val})``.
+            Keys whose names collide with reserved parameters (``clone``, ``inplace``, ``non_blocking``,
+            ``keys_to_update``, ``is_leaf``, ``update_batch_size``, ``ignore_lock``) must be passed through
+            the positional dict form.
 
         Returns:
             self
@@ -8193,8 +8204,30 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> other_td = other_td.clone().zero_()
             >>> td.update(other_td)
             >>> assert td['a'] is not other_td['a']
+            >>> # keyword form for top-level entries
+            >>> td.update(monkey=torch.zeros(3))
+            >>> assert (td["monkey"] == 0).all()
 
         """
+        if kwargs:
+            if input_dict_or_td is None:
+                input_dict_or_td = kwargs
+            elif isinstance(input_dict_or_td, dict):
+                input_dict_or_td = {**input_dict_or_td, **kwargs}
+            else:
+                self.update(
+                    input_dict_or_td,
+                    clone=clone,
+                    inplace=inplace,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                    is_leaf=is_leaf,
+                    update_batch_size=update_batch_size,
+                    ignore_lock=ignore_lock,
+                )
+                input_dict_or_td = kwargs
+        elif input_dict_or_td is None:
+            return self
         batch_size_changed = False
         if input_dict_or_td is self:
             # no op
@@ -8367,19 +8400,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def update_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T,
+        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
         clone: bool = False,
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        **kwargs,
     ) -> Self:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
 
         Unlike :meth:`~.update`, this function will throw an error if the key is unknown to ``self``.
 
         Args:
-            input_dict_or_td (TensorDictBase or dict): input data to be written
-                in self.
+            input_dict_or_td (TensorDictBase or dict, optional): input data to be written
+                in self. If ``None``, only the keyword arguments are used.
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Defaults to ``False``.
 
@@ -8391,6 +8425,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
             non_blocking (bool, optional): if ``True`` and this copy is between
                 different devices, the copy may occur asynchronously with respect
                 to the host.
+            **kwargs: additional key-value pairs to write into ``self`` as top-level entries. As with the
+                positional form, any key that does not already exist in ``self`` raises :class:`KeyError`.
+                When both ``input_dict_or_td`` and ``kwargs`` are provided, kwargs win on key conflict.
+
+        .. note:: Keyword arguments are treated as top-level keys only. Nested structures still work when
+            the kwarg value is itself a dict or tensor collection. Keys whose names collide with reserved
+            parameters (``clone``, ``non_blocking``, ``keys_to_update``) must be passed through the positional
+            dict form.
 
         Returns:
             self
@@ -8404,8 +8446,26 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> assert td['a'] is not other_td['a']
             >>> assert (td['a'] == other_td['a']).all()
             >>> assert (td['a'] == 0).all()
+            >>> # keyword form for top-level entries (key must already exist)
+            >>> td.update_(a=torch.ones(3))
+            >>> assert (td["a"] == 1).all()
 
         """
+        if kwargs:
+            if input_dict_or_td is None:
+                input_dict_or_td = kwargs
+            elif isinstance(input_dict_or_td, dict):
+                input_dict_or_td = {**input_dict_or_td, **kwargs}
+            else:
+                self.update_(
+                    input_dict_or_td,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+                input_dict_or_td = kwargs
+        elif input_dict_or_td is None:
+            return self
         if input_dict_or_td is self:
             # no op
             return self

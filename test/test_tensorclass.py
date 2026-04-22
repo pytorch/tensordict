@@ -2025,6 +2025,31 @@ class TestTensorClass:
         assert (data0.y.X == 1).all()
         assert data0.y.z == "test_tensorclass1"
 
+    def test_update_kwargs(self):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        tc = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        tc.update(a=torch.ones(3))
+        assert (tc.a == 1).all()
+
+        tc.update_(b=torch.ones(3) * 2)
+        assert (tc.b == 2).all()
+
+        # merge: positional + kwargs, kwargs win
+        tc2 = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        other = TC(a=torch.ones(3) * 5, b=torch.ones(3) * 7, batch_size=[3])
+        tc2.update(other, b=torch.ones(3) * 9)
+        assert (tc2.a == 5).all()
+        assert (tc2.b == 9).all()
+
+        # empty call is a no-op
+        tc3 = TC(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        assert tc3.update() is tc3
+        assert tc3.update_() is tc3
+
     def test_replace(self):
         @tensorclass
         class MyDataNested:
