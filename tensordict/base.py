@@ -144,6 +144,8 @@ except ImportError:
     from tensordict.utils import Buffer
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
+_has_pandas = importlib.util.find_spec("pandas") is not None
+_has_pyarrow = importlib.util.find_spec("pyarrow") is not None
 
 try:
     from torch._utils import _get_available_device_type, _get_device_module
@@ -14694,6 +14696,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 device=device,
                 batch_size=batch_size,
             )
+        if _has_pandas:
+            import pandas as pd
+
+            if isinstance(obj, pd.DataFrame):
+                return cls.from_pandas(
+                    obj,
+                    auto_batch_size=auto_batch_size,
+                    batch_dims=batch_dims,
+                    device=device,
+                    batch_size=batch_size,
+                )
         if _has_h5:
             import h5py
 
@@ -15118,6 +15131,391 @@ class TensorDictBase(MutableMapping, TensorCollection):
             else:
                 result[key] = val
         return result
+
+    @classmethod
+    def from_pandas(
+        cls,
+        dataframe,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> Self:
+        """Converts a pandas DataFrame to a TensorDict.
+
+        Numeric columns become tensors, string/object columns become
+        :class:`~tensordict.NonTensorData`.
+
+        Args:
+            dataframe (pd.DataFrame): The pandas DataFrame to convert.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): If ``True``, the batch size will
+                be computed automatically. Defaults to ``False``.
+            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
+                defines how many dimensions the output tensordict should have.
+                Defaults to ``None``.
+            device (torch.device, optional): The device for tensor data.
+                Defaults to ``None``.
+            batch_size (torch.Size, optional): The batch size. Defaults to
+                ``[num_rows]``.
+            separator (str, optional): If provided, column names are split on
+                this separator to create nested TensorDicts. For example, with
+                ``separator="."``, a column ``"obs.x"`` becomes
+                ``td["obs", "x"]``. Defaults to ``None``.
+            dtype (torch.dtype, optional): If provided, all numeric columns
+                are cast to this dtype. Defaults to ``None``.
+
+        Returns:
+            A TensorDict representation of the DataFrame.
+
+        Examples:
+            >>> import pandas as pd
+            >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+            >>> td = TensorDict.from_pandas(df)
+            >>> print(td)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+        """
+        from tensordict.tabular import _dataframe_to_tensordict
+
+        if cls is TensorDictBase:
+            from tensordict._td import TensorDict
+
+            cls = TensorDict
+
+        result = _dataframe_to_tensordict(
+            dataframe,
+            cls=cls,
+            device=device,
+            batch_size=batch_size,
+            separator=separator,
+            dtype=dtype,
+        )
+        if auto_batch_size:
+            if batch_size is not None:
+                raise TypeError(
+                    cls._CONFLICTING_BATCH_SIZES.format("from_pandas")
+                )
+            result.auto_batch_size_(batch_dims=batch_dims)
+        return result
+
+    def to_pandas(self, *, separator: str | None = None):
+        """Converts this TensorDict to a pandas DataFrame.
+
+        Each leaf key becomes a column. Tensor values are converted to numpy
+        arrays, :class:`~tensordict.NonTensorData` values are converted to
+        Python lists.
+
+        Keyword Args:
+            separator (str, optional): If provided, nested keys are joined
+                with this separator to produce flat column names. For example,
+                ``td["obs", "x"]`` becomes column ``"obs.x"`` with
+                ``separator="."``. Required when the TensorDict contains
+                nested sub-TensorDicts. Defaults to ``None``.
+
+        Returns:
+            A pandas DataFrame.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(3), "b": torch.zeros(3)}, [3])
+            >>> df = td.to_pandas()
+            >>> print(df)
+               a    b
+            0  0  0.0
+            1  1  0.0
+            2  2  0.0
+        """
+        from tensordict.tabular import _tensordict_to_dataframe
+
+        return _tensordict_to_dataframe(self, separator=separator)
+
+    @classmethod
+    def from_csv(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        **kwargs,
+    ) -> Self:
+        """Creates a TensorDict from a CSV file.
+
+        Requires either pandas or pyarrow to be installed.
+
+        Args:
+            path (str or Path): Path to the CSV file.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): If ``True``, the batch size will
+                be computed automatically. Defaults to ``False``.
+            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
+                defines how many dimensions the output tensordict should have.
+                Defaults to ``None``.
+            device (torch.device, optional): The device for tensor data.
+                Defaults to ``None``.
+            batch_size (torch.Size, optional): The batch size. Defaults to
+                ``[num_rows]``.
+            separator (str, optional): If provided, column names are split on
+                this separator to create nested TensorDicts. Defaults to ``None``.
+            dtype (torch.dtype, optional): If provided, all numeric columns
+                are cast to this dtype. Defaults to ``None``.
+            **kwargs: Additional keyword arguments forwarded to the CSV reader
+                (``pandas.read_csv`` or ``pyarrow.csv.read_csv``).
+
+        Returns:
+            A TensorDict representation of the CSV data.
+
+        Examples:
+            >>> td = TensorDict.from_csv("data.csv")
+            >>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
+        """
+        from tensordict.tabular import _columns_to_tensordict, _read_csv
+
+        if cls is TensorDictBase:
+            from tensordict._td import TensorDict
+
+            cls = TensorDict
+
+        columns, num_rows = _read_csv(path, **kwargs)
+        result = _columns_to_tensordict(
+            columns,
+            cls=cls,
+            device=device,
+            batch_size=batch_size,
+            separator=separator,
+            dtype=dtype,
+            num_rows=num_rows,
+        )
+        if auto_batch_size:
+            if batch_size is not None:
+                raise TypeError(
+                    cls._CONFLICTING_BATCH_SIZES.format("from_csv")
+                )
+            result.auto_batch_size_(batch_dims=batch_dims)
+        return result
+
+    def to_csv(self, path, *, separator: str | None = None, **kwargs):
+        """Writes this TensorDict to a CSV file.
+
+        Requires pandas to be installed.
+
+        Args:
+            path (str or Path): Path to the output CSV file.
+
+        Keyword Args:
+            separator (str, optional): If provided, nested keys are joined
+                with this separator. Defaults to ``None``.
+            **kwargs: Additional keyword arguments forwarded to
+                ``pandas.DataFrame.to_csv``.
+        """
+        from tensordict.tabular import _write_csv
+
+        _write_csv(self, path, separator=separator, **kwargs)
+
+    @classmethod
+    def from_parquet(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        columns: list[str] | None = None,
+        **kwargs,
+    ) -> Self:
+        """Creates a TensorDict from a Parquet file.
+
+        Requires either pyarrow or pandas to be installed. Prefers pyarrow
+        when available for better performance.
+
+        Args:
+            path (str or Path): Path to the Parquet file.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): If ``True``, the batch size will
+                be computed automatically. Defaults to ``False``.
+            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
+                defines how many dimensions the output tensordict should have.
+                Defaults to ``None``.
+            device (torch.device, optional): The device for tensor data.
+                Defaults to ``None``.
+            batch_size (torch.Size, optional): The batch size. Defaults to
+                ``[num_rows]``.
+            separator (str, optional): If provided, column names are split on
+                this separator to create nested TensorDicts. Defaults to ``None``.
+            dtype (torch.dtype, optional): If provided, all numeric columns
+                are cast to this dtype. Defaults to ``None``.
+            columns (list of str, optional): If provided, only read these
+                columns from the file. Defaults to ``None`` (all columns).
+            **kwargs: Additional keyword arguments forwarded to the Parquet
+                reader.
+
+        Returns:
+            A TensorDict representation of the Parquet data.
+
+        Examples:
+            >>> td = TensorDict.from_parquet("data.parquet")
+            >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
+        """
+        from tensordict.tabular import _columns_to_tensordict, _read_parquet
+
+        if cls is TensorDictBase:
+            from tensordict._td import TensorDict
+
+            cls = TensorDict
+
+        col_dict, num_rows = _read_parquet(path, columns=columns, **kwargs)
+        result = _columns_to_tensordict(
+            col_dict,
+            cls=cls,
+            device=device,
+            batch_size=batch_size,
+            separator=separator,
+            dtype=dtype,
+            num_rows=num_rows,
+        )
+        if auto_batch_size:
+            if batch_size is not None:
+                raise TypeError(
+                    cls._CONFLICTING_BATCH_SIZES.format("from_parquet")
+                )
+            result.auto_batch_size_(batch_dims=batch_dims)
+        return result
+
+    def to_parquet(self, path, *, separator: str | None = None, **kwargs):
+        """Writes this TensorDict to a Parquet file.
+
+        Requires either pyarrow or pandas to be installed.
+
+        Args:
+            path (str or Path): Path to the output Parquet file.
+
+        Keyword Args:
+            separator (str, optional): If provided, nested keys are joined
+                with this separator. Defaults to ``None``.
+            **kwargs: Additional keyword arguments forwarded to the Parquet
+                writer.
+        """
+        from tensordict.tabular import _write_parquet
+
+        _write_parquet(self, path, separator=separator, **kwargs)
+
+    @classmethod
+    def from_json(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        lines: bool = False,
+        **kwargs,
+    ) -> Self:
+        """Creates a TensorDict from a JSON file.
+
+        Supports both standard JSON (array of records) and JSON Lines format.
+        For nested JSON objects, use :func:`from_dict` instead.
+
+        Requires pandas for best results. Falls back to stdlib ``json``
+        for simple cases.
+
+        Args:
+            path (str or Path): Path to the JSON file.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): If ``True``, the batch size will
+                be computed automatically. Defaults to ``False``.
+            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
+                defines how many dimensions the output tensordict should have.
+                Defaults to ``None``.
+            device (torch.device, optional): The device for tensor data.
+                Defaults to ``None``.
+            batch_size (torch.Size, optional): The batch size. Defaults to
+                ``[num_rows]``.
+            separator (str, optional): If provided, column names are split on
+                this separator to create nested TensorDicts. Defaults to ``None``.
+            dtype (torch.dtype, optional): If provided, all numeric columns
+                are cast to this dtype. Defaults to ``None``.
+            lines (bool, optional): If ``True``, reads the file as JSON Lines
+                (one JSON object per line). Defaults to ``False``.
+            **kwargs: Additional keyword arguments forwarded to the JSON
+                reader.
+
+        Returns:
+            A TensorDict representation of the JSON data.
+
+        Examples:
+            >>> td = TensorDict.from_json("data.json")
+            >>> td = TensorDict.from_json("data.jsonl", lines=True)
+        """
+        from tensordict.tabular import _columns_to_tensordict, _read_json
+
+        if cls is TensorDictBase:
+            from tensordict._td import TensorDict
+
+            cls = TensorDict
+
+        columns, num_rows = _read_json(path, lines=lines, **kwargs)
+        result = _columns_to_tensordict(
+            columns,
+            cls=cls,
+            device=device,
+            batch_size=batch_size,
+            separator=separator,
+            dtype=dtype,
+            num_rows=num_rows,
+        )
+        if auto_batch_size:
+            if batch_size is not None:
+                raise TypeError(
+                    cls._CONFLICTING_BATCH_SIZES.format("from_json")
+                )
+            result.auto_batch_size_(batch_dims=batch_dims)
+        return result
+
+    def to_json(
+        self,
+        path,
+        *,
+        separator: str | None = None,
+        lines: bool = False,
+        **kwargs,
+    ):
+        """Writes this TensorDict to a JSON file.
+
+        Args:
+            path (str or Path): Path to the output JSON file.
+
+        Keyword Args:
+            separator (str, optional): If provided, nested keys are joined
+                with this separator. Defaults to ``None``.
+            lines (bool, optional): If ``True``, writes in JSON Lines format.
+                Defaults to ``False``.
+            **kwargs: Additional keyword arguments forwarded to the JSON
+                writer.
+        """
+        from tensordict.tabular import _write_json
+
+        _write_json(self, path, separator=separator, lines=lines, **kwargs)
 
     def to_h5(
         self,
@@ -17181,4 +17579,114 @@ def from_h5(
         batch_dims=batch_dims,
         device=device,
         batch_size=batch_size,
+    )
+
+
+def from_pandas(
+    dataframe,
+    *,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    device: torch.device | None = None,
+    batch_size: torch.Size | None = None,
+    separator: str | None = None,
+    dtype: torch.dtype | None = None,
+) -> "TensorDictBase":
+    """Converts a pandas DataFrame to a TensorDict.
+
+    .. seealso:: :meth:`TensorDictBase.from_pandas` for more information.
+    """
+    return TensorDictBase.from_pandas(
+        dataframe,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+        device=device,
+        batch_size=batch_size,
+        separator=separator,
+        dtype=dtype,
+    )
+
+
+def from_csv(
+    path,
+    *,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    device: torch.device | None = None,
+    batch_size: torch.Size | None = None,
+    separator: str | None = None,
+    dtype: torch.dtype | None = None,
+    **kwargs,
+) -> "TensorDictBase":
+    """Creates a TensorDict from a CSV file.
+
+    .. seealso:: :meth:`TensorDictBase.from_csv` for more information.
+    """
+    return TensorDictBase.from_csv(
+        path,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+        device=device,
+        batch_size=batch_size,
+        separator=separator,
+        dtype=dtype,
+        **kwargs,
+    )
+
+
+def from_parquet(
+    path,
+    *,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    device: torch.device | None = None,
+    batch_size: torch.Size | None = None,
+    separator: str | None = None,
+    dtype: torch.dtype | None = None,
+    columns: list[str] | None = None,
+    **kwargs,
+) -> "TensorDictBase":
+    """Creates a TensorDict from a Parquet file.
+
+    .. seealso:: :meth:`TensorDictBase.from_parquet` for more information.
+    """
+    return TensorDictBase.from_parquet(
+        path,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+        device=device,
+        batch_size=batch_size,
+        separator=separator,
+        dtype=dtype,
+        columns=columns,
+        **kwargs,
+    )
+
+
+def from_json(
+    path,
+    *,
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    device: torch.device | None = None,
+    batch_size: torch.Size | None = None,
+    separator: str | None = None,
+    dtype: torch.dtype | None = None,
+    lines: bool = False,
+    **kwargs,
+) -> "TensorDictBase":
+    """Creates a TensorDict from a JSON file.
+
+    .. seealso:: :meth:`TensorDictBase.from_json` for more information.
+    """
+    return TensorDictBase.from_json(
+        path,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
+        device=device,
+        batch_size=batch_size,
+        separator=separator,
+        dtype=dtype,
+        lines=lines,
+        **kwargs,
     )

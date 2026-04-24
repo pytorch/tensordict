@@ -55,6 +55,9 @@ tests = [
     "pytest-benchmark"
 ]
 h5 = ["h5py>=3.8"]
+pandas = ["pandas>=1.5"]
+parquet = ["pyarrow>=10.0"]
+tabular = ["pandas>=1.5", "pyarrow>=10.0"]
 dev = ["pybind11>=2.13", "ninja"]
 typecheck = ["mypy>=1.0.0"]
 onnx = ["onnx", "onnxscript", "onnxruntime"]
