@@ -144,8 +144,6 @@ except ImportError:
     from tensordict.utils import Buffer
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
-_has_pandas = importlib.util.find_spec("pandas") is not None
-_has_pyarrow = importlib.util.find_spec("pyarrow") is not None
 
 try:
     from torch._utils import _get_available_device_type, _get_device_module
@@ -14696,7 +14694,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 device=device,
                 batch_size=batch_size,
             )
-        if _has_pandas:
+        if importlib.util.find_spec("pandas") is not None:
             import pandas as pd
 
             if isinstance(obj, pd.DataFrame):
@@ -15202,9 +15200,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         if auto_batch_size:
             if batch_size is not None:
-                raise TypeError(
-                    cls._CONFLICTING_BATCH_SIZES.format("from_pandas")
-                )
+                raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_pandas"))
             result.auto_batch_size_(batch_dims=batch_dims)
         return result
 
@@ -15301,9 +15297,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         if auto_batch_size:
             if batch_size is not None:
-                raise TypeError(
-                    cls._CONFLICTING_BATCH_SIZES.format("from_csv")
-                )
+                raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_csv"))
             result.auto_batch_size_(batch_dims=batch_dims)
         return result
 
@@ -15392,9 +15386,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         if auto_batch_size:
             if batch_size is not None:
-                raise TypeError(
-                    cls._CONFLICTING_BATCH_SIZES.format("from_parquet")
-                )
+                raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_parquet"))
             result.auto_batch_size_(batch_dims=batch_dims)
         return result
 
@@ -15486,9 +15478,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         if auto_batch_size:
             if batch_size is not None:
-                raise TypeError(
-                    cls._CONFLICTING_BATCH_SIZES.format("from_json")
-                )
+                raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_json"))
             result.auto_batch_size_(batch_dims=batch_dims)
         return result
 

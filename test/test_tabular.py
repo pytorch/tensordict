@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -88,11 +86,13 @@ class TestFromPandas:
     def test_separator_nested(self):
         import pandas as pd
 
-        df = pd.DataFrame({
-            "obs.x": [1.0, 2.0],
-            "obs.y": [3.0, 4.0],
-            "action": [0, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "obs.x": [1.0, 2.0],
+                "obs.y": [3.0, 4.0],
+                "action": [0, 1],
+            }
+        )
         td = TensorDict.from_pandas(df, separator=".")
         assert "obs" in td.keys()
         assert (td["obs", "x"] == torch.tensor([1.0, 2.0])).all()
@@ -110,7 +110,9 @@ class TestFromPandas:
     def test_empty_dataframe(self):
         import pandas as pd
 
-        df = pd.DataFrame({"a": pd.array([], dtype="int64"), "b": pd.array([], dtype="float64")})
+        df = pd.DataFrame(
+            {"a": pd.array([], dtype="int64"), "b": pd.array([], dtype="float64")}
+        )
         td = TensorDict.from_pandas(df)
         assert td.batch_size == torch.Size([0])
 
@@ -221,11 +223,12 @@ class TestCSV:
         assert "x" in df.columns
 
     def test_csv_roundtrip(self, tmp_path):
-        import pandas as pd
-
         csv_path = tmp_path / "round.csv"
         td = TensorDict(
-            {"a": torch.tensor([1, 2, 3]), "b": torch.tensor([4.0, 5.0, 6.0], dtype=torch.float64)},
+            {
+                "a": torch.tensor([1, 2, 3]),
+                "b": torch.tensor([4.0, 5.0, 6.0], dtype=torch.float64),
+            },
             [3],
         )
         td.to_csv(csv_path)

@@ -8,15 +8,23 @@ All external dependencies (pandas, pyarrow) are optional.
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
-_has_pandas = importlib.util.find_spec("pandas") is not None
-_has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+
+def _has_pandas() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("pandas") is not None
+
+
+def _has_pyarrow() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("pyarrow") is not None
 
 
 def _unflatten_columns(flat_dict: dict, separator: str) -> dict:
@@ -182,7 +190,7 @@ def _pyarrow_table_to_columns(table) -> tuple[dict[str, np.ndarray | list], int]
 
 def _read_csv(path, **kwargs) -> tuple[dict[str, np.ndarray | list], int]:
     """Read a CSV file and return a column dict."""
-    if _has_pandas:
+    if _has_pandas():
         import pandas as pd
 
         df = pd.read_csv(path, **kwargs)
@@ -194,7 +202,7 @@ def _read_csv(path, **kwargs) -> tuple[dict[str, np.ndarray | list], int]:
             else:
                 columns[str(col)] = series.to_numpy()
         return columns, len(df)
-    elif _has_pyarrow:
+    elif _has_pyarrow():
         import pyarrow.csv as pcsv
 
         table = pcsv.read_csv(str(path), **kwargs)
@@ -210,12 +218,12 @@ def _read_parquet(
     path, columns: list[str] | None = None, **kwargs
 ) -> tuple[dict[str, np.ndarray | list], int]:
     """Read a Parquet file and return a column dict."""
-    if _has_pyarrow:
+    if _has_pyarrow():
         import pyarrow.parquet as pq
 
         table = pq.read_table(str(path), columns=columns, **kwargs)
         return _pyarrow_table_to_columns(table)
-    elif _has_pandas:
+    elif _has_pandas():
         import pandas as pd
 
         df = pd.read_parquet(path, columns=columns, **kwargs)
@@ -230,9 +238,11 @@ def _read_parquet(
         )
 
 
-def _read_json(path, lines: bool = False, **kwargs) -> tuple[dict[str, np.ndarray | list], int]:
+def _read_json(
+    path, lines: bool = False, **kwargs
+) -> tuple[dict[str, np.ndarray | list], int]:
     """Read a JSON file and return a column dict."""
-    if _has_pandas:
+    if _has_pandas():
         import pandas as pd
 
         df = pd.read_json(path, lines=lines, **kwargs)
@@ -246,7 +256,9 @@ def _read_json(path, lines: bool = False, **kwargs) -> tuple[dict[str, np.ndarra
 
         text = Path(path).read_text()
         if lines:
-            records = [json.loads(line) for line in text.strip().splitlines() if line.strip()]
+            records = [
+                json.loads(line) for line in text.strip().splitlines() if line.strip()
+            ]
         else:
             data = json.loads(text)
             if isinstance(data, list):
@@ -276,24 +288,20 @@ def _read_json(path, lines: bool = False, **kwargs) -> tuple[dict[str, np.ndarra
 
 def _write_csv(td, path, separator: str | None, **kwargs):
     """Write a TensorDict to a CSV file."""
-    import pandas as pd
-
     df = _tensordict_to_dataframe(td, separator=separator)
     df.to_csv(path, index=False, **kwargs)
 
 
 def _write_parquet(td, path, separator: str | None, **kwargs):
     """Write a TensorDict to a Parquet file."""
-    if _has_pyarrow:
+    if _has_pyarrow():
         import pyarrow as pa
         import pyarrow.parquet as pq
 
         df = _tensordict_to_dataframe(td, separator=separator)
         table = pa.Table.from_pandas(df)
         pq.write_table(table, str(path), **kwargs)
-    elif _has_pandas:
-        import pandas as pd
-
+    elif _has_pandas():
         df = _tensordict_to_dataframe(td, separator=separator)
         df.to_parquet(path, **kwargs)
     else:
@@ -305,15 +313,13 @@ def _write_parquet(td, path, separator: str | None, **kwargs):
 
 def _write_json(td, path, separator: str | None, lines: bool = False, **kwargs):
     """Write a TensorDict to a JSON file."""
-    if _has_pandas:
-        import pandas as pd
-
+    if _has_pandas():
         df = _tensordict_to_dataframe(td, separator=separator)
         df.to_json(path, orient="records", lines=lines, **kwargs)
     else:
         import json
 
-        from tensordict.base import _is_tensor_collection, is_non_tensor
+        from tensordict.base import is_non_tensor
 
         if separator is not None:
             flat = _flatten_keys(td, separator)
@@ -329,7 +335,11 @@ def _write_json(td, path, separator: str | None, lines: bool = False, **kwargs):
                     record[key] = value[i].item()
                 elif is_non_tensor(value):
                     if hasattr(value, "tolist"):
-                        record[key] = value.tolist()[i] if hasattr(value.tolist(), "__getitem__") else value.data
+                        record[key] = (
+                            value.tolist()[i]
+                            if hasattr(value.tolist(), "__getitem__")
+                            else value.data
+                        )
                     else:
                         record[key] = value.data
                 else:
