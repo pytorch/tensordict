@@ -14694,7 +14694,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 device=device,
                 batch_size=batch_size,
             )
-        if importlib.util.find_spec("pandas") is not None:
+        if not is_compiling() and importlib.util.find_spec("pandas") is not None:
             import pandas as pd
 
             if isinstance(obj, pd.DataFrame):
