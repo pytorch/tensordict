@@ -9,10 +9,16 @@ import numpy as np
 import pytest
 import torch
 
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 
 _has_pandas = importlib.util.find_spec("pandas") is not None
 _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+
+
+@tensorclass
+class TabularTensorClass:
+    x: torch.Tensor
+    y: torch.Tensor
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
@@ -368,3 +374,67 @@ class TestFromAnyIntegration:
         df = pd.DataFrame({"a": [1.0, 2.0]})
         td = TensorDict.from_any(df, device="cpu")
         assert td.device == torch.device("cpu")
+
+
+@pytest.mark.skipif(not _has_pandas, reason="pandas not found")
+class TestTensorClassTabular:
+    def test_from_pandas_returns_tensorclass(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"x": [1, 2, 3], "y": [4.0, 5.0, 6.0]})
+        tc = TabularTensorClass.from_pandas(df)
+        assert isinstance(tc, TabularTensorClass)
+        assert tc.batch_size == torch.Size([3])
+        assert (tc.x == torch.tensor([1, 2, 3])).all()
+        assert (tc.y == torch.tensor([4.0, 5.0, 6.0], dtype=torch.float64)).all()
+
+    def test_to_pandas(self):
+        tc = TabularTensorClass(
+            x=torch.tensor([1, 2, 3]),
+            y=torch.tensor([4.0, 5.0, 6.0]),
+            batch_size=[3],
+        )
+        df = tc.to_pandas()
+        assert list(df.columns) == ["x", "y"]
+        assert (df["x"].values == np.array([1, 2, 3])).all()
+        assert (df["y"].values == np.array([4.0, 5.0, 6.0], dtype=np.float32)).all()
+
+    def test_csv_roundtrip(self, tmp_path):
+        csv_path = tmp_path / "tensorclass.csv"
+        tc = TabularTensorClass(
+            x=torch.tensor([1, 2, 3]),
+            y=torch.tensor([4.0, 5.0, 6.0]),
+            batch_size=[3],
+        )
+        tc.to_csv(csv_path)
+        tc2 = TabularTensorClass.from_csv(csv_path)
+        assert isinstance(tc2, TabularTensorClass)
+        assert (tc2.x == tc.x).all()
+        assert torch.allclose(tc2.y, tc.y)
+
+    def test_json_roundtrip(self, tmp_path):
+        path = tmp_path / "tensorclass.json"
+        tc = TabularTensorClass(
+            x=torch.tensor([1, 2, 3]),
+            y=torch.tensor([4.0, 5.0, 6.0]),
+            batch_size=[3],
+        )
+        tc.to_json(path)
+        tc2 = TabularTensorClass.from_json(path)
+        assert isinstance(tc2, TabularTensorClass)
+        assert (tc2.x == tc.x).all()
+        assert torch.allclose(tc2.y, tc.y)
+
+    @pytest.mark.skipif(not _has_pyarrow, reason="pyarrow not found")
+    def test_parquet_roundtrip(self, tmp_path):
+        path = tmp_path / "tensorclass.parquet"
+        tc = TabularTensorClass(
+            x=torch.tensor([1, 2, 3]),
+            y=torch.tensor([4.0, 5.0, 6.0]),
+            batch_size=[3],
+        )
+        tc.to_parquet(path)
+        tc2 = TabularTensorClass.from_parquet(path)
+        assert isinstance(tc2, TabularTensorClass)
+        assert (tc2.x == tc.x).all()
+        assert torch.allclose(tc2.y, tc.y)
