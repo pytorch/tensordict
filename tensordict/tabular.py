@@ -8,22 +8,21 @@ All external dependencies (pandas, pyarrow) are optional.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+from tensordict._tensorcollection import TensorCollection
+from tensordict.utils import is_non_tensor
 
 
 def _has_pandas() -> bool:
-    import importlib.util
-
     return importlib.util.find_spec("pandas") is not None
 
 
 def _has_pyarrow() -> bool:
-    import importlib.util
-
     return importlib.util.find_spec("pyarrow") is not None
 
 
@@ -51,11 +50,9 @@ def _unflatten_columns(flat_dict: dict, separator: str) -> dict:
 
 def _flatten_keys(td, separator: str) -> dict[str, Any]:
     """Flatten a TensorDict into a dict with separated key names."""
-    from tensordict.base import _is_tensor_collection, is_non_tensor
-
     result = {}
     for key, value in td.items():
-        if _is_tensor_collection(type(value)) and not is_non_tensor(value):
+        if isinstance(value, TensorCollection) and not is_non_tensor(value):
             sub = _flatten_keys(value, separator)
             for sub_key, sub_val in sub.items():
                 result[f"{key}{separator}{sub_key}"] = sub_val
@@ -132,14 +129,12 @@ def _tensordict_to_dataframe(td, *, separator: str | None):
     """Convert a TensorDict to a pandas DataFrame."""
     import pandas as pd
 
-    from tensordict.base import _is_tensor_collection, is_non_tensor
-
     if separator is not None:
         flat = _flatten_keys(td, separator)
     else:
         flat = {}
         for key, value in td.items():
-            if _is_tensor_collection(type(value)) and not is_non_tensor(value):
+            if isinstance(value, TensorCollection) and not is_non_tensor(value):
                 raise ValueError(
                     f"Nested TensorDict at key '{key}' requires a separator parameter "
                     "to flatten to DataFrame columns. Use to_pandas(separator='.')."
@@ -318,8 +313,6 @@ def _write_json(td, path, separator: str | None, lines: bool = False, **kwargs):
         df.to_json(path, orient="records", lines=lines, **kwargs)
     else:
         import json
-
-        from tensordict.base import is_non_tensor
 
         if separator is not None:
             flat = _flatten_keys(td, separator)

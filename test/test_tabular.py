@@ -9,7 +9,16 @@ import numpy as np
 import pytest
 import torch
 
-from tensordict import tensorclass, TensorDict, TensorDictBase
+from tensordict import (
+    from_csv,
+    from_json,
+    from_pandas,
+    from_parquet,
+    tensorclass,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.tensorclass import NonTensorData
 
 _has_pandas = importlib.util.find_spec("pandas") is not None
 _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
@@ -42,7 +51,6 @@ class TestFromPandas:
         assert td.batch_size == torch.Size([3])
         assert td["age"].dtype == torch.int64
         name_val = td["name"]
-        from tensordict.tensorclass import NonTensorData
 
         assert isinstance(name_val, NonTensorData) or hasattr(name_val, "tolist")
 
@@ -132,8 +140,6 @@ class TestFromPandas:
 
     def test_module_level_function(self):
         import pandas as pd
-
-        from tensordict import from_pandas
 
         df = pd.DataFrame({"x": [1, 2, 3]})
         td = from_pandas(df)
@@ -245,8 +251,6 @@ class TestCSV:
     def test_module_level_function(self, tmp_path):
         import pandas as pd
 
-        from tensordict import from_csv
-
         csv_path = tmp_path / "test.csv"
         pd.DataFrame({"x": [1, 2]}).to_csv(csv_path, index=False)
         td = from_csv(csv_path)
@@ -307,8 +311,6 @@ class TestParquet:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        from tensordict import from_parquet
-
         path = tmp_path / "test.parquet"
         table = pa.table({"x": [1, 2]})
         pq.write_table(table, str(path))
@@ -349,8 +351,6 @@ class TestJSON:
         assert len(lines) == 3
 
     def test_module_level_function(self, tmp_path):
-        from tensordict import from_json
-
         path = tmp_path / "test.json"
         path.write_text(json.dumps([{"a": 1}, {"a": 2}]))
         td = from_json(path)
@@ -410,7 +410,7 @@ class TestTensorClassTabular:
         tc2 = TabularTensorClass.from_csv(csv_path)
         assert isinstance(tc2, TabularTensorClass)
         assert (tc2.x == tc.x).all()
-        assert torch.allclose(tc2.y, tc.y)
+        assert torch.allclose(tc2.y.to(tc.y.dtype), tc.y)
 
     def test_json_roundtrip(self, tmp_path):
         path = tmp_path / "tensorclass.json"
@@ -423,7 +423,7 @@ class TestTensorClassTabular:
         tc2 = TabularTensorClass.from_json(path)
         assert isinstance(tc2, TabularTensorClass)
         assert (tc2.x == tc.x).all()
-        assert torch.allclose(tc2.y, tc.y)
+        assert torch.allclose(tc2.y.to(tc.y.dtype), tc.y)
 
     @pytest.mark.skipif(not _has_pyarrow, reason="pyarrow not found")
     def test_parquet_roundtrip(self, tmp_path):
@@ -437,4 +437,4 @@ class TestTensorClassTabular:
         tc2 = TabularTensorClass.from_parquet(path)
         assert isinstance(tc2, TabularTensorClass)
         assert (tc2.x == tc.x).all()
-        assert torch.allclose(tc2.y, tc.y)
+        assert torch.allclose(tc2.y.to(tc.y.dtype), tc.y)

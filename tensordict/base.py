@@ -57,6 +57,17 @@ from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.tabular import (
+    _columns_to_tensordict,
+    _dataframe_to_tensordict,
+    _read_csv,
+    _read_json,
+    _read_parquet,
+    _tensordict_to_dataframe,
+    _write_csv,
+    _write_json,
+    _write_parquet,
+)
 from tensordict.utils import (
     _as_context_manager,
     _CloudpickleWrapper,
@@ -15183,8 +15194,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 device=None,
                 is_shared=False)
         """
-        from tensordict.tabular import _dataframe_to_tensordict
-
         if cls is TensorDictBase:
             from tensordict._td import TensorDict
 
@@ -15230,8 +15239,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             1  1  0.0
             2  2  0.0
         """
-        from tensordict.tabular import _tensordict_to_dataframe
-
         return _tensordict_to_dataframe(self, separator=separator)
 
     @classmethod
@@ -15278,8 +15285,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td = TensorDict.from_csv("data.csv")
             >>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
         """
-        from tensordict.tabular import _columns_to_tensordict, _read_csv
-
         if cls is TensorDictBase:
             from tensordict._td import TensorDict
 
@@ -15315,8 +15320,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             **kwargs: Additional keyword arguments forwarded to
                 ``pandas.DataFrame.to_csv``.
         """
-        from tensordict.tabular import _write_csv
-
         _write_csv(self, path, separator=separator, **kwargs)
 
     @classmethod
@@ -15367,8 +15370,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td = TensorDict.from_parquet("data.parquet")
             >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
         """
-        from tensordict.tabular import _columns_to_tensordict, _read_parquet
-
         if cls is TensorDictBase:
             from tensordict._td import TensorDict
 
@@ -15404,8 +15405,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             **kwargs: Additional keyword arguments forwarded to the Parquet
                 writer.
         """
-        from tensordict.tabular import _write_parquet
-
         _write_parquet(self, path, separator=separator, **kwargs)
 
     @classmethod
@@ -15459,8 +15458,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td = TensorDict.from_json("data.json")
             >>> td = TensorDict.from_json("data.jsonl", lines=True)
         """
-        from tensordict.tabular import _columns_to_tensordict, _read_json
-
         if cls is TensorDictBase:
             from tensordict._td import TensorDict
 
@@ -15503,8 +15500,6 @@ class TensorDictBase(MutableMapping, TensorCollection):
             **kwargs: Additional keyword arguments forwarded to the JSON
                 writer.
         """
-        from tensordict.tabular import _write_json
-
         _write_json(self, path, separator=separator, lines=lines, **kwargs)
 
     def to_h5(
