@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev3989+g69cd230fd.d20260422)
+                  main (0.12.0.dev4003+g8c46f0ca2.d20260429)
                 </div>
               
             
@@ -785,6 +785,39 @@ of each entry of the dict, without performing the expensive operation.</p>
 <p>When <code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">==</span> <span class="pre">0</span></code> the empty <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> will automatically be populated with empty tensors with batch
 size N. In subsequent iterations of the loop the updates will all be written in-place.</p>
 </section>
+<section id="per-leaf-device-and-dtype-casting">
+<h2>Per-leaf device and dtype casting<a class="headerlink" href="#per-leaf-device-and-dtype-casting" title="Permalink to this heading">¶</a></h2>
+<p>A deviceless <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (<code class="docutils literal notranslate"><span class="pre">device=None</span></code>) may legitimately hold leaves on
+different devices or with different dtypes. The usual <code class="docutils literal notranslate"><span class="pre">td.to(device)</span></code> collapses every leaf onto a
+single device, which is not always what you want — for instance when aligning an arbitrary tensordict
+to the heterogeneous placement of another one (FSDP/TP shards, cross-rank exchanges, mixed-precision
+state dicts).</p>
+<p>Calling <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.attrs" title="tensordict.TensorDictBase.attrs"><code class="xref py py-meth docutils literal notranslate"><span class="pre">attrs()</span></code></a> returns a lightweight tensordict whose leaves are
+<a class="reference internal" href="reference/generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs" title="tensordict.TensorAttrs"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorAttrs</span></code></a> — one per leaf — recording each source leaf’s target device, dtype
+and shape. That tensordict can be passed directly to <code class="docutils literal notranslate"><span class="pre">to()</span></code>, which then casts each leaf of the
+caller to the attributes of the matching leaf in the spec:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">),</span>
+<span class="gp">... </span>                  <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">),</span>
+<span class="gp">... </span>                  <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:1&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td3</span> <span class="o">=</span> <span class="n">td0</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">td2</span><span class="o">.</span><span class="n">attrs</span><span class="p">())</span>   <span class="c1"># td3[&quot;a&quot;] is on cpu, td3[&quot;b&quot;] is on cuda:1</span>
+</pre></div>
+</div>
+<p>Copies are issued asynchronously by default. A synchronization is performed at the end only when at
+least one leaf moved D2H (device to host) — the case where the host read is not coordinated by the
+source device’s stream scheduler. H2D and cross-device D2D transfers do not need an explicit sync:
+subsequent kernels on the destination device already serialize on the stream that enqueued the copy,
+so CUDA (and other accelerator runtimes) handle the dependency for you. Pass <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code>
+to skip the sync entirely (caller takes responsibility), or <code class="docutils literal notranslate"><span class="pre">non_blocking=False</span></code> to make copies
+blocking. Dtype-only specs never trigger a sync. Leaves that do not appear in the spec tensordict
+are passed through unchanged, so a partial spec can be used to retarget a subset of leaves.
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.attrs" title="tensordict.TensorDictBase.attrs"><code class="xref py py-meth docutils literal notranslate"><span class="pre">attrs()</span></code></a> also accepts a <code class="docutils literal notranslate"><span class="pre">fields</span></code> argument
+(<code class="docutils literal notranslate"><span class="pre">(&quot;device&quot;,</span> <span class="pre">&quot;dtype&quot;,</span> <span class="pre">&quot;shape&quot;)</span></code> by default) to limit what each <a class="reference internal" href="reference/generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs" title="tensordict.TensorAttrs"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorAttrs</span></code></a>
+records, which is useful when the caller only needs to match one dimension of the spec.</p>
+<p>For background on the non-blocking / pinned-memory rules that motivate this D2H-only sync, see the
+PyTorch tutorial <a class="reference external" href="https://docs.pytorch.org/tutorials/intermediate/pinmem_nonblock.html" title="(in PyTorch Tutorials vv2.11.0+cu130)"><span class="xref std std-doc">A Guide on Good Usage of non_blocking and pin_memory()</span></a>.</p>
+</section>
 <section id="tensordictmodule">
 <h2>TensorDictModule<a class="headerlink" href="#tensordictmodule" title="Permalink to this heading">¶</a></h2>
 <p>To make it easy to integrate <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> in one’s code base, we provide a tensordict.nn package that allows users to
@@ -978,6 +1011,7 @@ dimension with <a class="reference external" href="https://docs.pytorch.org/docs
 <li><a class="reference internal" href="#nested-tensordicts">Nested TensorDicts</a></li>
 <li><a class="reference internal" href="#lazy-evaluation">Lazy evaluation</a></li>
 <li><a class="reference internal" href="#lazy-pre-allocation">Lazy pre-allocation</a></li>
+<li><a class="reference internal" href="#per-leaf-device-and-dtype-casting">Per-leaf device and dtype casting</a></li>
 <li><a class="reference internal" href="#tensordictmodule">TensorDictModule</a><ul>
 <li><a class="reference internal" href="#jacobian-and-hessian-computation">Jacobian and Hessian computation</a></li>
 </ul>

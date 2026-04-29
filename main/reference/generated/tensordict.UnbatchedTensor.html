@@ -37,7 +37,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="from_dataclass" href="tensordict.from_dataclass.html" />
-    <link rel="prev" title="NonTensorStack" href="tensordict.NonTensorStack.html" />
+    <link rel="prev" title="TensorAttrs" href="tensordict.TensorAttrs.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev3989+g69cd230fd.d20260422)
+                  main (0.12.0.dev4003+g8c46f0ca2.d20260429)
                 </div>
               
             
@@ -3864,35 +3864,36 @@ invalid index.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<p># Example 1: Padding
-&gt;&gt;&gt; input_tensor = torch.tensor([[1, 0], [3, 2]])
-&gt;&gt;&gt; static_size = 4
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([[  0,   0],</p>
-<blockquote>
-<div><p>[  1,   0],
-[  1,   1],
-[  -1, -1]], dtype=torch.int64)</p>
-</div></blockquote>
-<p># Example 2: Truncating
-&gt;&gt;&gt; input_tensor = torch.tensor([[1, 0], [3, 2]])
-&gt;&gt;&gt; static_size = 2
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([[  0,   0],</p>
-<blockquote>
-<div><p>[  1,   0]], dtype=torch.int64)</p>
-</div></blockquote>
-<p># Example 3: 0 size
-&gt;&gt;&gt; input_tensor = torch.tensor([10])
-&gt;&gt;&gt; static_size = 0
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([], size=(0, 1), dtype=torch.int64)</p>
-<p># Example 4: 0 rank input
-&gt;&gt;&gt; input_tensor = torch.tensor(10)
-&gt;&gt;&gt; static_size = 2
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([], size=(2, 0), dtype=torch.int64)</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example 1: Padding</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([[</span>  <span class="mi">0</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">1</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 2: Truncating</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([[</span>  <span class="mi">0</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 3: 0 size</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">10</span><span class="p">])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([],</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 4: 0 rank input</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([],</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -6412,7 +6413,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
         <a href="tensordict.from_dataclass.html" class="btn btn-neutral float-right" title="from_dataclass" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.NonTensorStack.html" class="btn btn-neutral" title="NonTensorStack" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="tensordict.TensorAttrs.html" class="btn btn-neutral" title="TensorAttrs" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
