@@ -475,6 +475,59 @@ class TensorClass:
     @classmethod
     def from_any(cls, obj, *, auto_batch_size: bool = False) -> Self: ...
     @classmethod
+    def from_pandas(
+        cls,
+        dataframe,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> Self: ...
+    @classmethod
+    def from_csv(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        **kwargs,
+    ) -> Self: ...
+    @classmethod
+    def from_parquet(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        columns: list[str] | None = None,
+        **kwargs,
+    ) -> Self: ...
+    @classmethod
+    def from_json(
+        cls,
+        path,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+        separator: str | None = None,
+        dtype: torch.dtype | None = None,
+        lines: bool = False,
+        **kwargs,
+    ) -> Self: ...
+    @classmethod
     def from_dict(
         cls,
         input_dict,
@@ -1382,6 +1435,17 @@ class TensorClass:
         convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]: ...
+    def to_pandas(self, *, separator: str | None = None) -> Any: ...
+    def to_csv(self, path, *, separator: str | None = None, **kwargs) -> None: ...
+    def to_parquet(self, path, *, separator: str | None = None, **kwargs) -> None: ...
+    def to_json(
+        self,
+        path,
+        *,
+        separator: str | None = None,
+        lines: bool = False,
+        **kwargs,
+    ) -> None: ...
     def to_mds(
         self,
         *,
