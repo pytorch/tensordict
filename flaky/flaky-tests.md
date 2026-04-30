@@ -1,10 +1,10 @@
-# Flaky Test Report - 2026-04-29
+# Flaky Test Report - 2026-04-30
 
 ## Summary
 
 - **Flaky tests**: 19
 - **Newly flaky** (last 7 days): 0
-- **Total tests analyzed**: 46044
+- **Total tests analyzed**: 46085
 - **CI runs analyzed**: 30
 
 ---
@@ -13,9 +13,6 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 18.2% (10/55) | 10 | 0.36 | 2026-03-04 |
-| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 18.2% (10/55) | 10 | 0.36 | 2026-03-04 |
-| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 18.2% (10/55) | 10 | 0.36 | 2026-03-04 |
 | `...estTensorDictMP::test_chunksize_num_chunks[None-2-td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
 | `...estTensorDictMP::test_chunksize_num_chunks[4-None-td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
 | `...TensorDictMP::test_chunksize_num_chunks[None-None-td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
@@ -32,6 +29,9 @@
 | `...tensordict.TestTensorDictMP::test_map_exception[2-td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
 | `...tensordict.TestTensorDictMP::test_map_exception[3-td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
 | `...nsordict.TestTensorDictMP::test_sharing_locked_td[td_with_unbatched-device34]` | 14.5% (8/55) | 8 | 0.29 | 2026-03-12 |
+| `...ensordict.TestTensorDicts::test_pin_memory[True-0-td_with_unbatched-device33]` | 10.9% (6/55) | 6 | 0.22 | 2026-03-04 |
+| `...dict.TestTensorDicts::test_pin_memory[True-cuda:0-td_with_unbatched-device33]` | 10.9% (6/55) | 6 | 0.22 | 2026-03-04 |
+| `...estTensorDicts::test_pin_memory[True-device_cast2-td_with_unbatched-device33]` | 10.9% (6/55) | 6 | 0.22 | 2026-03-04 |
 
 
 ---
@@ -45,4 +45,4 @@
 
 ---
 
-*Generated at 2026-04-29T07:00:15.849494+00:00*
+*Generated at 2026-04-30T07:02:24.313583+00:00*
