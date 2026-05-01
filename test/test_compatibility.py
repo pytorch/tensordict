@@ -11,6 +11,8 @@ matrix between typed container wrappers and TensorDictBase backends.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import torch
 from tensordict import TensorClass, TensorDict, TypedTensorDict
@@ -23,6 +25,55 @@ from torch import Tensor
 BATCH = 4
 FEAT_A = 3
 FEAT_B = 5
+
+
+def test_legacy_import_paths_are_preserved():
+    """Splitting implementation files must not move the user-visible API."""
+    td_module = importlib.import_module("tensordict")
+    base_module = importlib.import_module("tensordict.base")
+    base_factories = importlib.import_module("tensordict._base.factories")
+    dense_module = importlib.import_module("tensordict._td")
+    lazy_module = importlib.import_module("tensordict._lazy")
+    tensorclass_module = importlib.import_module("tensordict.tensorclass")
+    store_module = importlib.import_module("tensordict.store._store")
+
+    assert td_module.TensorDict is dense_module.TensorDict
+    assert td_module.TensorDictBase is base_module.TensorDictBase
+    assert td_module.LazyStackedTensorDict is lazy_module.LazyStackedTensorDict
+    assert td_module.TensorClass is tensorclass_module.TensorClass
+    assert td_module.NonTensorData is tensorclass_module.NonTensorData
+    assert td_module.NonTensorStack is tensorclass_module.NonTensorStack
+    assert td_module.TensorDictStore is store_module.TensorDictStore
+    assert (
+        td_module.LazyStackedTensorDictStore is store_module.LazyStackedTensorDictStore
+    )
+
+    for name in (
+        "from_any",
+        "from_csv",
+        "from_dict",
+        "from_h5",
+        "from_json",
+        "from_namedtuple",
+        "from_pandas",
+        "from_parquet",
+        "from_struct_array",
+        "from_tuple",
+    ):
+        assert getattr(td_module, name) is getattr(base_module, name)
+        assert getattr(base_module, name).__module__ == "tensordict.base"
+
+    assert base_module.from_list is base_factories.from_list
+    assert base_module.from_list.__module__ == "tensordict.base"
+
+
+def test_public_class_modules_are_preserved():
+    assert TensorDictBase.__module__ == "tensordict.base"
+    assert TensorDict.__module__ == "tensordict._td"
+    assert LazyStackedTensorDict.__module__ == "tensordict._lazy"
+    assert TensorClass.__module__ == "tensordict.tensorclass"
+    assert TensorDictStore.__module__ == "tensordict.store._store"
+
 
 # ---------------------------------------------------------------------------
 # Typed containers
