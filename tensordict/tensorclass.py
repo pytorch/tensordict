@@ -46,7 +46,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
-from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._torch_func import _maybe_dispatch_higher_order_op, TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _GET_DEFAULTS_TO_NONE,
@@ -948,14 +948,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls, TensorDictBase)) for t in types
         ):
-            from torch._ops import HigherOrderOperator
-
-            if isinstance(func, HigherOrderOperator):
-                if kwargs is None:
-                    kwargs = {}
-                with torch._C.DisableTorchFunctionSubclass():
-                    return func(*args, **kwargs)
-            return NotImplemented
+            if kwargs is None:
+                kwargs = {}
+            return _maybe_dispatch_higher_order_op(func, args, kwargs)
 
         if kwargs is None:
             kwargs = {}
@@ -3968,14 +3963,9 @@ class NonTensorDataBase(TensorClass):
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls)) for t in types
         ):
-            from torch._ops import HigherOrderOperator
-
-            if isinstance(func, HigherOrderOperator):
-                if kwargs is None:
-                    kwargs = {}
-                with torch._C.DisableTorchFunctionSubclass():
-                    return func(*args, **kwargs)
-            return NotImplemented
+            if kwargs is None:
+                kwargs = {}
+            return _maybe_dispatch_higher_order_op(func, args, kwargs)
 
         escape_conversion = func in (torch.stack,)
 

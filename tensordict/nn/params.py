@@ -31,7 +31,7 @@ from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._tensorcollection import TensorCollection
-from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict._torch_func import _maybe_dispatch_higher_order_op, TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
     _default_is_leaf,
@@ -512,12 +512,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
-            from torch._ops import HigherOrderOperator
-
-            if isinstance(func, HigherOrderOperator):
-                with torch._C.DisableTorchFunctionSubclass():
-                    return func(*args, **kwargs)
-            return NotImplemented
+            return _maybe_dispatch_higher_order_op(func, args, kwargs)
         return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @classmethod

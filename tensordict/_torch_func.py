@@ -30,6 +30,7 @@ from tensordict.utils import (
     _shape,
     _zip_strict,
     DeviceType,
+    implement_for,
     is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
@@ -58,6 +59,31 @@ except ImportError:
     def tree_leaves(pytree):
         """Torch 2.0 compatible version of tree_leaves."""
         return tree_flatten(pytree)[0]
+
+
+try:
+    from torch._ops import HigherOrderOperator as _HigherOrderOperator
+except ImportError:
+    _HigherOrderOperator = None  # torch < 2.1
+
+
+@implement_for("torch", "2.1")
+def _maybe_dispatch_higher_order_op(func, args, kwargs):
+    """Pass through HigherOrderOperator calls (e.g. invoke_subgraph) to avoid returning NotImplemented."""
+    if isinstance(func, _HigherOrderOperator):
+        with torch._C.DisableTorchFunctionSubclass():
+            return func(*args, **kwargs)
+    return NotImplemented
+
+
+@implement_for("torch", None, "2.1")
+def _maybe_dispatch_higher_order_op(func, args, kwargs):  # noqa: F811
+    return NotImplemented
+
+
+# Force implement_for resolution at import time so that it doesn't trigger
+# _gcd_import inside torch.compile tracing context.
+_maybe_dispatch_higher_order_op(None, (), {})
 
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:

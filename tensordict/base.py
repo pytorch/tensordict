@@ -721,19 +721,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+        from tensordict._torch_func import (
+            _maybe_dispatch_higher_order_op,
+            TD_HANDLED_FUNCTIONS,
+        )
 
         if kwargs is None:
             kwargs = {}
         if func not in TD_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, TensorDictBase)) or _is_tensorclass(t) for t in types
         ):
-            from torch._ops import HigherOrderOperator
-
-            if isinstance(func, HigherOrderOperator):
-                with torch._C.DisableTorchFunctionSubclass():
-                    return func(*args, **kwargs)
-            return NotImplemented
+            return _maybe_dispatch_higher_order_op(func, args, kwargs)
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
