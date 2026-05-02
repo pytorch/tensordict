@@ -27,6 +27,33 @@ FEAT_A = 3
 FEAT_B = 5
 
 
+def test_td_helper_import_paths_are_preserved():
+    td_module = importlib.import_module("tensordict")
+    dense_module = importlib.import_module("tensordict._td")
+    helper_module = importlib.import_module("tensordict._td_functions")
+
+    for name in helper_module.__all__:
+        assert getattr(dense_module, name) is getattr(helper_module, name)
+        assert getattr(dense_module, name).__module__ == "tensordict._td"
+
+    for name in (
+        "cat",
+        "from_consolidated",
+        "from_module",
+        "from_modules",
+        "from_pytree",
+        "fromkeys",
+        "lazy_stack",
+        "load",
+        "load_memmap",
+        "maybe_dense_stack",
+        "memmap",
+        "save",
+        "stack",
+    ):
+        assert getattr(td_module, name) is getattr(dense_module, name)
+
+
 def test_legacy_import_paths_are_preserved():
     """Splitting implementation files must not move the user-visible API."""
     td_module = importlib.import_module("tensordict")
