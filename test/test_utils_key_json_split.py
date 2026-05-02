@@ -33,6 +33,8 @@ def test_filesystem_key_roundtrip_and_warning():
 def test_json_backend_roundtrip():
     utils_module = importlib.import_module("tensordict.utils")
     utils_module.set_json_backend("json")
+    assert utils_module.get_json_backend().__name__ == "json"
+
     data = utils_module.json_dumps({"a": [1, 2]}, separators=(",", ":"))
     if isinstance(data, bytes):
         data = data.decode()

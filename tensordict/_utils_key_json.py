@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import warnings
-
-from pyvers import get_backend, implement_for, register_backend, set_backend
 
 __all__ = [
     "_decode_key_from_filesystem",
@@ -20,6 +19,9 @@ __all__ = [
     "json_dumps",
     "set_json_backend",
 ]
+
+_JSON_BACKENDS = ("json", "orjson")
+_JSON_BACKEND = "orjson" if importlib.util.find_spec("orjson") is not None else "json"
 
 
 def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
@@ -91,25 +93,13 @@ def _decode_key_from_filesystem(encoded_key: str) -> str:
     return "".join(decoded_parts)
 
 
-register_backend(group="json", backends={"json": "json", "orjson": "orjson"})
-
-
-@implement_for("json")
 def _json_dumps(data, **kwargs):
-    """JSON serialization using standard json module."""
-    import json
+    """JSON serialization using the configured json backend."""
+    backend = get_json_backend()
 
-    return json.dumps(data, **kwargs)
-
-
-@implement_for("orjson")
-def _json_dumps(data, **kwargs):  # noqa: F811
-    """JSON serialization using orjson module."""
-    import orjson
-
-    if "separators" in kwargs:
+    if _JSON_BACKEND == "orjson" and "separators" in kwargs:
         kwargs.pop("separators")
-    return orjson.dumps(data, **kwargs)
+    return backend.dumps(data, **kwargs)
 
 
 def json_dumps(data, **kwargs):
@@ -119,20 +109,17 @@ def json_dumps(data, **kwargs):
 
 def set_json_backend(backend):
     """Set the JSON backend to use (either 'json' or 'orjson')."""
-    if backend not in ["json", "orjson"]:
+    global _JSON_BACKEND
+
+    if backend not in _JSON_BACKENDS:
         raise ValueError("Backend must be either 'json' or 'orjson'")
-    set_backend("json", backend)
+    importlib.import_module(backend)
+    _JSON_BACKEND = backend
 
 
 def get_json_backend():
     """Get the current JSON backend."""
-    return get_backend("json")
-
-
-if importlib.util.find_spec("orjson") is not None:
-    set_json_backend("orjson")
-else:
-    set_json_backend("json")
+    return importlib.import_module(_JSON_BACKEND)
 
 
 for _name in __all__:
