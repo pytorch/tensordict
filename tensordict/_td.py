@@ -4925,15 +4925,6 @@ _register_tensor_class(TensorDict)
 _register_tensor_class(_SubTensorDict)
 
 
-from tensordict._td_memmap import (
-    _populate_empty,
-    _populate_memmap,
-    _populate_storage,
-    _save_metadata,
-    _update_metadata,
-)
-
-
 from tensordict._td_functions import (  # noqa: F401
     cat,
     from_consolidated,
@@ -4948,4 +4939,11 @@ from tensordict._td_functions import (  # noqa: F401
     memmap,
     save,
     stack,
+)
+from tensordict._td_memmap import (
+    _populate_empty,
+    _populate_memmap,
+    _populate_storage,
+    _save_metadata,
+    _update_metadata,
 )
