@@ -2702,6 +2702,219 @@ class TestProbabilisticTensorDictModule:
             mod.log_prob(mod(td.copy()))
             mod.log_prob_key
 
+    # ------------------------------------------------------------------
+    # generator argument: Generator object, int seed, and tensordict-key forms
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _make_normal(generator=None, default_interaction_type="random"):
+        return ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+            default_interaction_type=default_interaction_type,
+            generator=generator,
+        )
+
+    def test_generator_module_level_generator(self):
+        """Two actors with same-seeded Generators should produce identical samples."""
+        g1 = torch.Generator().manual_seed(0)
+        g2 = torch.Generator().manual_seed(0)
+        m1 = self._make_normal(generator=g1)
+        m2 = self._make_normal(generator=g2)
+        # Set the global RNG to a different state to make sure we're not relying on it
+        torch.manual_seed(999)
+        s1 = m1(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        s2 = m2(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s1, s2)
+
+    def test_generator_advances_in_place(self):
+        """Consecutive calls advance the generator's stream."""
+        g = torch.Generator().manual_seed(0)
+        m = self._make_normal(generator=g)
+        s1 = m(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        s2 = m(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert not torch.equal(s1, s2)
+
+    def test_generator_int_seed_equivalent_to_generator(self):
+        """Module-level int seed is shorthand for Generator().manual_seed(int)."""
+        m_int = self._make_normal(generator=0)
+        m_gen = self._make_normal(generator=torch.Generator().manual_seed(0))
+        s_int = m_int(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        s_gen = m_gen(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s_int, s_gen)
+
+    def test_generator_isolates_global_rng(self):
+        """Sampling with a generator must not advance the global RNG."""
+        g = torch.Generator().manual_seed(0)
+        m = self._make_normal(generator=g)
+        torch.manual_seed(1234)
+        before = torch.get_rng_state()
+        m(TensorDict(loc=torch.zeros(4)))
+        after = torch.get_rng_state()
+        assert torch.equal(before, after)
+
+    def test_generator_independent_streams(self):
+        """Two same-seeded Generators on two actors stay synchronized only if used
+        independently and identically; sampling on one must not perturb the other."""
+        g1 = torch.Generator().manual_seed(0)
+        g2 = torch.Generator().manual_seed(0)
+        m1 = self._make_normal(generator=g1)
+        m2 = self._make_normal(generator=g2)
+        # Sample once on m1, then both — m2's first sample should match m1's first.
+        s1a = m1(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        s2a = m2(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s1a, s2a)
+        s1b = m1(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        s2b = m2(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s1b, s2b)
+        assert not torch.equal(s1a, s1b)
+
+    def test_generator_td_key_generator_form(self):
+        """Generator passed via tensordict key works like a module-level Generator."""
+        m_key = self._make_normal(generator="rng")
+        td = TensorDict(loc=torch.zeros(4))
+        td["rng"] = NonTensorData(torch.Generator().manual_seed(0))
+        s_key = m_key(td)["sample"].clone()
+        m_ref = self._make_normal(generator=torch.Generator().manual_seed(0))
+        s_ref = m_ref(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s_key, s_ref)
+
+    def test_generator_td_key_int_seed_writeback(self):
+        """Int seed in the tensordict is treated as a stream-key: each call seeds a
+        fresh Generator, samples, then writes the next seed back to the tensordict."""
+        m = self._make_normal(generator="rng")
+
+        # Two independent runs starting from the same seed must produce the same
+        # trajectory.
+        def run(initial_seed, n_steps):
+            td = TensorDict(loc=torch.zeros(4))
+            td["rng"] = NonTensorData(initial_seed)
+            samples = []
+            for _ in range(n_steps):
+                out = m(td)
+                samples.append(out["sample"].clone())
+            return samples, td["rng"]
+
+        traj_a, last_a = run(42, 3)
+        traj_b, last_b = run(42, 3)
+        for a, b in zip(traj_a, traj_b):
+            assert torch.equal(a, b)
+        assert last_a == last_b
+        # And consecutive samples in a trajectory differ.
+        assert not torch.equal(traj_a[0], traj_a[1])
+        assert not torch.equal(traj_a[1], traj_a[2])
+        # And different starting seeds give different trajectories.
+        traj_c, _ = run(43, 3)
+        assert not torch.equal(traj_a[0], traj_c[0])
+
+    def test_generator_td_key_tensor_seed(self):
+        """A scalar Tensor seed in the tensordict round-trips as a Tensor."""
+        m = self._make_normal(generator="rng")
+        td = TensorDict(loc=torch.zeros(4), rng=torch.tensor(7, dtype=torch.int64))
+        m(td)
+        assert isinstance(td["rng"], torch.Tensor)
+        assert td["rng"].dtype == torch.int64
+        assert int(td["rng"].item()) != 7  # Got advanced.
+
+    def test_generator_no_overhead_when_unset(self):
+        """generator=None must leave the global-RNG path untouched."""
+        m = self._make_normal(generator=None)
+        torch.manual_seed(0)
+        s1 = m(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        torch.manual_seed(0)
+        s2 = m(TensorDict(loc=torch.zeros(4)))["sample"].clone()
+        assert torch.equal(s1, s2)
+
+    def test_generator_invalid_type(self):
+        with pytest.raises(TypeError, match="generator must be"):
+            ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["sample"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                generator=1.5,
+            )
+
+    def test_generator_nested_key(self):
+        """The generator NestedKey can be a tuple."""
+        m = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+            default_interaction_type="random",
+            generator=("meta", "rng"),
+        )
+        td = TensorDict(loc=torch.zeros(4))
+        td["meta", "rng"] = NonTensorData(123)
+        m(td)
+        # Stream-key was written back at the nested location.
+        assert td["meta", "rng"] != 123
+
+    def test_generator_no_op_for_mode(self):
+        """MODE doesn't sample, so the generator is irrelevant and not advanced."""
+        g = torch.Generator().manual_seed(0)
+        state_before = g.get_state().clone()
+        m = self._make_normal(generator=g, default_interaction_type="mode")
+        m(TensorDict(loc=torch.tensor([1.0, 2.0, 3.0])))
+        assert torch.equal(g.get_state(), state_before)
+
+    def test_generator_categorical_uses_sample_path(self):
+        """Discrete distributions go through dist.sample (no rsample); generator must
+        still produce reproducible results."""
+        g1 = torch.Generator().manual_seed(0)
+        g2 = torch.Generator().manual_seed(0)
+        m1 = ProbabilisticTensorDictModule(
+            in_keys={"logits": "logits"},
+            out_keys=["sample"],
+            distribution_class=Categorical,
+            default_interaction_type="random",
+            generator=g1,
+        )
+        m2 = ProbabilisticTensorDictModule(
+            in_keys={"logits": "logits"},
+            out_keys=["sample"],
+            distribution_class=Categorical,
+            default_interaction_type="random",
+            generator=g2,
+        )
+        logits = torch.zeros(8, 4)
+        s1 = m1(TensorDict(logits=logits))["sample"].clone()
+        s2 = m2(TensorDict(logits=logits))["sample"].clone()
+        assert torch.equal(s1, s2)
+
+    def test_generator_in_sequential(self):
+        """ProbabilisticActor inheritance: generator threads through Sequential."""
+        prob = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc"},
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+            default_interaction_type="random",
+            generator=torch.Generator().manual_seed(0),
+        )
+        seq1 = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["loc"]),
+            prob,
+        )
+        prob2 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc"},
+            out_keys=["sample"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+            default_interaction_type="random",
+            generator=torch.Generator().manual_seed(0),
+        )
+        seq2 = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["loc"]),
+            prob2,
+        )
+        td = TensorDict(x=torch.zeros(4))
+        s1 = seq1(td.copy())["sample"].clone()
+        s2 = seq2(td.copy())["sample"].clone()
+        assert torch.equal(s1, s2)
+
 
 class TestEnsembleModule:
     def test_init(self):

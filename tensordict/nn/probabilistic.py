@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import re
 import warnings
 from collections.abc import MutableSequence
 from textwrap import indent
-from typing import Any, Dict, List, OrderedDict, overload, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, OrderedDict, overload, TYPE_CHECKING
 
 import torch
 
@@ -156,6 +157,38 @@ class set_interaction_type(_DecoratorContextManager):
         _interaction_type.set_mode(self.prev)
 
 
+@contextlib.contextmanager
+def _use_generator(generator: torch.Generator | None):
+    """Temporarily route the global RNG through ``generator`` for the duration of the block.
+
+    On entry the current global RNG state (CPU and, if applicable, the relevant CUDA device)
+    is forked, the generator's state is loaded into the global RNG, and the block runs.
+    On exit, the post-sample global state is written back to ``generator`` so its stream
+    advances in place, then the original global state is restored.
+
+    No-op when ``generator`` is ``None`` or when running under ``torch.compile``: in the
+    compile case fork_rng is not traceable, so we leave the global RNG as-is.
+    """
+    if generator is None or is_compiling():
+        yield
+        return
+    device = generator.device
+    if device.type == "cuda":
+        with torch.random.fork_rng(devices=[device.index]):
+            torch.cuda.set_rng_state(generator.get_state(), device)
+            try:
+                yield
+            finally:
+                generator.set_state(torch.cuda.get_rng_state(device))
+    else:
+        with torch.random.fork_rng(devices=[]):
+            torch.set_rng_state(generator.get_state())
+            try:
+                yield
+            finally:
+                generator.set_state(torch.get_rng_state())
+
+
 class ProbabilisticTensorDictModule(TensorDictModuleBase):
     """A probabilistic TD Module.
 
@@ -268,6 +301,30 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Controls the random number generator used when sampling from the distribution
+            (relevant only for ``RANDOM`` and ``MEAN`` interaction types).
+
+            - ``None`` (default): the global PyTorch RNG is used (current behaviour).
+            - :class:`torch.Generator`: this generator is used for every sample. Its state
+              advances in place across calls, so consecutive forward passes draw distinct
+              samples. The generator must live on the same device as the distribution
+              parameters.
+            - :class:`int`: shorthand for ``torch.Generator().manual_seed(int)``; a CPU
+              generator is created at construction time and used statefully thereafter.
+            - :class:`NestedKey` (``str`` or ``tuple``): the generator is fetched from the
+              input tensordict at this key on every call. The value may be a
+              :class:`torch.Generator` (used in place, state mutates) or an integer scalar
+              (read as a stream-key, then a fresh ``next_seed`` is written back to the
+              same key after sampling, JAX-PRNG-style).
+
+            .. note:: PyTorch's :class:`~torch.distributions.Distribution` API does not
+                accept a ``generator`` argument. Internally, sampling is wrapped in
+                :func:`torch.random.fork_rng` and the global RNG state is swapped with the
+                provided generator's state for the duration of the call. This makes the
+                approach portable across all distributions (including reparameterized
+                ``rsample`` and discrete ``sample``) but is not compatible with
+                ``torch.compile`` — under compile the argument is silently ignored.
 
     Examples:
         >>> import torch
@@ -358,6 +415,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
         num_samples: int | torch.Size | None = None,
+        generator: torch.Generator | int | NestedKey | None = None,
     ) -> None:
         super().__init__()
         distribution_kwargs = (
@@ -443,6 +501,28 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             num_samples = torch.Size((num_samples,))
         self.num_samples = num_samples
         self._composite_lp_aggreate_at_init = composite_lp_aggregate()
+
+        # Generator: either a stateful Generator owned by this module, or a NestedKey
+        # to pull a Generator/seed from the input tensordict on every call.
+        if generator is None:
+            self._generator = None
+            self._generator_key = None
+        elif isinstance(generator, torch.Generator):
+            self._generator = generator
+            self._generator_key = None
+        elif isinstance(generator, int) and not isinstance(generator, bool):
+            owned = torch.Generator()
+            owned.manual_seed(generator)
+            self._generator = owned
+            self._generator_key = None
+        elif isinstance(generator, (str, tuple)):
+            self._generator = None
+            self._generator_key = unravel_key(generator)
+        else:
+            raise TypeError(
+                f"generator must be a torch.Generator, int, NestedKey, or None; "
+                f"got {type(generator).__name__}."
+            )
 
     def __repr__(self):
         return (
@@ -611,7 +691,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
         dist = self.get_dist(tensordict)
         if _requires_sample:
-            out_tensors = self._dist_sample(dist, interaction_type=interaction_type())
+            generator, writeback = self._resolve_generator(tensordict)
+            out_tensors = self._dist_sample(
+                dist, interaction_type=interaction_type(), generator=generator
+            )
+            if writeback is not None:
+                writeback(generator)
             if self.num_samples is not None:
                 # TODO: capture contiguous error here
                 tensordict_out = tensordict_out.expand(
@@ -669,10 +754,73 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             # )
         return tensordict_out
 
+    def _resolve_generator(
+        self, tensordict: TensorDictBase
+    ) -> tuple[torch.Generator | None, Callable[[torch.Generator], None] | None]:
+        """Resolve the generator to use for the current call.
+
+        Returns a ``(generator, writeback)`` tuple. ``writeback`` is either ``None`` (no
+        action needed after sampling) or a callable that, given the just-used generator,
+        writes a fresh seed back to the input tensordict (stream-key form).
+        """
+        if self._generator is not None:
+            return self._generator, None
+        if self._generator_key is None:
+            return None, None
+        value = tensordict.get(self._generator_key, default=None)
+        if value is None:
+            return None, None
+        unwrapped = value.data if is_non_tensor(value) else value
+        if isinstance(unwrapped, torch.Generator):
+            return unwrapped, None
+        if isinstance(unwrapped, torch.Tensor):
+            if unwrapped.numel() != 1:
+                raise ValueError(
+                    f"Generator key {self._generator_key!r} resolved to a tensor "
+                    f"of {unwrapped.numel()} elements; expected a scalar seed."
+                )
+            seed = int(unwrapped.item())
+            device = unwrapped.device
+            seed_was_tensor = True
+        elif isinstance(unwrapped, int) and not isinstance(unwrapped, bool):
+            seed = unwrapped
+            device = self._infer_param_device(tensordict)
+            seed_was_tensor = False
+        else:
+            raise TypeError(
+                f"Generator key {self._generator_key!r} resolved to a value of type "
+                f"{type(unwrapped).__name__}; expected torch.Generator, int, or scalar Tensor."
+            )
+        local_gen = torch.Generator(device=device)
+        local_gen.manual_seed(seed)
+        key = self._generator_key
+
+        def writeback(gen: torch.Generator) -> None:
+            next_seed_t = torch.randint(
+                0, 2**62, (), generator=gen, dtype=torch.int64, device=device
+            )
+            if seed_was_tensor:
+                tensordict.set(key, next_seed_t)
+            else:
+                from tensordict.tensorclass import NonTensorData
+
+                tensordict.set(key, NonTensorData(int(next_seed_t.item())))
+
+        return local_gen, writeback
+
+    def _infer_param_device(self, tensordict: TensorDictBase) -> torch.device:
+        for k in self.in_keys:
+            v = tensordict.get(k, default=None)
+            if isinstance(v, torch.Tensor):
+                return v.device
+        return torch.device("cpu")
+
     def _dist_sample(
         self,
         dist: D.Distribution,
         interaction_type: InteractionType | None = None,
+        *,
+        generator: torch.Generator | None = None,
     ) -> tuple[Tensor, ...] | Tensor:
         if not isinstance(dist, D.Distribution):
             raise TypeError("Expected Distribution, but got {}".format(type(dist)))
@@ -751,19 +899,21 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     return dist.mean
                 except NotImplementedError:
                     pass
-            if dist.has_rsample:
-                return dist.rsample((self.n_empirical_estimate,)).mean(0)
-            else:
-                return dist.sample((self.n_empirical_estimate,)).mean(0)
+            with _use_generator(generator):
+                if dist.has_rsample:
+                    return dist.rsample((self.n_empirical_estimate,)).mean(0)
+                else:
+                    return dist.sample((self.n_empirical_estimate,)).mean(0)
 
         elif interaction_type is InteractionType.RANDOM:
             num_samples = self.num_samples
             if num_samples is None:
                 num_samples = torch.Size(())
-            if dist.has_rsample:
-                return dist.rsample(num_samples)
-            else:
-                return dist.sample(num_samples)
+            with _use_generator(generator):
+                if dist.has_rsample:
+                    return dist.rsample(num_samples)
+                else:
+                    return dist.sample(num_samples)
         else:
             raise NotImplementedError(f"unknown interaction_type {interaction_type}")
 
@@ -1218,7 +1368,15 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             ):
                 dist = tdm.get_dist(td_copy)
                 if i < len(self.module) - 1:
-                    sample = tdm._dist_sample(dist, interaction_type=interaction_type())
+                    if isinstance(tdm, ProbabilisticTensorDictModule):
+                        gen, writeback = tdm._resolve_generator(td_copy)
+                    else:
+                        gen, writeback = None, None
+                    sample = tdm._dist_sample(
+                        dist, interaction_type=interaction_type(), generator=gen
+                    )
+                    if writeback is not None:
+                        writeback(gen)
                     if tdm.num_samples not in ((), None):
                         td_copy = td_copy.expand(tdm.num_samples + td_copy.shape)
                     if isinstance(tdm, ProbabilisticTensorDictModule):
