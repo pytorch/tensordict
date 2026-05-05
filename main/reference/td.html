@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4003+g8c46f0ca2.d20260429)
+                  main (0.12.0.dev4026+gddc025430.d20260505)
                 </div>
               
             
@@ -412,7 +412,7 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <td><p>Copies the params and buffers of a module in a tensordict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_modules.html#tensordict.from_modules" title="tensordict.from_modules"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_modules</span></code></a>(*modules[, as_module, lock, ...])</p></td>
-<td><p>Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.</p></td>
+<td><p>Retrieves the parameters of several modules for vmap.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.from_namedtuple.html#tensordict.from_namedtuple" title="tensordict.from_namedtuple"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_namedtuple</span></code></a>(named_tuple, *[, ...])</p></td>
 <td><p>Converts a namedtuple to a TensorDict.</p></td>
@@ -445,10 +445,10 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <td><p>Loads a memory-mapped tensordict from disk.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maybe_dense_stack</span></code></a>(input[, dim, out])</p></td>
-<td><p>Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..</p></td>
+<td><p>Attempts to make a dense stack and falls back on lazy stack when required.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.memmap.html#tensordict.memmap" title="tensordict.memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">memmap</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
-<td><p>Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.</p></td>
+<td><p>Writes all tensors onto memory-mapped tensors in a new tensordict.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.save.html#tensordict.save" title="tensordict.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
 <td><p>Saves the tensordict to disk.</p></td>
@@ -700,13 +700,13 @@ and return another one (for instance via <a class="reference internal" href="gen
 <td><p>Parse a TensorDict repr to a TensorDict.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.set_capture_non_tensor_stack.html#tensordict.set_capture_non_tensor_stack" title="tensordict.set_capture_non_tensor_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack</span></code></a>(mode)</p></td>
-<td><p>A context manager or decorator to control whether identical non-tensor data should be stacked into a single NonTensorData object or a NonTensorStack.</p></td>
+<td><p>Controls whether identical non-tensor data should be captured when stacked.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>(mode)</p></td>
 <td><p>Sets the behaviour of some methods to a lazy transform.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.set_list_to_stack.html#tensordict.set_list_to_stack" title="tensordict.set_list_to_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_list_to_stack</span></code></a>(mode)</p></td>
-<td><p>Context manager and decorator to control the behavior of list handling in TensorDict.</p></td>
+<td><p>Context manager and decorator to control list handling in TensorDict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_printoptions</span></code></a>(*[, verbose])</p></td>
 <td><p>Controls which attributes appear in TensorDict's <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> output.</p></td>

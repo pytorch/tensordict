@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4003+g8c46f0ca2.d20260429)
+                  main (0.12.0.dev4026+gddc025430.d20260505)
                 </div>
               
             
@@ -481,6 +481,34 @@ PPO). Default is <code class="docutils literal notranslate"><span class="pre">Fa
 <li><p><strong>n_empirical_estimate</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.11)"><em>torch.Generator</em></a><em>, </em><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.int" title="tensordict.LazyStackedTensorDict.int"><em>int</em></a><em>, </em><em>NestedKey</em><em>, or </em><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><em>None</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
+Controls the random number generator used when sampling from the distribution
+(relevant only for <code class="docutils literal notranslate"><span class="pre">RANDOM</span></code> and <code class="docutils literal notranslate"><span class="pre">MEAN</span></code> interaction types).</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> (default): the global PyTorch RNG is used (current behaviour).</p></li>
+<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a>: this generator is used for every sample. Its state
+advances in place across calls, so consecutive forward passes draw distinct
+samples. The generator must live on the same device as the distribution
+parameters.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>: shorthand for <code class="docutils literal notranslate"><span class="pre">torch.Generator().manual_seed(int)</span></code>; a CPU
+generator is created at construction time and used statefully thereafter.</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code> or <code class="docutils literal notranslate"><span class="pre">tuple</span></code>): the generator is fetched from the
+input tensordict at this key on every call. The value may be a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a> (used in place, state mutates) or an integer scalar
+(read as a stream-key, then a fresh <code class="docutils literal notranslate"><span class="pre">next_seed</span></code> is written back to the
+same key after sampling, JAX-PRNG-style).</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>PyTorch’s <code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code> API does not
+accept a <code class="docutils literal notranslate"><span class="pre">generator</span></code> argument. Internally, sampling is wrapped in
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/random.html#torch.random.fork_rng" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.random.fork_rng()</span></code></a> and the global RNG state is swapped with the
+provided generator’s state for the duration of the call. This makes the
+approach portable across all distributions (including reparameterized
+<code class="docutils literal notranslate"><span class="pre">rsample</span></code> and discrete <code class="docutils literal notranslate"><span class="pre">sample</span></code>) but is not compatible with
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> — under compile the argument is silently ignored.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 </dl>

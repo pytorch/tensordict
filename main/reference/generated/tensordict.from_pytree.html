@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4003+g8c46f0ca2.d20260429)
+                  main (0.12.0.dev4026+gddc025430.d20260505)
                 </div>
               
             
@@ -364,52 +364,6 @@
 <dt class="sig sig-object py" id="tensordict.from_pytree">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">from_pytree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pytree</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.from_pytree" title="Permalink to this definition">¶</a></dt>
 <dd><p>Converts a pytree to a TensorDict instance.</p>
-<p>This method is designed to keep the pytree nested structure as much as possible.</p>
-<p>Additional non-tensor keys are added to keep track of each level’s identity, providing
-a built-in pytree-to-tensordict bijective transform API.</p>
-<p>Accepted classes currently include lists, tuples, named tuples and dict.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>For dictionaries, non-NestedKey keys are registered separately as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
-instances.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-Note that this transformation is surjective: transforming back the tensordict to a pytree will not
-recover the original types.</p>
-</div>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a pytree with tensor leaves, and one &quot;weird&quot;-looking dict key</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">WeirdLookingClass</span><span class="p">:</span>
-<span class="gp">... </span>    <span class="k">pass</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">weird_key</span> <span class="o">=</span> <span class="n">WeirdLookingClass</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Make a pytree with tuple, lists, dict and namedtuple</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">pytree</span> <span class="o">=</span> <span class="p">(</span>
-<span class="gp">... </span>    <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,)),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)],</span>
-<span class="gp">... </span>    <span class="p">{</span>
-<span class="gp">... </span>        <span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
-<span class="gp">... </span>            <span class="mi">2</span><span class="p">,</span>
-<span class="gp">... </span>        <span class="p">),</span>
-<span class="gp">... </span>        <span class="s2">&quot;td&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;one&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}),</span>
-<span class="gp">... </span>        <span class="n">weird_key</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)),</span>
-<span class="gp">... </span>        <span class="s2">&quot;list&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;named_tuple&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;two&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">})</span><span class="o">.</span><span class="n">to_namedtuple</span><span class="p">()},</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Build a TensorDict from that pytree</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">from_pytree</span><span class="p">(</span><span class="n">pytree</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Recover the pytree</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">pytree_recon</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_pytree</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Check that the leaves match</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">):</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">v1</span> <span class="o">==</span> <span class="n">v2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span><span class="n">check</span><span class="p">,</span> <span class="n">pytree</span><span class="p">,</span> <span class="n">pytree_recon</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">weird_key</span> <span class="ow">in</span> <span class="n">pytree_recon</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</pre></div>
-</div>
 </dd></dl>
 
 </section>
