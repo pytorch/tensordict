@@ -3,7 +3,10 @@ name: Continuous Benchmark (PR)
 on:
   pull_request:
 
-permissions: write-all
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -40,11 +43,11 @@ jobs:
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -88,8 +91,8 @@ jobs:
           source .venv/local/bin/activate
           echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
           echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=${RUNNER_TEMP}/${{ matrix.device }}-baseline.json" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=${RUNNER_TEMP}/${{ matrix.device }}-contender.json" >> $GITHUB_ENV
           echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run benchmarks
         run: |
@@ -131,7 +134,15 @@ jobs:
           with open('${{ env.CONTENDER_JSON }}', 'w') as f:
               json.dump(contender, f)
           "
+      - name: Upload benchmark comparison data
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.device }}-benchmark-comparison-data
+          path: |
+            ${{ env.BASELINE_JSON }}
+            ${{ env.CONTENDER_JSON }}
       - name: Publish results
+        continue-on-error: true
         uses: apbard/pytest-benchmark-commenter@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

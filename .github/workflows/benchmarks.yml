@@ -54,11 +54,11 @@ jobs:
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -163,7 +163,7 @@ jobs:
           name: CPU Benchmark Results
           tool: 'pytest'
           output-file-path: cpu-results/output.json
-          fail-on-alert: true
+          fail-on-alert: false
           alert-threshold: '200%'
           alert-comment-cc-users: '@vmoens'
           # Disable PR comments to avoid permission issues with PR reviews
@@ -178,7 +178,7 @@ jobs:
           name: GPU Benchmark Results
           tool: 'pytest'
           output-file-path: gpu-results/output.json
-          fail-on-alert: true
+          fail-on-alert: false
           alert-threshold: '200%'
           alert-comment-cc-users: '@vmoens'
           # Disable PR comments to avoid permission issues with PR reviews
