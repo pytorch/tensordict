@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4026+gddc025430.d20260505)
+                  main (0.12.0.dev4030+g4e85a232a.d20260506)
                 </div>
               
             
@@ -931,10 +931,12 @@ setting this option to True is not needed and often can be worked around in a mu
 <li><p><strong>create_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, graph of the derivative will
 be constructed, allowing to compute higher order derivative
 products. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which the gradient will be
-accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be ignored. If not
-provided, the gradient is accumulated into all the leaf Tensors that were
-used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which
+the gradient will be accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be
+ignored. If not provided, the gradient is accumulated into all the leaf
+Tensors that were used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>. A dict of tensors
+(e.g. <code class="docutils literal notranslate"><span class="pre">dict(model.named_parameters())</span></code>) is also accepted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
