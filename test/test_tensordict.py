@@ -9232,6 +9232,89 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update_at_(td0, 0)
         assert (td[0] == 0).all()
 
+    def test_update_at_nested_time_slice(self, td_name, device):
+        td = TensorDict(
+            {
+                "a": torch.zeros(4, 3, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.zeros(4, 3, 2, device=device)},
+                    batch_size=[4, 3],
+                    device=device,
+                ),
+            },
+            batch_size=[4, 3],
+            device=device,
+        )
+        td0 = TensorDict(
+            {
+                "a": torch.ones(4, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.ones(4, 2, device=device)},
+                    batch_size=[4],
+                    device=device,
+                ),
+            },
+            batch_size=[4],
+            device=device,
+        )
+        td.update_at_(td0, (slice(None), 1))
+        assert (td[:, 1] == td0).all()
+        assert (td[:, 0] == 0).all()
+        assert (td[:, 2] == 0).all()
+
+    def test_update_at_nested_time_slice_locked(self, td_name, device):
+        td = TensorDict(
+            {
+                "a": torch.zeros(4, 3, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.zeros(4, 3, 2, device=device)},
+                    batch_size=[4, 3],
+                    device=device,
+                ),
+            },
+            batch_size=[4, 3],
+            device=device,
+        ).lock_()
+        td0 = TensorDict(
+            {
+                "a": torch.ones(4, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.ones(4, 2, device=device)},
+                    batch_size=[4],
+                    device=device,
+                ),
+            },
+            batch_size=[4],
+            device=device,
+        )
+        td.update_at_(td0, (slice(None), 2))
+        assert (td[:, 2] == td0).all()
+
+    @pytest.mark.parametrize("method", ["copy_at_", "update_at_"])
+    def test_update_at_nontensor_data(self, td_name, device, method):
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+
+        if method == "copy_at_":
+            getattr(td, method)(newdata, slice(1, None, 2), fast=False)
+        else:
+            getattr(td, method)(newdata, slice(1, None, 2))
+
+        assert td.get("val").tolist() == [0, 1] * 5
+
+    def test_copy_at_fast_transition(self, td_name, device):
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+
+        with pytest.warns(FutureWarning, match="fast=True in v0.14"):
+            td.copy_at_(newdata, slice(1, None, 2))
+        assert td.get("val").tolist() == [0, 1] * 5
+
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        with pytest.raises(RuntimeError, match="fast=True"):
+            td.copy_at_(newdata, slice(1, None, 2), fast=True)
+        assert td.get("val").tolist() == [0] * 10
+
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
     @set_lazy_legacy(True)

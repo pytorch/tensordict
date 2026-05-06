@@ -39,6 +39,8 @@ from tensordict.base import (
     _default_is_leaf,
     _device_recorder,
     _expand_to_match_shape,
+    _foreach_copy_,
+    _foreach_copy_compiled,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
@@ -2712,6 +2714,62 @@ class TensorDict(TensorDictBase):
         td._set_at_tuple(
             key[1:], value, idx, validated=validated, non_blocking=non_blocking
         )
+        return self
+
+    def _update_at_fast(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        idx: IndexType,
+        clone: bool,
+        *,
+        non_blocking: bool,
+        keys_to_update: Sequence[NestedKey] | None,
+    ) -> Any:
+        if (
+            clone
+            or keys_to_update is not None
+            or type(self) is not TensorDict
+            or type(input_dict_or_td) is not TensorDict
+        ):
+            return NotImplemented
+        source_keys, source_values = input_dict_or_td._items_list(True, True)
+        if not source_keys:
+            if input_dict_or_td.is_empty():
+                return self
+            return NotImplemented
+        dest_values = []
+        for key in source_keys:
+            dest = self
+            for subkey in _unravel_key_to_tuple(key):
+                if type(dest) is not TensorDict or subkey not in dest._tensordict:
+                    return NotImplemented
+                dest = dest._tensordict[subkey]
+            dest_values.append(dest)
+        if not isinstance(idx, tuple):
+            idx = (idx,)
+        idx = convert_ellipsis_to_idx(idx, self.batch_size)
+        indexed_dest_values = []
+        for dest, source in zip(dest_values, source_values):
+            if not isinstance(dest, Tensor) or not isinstance(source, Tensor):
+                return NotImplemented
+            try:
+                dest_indexed = dest[idx]
+            except (IndexError, RuntimeError, TypeError):
+                return NotImplemented
+            if dest_indexed.shape != source.shape:
+                return NotImplemented
+            if (
+                dest_indexed is not dest
+                and getattr(dest_indexed, "_base", None) is None
+            ):
+                return NotImplemented
+            indexed_dest_values.append(dest_indexed)
+        if _foreach_copy_ is not None:
+            copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
+            copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
+        else:
+            for dest, source in zip(indexed_dest_values, source_values):
+                dest.copy_(source, non_blocking=non_blocking)
         return self
 
     @lock_blocked

@@ -1030,7 +1030,12 @@ class TensorClass:
     def create_nested(self, key: NestedKey) -> Self: ...
     def copy_(self, tensordict: T, non_blocking: bool = False) -> Self: ...
     def copy_at_(
-        self, tensordict: T, idx: IndexType, non_blocking: bool = False
+        self,
+        tensordict: T,
+        idx: IndexType,
+        non_blocking: bool = False,
+        *,
+        fast: bool | None = None,
     ) -> Self: ...
     def is_empty(self) -> bool: ...
     def setdefault(

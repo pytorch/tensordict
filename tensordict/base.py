@@ -8553,6 +8553,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
 
         Unlike  TensorDict.update, this function will throw an error if the key is unknown to the TensorDict.
+        This method keeps the general ``set_at_`` semantics and supports tensor
+        and non-tensor leaves. For optimized tensor-only copies in hot paths,
+        use :meth:`~tensordict.TensorDictBase.copy_at_` with ``fast=True``.
 
         Args:
             input_dict_or_td (TensorDictBase or dict): input data to be written
@@ -8619,6 +8622,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 value = value.clone()
             self.set_at_((firstkey, *nextkeys), value, idx, non_blocking=non_blocking)
         return self
+
+    def _update_at_fast(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        idx: IndexType,
+        clone: bool,
+        *,
+        non_blocking: bool,
+        keys_to_update: Sequence[NestedKey] | None,
+    ) -> Any:
+        return NotImplemented
 
     def replace(self, *args, **kwargs):
         """Creates a shallow copy of the tensordict where entries have been replaced.
@@ -8729,9 +8743,70 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.update_(tensordict, non_blocking=non_blocking)
 
     def copy_at_(
-        self, tensordict: T, idx: IndexType, non_blocking: bool = False
+        self,
+        tensordict: T,
+        idx: IndexType,
+        non_blocking: bool = False,
+        *,
+        fast: bool | None = None,
     ) -> Self:
-        """See :obj:`TensorDictBase.update_at_`."""
+        """Copies values from ``tensordict`` into ``self`` at the specified index.
+
+        ``copy_at_`` is an explicit copy-oriented variant of
+        :meth:`~tensordict.TensorDictBase.update_at_`. Unlike ``update_at_``,
+        it may use optimized tensor-only copy paths and is intended for hot
+        paths where the source and destination structures are known to match.
+
+        Args:
+            tensordict (TensorDictBase): input data to be copied in ``self``.
+            idx (int, torch.Tensor, iterable, slice): index of the tensordict
+                where the copy should occur.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
+
+        Keyword Args:
+            fast (bool or None, optional): controls whether ``copy_at_`` may
+                fall back to :meth:`~tensordict.TensorDictBase.update_at_`.
+                If ``True``, only the optimized tensor-only path is used and a
+                ``RuntimeError`` is raised when the fast path is not available.
+                If ``False``, this method delegates directly to ``update_at_``.
+                If ``None``, the current default, ``copy_at_`` warns and falls
+                back to ``update_at_`` when the fast path is unavailable. The
+                default will become ``True`` in v0.14.
+
+        Returns:
+            self
+        """
+        if fast is None:
+            warnings.warn(
+                "copy_at_(..., fast=None) currently falls back to update_at_ "
+                "when the optimized tensor-only copy path is unavailable. "
+                "This default will change to fast=True in v0.14, making "
+                "copy_at_ fast-only by default. Pass fast=False to keep the "
+                "current fallback behavior, or fast=True to require the fast "
+                "path.",
+                FutureWarning,
+                stacklevel=2,
+            )
+        elif fast is False:
+            return self.update_at_(tensordict, idx, non_blocking=non_blocking)
+        result = self._update_at_fast(
+            input_dict_or_td=tensordict,
+            idx=idx,
+            clone=False,
+            non_blocking=non_blocking,
+            keys_to_update=None,
+        )
+        if result is not NotImplemented:
+            return result
+        if fast:
+            raise RuntimeError(
+                "copy_at_(..., fast=True) requires the optimized tensor-only "
+                "copy path, but the source, destination, or index is not "
+                "compatible. Use fast=False or update_at_ for the general "
+                "update semantics."
+            )
         return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
     def is_empty(self) -> bool:

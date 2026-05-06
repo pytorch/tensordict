@@ -146,7 +146,7 @@ def _stack_out(rollout, steps, device):
 
 def _copy_at(rollout, steps, device):
     for i, step in enumerate(steps):
-        rollout.copy_at_(step, idx=(slice(None), i))
+        rollout.copy_at_(step, idx=(slice(None), i), fast=True)
     _maybe_synchronize(device)
 
 
