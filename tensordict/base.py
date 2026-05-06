@@ -207,6 +207,114 @@ else:
     Self = Any
 
 
+class _TensorDictCopyAtWriter:
+    """Reusable tensor-only writer created by :meth:`prepare_copy_at_`."""
+
+    def __init__(
+        self,
+        destination: TensorDictBase,
+        dim: int,
+        source: TensorDictBase | None = None,
+    ):
+        self.destination = destination
+        self.dim = _maybe_correct_neg_dim(dim, destination.batch_size)
+        self.keys, self.dest_values = destination._items_list(True, True)
+        self._indexed_dest_values: dict[Any, list[Tensor]] = {}
+        if any(not isinstance(dest, Tensor) for dest in self.dest_values):
+            raise TypeError(
+                "prepare_copy_at_ only supports tensor leaves in the destination "
+                "tensordict."
+            )
+        if source is not None:
+            self._source_values(source)
+
+    def _source_values(self, source: TensorDictBase) -> list[Tensor]:
+        if not _is_tensor_collection(type(source)):
+            raise TypeError(
+                "prepare_copy_at_.copy_ expected a TensorDictBase source, "
+                f"got {type(source)}."
+            )
+        source_keys, source_values = source._items_list(True, True)
+        if source_keys != self.keys:
+            _, source_values = source._items_list(
+                True, True, sorting_keys=self.keys, default=None
+            )
+        if len(source_values) != len(self.dest_values):
+            raise RuntimeError(
+                "The source and destination tensordicts must have matching leaves."
+            )
+        if any(not isinstance(source, Tensor) for source in source_values):
+            raise TypeError(
+                "prepare_copy_at_ only supports tensor leaves in the source "
+                "tensordict."
+            )
+        return source_values
+
+    def _index(self, index: IndexType) -> tuple:
+        idx = [slice(None)] * self.destination.batch_dims
+        idx[self.dim] = index
+        return tuple(idx)
+
+    def _cache_key(self, index: IndexType):
+        try:
+            hash(index)
+        except TypeError:
+            return None
+        return index
+
+    def _get_indexed_dest_values(self, index: IndexType) -> list[Tensor]:
+        cache_key = self._cache_key(index)
+        if cache_key is not None:
+            cached = self._indexed_dest_values.get(cache_key)
+            if cached is not None:
+                return cached
+        idx = self._index(index)
+        indexed_dest_values = []
+        for key, dest in zip(self.keys, self.dest_values):
+            try:
+                dest_indexed = dest[idx]
+            except (IndexError, RuntimeError, TypeError) as err:
+                raise IndexError(
+                    f"Could not index destination leaf {key} with index {idx}."
+                ) from err
+            if (
+                dest_indexed is not dest
+                and getattr(dest_indexed, "_base", None) is None
+            ):
+                raise IndexError(
+                    f"Index {idx} does not produce a writable view for key {key}."
+                )
+            indexed_dest_values.append(dest_indexed)
+        if cache_key is not None:
+            self._indexed_dest_values[cache_key] = indexed_dest_values
+        return indexed_dest_values
+
+    def copy_(
+        self,
+        source: TensorDictBase,
+        index: IndexType,
+        *,
+        non_blocking: bool = False,
+    ) -> TensorDictBase:
+        source_values = self._source_values(source)
+        indexed_dest_values = self._get_indexed_dest_values(index)
+        for key, dest_indexed, source_value in zip(
+            self.keys, indexed_dest_values, source_values
+        ):
+            if dest_indexed.shape != source_value.shape:
+                raise RuntimeError(
+                    f"Shape mismatch for key {key}: indexed destination has shape "
+                    f"{dest_indexed.shape}, source has shape {source_value.shape}."
+                )
+        if _foreach_copy_ is not None:
+            copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
+            copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
+        else:
+            for dest, source_value in zip(indexed_dest_values, source_values):
+                dest.copy_(source_value, non_blocking=non_blocking)
+        return self.destination
+
+
 class _BEST_ATTEMPT_INPLACE:
     def __bool__(self):
         # we use an exception to exit when running `inplace = BEST_ATTEMPT_INPLACE if inplace else False`
@@ -8808,6 +8916,44 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 "update semantics."
             )
         return self.update_at_(tensordict, idx, non_blocking=non_blocking)
+
+    def prepare_copy_at_(
+        self, dim: int, source: T | None = None
+    ) -> _TensorDictCopyAtWriter:
+        """Creates a reusable writer for repeated indexed tensor copies.
+
+        ``prepare_copy_at_`` is intended for hot paths that repeatedly copy
+        TensorDicts with the same leaf structure into different indices of the
+        same destination, for example collector rollouts. It precomputes the
+        destination leaves and, for repeated scalar indices, caches the indexed
+        destination tensor views used by the writer's ``copy_(source, index)``
+        method.
+
+        The writer is stricter than :meth:`~tensordict.TensorDictBase.update_at_`:
+        it only supports tensor leaves and requires the source and destination
+        to have matching leaves. Use ``copy_at_`` for one-off optimized copies,
+        or ``update_at_`` when the general update semantics are required.
+
+        Args:
+            dim (int): batch dimension of ``self`` along which ``index`` will
+                select the destination slice for each copy.
+            source (TensorDictBase, optional): if provided, validates at
+                preparation time that the source structure is compatible with
+                ``self``.
+
+        Returns:
+            A lightweight writer with a ``copy_(source, index)`` method that
+            copies ``source`` tensor leaves into ``self`` at ``index`` along
+            ``dim``.
+
+        Examples:
+            >>> dest = TensorDict({"x": torch.zeros(3, 2)}, batch_size=[3, 2])
+            >>> src = TensorDict({"x": torch.ones(3)}, batch_size=[3])
+            >>> writer = dest.prepare_copy_at_(dim=1, source=src)
+            >>> writer.copy_(src, index=0)
+            >>> assert (dest[:, 0] == src).all()
+        """
+        return _TensorDictCopyAtWriter(self, dim=dim, source=source)
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""

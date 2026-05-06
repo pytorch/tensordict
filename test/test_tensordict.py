@@ -9315,6 +9315,38 @@ class TestTensorDicts(TestTensorDictsBase):
             td.copy_at_(newdata, slice(1, None, 2), fast=True)
         assert td.get("val").tolist() == [0] * 10
 
+    def test_prepare_copy_at_(self, td_name, device):
+        td = TensorDict(
+            {
+                "a": torch.zeros(4, 3, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.zeros(4, 3, 2, device=device)},
+                    batch_size=[4, 3],
+                    device=device,
+                ),
+            },
+            batch_size=[4, 3],
+            device=device,
+        )
+        td0 = TensorDict(
+            {
+                "a": torch.ones(4, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.ones(4, 2, device=device)},
+                    batch_size=[4],
+                    device=device,
+                ),
+            },
+            batch_size=[4],
+            device=device,
+        )
+        writer = td.prepare_copy_at_(dim=1, source=td0)
+        writer.copy_(td0, index=0)
+        writer.copy_(td0.clone().zero_(), index=2)
+        assert (td[:, 0] == td0).all()
+        assert (td[:, 1] == 0).all()
+        assert (td[:, 2] == 0).all()
+
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
     @set_lazy_legacy(True)

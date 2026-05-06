@@ -256,6 +256,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "numpy",
     "param_count",
     "pop",
+    "prepare_copy_at_",
     "recv",
     "reduce",
     "requires_grad",
