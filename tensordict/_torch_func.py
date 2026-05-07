@@ -1125,10 +1125,13 @@ def fast_stack(
     result = _stack_homogeneous(list_of_tensordicts, dim)
     if result is None:
         raise RuntimeError(
-            "fast_stack requires every input to be a plain TensorDict with "
-            "matching key set, batch_size and device, and only regular "
-            "torch.Tensor leaves. One or more preconditions failed. Use "
-            "tensordict.stack for the general case."
+            "fast_stack could not stack the inputs. All inputs must share "
+            "the same root type (TensorDict, LazyStackedTensorDict, "
+            "tensorclass, or NonTensorData/NonTensorStack/MetaData), with "
+            "matching batch_size, device and key set; LazyStackedTensorDicts "
+            "must additionally agree on stack_dim and inner-TD count. "
+            "PersistentTensorDict, _SubTensorDict and TensorDictParams "
+            "are not supported. Use tensordict.stack for the general case."
         )
     return result
 

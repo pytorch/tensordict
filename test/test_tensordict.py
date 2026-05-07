@@ -3603,13 +3603,13 @@ class TestGeneric:
         td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
         lazy0 = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
         lazy1 = LazyStackedTensorDict.lazy_stack([td, td], dim=1)
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
             fast_stack([lazy0, lazy1], dim=0)
 
     def test_fast_stack_rejects_key_mismatch(self):
         td_a = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
         td_b = TensorDict({"b": torch.zeros(3)}, batch_size=[3])
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
             fast_stack([td_a, td_b], dim=0)
 
     def test_fast_stack_handles_key_order_mismatch(self):
@@ -3645,7 +3645,7 @@ class TestGeneric:
     def test_fast_stack_rejects_batch_size_mismatch(self):
         td0 = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
         td1 = TensorDict({"a": torch.zeros(4)}, batch_size=[4])
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
             fast_stack([td0, td1], dim=0)
 
     def test_fast_stack_handles_non_tensor_leaves(self):
@@ -3778,8 +3778,29 @@ class TestGeneric:
 
     def test_fast_stack_rejects_dim_out_of_range(self):
         td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
             fast_stack([td, td], dim=5)
+
+    def test_fast_stack_rejects_mixed_root_types(self):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        lazy = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td, lazy], dim=0)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
+    def test_fast_stack_rejects_persistent_td(self, tmpdir):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        ptd = PersistentTensorDict.from_dict(
+            td.to_dict(), filename=str(tmpdir / "p.h5")
+        )
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([ptd, ptd], dim=0)
+
+    def test_fast_stack_rejects_device_mismatch(self):
+        td0 = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device="cpu")
+        td1 = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device=None)
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td0, td1], dim=0)
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
