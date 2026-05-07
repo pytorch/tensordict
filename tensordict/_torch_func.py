@@ -945,6 +945,12 @@ def _stack_leaf(vals: list, dim: int):
             if type(v) is not TensorDict:
                 return None
         return _stack_homogeneous_inner(vals, dim)
+    # Nested LazyStackedTensorDict at a leaf.
+    if t0 is LazyStackedTensorDict:
+        for v in vals[1:]:
+            if type(v) is not LazyStackedTensorDict:
+                return None
+        return _stack_homogeneous_lazy(vals, dim)
     # Pass-through (NonTensorData, NonTensorStack, MetaData, UnbatchedTensor).
     # Must come before the tensorclass branch — these are tensorclasses too,
     # but they have a dedicated _stack_non_tensor path.
@@ -1031,7 +1037,48 @@ def _stack_homogeneous(
                 return None
         return _stack_homogeneous_inner(tds, dim)
 
+    # LazyStackedTensorDict at root.
+    if t0 is LazyStackedTensorDict:
+        return _stack_homogeneous_lazy(tds, dim)
+
     return None
+
+
+def _stack_homogeneous_lazy(
+    tds: Sequence[LazyStackedTensorDict], dim: int
+) -> TensorDictBase | None:
+    """Stack N LazyStackedTensorDicts via dense-stack of corresponding inner TDs.
+
+    Mirrors the lazy branch of :func:`_stack` (lines 683-714 of this file)
+    but skips the leaf-len consistency check: if any sub-stack bails the
+    caller falls back to ``stack``.
+
+    Returns None on bail-out.
+    """
+    td0 = tds[0]
+    n_subs = len(td0.tensordicts)
+    stack_dim = td0.stack_dim
+    for td in tds[1:]:
+        if td.stack_dim != stack_dim:
+            return None
+        if len(td.tensordicts) != n_subs:
+            return None
+
+    if dim <= stack_dim:
+        new_lazy_stack_dim = stack_dim + 1
+        sub_dim = dim
+    else:
+        new_lazy_stack_dim = stack_dim
+        sub_dim = dim - 1
+
+    sub_results = []
+    for subtds in zip(*[td.tensordicts for td in tds]):
+        sub = _stack_homogeneous(list(subtds), sub_dim)
+        if sub is None:
+            return None
+        sub_results.append(sub)
+
+    return LazyStackedTensorDict(*sub_results, stack_dim=new_lazy_stack_dim)
 
 
 def fast_stack(

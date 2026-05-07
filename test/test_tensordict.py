@@ -3564,11 +3564,47 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="cannot be empty"):
             fast_stack([], dim=0)
 
-    def test_fast_stack_rejects_lazy_stacked(self):
-        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
-        lazy = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
+    def test_fast_stack_lazy_root(self):
+        # Two lazy-stacked TDs each containing 4 inner TDs.
+        def make_lazy():
+            inners = [
+                TensorDict({"a": torch.randn(3)}, batch_size=[3]) for _ in range(4)
+            ]
+            return LazyStackedTensorDict.lazy_stack(inners, dim=0)
+
+        lazies = [make_lazy() for _ in range(2)]
+        out = fast_stack(lazies, dim=0)
+        ref = torch.stack(lazies, dim=0)
+        assert isinstance(out, LazyStackedTensorDict)
+        assert out.batch_size == ref.batch_size
+        torch.testing.assert_close(out["a"], ref["a"])
+
+    def test_fast_stack_lazy_nested(self):
+        def make_td():
+            sub_inners = [
+                TensorDict({"x": torch.randn(3)}, batch_size=[3]) for _ in range(2)
+            ]
+            return TensorDict(
+                {
+                    "y": torch.randn(3, 2),
+                    "lazy": LazyStackedTensorDict.lazy_stack(sub_inners, dim=1),
+                },
+                batch_size=[3],
+            )
+
+        tds = [make_td() for _ in range(4)]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["y"], ref["y"])
+        torch.testing.assert_close(out["lazy", "x"], ref["lazy", "x"])
+
+    def test_fast_stack_lazy_stack_dim_mismatch(self):
+        # Different stack_dims -> bail.
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
+        lazy0 = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
+        lazy1 = LazyStackedTensorDict.lazy_stack([td, td], dim=1)
         with pytest.raises(RuntimeError, match="fast_stack requires"):
-            fast_stack([lazy, lazy], dim=0)
+            fast_stack([lazy0, lazy1], dim=0)
 
     def test_fast_stack_rejects_key_mismatch(self):
         td_a = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
