@@ -968,15 +968,14 @@ def _stack_leaf(vals: list, dim: int):
             if type(v) is not t0:
                 return None
         return t0._stack_non_tensor(vals, dim)
-    # Tensorclass leaf: unwrap, recurse, re-wrap.
+    # Tensorclass leaf: unwrap, route through the dispatcher (so the inner
+    # can be plain TensorDict, LazyStackedTensorDict, or nested tensorclass),
+    # then re-wrap.
     if _is_tensorclass(t0):
         for v in vals[1:]:
             if type(v) is not t0:
                 return None
-        inner_tds = [v._tensordict for v in vals]
-        if any(type(it) is not TensorDict for it in inner_tds):
-            return None
-        inner = _stack_homogeneous_inner(inner_tds, dim)
+        inner = _stack_homogeneous([v._tensordict for v in vals], dim)
         if inner is None:
             return None
         return t0._from_tensordict(inner)
@@ -1018,19 +1017,11 @@ def _stack_homogeneous(
     if _pass_through_cls(t0):
         return t0._stack_non_tensor(tds, dim)
 
-    # Tensorclass at root: unwrap, recurse on inner _tensordict, re-wrap.
+    # Tensorclass at root: unwrap, recurse via the dispatcher (so the inner
+    # can be a TensorDict, a LazyStackedTensorDict, or another tensorclass),
+    # then re-wrap.
     if _is_tensorclass(t0):
-        inner_tds = [t._tensordict for t in tds]
-        if any(type(it) is not TensorDict for it in inner_tds):
-            return None  # e.g. tensorclass wrapping a LazyStackedTensorDict
-        dev = td0.device
-        keys0 = inner_tds[0]._tensordict.keys()
-        for it in inner_tds[1:]:
-            if it.batch_size != bs or it.device != dev:
-                return None
-            if it._tensordict.keys() != keys0:
-                return None
-        inner = _stack_homogeneous_inner(inner_tds, dim)
+        inner = _stack_homogeneous([t._tensordict for t in tds], dim)
         if inner is None:
             return None
         return t0._from_tensordict(inner)

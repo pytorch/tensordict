@@ -3725,6 +3725,25 @@ class TestGeneric:
         torch.testing.assert_close(out["tc"].x, ref["tc"].x)
         torch.testing.assert_close(out["y"], ref["y"])
 
+    def test_fast_stack_tensorclass_wrapping_lazy(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        # Build a tensorclass whose _tensordict is a LazyStackedTensorDict
+        # by lazy_stacking N tensorclass instances together.
+        def make_tc_lazy():
+            inners = [TC(x=torch.randn(3), batch_size=[3]) for _ in range(2)]
+            return lazy_stack(inners, dim=0)  # tensorclass wrapping a lazy stack
+
+        tcs = [make_tc_lazy() for _ in range(3)]
+        # Sanity-check the inner structure.
+        assert isinstance(tcs[0]._tensordict, LazyStackedTensorDict)
+        out = fast_stack(tcs, dim=0)
+        ref = torch.stack(tcs, dim=0)
+        assert isinstance(out, TC)
+        torch.testing.assert_close(out.x, ref.x)
+
     def test_fast_stack_non_tensor_data_root(self):
         nts = [NonTensorData("hello", batch_size=[3]) for _ in range(4)]
         out = fast_stack(nts, dim=0)
