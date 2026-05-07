@@ -3612,13 +3612,14 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="fast_stack requires"):
             fast_stack([td0, td1], dim=0)
 
-    def test_fast_stack_rejects_non_tensor_leaves(self):
+    def test_fast_stack_handles_non_tensor_leaves(self):
         td0 = TensorDict(
             {"a": torch.zeros(3), "meta": NonTensorData("x")}, batch_size=[3]
         )
         td1 = td0.clone()
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
-            fast_stack([td0, td1], dim=0)
+        out = fast_stack([td0, td1], dim=0)
+        assert out.batch_size == torch.Size([2, 3])
+        torch.testing.assert_close(out["a"], torch.zeros(2, 3))
 
     def test_fast_stack_handles_uninit_param(self):
         td0 = TensorDict(
@@ -3649,6 +3650,62 @@ class TestGeneric:
         out = fast_stack(tds, dim=0)
         ref = torch.stack(tds, dim=0)
         torch.testing.assert_close(out["m"], ref["m"])
+
+    def test_fast_stack_tensorclass_root(self):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        tcs = [
+            TC(a=torch.randn(3, 4), b=torch.randn(3, 5), batch_size=[3])
+            for _ in range(5)
+        ]
+        out = fast_stack(tcs, dim=0)
+        ref = torch.stack(tcs, dim=0)
+        assert isinstance(out, TC)
+        assert out.batch_size == torch.Size([5, 3])
+        torch.testing.assert_close(out.a, ref.a)
+        torch.testing.assert_close(out.b, ref.b)
+
+    def test_fast_stack_tensorclass_nested(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        tds = [
+            TensorDict(
+                {
+                    "tc": TC(x=torch.randn(3, 4), batch_size=[3]),
+                    "y": torch.randn(3, 2),
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        assert isinstance(out["tc"], TC)
+        torch.testing.assert_close(out["tc"].x, ref["tc"].x)
+        torch.testing.assert_close(out["y"], ref["y"])
+
+    def test_fast_stack_non_tensor_data_root(self):
+        nts = [NonTensorData("hello", batch_size=[3]) for _ in range(4)]
+        out = fast_stack(nts, dim=0)
+        ref = torch.stack(nts, dim=0)
+        assert out.batch_size == ref.batch_size
+
+    def test_fast_stack_non_tensor_data_nested(self):
+        tds = [
+            TensorDict(
+                {"x": torch.randn(3), "meta": NonTensorData(f"hi", batch_size=[3])},
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["x"], ref["x"])
 
     def test_fast_stack_handles_unbatched_tensor(self):
         shared = torch.randn(2, 2)  # UnbatchedTensor must share data to stack quietly

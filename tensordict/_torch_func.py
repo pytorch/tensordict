@@ -27,6 +27,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _pass_through,
+    _pass_through_cls,
     _shape,
     _zip_strict,
     DeviceType,
@@ -869,26 +870,6 @@ def where(condition, input, other, *, out=None):
     return input.where(condition, other, out=out)
 
 
-def _can_stack_homogeneous(tds: Sequence[TensorDictBase]) -> bool:
-    """Pre-flight for :func:`fast_stack`. Top-level structural check only."""
-    if not tds:
-        return False
-    first = tds[0]
-    if type(first) is not TensorDict:
-        return False
-    bs = first.batch_size
-    dev = first.device
-    first_keys = first._tensordict.keys()
-    for td in tds[1:]:
-        if type(td) is not TensorDict:
-            return False
-        if td.batch_size != bs or td.device != dev:
-            return False
-        if td._tensordict.keys() != first_keys:
-            return False
-    return True
-
-
 def _stack_homogeneous_inner(
     tds: Sequence[TensorDict], dim: int
 ) -> TensorDictBase | None:
@@ -964,19 +945,33 @@ def _stack_leaf(vals: list, dim: int):
             if type(v) is not TensorDict:
                 return None
         return _stack_homogeneous_inner(vals, dim)
-    # Tensor subclasses: Parameter, MemoryMappedTensor, UninitializedParameter,
-    # UnbatchedTensor, etc.
+    # Pass-through (NonTensorData, NonTensorStack, MetaData, UnbatchedTensor).
+    # Must come before the tensorclass branch — these are tensorclasses too,
+    # but they have a dedicated _stack_non_tensor path.
+    if _pass_through_cls(t0):
+        for v in vals[1:]:
+            if type(v) is not t0:
+                return None
+        return t0._stack_non_tensor(vals, dim)
+    # Tensorclass leaf: unwrap, recurse, re-wrap.
+    if _is_tensorclass(t0):
+        for v in vals[1:]:
+            if type(v) is not t0:
+                return None
+        inner_tds = [v._tensordict for v in vals]
+        if any(type(it) is not TensorDict for it in inner_tds):
+            return None
+        inner = _stack_homogeneous_inner(inner_tds, dim)
+        if inner is None:
+            return None
+        return t0._from_tensordict(inner)
+    # Tensor subclasses: Parameter, MemoryMappedTensor, UninitializedParameter, etc.
     if isinstance(v0, Tensor):
         if isinstance(v0, UninitializedTensorMixin):
             for v in vals[1:]:
                 if not isinstance(v, UninitializedTensorMixin):
                     return None
             return _stack_uninit_params(vals, dim)
-        if _is_unbatched(v0):
-            for v in vals[1:]:
-                if type(v) is not t0:
-                    return None
-            return t0._stack_non_tensor(vals, dim)
         for v in vals[1:]:
             if not isinstance(v, Tensor) or isinstance(v, UninitializedTensorMixin):
                 return None
@@ -987,15 +982,56 @@ def _stack_leaf(vals: list, dim: int):
 def _stack_homogeneous(
     tds: Sequence[TensorDictBase], dim: int
 ) -> TensorDictBase | None:
-    """Lockstep stack entry point. Returns None when the fast path is ineligible."""
-    if not _can_stack_homogeneous(tds):
+    """Fast-stack dispatch. Returns None when the fast path is ineligible."""
+    if not tds:
         return None
-    bs = tds[0].batch_size
+    td0 = tds[0]
+    t0 = type(td0)
+    # All inputs must be the same root type — anything else falls back.
+    for td in tds[1:]:
+        if type(td) is not t0:
+            return None
+
+    bs = td0.batch_size
     if dim < 0:
         dim = len(bs) + dim + 1
     elif dim > len(bs):
         return None
-    return _stack_homogeneous_inner(tds, dim)
+
+    # Pass-through types (NonTensorData, NonTensorStack, MetaData):
+    # mirror the top-of-_stack pass-through branch.
+    if _pass_through_cls(t0):
+        return t0._stack_non_tensor(tds, dim)
+
+    # Tensorclass at root: unwrap, recurse on inner _tensordict, re-wrap.
+    if _is_tensorclass(t0):
+        inner_tds = [t._tensordict for t in tds]
+        if any(type(it) is not TensorDict for it in inner_tds):
+            return None  # e.g. tensorclass wrapping a LazyStackedTensorDict
+        dev = td0.device
+        keys0 = inner_tds[0]._tensordict.keys()
+        for it in inner_tds[1:]:
+            if it.batch_size != bs or it.device != dev:
+                return None
+            if it._tensordict.keys() != keys0:
+                return None
+        inner = _stack_homogeneous_inner(inner_tds, dim)
+        if inner is None:
+            return None
+        return t0._from_tensordict(inner)
+
+    # Plain TensorDict at root.
+    if t0 is TensorDict:
+        dev = td0.device
+        keys0 = td0._tensordict.keys()
+        for td in tds[1:]:
+            if td.batch_size != bs or td.device != dev:
+                return None
+            if td._tensordict.keys() != keys0:
+                return None
+        return _stack_homogeneous_inner(tds, dim)
+
+    return None
 
 
 def fast_stack(
