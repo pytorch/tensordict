@@ -4833,6 +4833,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return _stack(input, dim, out=out)
 
     @classmethod
+    def fast_stack(cls, input, dim: int = 0):
+        """Strict, fast variant of :meth:`stack` using a lockstep zip.
+
+        Requires every input to be a plain :class:`TensorDict` with identical
+        key set, key insertion order, ``batch_size`` and ``device``, and only
+        regular :class:`torch.Tensor` leaves. Each input TensorDict is
+        traversed exactly once. Raises ``RuntimeError`` if any precondition
+        fails — use :meth:`stack` for the general case.
+
+        See :func:`tensordict.fast_stack` for full documentation.
+        """
+        from tensordict._torch_func import fast_stack
+
+        return fast_stack(input, dim=dim)
+
+    @classmethod
     def cat(cls, input, dim: int = 0, *, out=None):
         """Concatenates tensordicts into a single tensordict along the given dimension.
 

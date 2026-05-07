@@ -869,6 +869,137 @@ def where(condition, input, other, *, out=None):
     return input.where(condition, other, out=out)
 
 
+def _can_stack_homogeneous(tds: Sequence[TensorDictBase]) -> bool:
+    """Pre-flight for :func:`fast_stack`. Top-level structural check only."""
+    if not tds:
+        return False
+    first = tds[0]
+    if type(first) is not TensorDict:
+        return False
+    bs = first.batch_size
+    dev = first.device
+    first_keys = first._tensordict.keys()
+    for td in tds[1:]:
+        if type(td) is not TensorDict:
+            return False
+        if td.batch_size != bs or td.device != dev:
+            return False
+        if td._tensordict.keys() != first_keys:
+            return False
+    return True
+
+
+def _stack_homogeneous_inner(
+    tds: Sequence[TensorDict], dim: int
+) -> TensorDictBase | None:
+    """Recursive lockstep zip stack. Returns None on bail-out."""
+    iters = [iter(td._tensordict.items()) for td in tds]
+    out = {}
+    for items in zip(*iters):
+        k0 = items[0][0]
+        for kx, _ in items[1:]:
+            if kx != k0:
+                return None
+        vals = [v for _, v in items]
+        v0 = vals[0]
+        t0 = type(v0)
+        if t0 is Tensor:
+            out[k0] = torch.stack(vals, dim)
+        elif t0 is TensorDict:
+            for v in vals[1:]:
+                if type(v) is not TensorDict:
+                    return None
+            sub = _stack_homogeneous_inner(vals, dim)
+            if sub is None:
+                return None
+            out[k0] = sub
+        else:
+            return None
+
+    first = tds[0]
+    bs = first.batch_size
+    new_bs = LazyStackedTensorDict._compute_batch_size(bs, dim, len(tds))
+    names = first._maybe_names()
+    if names is not None:
+        if all(td._maybe_names() == names for td in tds[1:]):
+            names = list(names)
+            names.insert(dim, None)
+        else:
+            names = None
+    return TensorDict._new_unsafe(
+        out,
+        batch_size=new_bs,
+        device=first.device,
+        names=names,
+    )
+
+
+def _stack_homogeneous(
+    tds: Sequence[TensorDictBase], dim: int
+) -> TensorDictBase | None:
+    """Lockstep stack entry point. Returns None when the fast path is ineligible."""
+    if not _can_stack_homogeneous(tds):
+        return None
+    bs = tds[0].batch_size
+    if dim < 0:
+        dim = len(bs) + dim + 1
+    elif dim > len(bs):
+        return None
+    return _stack_homogeneous_inner(tds, dim)
+
+
+def fast_stack(
+    list_of_tensordicts: Sequence[TensorDictBase],
+    dim: int = 0,
+) -> TensorDictBase:
+    """Strict, fast variant of :func:`tensordict.stack` using a lockstep zip.
+
+    ``fast_stack`` is intended for hot paths where every input is known to
+    share the same structure: a plain :class:`TensorDict` with identical
+    key set and key insertion order, identical ``batch_size`` and
+    ``device``, and only regular :class:`torch.Tensor` leaves (no
+    :class:`NonTensorData`, :class:`UninitializedParameter`,
+    :class:`LazyStackedTensorDict`, :class:`PersistentTensorDict`, or
+    tensorclass leaves). Each input TensorDict is traversed exactly once;
+    per-leaf string lookups in the source TensorDicts are avoided.
+
+    The general, permissive entry point is :func:`tensordict.stack` —
+    use it when any of the above preconditions may not hold.
+
+    Args:
+        list_of_tensordicts: sequence of TensorDicts to stack. Must be non-empty.
+        dim: dimension along which to stack.
+
+    Returns:
+        A new :class:`TensorDict` with shape
+        ``batch_size[:dim] + (len(list_of_tensordicts),) + batch_size[dim:]``.
+
+    Raises:
+        RuntimeError: if any precondition fails. Fall back to
+            :func:`tensordict.stack` for the general case.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, fast_stack
+        >>> tds = [TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}},
+        ...                   batch_size=[3]) for _ in range(4)]
+        >>> stacked = fast_stack(tds, dim=0)
+        >>> stacked.batch_size
+        torch.Size([4, 3])
+    """
+    if not list_of_tensordicts:
+        raise RuntimeError("list_of_tensordicts cannot be empty")
+    result = _stack_homogeneous(list_of_tensordicts, dim)
+    if result is None:
+        raise RuntimeError(
+            "fast_stack requires every input to be a plain TensorDict with "
+            "matching key set, key insertion order, batch_size and device, "
+            "and only regular torch.Tensor leaves. One or more preconditions "
+            "failed. Use tensordict.stack for the general case."
+        )
+    return result
+
+
 def _stack_uninit_params(list_of_params, dim: int = 0, out=None):
     if out is not None:
         raise NotImplementedError
