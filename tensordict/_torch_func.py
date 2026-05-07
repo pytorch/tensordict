@@ -884,6 +884,9 @@ def _stack_homogeneous_inner(
     iters = [iter(td._tensordict.items()) for td in tds]
     out = {}
     fallback = False
+    # Inline the Tensor hot path inside the lockstep loop to avoid a Python
+    # function call per leaf in the common case. Anything else routes through
+    # _stack_leaf.
     for items in zip(*iters):
         k0 = items[0][0]
         for i in range(1, n):
@@ -892,11 +895,14 @@ def _stack_homogeneous_inner(
                 break
         if fallback:
             break
-        vals = [items[i][1] for i in range(n)]
-        leaf = _stack_leaf(vals, dim)
-        if leaf is None:
-            return None
-        out[k0] = leaf
+        v0 = items[0][1]
+        if type(v0) is Tensor:
+            out[k0] = torch.stack([items[i][1] for i in range(n)], dim)
+        else:
+            leaf = _stack_leaf([items[i][1] for i in range(n)], dim)
+            if leaf is None:
+                return None
+            out[k0] = leaf
 
     if fallback:
         # Drive by td0's order, look up by key in others. Skip keys already
@@ -910,10 +916,13 @@ def _stack_homogeneous_inner(
                 vals = [v0] + [d[k] for d in others_dicts]
             except KeyError:
                 return None
-            leaf = _stack_leaf(vals, dim)
-            if leaf is None:
-                return None
-            out[k] = leaf
+            if type(v0) is Tensor:
+                out[k] = torch.stack(vals, dim)
+            else:
+                leaf = _stack_leaf(vals, dim)
+                if leaf is None:
+                    return None
+                out[k] = leaf
 
     first = tds[0]
     bs = first.batch_size
