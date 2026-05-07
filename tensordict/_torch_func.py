@@ -956,6 +956,7 @@ def _stack_leaf(vals: list, dim: int):
     """Stack a list of values that share a key. Returns None on bail-out."""
     v0 = vals[0]
     t0 = type(v0)
+    # Hot path: regular Tensor, no subclass.
     if t0 is Tensor:
         return torch.stack(vals, dim)
     if t0 is TensorDict:
@@ -963,6 +964,23 @@ def _stack_leaf(vals: list, dim: int):
             if type(v) is not TensorDict:
                 return None
         return _stack_homogeneous_inner(vals, dim)
+    # Tensor subclasses: Parameter, MemoryMappedTensor, UninitializedParameter,
+    # UnbatchedTensor, etc.
+    if isinstance(v0, Tensor):
+        if isinstance(v0, UninitializedTensorMixin):
+            for v in vals[1:]:
+                if not isinstance(v, UninitializedTensorMixin):
+                    return None
+            return _stack_uninit_params(vals, dim)
+        if _is_unbatched(v0):
+            for v in vals[1:]:
+                if type(v) is not t0:
+                    return None
+            return t0._stack_non_tensor(vals, dim)
+        for v in vals[1:]:
+            if not isinstance(v, Tensor) or isinstance(v, UninitializedTensorMixin):
+                return None
+        return torch.stack(vals, dim)
     return None
 
 

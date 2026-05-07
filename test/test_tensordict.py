@@ -3620,15 +3620,49 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="fast_stack requires"):
             fast_stack([td0, td1], dim=0)
 
-    def test_fast_stack_rejects_uninit_param(self):
+    def test_fast_stack_handles_uninit_param(self):
         td0 = TensorDict(
             {"p": nn.parameter.UninitializedParameter()}, batch_size=[]
         )
         td1 = TensorDict(
             {"p": nn.parameter.UninitializedParameter()}, batch_size=[]
         )
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
-            fast_stack([td0, td1], dim=0)
+        out = fast_stack([td0, td1], dim=0)
+        assert out["p"].batch_size == torch.Size([2])
+
+    def test_fast_stack_handles_nn_parameter(self):
+        tds = [
+            TensorDict({"w": nn.Parameter(torch.randn(3, 4))}, batch_size=[3])
+            for _ in range(5)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["w"], ref["w"])
+
+    def test_fast_stack_handles_memory_mapped_tensor(self, tmpdir):
+        tds = []
+        for i in range(4):
+            t = MemoryMappedTensor.from_tensor(
+                torch.randn(3, 4), filename=str(tmpdir / f"t{i}.memmap")
+            )
+            tds.append(TensorDict({"m": t}, batch_size=[3]))
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["m"], ref["m"])
+
+    def test_fast_stack_handles_unbatched_tensor(self):
+        shared = torch.randn(2, 2)  # UnbatchedTensor must share data to stack quietly
+        tds = [
+            TensorDict(
+                {"x": torch.randn(3, 4), "u": UnbatchedTensor(shared)},
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["x"], ref["x"])
+        assert isinstance(out["u"], UnbatchedTensor)
 
     def test_fast_stack_rejects_dim_out_of_range(self):
         td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
