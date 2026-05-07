@@ -3576,16 +3576,35 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="fast_stack requires"):
             fast_stack([td_a, td_b], dim=0)
 
-    def test_fast_stack_rejects_key_order_mismatch(self):
+    def test_fast_stack_handles_key_order_mismatch(self):
+        # td0 and td1 have the same key set but different insertion order.
         td0 = TensorDict({}, batch_size=[3])
-        td0["a"] = torch.zeros(3)
-        td0["b"] = torch.zeros(3)
+        td0["a"] = torch.arange(3, dtype=torch.float32)
+        td0["b"] = torch.arange(3, dtype=torch.float32) * 10
         td1 = TensorDict({}, batch_size=[3])
-        td1["b"] = torch.zeros(3)
-        td1["a"] = torch.zeros(3)
-        # Same key set, set-equal — passes pre-flight, then fails mid-zip.
-        with pytest.raises(RuntimeError, match="fast_stack requires"):
-            fast_stack([td0, td1], dim=0)
+        td1["b"] = torch.arange(3, dtype=torch.float32) * 10 + 100
+        td1["a"] = torch.arange(3, dtype=torch.float32) + 100
+        out = fast_stack([td0, td1], dim=0)
+        ref = torch.stack([td0, td1], dim=0)
+        torch.testing.assert_close(out["a"], ref["a"])
+        torch.testing.assert_close(out["b"], ref["b"])
+
+    def test_fast_stack_handles_nested_key_order_mismatch(self):
+        # Order mismatch inside a nested TD.
+        td0 = TensorDict(
+            {"nested": TensorDict({}, batch_size=[3])}, batch_size=[3]
+        )
+        td0["nested", "a"] = torch.arange(3, dtype=torch.float32)
+        td0["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10
+        td1 = TensorDict(
+            {"nested": TensorDict({}, batch_size=[3])}, batch_size=[3]
+        )
+        td1["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10 + 100
+        td1["nested", "a"] = torch.arange(3, dtype=torch.float32) + 100
+        out = fast_stack([td0, td1], dim=0)
+        ref = torch.stack([td0, td1], dim=0)
+        torch.testing.assert_close(out["nested", "a"], ref["nested", "a"])
+        torch.testing.assert_close(out["nested", "b"], ref["nested", "b"])
 
     def test_fast_stack_rejects_batch_size_mismatch(self):
         td0 = TensorDict({"a": torch.zeros(3)}, batch_size=[3])

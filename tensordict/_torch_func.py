@@ -892,29 +892,47 @@ def _can_stack_homogeneous(tds: Sequence[TensorDictBase]) -> bool:
 def _stack_homogeneous_inner(
     tds: Sequence[TensorDict], dim: int
 ) -> TensorDictBase | None:
-    """Recursive lockstep zip stack. Returns None on bail-out."""
+    """Recursive stack. Lockstep zip when iteration order matches across inputs;
+    falls back to td0-driven dict lookup mid-traversal on order mismatch.
+
+    Returns None on bail-out (mismatched leaf types, missing key, ...).
+    Pre-flight has already validated set-equality of keys, so missing keys
+    here would indicate concurrent mutation and are treated as bail-out.
+    """
+    n = len(tds)
     iters = [iter(td._tensordict.items()) for td in tds]
     out = {}
+    fallback = False
     for items in zip(*iters):
         k0 = items[0][0]
-        for kx, _ in items[1:]:
-            if kx != k0:
-                return None
-        vals = [v for _, v in items]
-        v0 = vals[0]
-        t0 = type(v0)
-        if t0 is Tensor:
-            out[k0] = torch.stack(vals, dim)
-        elif t0 is TensorDict:
-            for v in vals[1:]:
-                if type(v) is not TensorDict:
-                    return None
-            sub = _stack_homogeneous_inner(vals, dim)
-            if sub is None:
-                return None
-            out[k0] = sub
-        else:
+        for i in range(1, n):
+            if items[i][0] != k0:
+                fallback = True
+                break
+        if fallback:
+            break
+        vals = [items[i][1] for i in range(n)]
+        leaf = _stack_leaf(vals, dim)
+        if leaf is None:
             return None
+        out[k0] = leaf
+
+    if fallback:
+        # Drive by td0's order, look up by key in others. Skip keys already
+        # processed in the lockstep prefix.
+        td0 = tds[0]
+        others_dicts = [td._tensordict for td in tds[1:]]
+        for k, v0 in td0._tensordict.items():
+            if k in out:
+                continue
+            try:
+                vals = [v0] + [d[k] for d in others_dicts]
+            except KeyError:
+                return None
+            leaf = _stack_leaf(vals, dim)
+            if leaf is None:
+                return None
+            out[k] = leaf
 
     first = tds[0]
     bs = first.batch_size
@@ -932,6 +950,20 @@ def _stack_homogeneous_inner(
         device=first.device,
         names=names,
     )
+
+
+def _stack_leaf(vals: list, dim: int):
+    """Stack a list of values that share a key. Returns None on bail-out."""
+    v0 = vals[0]
+    t0 = type(v0)
+    if t0 is Tensor:
+        return torch.stack(vals, dim)
+    if t0 is TensorDict:
+        for v in vals[1:]:
+            if type(v) is not TensorDict:
+                return None
+        return _stack_homogeneous_inner(vals, dim)
+    return None
 
 
 def _stack_homogeneous(
@@ -954,14 +986,14 @@ def fast_stack(
 ) -> TensorDictBase:
     """Strict, fast variant of :func:`tensordict.stack` using a lockstep zip.
 
-    ``fast_stack`` is intended for hot paths where every input is known to
-    share the same structure: a plain :class:`TensorDict` with identical
-    key set and key insertion order, identical ``batch_size`` and
-    ``device``, and only regular :class:`torch.Tensor` leaves (no
-    :class:`NonTensorData`, :class:`UninitializedParameter`,
+    ``fast_stack`` is intended for hot paths where every input is a plain
+    :class:`TensorDict` with the same key set, ``batch_size`` and
+    ``device``, and where every leaf is a regular :class:`torch.Tensor`
+    (no :class:`NonTensorData`, :class:`UninitializedParameter`,
     :class:`LazyStackedTensorDict`, :class:`PersistentTensorDict`, or
-    tensorclass leaves). Each input TensorDict is traversed exactly once;
-    per-leaf string lookups in the source TensorDicts are avoided.
+    tensorclass leaves). Key insertion order does not have to match
+    across inputs: when it does, traversal uses a lockstep zip; otherwise
+    it falls back to a key lookup driven by the first TensorDict.
 
     The general, permissive entry point is :func:`tensordict.stack` —
     use it when any of the above preconditions may not hold.
@@ -993,9 +1025,9 @@ def fast_stack(
     if result is None:
         raise RuntimeError(
             "fast_stack requires every input to be a plain TensorDict with "
-            "matching key set, key insertion order, batch_size and device, "
-            "and only regular torch.Tensor leaves. One or more preconditions "
-            "failed. Use tensordict.stack for the general case."
+            "matching key set, batch_size and device, and only regular "
+            "torch.Tensor leaves. One or more preconditions failed. Use "
+            "tensordict.stack for the general case."
         )
     return result
 
