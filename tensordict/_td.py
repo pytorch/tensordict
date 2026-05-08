@@ -4985,6 +4985,7 @@ _register_tensor_class(_SubTensorDict)
 
 from tensordict._td_functions import (  # noqa: F401
     cat,
+    fast_stack,
     from_consolidated,
     from_module,
     from_modules,
