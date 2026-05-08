@@ -3553,9 +3553,7 @@ class TestGeneric:
         assert out.names == [None, None, None]
 
     def test_fast_stack_classmethod(self):
-        tds = [
-            TensorDict({"a": torch.randn(3)}, batch_size=[3]) for _ in range(4)
-        ]
+        tds = [TensorDict({"a": torch.randn(3)}, batch_size=[3]) for _ in range(4)]
         out = TensorDict.fast_stack(tds, dim=0)
         ref = torch.stack(tds, dim=0)
         torch.testing.assert_close(out["a"], ref["a"])
@@ -3627,14 +3625,10 @@ class TestGeneric:
 
     def test_fast_stack_handles_nested_key_order_mismatch(self):
         # Order mismatch inside a nested TD.
-        td0 = TensorDict(
-            {"nested": TensorDict({}, batch_size=[3])}, batch_size=[3]
-        )
+        td0 = TensorDict({"nested": TensorDict({}, batch_size=[3])}, batch_size=[3])
         td0["nested", "a"] = torch.arange(3, dtype=torch.float32)
         td0["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10
-        td1 = TensorDict(
-            {"nested": TensorDict({}, batch_size=[3])}, batch_size=[3]
-        )
+        td1 = TensorDict({"nested": TensorDict({}, batch_size=[3])}, batch_size=[3])
         td1["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10 + 100
         td1["nested", "a"] = torch.arange(3, dtype=torch.float32) + 100
         out = fast_stack([td0, td1], dim=0)
@@ -3658,12 +3652,8 @@ class TestGeneric:
         torch.testing.assert_close(out["a"], torch.zeros(2, 3))
 
     def test_fast_stack_handles_uninit_param(self):
-        td0 = TensorDict(
-            {"p": nn.parameter.UninitializedParameter()}, batch_size=[]
-        )
-        td1 = TensorDict(
-            {"p": nn.parameter.UninitializedParameter()}, batch_size=[]
-        )
+        td0 = TensorDict({"p": nn.parameter.UninitializedParameter()}, batch_size=[])
+        td1 = TensorDict({"p": nn.parameter.UninitializedParameter()}, batch_size=[])
         out = fast_stack([td0, td1], dim=0)
         assert out["p"].batch_size == torch.Size([2])
 
@@ -3753,7 +3743,7 @@ class TestGeneric:
     def test_fast_stack_non_tensor_data_nested(self):
         tds = [
             TensorDict(
-                {"x": torch.randn(3), "meta": NonTensorData(f"hi", batch_size=[3])},
+                {"x": torch.randn(3), "meta": NonTensorData("hi", batch_size=[3])},
                 batch_size=[3],
             )
             for _ in range(4)

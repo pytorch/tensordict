@@ -873,8 +873,10 @@ def where(condition, input, other, *, out=None):
 def _stack_homogeneous_inner(
     tds: Sequence[TensorDict], dim: int
 ) -> TensorDictBase | None:
-    """Recursive stack. Lockstep zip when iteration order matches across inputs;
-    falls back to td0-driven dict lookup mid-traversal on order mismatch.
+    """Recursive stack of plain TensorDicts.
+
+    Uses a lockstep zip when iteration order matches across inputs, and
+    falls back to a td0-driven dict lookup mid-traversal on order mismatch.
 
     Returns None on bail-out (mismatched leaf types, missing key, ...).
     Pre-flight has already validated set-equality of keys, so missing keys
