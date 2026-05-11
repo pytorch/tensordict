@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="NonTensorData" href="tensordict.NonTensorData.html" />
-    <link rel="prev" title="tensorclass" href="tensordict.tensorclass.html" />
+    <link rel="next" title="tensorclass" href="tensordict.tensorclass.html" />
+    <link rel="prev" title="tensorclass" href="../tc.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4042+g22f099c0b.d20260507)
+                  main (0.12.0.dev4048+g3620fe1e8.d20260511)
                 </div>
               
             
@@ -363,9 +363,12 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.TensorClass">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">TensorClass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorClass" title="Permalink to this definition">¶</a></dt>
-<dd><p>TensorClass is the inheritance-based version of the &#64;tensorclass decorator.</p>
-<p>TensorClass allows you to code dataclasses that are better type-checked and more pythonic than those built with
-the &#64;tensorclass decorator.</p>
+<dd><p>TensorClass is the inheritance-based version of the <a class="reference internal" href="tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> decorator.</p>
+<p>TensorClass lets you write dataclass-like containers that benefit from all the TensorDict
+machinery (indexing, reshaping, <code class="docutils literal notranslate"><span class="pre">to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">stack</span></code>/<code class="docutils literal notranslate"><span class="pre">cat</span></code>, memmap serialization, …)
+while remaining pythonic and friendly to static type-checkers. It is the recommended entry
+point for new code; the <a class="reference internal" href="tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> decorator is kept for backwards
+compatibility and dataclass-style ergonomics.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -391,53 +394,122 @@ the &#64;tensorclass decorator.</p>
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – The batch size of the TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The device on which the TensorDict will be created. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>frozen</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting class or instance will be immutable. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>autocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, enables automatic type casting for the resulting class or instance. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>nocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, disables any type casting for the resulting class or instance. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>tensor_only</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is expected that all items in tensorclass will be
-tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
-This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved attributes.
-Use with caution, as this may cause unintended consequences. Defaults to False.</p></li>
+<li><p><strong>autocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, values are coerced to the field’s type annotation when
+set (e.g. an <code class="docutils literal notranslate"><span class="pre">int</span></code> annotation keeps Python ints as ints rather than wrapping them in a
+tensor). Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">nocast</span></code> and <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>nocast</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, tensor-compatible scalar types (<code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>,
+<code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code>, …) are stored as-is instead of being cast to a tensor. Mutually exclusive
+with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> and <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>tensor_only</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, every field is expected to hold a tensor (or
+tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
+which can yield significant speed-ups at the cost of losing non-tensor support.
+Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">autocast</span></code> and <code class="docutils literal notranslate"><span class="pre">nocast</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>shadow</strong> (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.bool" title="tensordict.LazyStackedTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – Disables the validation of field names against TensorDict’s reserved
+attributes (e.g. allowing a field named <code class="docutils literal notranslate"><span class="pre">device</span></code> or <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>). Use with caution,
+as this can lead to surprising behaviour. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="simple">
-<dt>You can pass boolean keyword arguments (<cite>“autocast”</cite>, <cite>“nocast”</cite>, <cite>“frozen”</cite>, <cite>“tensor_only”</cite>, <cite>“shadow”</cite>) in two ways: using</dt><dd><p>brackets or keyword arguments.</p>
-</dd>
-</dl>
+<p><strong>The bracket form</strong> <code class="docutils literal notranslate"><span class="pre">TensorClass[...]</span></code> is sugar for “build a parametrized subclass with the
+given flags turned on”. The three forms below are equivalent:</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>     <span class="c1"># bracket form</span>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># equivalent</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># metaclass kwargs form</span>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>             <span class="c1"># legacy decorator form</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>  <span class="c1"># multiple keywords can be used</span>
+</pre></div>
+</div>
+<p>The bracket form is usually the most readable when you stack several flags and it is the form
+static type-checkers (mypy/pyright) understand via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>. The kwargs
+form is convenient if the flag value is computed; the decorator form is best when migrating
+plain <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> code.</p>
+<p>Several flags can be combined inside the brackets:</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
 <span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">nocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># equivalent</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
-<span class="go">1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">integer</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">integer</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">integer</span>
+</pre></div>
+</div>
+<p><strong>Per-flag semantics.</strong> The flags fall into three families — casting (<code class="docutils literal notranslate"><span class="pre">autocast</span></code>, <code class="docutils literal notranslate"><span class="pre">nocast</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tensor_only</span></code>, which are mutually exclusive), mutability (<code class="docutils literal notranslate"><span class="pre">frozen</span></code>) and name shadowing
+(<code class="docutils literal notranslate"><span class="pre">shadow</span></code>).</p>
+<p>Default behaviour (no flags) — tensor-compatible values are wrapped as tensors and non-tensor
+values are stored as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">x</span>
 <span class="go">tensor(1)</span>
 </pre></div>
 </div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>TensorClass itself is not decorated as a tensorclass, but subclasses will be.
-This is because we cannot anticipate if the frozen argument will be set, and if it is, it may
-conflict with the parent class (a subclass cannot be frozen if the parent class isn’t).</p>
+<p><code class="docutils literal notranslate"><span class="pre">autocast</span></code> — coerce values back to the field’s annotated type when reading them. Useful when
+a field is conceptually a scalar/string/enum but should still travel through the TensorDict
+machinery as a leaf:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()))</span><span class="o">.</span><span class="n">x</span>
+<span class="go">1</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">nocast</span></code> — opt out of tensor casting entirely; tensor-compatible scalars are stored as-is:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Foo</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">x</span>
+<span class="go">1</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> — the strict, fast path. Every field must be (or convert to) a tensor; the
+non-tensor storage is bypassed, which makes attribute access cheaper. Reach for this on
+performance-sensitive containers (e.g. RL trajectories, batched model I/O) where you control
+every field:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;tensor_only&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">frozen</span></code> — make the class immutable, mirroring <code class="docutils literal notranslate"><span class="pre">&#64;dataclass(frozen=True)</span></code>. Frozen instances
+play well with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and functional code paths where in-place mutation would be a
+foot-gun. Note that <code class="docutils literal notranslate"><span class="pre">frozen</span></code> propagates to subclasses: a non-frozen subclass cannot inherit
+from a frozen base, and vice versa.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">foo</span> <span class="o">=</span> <span class="n">Foo</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">foo</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># raises FrozenInstanceError</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">shadow</span></code> — by default, field names that collide with TensorDict’s reserved attributes
+(<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">names</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code>, …) raise an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> at class
+construction. <code class="docutils literal notranslate"><span class="pre">shadow=True</span></code> opts out of that check so you can use those names anyway:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;shadow&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">data</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</pre></div>
+</div>
+<p><strong>Subclassing.</strong> A parametrized class is just a class — you can subclass it and stack more
+flags:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Base</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sub</span><span class="p">(</span><span class="n">Base</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>   <span class="c1"># autocast inherited, frozen added</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">float</span>
+</pre></div>
+</div>
+<p><strong>Type-checking.</strong> <code class="docutils literal notranslate"><span class="pre">TensorClass[...]</span></code> is implemented via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>,
+so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
+parameter. Annotated fields propagate as expected and editors offer attribute completion on
+instances.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">TensorClass</span></code> itself is <em>not</em> decorated as a tensorclass — the dataclass machinery
+only fires on subclasses. This is intentional: we cannot anticipate whether <code class="docutils literal notranslate"><span class="pre">frozen</span></code> will
+be requested, and a non-frozen base cannot have a frozen subclass.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> for the decorator form.</p></li>
+<li><p><a class="reference internal" href="tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> to migrate an existing <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> to a tensorclass.</p></li>
+<li><p><a class="reference internal" href="tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a> for typed <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> I/O backed by
+tensorclasses.</p></li>
+</ul>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorClass.dumps">
@@ -840,10 +912,10 @@ tensordict. Otherwise they will be discrarded. Default: <code class="docutils li
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="tensordict.NonTensorData.html" class="btn btn-neutral float-right" title="NonTensorData" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="tensordict.tensorclass.html" class="btn btn-neutral float-right" title="tensorclass" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="tensordict.tensorclass.html" class="btn btn-neutral" title="tensorclass" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../tc.html" class="btn btn-neutral" title="tensorclass" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
