@@ -3468,10 +3468,13 @@ class _TensorClassMeta(abc.ABCMeta):
 
 
 class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
-    """TensorClass is the inheritance-based version of the @tensorclass decorator.
+    """TensorClass is the inheritance-based version of the :func:`~tensordict.tensorclass` decorator.
 
-    TensorClass allows you to code dataclasses that are better type-checked and more pythonic than those built with
-    the @tensorclass decorator.
+    TensorClass lets you write dataclass-like containers that benefit from all the TensorDict
+    machinery (indexing, reshaping, ``to(device)``, ``stack``/``cat``, memmap serialization, ...)
+    while remaining pythonic and friendly to static type-checkers. It is the recommended entry
+    point for new code; the :func:`~tensordict.tensorclass` decorator is kept for backwards
+    compatibility and dataclass-style ergonomics.
 
     Examples:
         >>> from typing import Any
@@ -3495,47 +3498,119 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
         device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
         frozen (bool, optional): If ``True``, the resulting class or instance will be immutable. Defaults to ``False``.
-        autocast (bool, optional): If ``True``, enables automatic type casting for the resulting class or instance. Defaults to ``False``.
-        nocast (bool, optional): If ``True``, disables any type casting for the resulting class or instance. Defaults to ``False``.
-        tensor_only (bool, optional): if ``True``, it is expected that all items in tensorclass will be
-            tensor instances (tensor-compatible, since non-tensor data is converted to tensors if possible).
-            This can bring significant speed-ups at the cost of flexible interactions with non-tensor data.
-            Defaults to ``False``.
-        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved attributes.
-            Use with caution, as this may cause unintended consequences. Defaults to False.
+        autocast (bool, optional): If ``True``, values are coerced to the field's type annotation when
+            set (e.g. an ``int`` annotation keeps Python ints as ints rather than wrapping them in a
+            tensor). Mutually exclusive with ``nocast`` and ``tensor_only``. Defaults to ``False``.
+        nocast (bool, optional): If ``True``, tensor-compatible scalar types (``int``, ``float``,
+            ``np.ndarray``, ...) are stored as-is instead of being cast to a tensor. Mutually exclusive
+            with ``autocast`` and ``tensor_only``. Defaults to ``False``.
+        tensor_only (bool, optional): If ``True``, every field is expected to hold a tensor (or
+            tensor-compatible value, which will be cast). Lookups skip the non-tensor data path,
+            which can yield significant speed-ups at the cost of losing non-tensor support.
+            Mutually exclusive with ``autocast`` and ``nocast``. Defaults to ``False``.
+        shadow (bool, optional): Disables the validation of field names against TensorDict's reserved
+            attributes (e.g. allowing a field named ``device`` or ``batch_size``). Use with caution,
+            as this can lead to surprising behaviour. Defaults to ``False``.
 
-    You can pass boolean keyword arguments (`"autocast"`, `"nocast"`, `"frozen"`, `"tensor_only"`, `"shadow"`) in two ways: using
-        brackets or keyword arguments.
+    **The bracket form** ``TensorClass[...]`` is sugar for "build a parametrized subclass with the
+    given flags turned on". The three forms below are equivalent:
 
     Examples:
-        >>> class Foo(TensorClass["autocast"]):
+        >>> class Foo(TensorClass["autocast"]):     # bracket form
         ...     integer: int
-        >>> Foo(integer=torch.ones(())).integer
-        1
-        >>> class Foo(TensorClass, autocast=True):  # equivalent
+        >>> class Foo(TensorClass, autocast=True):  # metaclass kwargs form
         ...     integer: int
-        >>> Foo(integer=torch.ones(())).integer
-        1
-        >>> class Foo(TensorClass["nocast"]):
+        >>> @tensorclass(autocast=True)             # legacy decorator form
+        ... class Foo:
         ...     integer: int
-        >>> Foo(integer=1).integer
-        1
-        >>> class Foo(TensorClass["nocast", "frozen"]):  # multiple keywords can be used
+
+    The bracket form is usually the most readable when you stack several flags and it is the form
+    static type-checkers (mypy/pyright) understand via :meth:`~object.__class_getitem__`. The kwargs
+    form is convenient if the flag value is computed; the decorator form is best when migrating
+    plain ``@dataclass`` code.
+
+    Several flags can be combined inside the brackets:
+
+    Examples:
+        >>> class Foo(TensorClass["nocast", "frozen"]):
         ...     integer: int
-        >>> Foo(integer=1).integer
-        1
-        >>> class Foo(TensorClass, nocast=True):  # equivalent
-        ...     integer: int
-        >>> Foo(integer=1).integer
-        1
+
+    **Per-flag semantics.** The flags fall into three families — casting (``autocast``, ``nocast``,
+    ``tensor_only``, which are mutually exclusive), mutability (``frozen``) and name shadowing
+    (``shadow``).
+
+    Default behaviour (no flags) — tensor-compatible values are wrapped as tensors and non-tensor
+    values are stored as :class:`~tensordict.NonTensorData`:
+
         >>> class Foo(TensorClass):
-        ...     integer: int
-        >>> Foo(integer=1).integer
+        ...     x: int
+        >>> Foo(x=1).x
         tensor(1)
 
-    .. warning:: TensorClass itself is not decorated as a tensorclass, but subclasses will be.
-        This is because we cannot anticipate if the frozen argument will be set, and if it is, it may
-        conflict with the parent class (a subclass cannot be frozen if the parent class isn't).
+    ``autocast`` — coerce values back to the field's annotated type when reading them. Useful when
+    a field is conceptually a scalar/string/enum but should still travel through the TensorDict
+    machinery as a leaf:
+
+        >>> class Foo(TensorClass["autocast"]):
+        ...     x: int
+        >>> Foo(x=torch.ones(())).x
+        1
+
+    ``nocast`` — opt out of tensor casting entirely; tensor-compatible scalars are stored as-is:
+
+        >>> class Foo(TensorClass["nocast"]):
+        ...     x: int
+        >>> Foo(x=1).x
+        1
+
+    ``tensor_only`` — the strict, fast path. Every field must be (or convert to) a tensor; the
+    non-tensor storage is bypassed, which makes attribute access cheaper. Reach for this on
+    performance-sensitive containers (e.g. RL trajectories, batched model I/O) where you control
+    every field:
+
+        >>> class Foo(TensorClass["tensor_only"]):
+        ...     x: torch.Tensor
+
+    ``frozen`` — make the class immutable, mirroring ``@dataclass(frozen=True)``. Frozen instances
+    play well with ``torch.compile`` and functional code paths where in-place mutation would be a
+    foot-gun. Note that ``frozen`` propagates to subclasses: a non-frozen subclass cannot inherit
+    from a frozen base, and vice versa.
+
+        >>> class Foo(TensorClass["frozen"]):
+        ...     x: torch.Tensor
+        >>> foo = Foo(x=torch.zeros(3))
+        >>> foo.x = torch.ones(3)  # raises FrozenInstanceError
+
+    ``shadow`` — by default, field names that collide with TensorDict's reserved attributes
+    (``batch_size``, ``device``, ``names``, ``data``, ...) raise an ``AttributeError`` at class
+    construction. ``shadow=True`` opts out of that check so you can use those names anyway:
+
+        >>> class Foo(TensorClass["shadow"]):
+        ...     data: torch.Tensor
+
+    **Subclassing.** A parametrized class is just a class — you can subclass it and stack more
+    flags:
+
+        >>> class Base(TensorClass["autocast"]):
+        ...     x: int
+        >>> class Sub(Base, frozen=True):   # autocast inherited, frozen added
+        ...     y: float
+
+    **Type-checking.** ``TensorClass[...]`` is implemented via :meth:`~object.__class_getitem__`,
+    so mypy and pyright resolve it to the (parametrized) class itself rather than to a generic
+    parameter. Annotated fields propagate as expected and editors offer attribute completion on
+    instances.
+
+    .. note:: ``TensorClass`` itself is *not* decorated as a tensorclass — the dataclass machinery
+        only fires on subclasses. This is intentional: we cannot anticipate whether ``frozen`` will
+        be requested, and a non-frozen base cannot have a frozen subclass.
+
+    .. seealso::
+
+        - :func:`~tensordict.tensorclass` for the decorator form.
+        - :func:`~tensordict.from_dataclass` to migrate an existing ``@dataclass`` to a tensorclass.
+        - :class:`~tensordict.nn.TensorClassModuleBase` for typed ``nn.Module`` I/O backed by
+          tensorclasses.
 
     """
 
