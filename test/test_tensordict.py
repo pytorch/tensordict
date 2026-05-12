@@ -14895,6 +14895,20 @@ class TestMetaData:
         assert isinstance(foo, NonTensorStack)
         assert foo.batch_size == (2,)
 
+    def test_auto_batch_size_scalar_metadata(self):
+        # Regression test for #1696: a scalar MetaData entry must not
+        # constrain auto_batch_size_ to an empty batch size.
+        td = TensorDict(data=torch.zeros(16, 10), meta=MetaData(slice(-1)))
+        td.auto_batch_size_(2)
+        assert td.batch_size == torch.Size([16, 10])
+        td = TensorDict(data=torch.zeros(16, 10), meta=MetaData(slice(-1)))
+        td.auto_batch_size_()
+        assert td.batch_size == torch.Size([16, 10])
+        # scalar NonTensorData behaves the same way
+        td = TensorDict(data=torch.zeros(16, 10), meta=NonTensorData("hi"))
+        td.auto_batch_size_(2)
+        assert td.batch_size == torch.Size([16, 10])
+
 
 class TestSubclassing:
     def test_td_inheritance(self):
