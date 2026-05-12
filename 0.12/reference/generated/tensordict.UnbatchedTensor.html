@@ -931,10 +931,12 @@ setting this option to True is not needed and often can be worked around in a mu
 <li><p><strong>create_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, graph of the derivative will
 be constructed, allowing to compute higher order derivative
 products. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which the gradient will be
-accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be ignored. If not
-provided, the gradient is accumulated into all the leaf Tensors that were
-used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which
+the gradient will be accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be
+ignored. If not provided, the gradient is accumulated into all the leaf
+Tensors that were used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>. A dict of tensors
+(e.g. <code class="docutils literal notranslate"><span class="pre">dict(model.named_parameters())</span></code>) is also accepted.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1799,7 +1801,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.expand">
-<span class="sig-name descname"><span class="pre">expand</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">sizes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.expand" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">expand</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.expand" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a new view of the <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor with singleton dimensions expanded
 to a larger size.</p>
 <p>Passing -1 as the size for a dimension means not changing the size of
@@ -1814,7 +1816,7 @@ of size 1 can be expanded to an arbitrary value without allocating new
 memory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>*sizes</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired expanded size</p>
+<dd class="field-odd"><p><strong>*size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired expanded size</p>
 </dd>
 </dl>
 <div class="admonition warning">
@@ -3864,35 +3866,36 @@ invalid index.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<p># Example 1: Padding
-&gt;&gt;&gt; input_tensor = torch.tensor([[1, 0], [3, 2]])
-&gt;&gt;&gt; static_size = 4
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([[  0,   0],</p>
-<blockquote>
-<div><p>[  1,   0],
-[  1,   1],
-[  -1, -1]], dtype=torch.int64)</p>
-</div></blockquote>
-<p># Example 2: Truncating
-&gt;&gt;&gt; input_tensor = torch.tensor([[1, 0], [3, 2]])
-&gt;&gt;&gt; static_size = 2
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([[  0,   0],</p>
-<blockquote>
-<div><p>[  1,   0]], dtype=torch.int64)</p>
-</div></blockquote>
-<p># Example 3: 0 size
-&gt;&gt;&gt; input_tensor = torch.tensor([10])
-&gt;&gt;&gt; static_size = 0
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([], size=(0, 1), dtype=torch.int64)</p>
-<p># Example 4: 0 rank input
-&gt;&gt;&gt; input_tensor = torch.tensor(10)
-&gt;&gt;&gt; static_size = 2
-&gt;&gt;&gt; t = torch.nonzero_static(input_tensor, size=static_size)
-tensor([], size=(2, 0), dtype=torch.int64)</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example 1: Padding</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([[</span>  <span class="mi">0</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">1</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 2: Truncating</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([[</span>  <span class="mi">0</span><span class="p">,</span>   <span class="mi">0</span><span class="p">],</span>
+        <span class="p">[</span>  <span class="mi">1</span><span class="p">,</span>   <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 3: 0 size</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">10</span><span class="p">])</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([],</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+<span class="c1"># Example 4: 0 rank input</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">input_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">static_size</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero_static</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">static_size</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([],</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -4163,7 +4166,7 @@ will be uniform in <code class="docutils literal notranslate"><span class="pre">
 <span class="sig-name descname"><span class="pre">real</span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.real" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a new tensor containing real values of the <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor for a complex-valued input tensor.
 The returned tensor and <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> share the same underlying storage.</p>
-<p>Returns <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> if <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a real-valued tensor tensor.</p>
+<p>Returns <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> if <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a real-valued tensor.</p>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cfloat</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span>
