@@ -55,6 +55,7 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _broadcast_tensors,
+    _canonicalize_tensor,
     _check_is_flatten,
     _check_is_unflatten,
     _get_shape_from_args,
@@ -1814,8 +1815,18 @@ class LazyStackedTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return False
 
-    def contiguous(self) -> Self:
-        source = {key: value.contiguous() for key, value in self.items()}
+    def contiguous(self, *, canonical: bool = False) -> Self:
+        if canonical:
+            source = {
+                key: (
+                    value.contiguous(canonical=True)
+                    if is_tensor_collection(value)
+                    else _canonicalize_tensor(value.contiguous())
+                )
+                for key, value in self.items()
+            }
+        else:
+            source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
         out = TensorDict._new_unsafe(
@@ -4214,9 +4225,16 @@ class _CustomOpTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
 
-    def contiguous(self) -> Self:
-        def contiguous(x):
-            return x.contiguous()
+    def contiguous(self, *, canonical: bool = False) -> Self:
+        if canonical:
+
+            def contiguous(x):
+                return _canonicalize_tensor(x.contiguous())
+
+        else:
+
+            def contiguous(x):
+                return x.contiguous()
 
         return self._fast_apply(contiguous, propagate_lock=True)
 

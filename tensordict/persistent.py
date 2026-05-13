@@ -571,9 +571,12 @@ class PersistentTensorDict(TensorDictBase):
                 td_names = list(names) + [None] * (item.ndim - self.ndim)
                 item.rename_(*td_names)
 
-    def contiguous(self):
+    def contiguous(self, *, canonical: bool = False):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
-        return self.to_tensordict()
+        out = self.to_tensordict()
+        if canonical:
+            out = out.contiguous(canonical=True)
+        return out
 
     @lock_blocked
     def del_(self, key):

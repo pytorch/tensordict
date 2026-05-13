@@ -15863,8 +15863,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def contiguous(self) -> Self:
-        """Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous)."""
+    def contiguous(self, *, canonical: bool = False) -> Self:
+        """Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).
+
+        Args:
+            canonical (bool, optional): if ``True``, every dense tensor leaf
+                whose strides do not match the canonical C-row-major strides
+                for its shape is rematerialized into a freshly allocated
+                contiguous tensor (using ``torch.contiguous_format``), even if
+                :meth:`torch.Tensor.is_contiguous` returns ``True`` (e.g.
+                because of size-1 dimensions). When ``False`` (the default),
+                the historical behavior of :meth:`torch.Tensor.contiguous` is
+                preserved. Defaults to ``False``.
+
+        """
         raise NotImplementedError
 
     @cache  # noqa: B019

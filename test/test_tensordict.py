@@ -4414,6 +4414,54 @@ class TestGeneric:
         assert p.grad is None
         assert linear.weight.grad is None
 
+    def test_contiguous_canonical(self):
+        # Leaf with a size-1 dim and a non-canonical stride: torch reports
+        # is_contiguous() == True even though the strides don't match the
+        # C-row-major layout for the shape.
+        non_canonical = torch.empty_strided((1, 4, 5), (5, 5, 1))
+        non_canonical.copy_(torch.arange(20).view(1, 4, 5))
+        assert non_canonical.is_contiguous()
+        assert tuple(non_canonical.stride()) != (20, 5, 1)
+        canonical = torch.randn(2, 3, 4)
+        assert tuple(canonical.stride()) == (12, 4, 1)
+        nested_leaf = torch.empty_strided((1, 4, 5), (5, 5, 1))
+        nested_leaf.copy_(torch.arange(20).view(1, 4, 5))
+
+        td = TensorDict(
+            {
+                "non_canonical": non_canonical,
+                "canonical": canonical,
+                "nested": TensorDict({"leaf": nested_leaf}, batch_size=[]),
+            },
+            batch_size=[],
+        )
+
+        # canonical=False (default) keeps the historical no-copy behaviour
+        # for tensors that already pass is_contiguous().
+        td_default = td.contiguous()
+        assert td_default["non_canonical"].data_ptr() == non_canonical.data_ptr()
+        assert tuple(td_default["non_canonical"].stride()) == (5, 5, 1)
+        assert td_default["canonical"].data_ptr() == canonical.data_ptr()
+        assert (
+            td_default["nested", "leaf"].data_ptr() == nested_leaf.data_ptr()
+        )
+
+        # canonical=True materialises the leaf whose strides do not match
+        # the canonical layout and leaves already-canonical tensors alone.
+        td_canon = td.contiguous(canonical=True)
+        assert tuple(td_canon["non_canonical"].stride()) == (20, 5, 1)
+        assert td_canon["non_canonical"].data_ptr() != non_canonical.data_ptr()
+        torch.testing.assert_close(td_canon["non_canonical"], non_canonical)
+        assert td_canon["canonical"].data_ptr() == canonical.data_ptr()
+        # Nested TensorDict leaf is also canonicalised.
+        assert tuple(td_canon["nested", "leaf"].stride()) == (20, 5, 1)
+        assert td_canon["nested", "leaf"].data_ptr() != nested_leaf.data_ptr()
+        torch.testing.assert_close(td_canon["nested", "leaf"], nested_leaf)
+        # Batch size / device / structure are preserved.
+        assert td_canon.batch_size == td.batch_size
+        assert td_canon.device == td.device
+        assert set(td_canon.keys()) == set(td.keys())
+
 
 class TestPointwiseOps:
     def test_r_ops(self):
