@@ -850,6 +850,161 @@ class TestReadWrite:
         # assert (mmap1[1].view(-1) == 0).all()
 
 
+def _gds_api_present() -> bool:
+    import torch as _torch
+
+    return hasattr(getattr(_torch.cuda, "gds", None), "GdsFile")
+
+
+def _gds_smoke() -> bool:
+    """Best-effort end-to-end probe: returns True only if a tiny GDS read works.
+
+    Tests use this as a ``pytest.mark.skipif`` condition so they skip cleanly
+    on environments without nvidia-fs or on filesystems that don't support
+    direct I/O (e.g. macOS, tmpfs).
+    """
+    if not _gds_api_present():
+        return False
+    if not torch.cuda.is_available():
+        return False
+    try:
+        from torch.cuda.gds import gds_register_buffer, GdsFile
+    except ImportError:
+        return False
+    import tempfile
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as fh:
+            payload = bytes(range(256)) * 16  # 4 KiB
+            fh.write(payload)
+            path = fh.name
+        try:
+            buf = torch.empty(len(payload), dtype=torch.uint8, device="cuda")
+            storage = buf.untyped_storage()
+            gds_register_buffer(storage)
+            try:
+                gf = GdsFile(path, os.O_RDONLY)
+                try:
+                    gf.load_storage(storage, offset=0)
+                finally:
+                    del gf
+            finally:
+                from torch.cuda.gds import gds_deregister_buffer
+
+                gds_deregister_buffer(storage)
+            return bool(
+                (buf.cpu() == torch.tensor(list(payload), dtype=torch.uint8)).all()
+            )
+        finally:
+            os.unlink(path)
+    except Exception:
+        return False
+
+
+_GDS_SMOKE_OK = _gds_smoke()
+
+
+class TestGDS:
+    @staticmethod
+    def _make_td():
+        return TensorDict(
+            {
+                "a": torch.arange(16, dtype=torch.int64),
+                "b": torch.randn(3, 4),
+                "nested": TensorDict(
+                    {"c": torch.ones(2, 2, dtype=torch.float32)}, batch_size=[]
+                ),
+            },
+            batch_size=[],
+        )
+
+    def test_gds_requires_cuda_device(self, tmp_path):
+        td = self._make_td()
+        p = tmp_path / "td.pt"
+        td.consolidate(filename=str(p))
+        with pytest.raises(RuntimeError, match="CUDA"):
+            TensorDict.from_consolidated(str(p), device="cpu", use_gds=True)
+        with pytest.raises(RuntimeError, match="CUDA"):
+            TensorDict.from_consolidated(str(p), use_gds=True)
+
+    def test_gds_consolidate_requires_filename(self):
+        td = self._make_td()
+        with pytest.raises(RuntimeError, match="filename"):
+            td.consolidate(use_gds=True)
+
+    def test_gds_consolidate_requires_cuda(self, tmp_path):
+        td = self._make_td()  # cpu
+        p = tmp_path / "td.pt"
+        with pytest.raises(RuntimeError, match="CUDA"):
+            td.consolidate(filename=str(p), use_gds=True)
+
+    @pytest.mark.skipif(
+        _GDS_SMOKE_OK,
+        reason="GDS is available; this test runs only when GDS is unavailable",
+    )
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_gds_raises_when_unavailable(self, tmp_path):
+        td = self._make_td()
+        p = tmp_path / "td.pt"
+        td.consolidate(filename=str(p))
+        with pytest.raises(RuntimeError):
+            TensorDict.from_consolidated(str(p), device="cuda", use_gds=True)
+
+    @pytest.mark.skipif(not _GDS_SMOKE_OK, reason="GDS not usable in this environment")
+    def test_gds_load_roundtrip_small(self, tmp_path):
+        td = self._make_td()
+        p = tmp_path / "td.pt"
+        td.consolidate(filename=str(p))
+
+        td_gpu = TensorDict.from_consolidated(str(p), device="cuda", use_gds=True)
+        assert td_gpu.device.type == "cuda"
+        for k in [("a",), ("b",), ("nested", "c")]:
+            torch.testing.assert_close(td_gpu.get(k).cpu(), td.get(k))
+
+        # All leaves share one CUDA storage.
+        ptrs = {
+            td_gpu.get(k).untyped_storage().data_ptr()
+            for k in [("a",), ("b",), ("nested", "c")]
+        }
+        assert len(ptrs) == 1
+
+    @pytest.mark.skipif(not _GDS_SMOKE_OK, reason="GDS not usable in this environment")
+    def test_gds_save_roundtrip_small(self, tmp_path):
+        td = self._make_td().to("cuda")
+        p = tmp_path / "td_gds.pt"
+        td.consolidate(filename=str(p), use_gds=True)
+
+        td_back = TensorDict.from_consolidated(str(p))
+        for k in [("a",), ("b",), ("nested", "c")]:
+            torch.testing.assert_close(td_back.get(k), td.get(k).cpu())
+
+    @pytest.mark.skipif(not _GDS_SMOKE_OK, reason="GDS not usable in this environment")
+    def test_gds_save_then_gds_load(self, tmp_path):
+        td = self._make_td().to("cuda")
+        p = tmp_path / "td_gds.pt"
+        td.consolidate(filename=str(p), use_gds=True)
+
+        td_back = TensorDict.from_consolidated(str(p), device="cuda", use_gds=True)
+        assert td_back.device.type == "cuda"
+        for k in [("a",), ("b",), ("nested", "c")]:
+            torch.testing.assert_close(td_back.get(k), td.get(k))
+
+    @pytest.mark.skipif(not _GDS_SMOKE_OK, reason="GDS not usable in this environment")
+    def test_gds_leaf_outlives_td(self, tmp_path):
+        td = self._make_td()
+        p = tmp_path / "td.pt"
+        td.consolidate(filename=str(p))
+
+        td_gpu = TensorDict.from_consolidated(str(p), device="cuda", use_gds=True)
+        leaf = td_gpu.get("b").clone()  # detach a value
+        leaf_view = td_gpu.get("b")  # alias the registered storage
+        del td_gpu
+        gc.collect()
+        # Both the cloned leaf and the view-on-shared-storage must remain usable.
+        torch.testing.assert_close(leaf_view.cpu(), td.get("b"))
+        torch.testing.assert_close(leaf.cpu(), td.get("b"))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
