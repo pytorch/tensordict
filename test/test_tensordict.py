@@ -4442,9 +4442,7 @@ class TestGeneric:
         assert td_default["non_canonical"].data_ptr() == non_canonical.data_ptr()
         assert tuple(td_default["non_canonical"].stride()) == (5, 5, 1)
         assert td_default["canonical"].data_ptr() == canonical.data_ptr()
-        assert (
-            td_default["nested", "leaf"].data_ptr() == nested_leaf.data_ptr()
-        )
+        assert td_default["nested", "leaf"].data_ptr() == nested_leaf.data_ptr()
 
         # canonical=True materialises the leaf whose strides do not match
         # the canonical layout and leaves already-canonical tensors alone.
