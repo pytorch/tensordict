@@ -880,13 +880,6 @@ class TestTTDImprovements:
     See the corresponding ``TODO/*.md`` files for upstream context.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Dynamo cannot trace frozenset.__sub__(dict_keys). "
-            "See TODO/dynamo_frozenset_sub.md"
-        ),
-    )
     def test_frozenset_sub_dict_keys(self):
         """frozenset - dict.keys() should be traceable by Dynamo."""
         required = frozenset({"a", "b"})
