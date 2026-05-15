@@ -1846,9 +1846,12 @@ class TensorDictStore(TensorDictBase):
         """
         return self.to_tensordict()
 
-    def contiguous(self) -> TensorDict:
+    def contiguous(self, *, canonical: bool = False) -> TensorDict:
         """Materialize into a regular TensorDict."""
-        return self.to_tensordict()
+        out = self.to_tensordict()
+        if canonical:
+            out = out.contiguous(canonical=True)
+        return out
 
     # ---- Construction ----
 
@@ -2981,8 +2984,11 @@ class _StoreStackElementView(TensorDictBase):
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
-    def contiguous(self) -> TensorDict:
-        return self.to_tensordict()
+    def contiguous(self, *, canonical: bool = False) -> TensorDict:
+        out = self.to_tensordict()
+        if canonical:
+            out = out.contiguous(canonical=True)
+        return out
 
     def is_contiguous(self) -> bool:
         return False
@@ -4409,8 +4415,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
     def to_local(self) -> TensorDict:
         return self.to_tensordict()
 
-    def contiguous(self) -> TensorDict:
-        return self.to_tensordict()
+    def contiguous(self, *, canonical: bool = False) -> TensorDict:
+        out = self.to_tensordict()
+        if canonical:
+            out = out.contiguous(canonical=True)
+        return out
 
     # ---- Construction ----
 

@@ -61,6 +61,7 @@ from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
+    _canonicalize_tensor,
     _check_inbuild,
     _clone_value,
     _create_segments_from_int,
@@ -3464,8 +3465,18 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    def contiguous(self) -> Self:
-        source = {key: value.contiguous() for key, value in self.items()}
+    def contiguous(self, *, canonical: bool = False) -> Self:
+        if canonical:
+            source = {
+                key: (
+                    value.contiguous(canonical=True)
+                    if is_tensor_collection(value)
+                    else _canonicalize_tensor(value.contiguous())
+                )
+                for key, value in self.items()
+            }
+        else:
+            source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
         out = self._new_unsafe(
@@ -4332,10 +4343,21 @@ class _SubTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all(value.is_contiguous() for value in self.values())
 
-    def contiguous(self) -> Self:
+    def contiguous(self, *, canonical: bool = False) -> Self:
+        if canonical:
+            source = {
+                key: (
+                    value.contiguous(canonical=True)
+                    if is_tensor_collection(value)
+                    else _canonicalize_tensor(value.contiguous())
+                )
+                for key, value in self.items()
+            }
+        else:
+            source = {key: value.contiguous() for key, value in self.items()}
         return self._new_unsafe(
             batch_size=self.batch_size,
-            source={key: value.contiguous() for key, value in self.items()},
+            source=source,
             device=self.device,
             names=self.names if self._has_names() else None,
         )

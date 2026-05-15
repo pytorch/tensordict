@@ -565,6 +565,35 @@ def _device(tensor: Tensor) -> torch.device:
         return tensor.device
 
 
+def _canonical_stride(shape: Sequence[int]) -> tuple[int, ...]:
+    """Returns the C-row-major (canonical) stride for a given shape."""
+    stride: list[int] = []
+    running = 1
+    for size in reversed(tuple(shape)):
+        stride.append(running)
+        running *= int(size)
+    stride.reverse()
+    return tuple(stride)
+
+
+def _canonicalize_tensor(tensor: Tensor) -> Tensor:
+    """Materializes a tensor with canonical (C-row-major) strides if needed.
+
+    Tensors whose strides already match the canonical stride for their shape
+    are returned unchanged. Otherwise a fresh contiguous copy is allocated and
+    the values are copied in.
+    """
+    if not isinstance(tensor, Tensor):
+        return tensor
+    if tensor.is_nested or tensor.layout != torch.strided:
+        return tensor
+    if tuple(tensor.stride()) == _canonical_stride(tensor.shape):
+        return tensor
+    out = torch.empty_like(tensor, memory_format=torch.contiguous_format)
+    out.copy_(tensor)
+    return out
+
+
 def _is_shared(tensor: Tensor) -> bool:
     if isinstance(tensor, Tensor):
         if torch._C._functorch.is_batchedtensor(tensor):
