@@ -179,19 +179,13 @@ def _make_init(cls: type) -> Callable:
                 lock=lock,
             )
             return
-        # NOTE: the natural spelling here is ``required_keys - kwargs.keys()``
-        # and ``kwargs.keys() - expected_keys``, but torch.compile / Dynamo
-        # cannot trace ``frozenset.__sub__(dict_keys)`` and raises
-        # ``Unsupported: unsupported operand type(s) for __sub__``.
-        # We use set comprehensions as a compile-friendly workaround.
-        # See TODO/dynamo_frozenset_sub.md for a repro.
-        missing = {k for k in required_keys if k not in kwargs}
+        missing = required_keys - kwargs.keys()
         if missing:
             missing_str = ", ".join(sorted(missing))
             raise TypeError(
                 f"{type(self).__name__}() missing required field(s): {missing_str}"
             )
-        extra = {k for k in kwargs if k not in expected_keys}
+        extra = kwargs.keys() - expected_keys
         if extra:
             extra_str = ", ".join(sorted(extra))
             raise TypeError(
