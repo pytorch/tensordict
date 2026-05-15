@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4050+g89651371f.d20260512)
+                  main (0.12.0.dev4060+gc657f2b8f.d20260515)
                 </div>
               
             
@@ -632,7 +632,7 @@ about immutable containers more cleanly than about mutable ones.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">tensor_only=True</span></code> containers avoid the non-tensor lookup branch and tend
 to produce simpler graphs.</p></li>
 <li><p>Avoid data-dependent shapes (<code class="docutils literal notranslate"><span class="pre">.item()</span></code> on a tensor that controls a Python
-branch) and prefer <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> over Python <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">else</span></code> on tensor
+branch) and prefer <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> over Python <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">else</span></code> on tensor
 values.</p></li>
 </ul>
 </section>
@@ -640,7 +640,7 @@ values.</p></li>
 <h2>Serialization<a class="headerlink" href="#serialization" title="Permalink to this heading">¶</a></h2>
 <p>A tensorclass instance can be saved with the <code class="docutils literal notranslate"><span class="pre">memmap</span></code> method. Tensor data is
 written as memory-mapped tensors and JSON-serializable non-tensor data is
-written as JSON; remaining data is pickled via <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>.</p>
+written as JSON; remaining data is pickled via <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>.</p>
 <p>Loading is done with <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>. The instance
 recovers its original type provided the tensorclass is importable in the
 loading process:</p>
