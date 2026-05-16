@@ -93,7 +93,11 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         values = []
     return values, {
         "keys": keys,
-        "batch_size": d.batch_size,
+        # Store batch_dims (int) rather than batch_size (torch.Size that may
+        # contain SymInts during torch.export with dynamic shapes). The unflatten
+        # reconstructs the actual batch_size from tensor shapes at that point.
+        # See: https://github.com/pytorch/tensordict/issues/1003
+        "batch_dims": len(d.batch_size),
         "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
@@ -119,38 +123,49 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
             if all(val.device == device for val in values if hasattr(val, "device"))
             else None
         )
-    batch_size = context["batch_size"]
+    # Support both old contexts (batch_size key) and new contexts (batch_dims key).
+    # The new batch_dims form avoids storing SymInts in the pytree context, which
+    # would fail serialization during torch.export with dynamic shapes.
+    if "batch_dims" in context:
+        batch_dims = context["batch_dims"]
+        if any(tensor is None for tensor in values):
+            return
+        shapes = [_shape(v) for v in values if hasattr(v, "shape")]
+        batch_size = shapes[0][:batch_dims] if shapes else torch.Size([0] * batch_dims)
+    else:
+        # Legacy path: batch_size stored directly (may contain SymInts in old code).
+        batch_size = context["batch_size"]
+        batch_dims = len(batch_size)
+        if any(tensor is None for tensor in values):
+            return
+        shapes = [_shape(v) for v in values if hasattr(v, "shape")]
+        if shapes and any(s[:batch_dims] != batch_size for s in shapes):
+            # Values have different leading dims than the original batch_size.
+            # This happens when torch.func transforms (jacrev, jacfwd, hessian)
+            # create basis vectors with extra leading dimensions. We infer a new
+            # batch_size from the common prefix of all value shapes, capped at
+            # batch_dims + 1 to include at most one extra (basis) dimension.
+            #
+            # NOTE: when tensors have no feature dimensions (ndim == batch_dims),
+            # the basis leading dim can coincidentally equal a batch dim, making
+            # it impossible to detect the mismatch here. In that case, the
+            # TensorDict should be created with batch_size=[] or the tensors
+            # should be given at least one feature dimension (e.g. via unsqueeze).
+            min_dims = min(len(s) for s in shapes)
+            max_prefix_len = min(min_dims, batch_dims + 1)
+            common_dims = 0
+            for i in range(max_prefix_len):
+                if all(s[i] == shapes[0][i] for s in shapes):
+                    common_dims = i + 1
+                else:
+                    break
+            batch_size = torch.Size(shapes[0][:common_dims])
+            context["names"] = None
     names = context["names"]
     keys = context["keys"]
     constructor = context["constructor"]
     non_tensor_items = context["non_tensor_data"]
     cls = context["cls"]
-    batch_dims = len(batch_size)
-    if any(tensor is None for tensor in values):
-        return
-    shapes = [_shape(v) for v in values if hasattr(v, "shape")]
-    if shapes and any(s[:batch_dims] != batch_size for s in shapes):
-        # Values have different leading dims than the original batch_size.
-        # This happens when torch.func transforms (jacrev, jacfwd, hessian)
-        # create basis vectors with extra leading dimensions. We infer a new
-        # batch_size from the common prefix of all value shapes, capped at
-        # batch_dims + 1 to include at most one extra (basis) dimension.
-        #
-        # NOTE: when tensors have no feature dimensions (ndim == batch_dims),
-        # the basis leading dim can coincidentally equal a batch dim, making
-        # it impossible to detect the mismatch here. In that case, the
-        # TensorDict should be created with batch_size=[] or the tensors
-        # should be given at least one feature dimension (e.g. via unsqueeze).
-        min_dims = min(len(s) for s in shapes)
-        max_prefix_len = min(min_dims, batch_dims + 1)
-        common_dims = 0
-        for i in range(max_prefix_len):
-            if all(s[i] == shapes[0][i] for s in shapes):
-                common_dims = i + 1
-            else:
-                break
-        batch_size = torch.Size(shapes[0][:common_dims])
-        names = None
     return constructor(
         cls=cls,
         keys=keys,

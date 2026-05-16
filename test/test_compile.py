@@ -1588,6 +1588,38 @@ class TestExport:
     # Currently only works with strict=False, because export fails to see that
     #  the params in the module have changed and are not 'meta' anymore => this
     #  is symptomatic of export failing to see the functional call
+    def test_export_dynamic_batch_size(self):
+        """TensorDict with dynamic batch_size is exportable with dynamic shapes.
+
+        Regression test for https://github.com/pytorch/tensordict/issues/1003.
+        Previously, _tensordict_flatten stored batch_size (a torch.Size that may
+        contain SymInts) in the pytree context. torch.export cannot serialize
+        SymInts in the output pytree spec, causing AsPythonConstantNotImplementedError.
+
+        Fix: store batch_dims (int) and reconstruct batch_size from tensor shapes
+        in _tensordict_unflatten.
+        """
+        torch._dynamo.reset_code_caches()
+
+        class Mod(torch.nn.Module):
+            def forward(self, x: torch.Tensor) -> TensorDict:
+                b, t = x.shape[0], x.shape[1]
+                return TensorDict({"x": x, "y": x * 2}, batch_size=[b, t])
+
+        m = Mod()
+        inp = torch.randn(2, 6, 8)
+        m(inp)  # eager run
+
+        batch_dim = torch.export.Dim("batch", min=1)
+        ep = torch.export.export(
+            m, args=(inp,), dynamic_shapes=({0: batch_dim},), strict=True
+        )
+
+        # Verify the exported program runs correctly with a different batch size
+        out = ep.module()(torch.randn(4, 6, 8))
+        assert out.batch_size == torch.Size([4, 6])
+        torch.testing.assert_close(out["y"], out["x"] * 2)
+
     @pytest.mark.parametrize("strict", [False])  # , True])
     @pytest.mark.skipif(not _v2_7, reason="Requires PT>=2.7")
     def test_export_with_td_params(self, strict):
