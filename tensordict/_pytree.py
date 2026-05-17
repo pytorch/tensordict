@@ -10,7 +10,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.persistent import PersistentTensorDict
-from tensordict.utils import _shape, implement_for
+from tensordict.utils import _shape, implement_for, is_compiling
 
 try:
     from torch.utils._pytree import Context, MappingKey, register_pytree_node
@@ -91,19 +91,26 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     else:
         keys = []
         values = []
-    return values, {
+    context = {
         "keys": keys,
-        # Store batch_dims (int) rather than batch_size (torch.Size that may
-        # contain SymInts during torch.export with dynamic shapes). The unflatten
-        # reconstructs the actual batch_size from tensor shapes at that point.
-        # See: https://github.com/pytorch/tensordict/issues/1003
-        "batch_dims": len(d.batch_size),
         "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
         "non_tensor_data": d.non_tensor_items(),
         "cls": type(d),
     }
+    if is_compiling():
+        # During torch.export with dynamic shapes, batch_size may contain SymInts.
+        # torch.export cannot serialize SymInts in the output pytree spec
+        # (as_python_constant raises). Store batch_dims (int) instead and
+        # reconstruct batch_size from tensor shapes in _tensordict_unflatten.
+        # See: https://github.com/pytorch/tensordict/issues/1003
+        context["batch_dims"] = len(d.batch_size)
+    else:
+        # Eager path: store batch_size directly so that torch.func transforms
+        # (jacrev, jacfwd, hessian) can detect basis-vector shape mismatches.
+        context["batch_size"] = d.batch_size
+    return values, context
 
 
 def _lazy_tensordict_flatten(d: LazyStackedTensorDict) -> Tuple[List[Any], Context]:
@@ -123,22 +130,18 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
             if all(val.device == device for val in values if hasattr(val, "device"))
             else None
         )
-    # Support both old contexts (batch_size key) and new contexts (batch_dims key).
-    # The new batch_dims form avoids storing SymInts in the pytree context, which
-    # would fail serialization during torch.export with dynamic shapes.
+    if any(tensor is None for tensor in values):
+        return
+    shapes = [_shape(v) for v in values if hasattr(v, "shape")]
     if "batch_dims" in context:
+        # Compilation path (torch.export): batch_size was not stored because it
+        # may contain SymInts which torch.export cannot serialize. Reconstruct
+        # from the leading batch_dims dimensions of the actual tensor shapes.
         batch_dims = context["batch_dims"]
-        if any(tensor is None for tensor in values):
-            return
-        shapes = [_shape(v) for v in values if hasattr(v, "shape")]
         batch_size = shapes[0][:batch_dims] if shapes else torch.Size([0] * batch_dims)
     else:
-        # Legacy path: batch_size stored directly (may contain SymInts in old code).
         batch_size = context["batch_size"]
         batch_dims = len(batch_size)
-        if any(tensor is None for tensor in values):
-            return
-        shapes = [_shape(v) for v in values if hasattr(v, "shape")]
         if shapes and any(s[:batch_dims] != batch_size for s in shapes):
             # Values have different leading dims than the original batch_size.
             # This happens when torch.func transforms (jacrev, jacfwd, hessian)
