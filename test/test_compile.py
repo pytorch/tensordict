@@ -1588,27 +1588,20 @@ class TestExport:
     # Currently only works with strict=False, because export fails to see that
     #  the params in the module have changed and are not 'meta' anymore => this
     #  is symptomatic of export failing to see the functional call
-    def test_export_dynamic_batch_size(self):
-        """TensorDict with dynamic batch_size is exportable with dynamic shapes.
+    def test_export_dynamic_batch_size_scalar(self):
+        """Scalar SymInt batch_size (x.shape[0]) is accepted during export.
 
         Regression test for https://github.com/pytorch/tensordict/issues/1003.
-        Two bugs prevented export:
-
-        1. _parse_batch_size did not handle scalar SymInt (e.g. batch_size=x.shape[0]),
-           raising ValueError("batch size was not specified").
-
-        2. _tensordict_flatten stored batch_size (torch.Size that may contain SymInts)
-           in the pytree context. torch.export cannot serialize SymInts in the output
-           pytree spec, raising AsPythonConstantNotImplementedError.
+        _parse_batch_size did not handle torch.SymInt (which does not subclass
+        numbers.Number), causing ValueError("batch size was not specified").
         """
         torch._dynamo.reset_code_caches()
 
-        # Case 1: scalar SymInt batch_size (original issue repro, strict=False)
-        class ModScalar(torch.nn.Module):
+        class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor, y: torch.Tensor) -> TensorDict:
                 return TensorDict({"x": x, "y": y}, batch_size=x.shape[0])
 
-        m = ModScalar()
+        m = Mod()
         x, y = torch.zeros(2, 100), torch.zeros(2, 100)
         ep = torch.export.export(
             m,
@@ -1622,13 +1615,23 @@ class TestExport:
         out = ep.module()(torch.zeros(5, 100), torch.zeros(5, 100))
         assert out.batch_size == torch.Size([5])
 
-        # Case 2: multi-dim SymInt batch_size (strict=True)
-        class ModMultiDim(torch.nn.Module):
+    def test_export_dynamic_batch_size_multi_dim(self):
+        """Multi-dim SymInt batch_size ([b, t]) is serializable in pytree context.
+
+        Regression test for https://github.com/pytorch/tensordict/issues/1003.
+        _tensordict_flatten stored batch_size (torch.Size that may contain SymInts)
+        in the pytree context. torch.export cannot serialize SymInts in the output
+        pytree spec, raising AsPythonConstantNotImplementedError.
+        Fix: store batch_dims (int) and reconstruct batch_size from tensor shapes.
+        """
+        torch._dynamo.reset_code_caches()
+
+        class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor) -> TensorDict:
                 b, t = x.shape[0], x.shape[1]
                 return TensorDict({"x": x, "y": x * 2}, batch_size=[b, t])
 
-        m = ModMultiDim()
+        m = Mod()
         inp = torch.randn(2, 6, 8)
         ep = torch.export.export(
             m,
