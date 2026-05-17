@@ -1592,30 +1592,50 @@ class TestExport:
         """TensorDict with dynamic batch_size is exportable with dynamic shapes.
 
         Regression test for https://github.com/pytorch/tensordict/issues/1003.
-        Previously, _tensordict_flatten stored batch_size (a torch.Size that may
-        contain SymInts) in the pytree context. torch.export cannot serialize
-        SymInts in the output pytree spec, causing AsPythonConstantNotImplementedError.
+        Two bugs prevented export:
 
-        Fix: store batch_dims (int) and reconstruct batch_size from tensor shapes
-        in _tensordict_unflatten.
+        1. _parse_batch_size did not handle scalar SymInt (e.g. batch_size=x.shape[0]),
+           raising ValueError("batch size was not specified").
+
+        2. _tensordict_flatten stored batch_size (torch.Size that may contain SymInts)
+           in the pytree context. torch.export cannot serialize SymInts in the output
+           pytree spec, raising AsPythonConstantNotImplementedError.
         """
         torch._dynamo.reset_code_caches()
 
-        class Mod(torch.nn.Module):
+        # Case 1: scalar SymInt batch_size (original issue repro, strict=False)
+        class ModScalar(torch.nn.Module):
+            def forward(self, x: torch.Tensor, y: torch.Tensor) -> TensorDict:
+                return TensorDict({"x": x, "y": y}, batch_size=x.shape[0])
+
+        m = ModScalar()
+        x, y = torch.zeros(2, 100), torch.zeros(2, 100)
+        ep = torch.export.export(
+            m,
+            args=(x, y),
+            strict=False,
+            dynamic_shapes={
+                "x": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+                "y": {0: torch.export.Dim("batch"), 1: torch.export.Dim("time")},
+            },
+        )
+        out = ep.module()(torch.zeros(5, 100), torch.zeros(5, 100))
+        assert out.batch_size == torch.Size([5])
+
+        # Case 2: multi-dim SymInt batch_size (strict=True)
+        class ModMultiDim(torch.nn.Module):
             def forward(self, x: torch.Tensor) -> TensorDict:
                 b, t = x.shape[0], x.shape[1]
                 return TensorDict({"x": x, "y": x * 2}, batch_size=[b, t])
 
-        m = Mod()
+        m = ModMultiDim()
         inp = torch.randn(2, 6, 8)
-        m(inp)  # eager run
-
-        batch_dim = torch.export.Dim("batch", min=1)
         ep = torch.export.export(
-            m, args=(inp,), dynamic_shapes=({0: batch_dim},), strict=True
+            m,
+            args=(inp,),
+            dynamic_shapes=({0: torch.export.Dim("batch", min=1)},),
+            strict=True,
         )
-
-        # Verify the exported program runs correctly with a different batch size
         out = ep.module()(torch.randn(4, 6, 8))
         assert out.batch_size == torch.Size([4, 6])
         torch.testing.assert_close(out["y"], out["x"] * 2)

@@ -2355,7 +2355,10 @@ class TensorDict(TensorDictBase):
                 return torch.Size(tuple(batch_size))
             if batch_size is None:
                 return torch.Size([])
-            elif isinstance(batch_size, Number):
+            elif isinstance(batch_size, (Number, torch.SymInt)):
+                # torch.SymInt does not subclass Number but must be handled the
+                # same way during compilation (e.g. batch_size=x.shape[0]).
+                # See: https://github.com/pytorch/tensordict/issues/1003
                 return torch.Size([batch_size])
             elif isinstance(source, TensorDictBase):
                 return source.batch_size
