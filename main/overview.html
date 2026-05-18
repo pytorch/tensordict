@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4064+g08c9ae048.d20260515)
+                  main (0.12.0.dev4074+gf7d8efa00.d20260518)
                 </div>
               
             
@@ -443,6 +443,30 @@ a few characters (notice that indexing the nth leading dimensions with tree_map 
 </div>
 <p>One can also use the set method with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> or the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.set_" title="tensordict.TensorDict.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> method to do inplace updates of the contents.
 The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.</p>
+<section id="in-place-conventions">
+<h3>In-place conventions<a class="headerlink" href="#in-place-conventions" title="Permalink to this heading">¶</a></h3>
+<p>Throughout the library, two related-but-distinct flavors of in-place
+operation are used:</p>
+<ul class="simple">
+<li><p>A trailing-underscore method (<code class="docutils literal notranslate"><span class="pre">method_</span></code>, for example
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.add_" title="tensordict.TensorDict.add_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.mul_" title="tensordict.TensorDict.mul_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">mul_()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.masked_fill_" title="tensordict.TensorDict.masked_fill_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">masked_fill_()</span></code></a>) writes into the <strong>same
+underlying tensor storage</strong> for every leaf. Each leaf’s <code class="docutils literal notranslate"><span class="pre">data_ptr</span></code> is
+preserved. This mirrors PyTorch’s own convention and is only available
+when the operation can be performed without changing a tensor’s shape,
+dtype, or layout.</p></li>
+<li><p>An <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keyword (for example
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pad" title="tensordict.TensorDict.pad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pad()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update" title="tensordict.TensorDict.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>) preserves the <strong>tensordict’s
+object identity and key set</strong>, but individual leaf storages may be
+replaced with freshly allocated tensors. The guarantee is “no extra
+tensordict-shaped allocation”, and the implementation will release each
+old leaf storage as soon as its replacement is written so that peak
+memory stays close to <code class="docutils literal notranslate"><span class="pre">1x</span></code> rather than <code class="docutils literal notranslate"><span class="pre">2x</span></code>. This is the only
+meaningful flavor of in-place for shape-changing operations.</p></li>
+</ul>
+<p>In short: <code class="docutils literal notranslate"><span class="pre">method_</span></code> keeps the bytes; <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keeps the
+container.</p>
 <p>The contents of the TensorDict can now be manipulated collectively.
 For example, to place all of the contents onto a particular device one can simply do</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
@@ -473,6 +497,7 @@ For example, to place all of the contents onto a particular device one can simpl
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a> and many more.</p>
 <p>If an operation is not present, the <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.apply" title="tensordict.TensorDict.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> method will usually provide the solution
 that was needed.</p>
+</section>
 <section id="escaping-shape-operations-unbatchedtensor">
 <h3>Escaping shape operations: UnbatchedTensor<a class="headerlink" href="#escaping-shape-operations-unbatchedtensor" title="Permalink to this heading">¶</a></h3>
 <p>In some cases, it may be desirable to store tensors in a TensorDict without enforcing batch size consistency during
@@ -990,6 +1015,7 @@ dimension with <a class="reference external" href="https://docs.pytorch.org/docs
 <li><a class="reference internal" href="#">Overview</a><ul>
 <li><a class="reference internal" href="#motivation">Motivation</a></li>
 <li><a class="reference internal" href="#features">Features</a><ul>
+<li><a class="reference internal" href="#in-place-conventions">In-place conventions</a></li>
 <li><a class="reference internal" href="#escaping-shape-operations-unbatchedtensor">Escaping shape operations: UnbatchedTensor</a><ul>
 <li><a class="reference internal" href="#contract">Contract</a></li>
 <li><a class="reference internal" href="#usage">Usage</a></li>

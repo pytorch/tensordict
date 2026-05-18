@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4064+g08c9ae048.d20260515)
+                  main (0.12.0.dev4074+gf7d8efa00.d20260518)
                 </div>
               
             
@@ -362,8 +362,8 @@
 <h1>pad<a class="headerlink" href="#pad" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.pad">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">pad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.pad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Pads all tensors in a tensordict along the batch dimensions with a constant value, returning a new tensordict.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">pad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">safe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.pad" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pads all tensors in a tensordict along the batch dimensions with a constant value.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -376,10 +376,45 @@ be padded. For example to pad only the first dimension, pad has the form
 (padding_left, padding_right, padding_top, padding_bottom) and so on.
 pad_size must be even and less than or equal to twice the number of batch dimensions.</p></li>
 <li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – The fill value to pad by, default 0.0</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – <p>If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input tensordict’s identity
+and key set are preserved, and each leaf’s storage is replaced by
+its padded counterpart one at a time. This keeps peak memory close
+to the size of the tensordict itself rather than 2x (the case when
+a fresh tensordict is allocated alongside the original). The leaf
+tensors themselves are still freshly allocated (<code class="docutils literal notranslate"><span class="pre">pad</span></code> necessarily
+grows shapes), so this is not a same-storage operation. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<p>On <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> pads
+each constituent tensordict along the non-stack dimensions in place
+and grows the stack along the stack dimension by appending or
+prepending zero-filled copies of the edge constituents; the lazy
+stack’s identity is preserved.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> and the operation fails partway through
+(for example an out-of-memory error during a leaf’s padding),
+the tensordict is left in an inconsistent state: some leaves
+will have the new shape and others the old, and the
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> will not have been updated. Restoring the
+original state would require keeping every old leaf alive
+until the whole pass succeeded, which would defeat the 1x
+memory contract. Use <code class="docutils literal notranslate"><span class="pre">safe=True</span></code> (the default) to catch
+the realistic user-error class of failures before any
+mutation happens.</p>
+</div>
+</p></li>
+<li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, validate that the operation
+would succeed for every leaf before any mutation occurs. This
+catches errors such as negative pad widths that exceed a leaf’s
+dimension size, leaves that are not paddable, etc., raising
+before any in-place rebind. Set to <code class="docutils literal notranslate"><span class="pre">False</span></code> to skip the
+pre-flight walk for a small speedup when the inputs are known
+to be valid. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new TensorDict padded along the batch dimensions</p>
+<dd class="field-even"><p>The padded tensordict. When <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> this is the same object as
+the input; otherwise a new tensordict.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
