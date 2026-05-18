@@ -4434,8 +4434,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             *shape (int): new shape of the resulting tensordict.
 
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf is reshaped one at a
+                time. Note that the underlying ``Tensor.reshape`` may return
+                a view of the original leaf (when memory layout permits) or
+                a copy (otherwise); in the view case ``inplace=True`` keeps
+                the leaves sharing storage with the originals and the
+                memory benefit does not materialize. Defaults to ``False``.
+
         Returns:
-            A TensorDict with reshaped keys
+            A TensorDict with reshaped keys. When ``inplace=True`` this is
+            ``self``.
 
         Examples:
             >>> td = TensorDict({
@@ -4455,6 +4465,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         dim: int | None = None,
         *,
         output_size: int | None = None,
+        inplace: bool = False,
     ) -> Self:
         """Repeat elements of a TensorDict.
 
@@ -4469,6 +4480,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Keyword Args:
             output_size (int, optional): Total output size for the given axis (e.g. sum of repeats). If given, it
                 will avoid stream synchronization needed to calculate output shape of the tensordict.
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf storage is replaced by
+                its repeated counterpart one leaf at a time. Not supported on
+                :class:`~tensordict.LazyStackedTensorDict` (call
+                ``to_tensordict()`` first). Defaults to ``False``.
 
         Returns:
             Repeated TensorDict which has the same shape as input, except along the given axis.
@@ -4506,9 +4522,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @overload
-    def repeat(self, repeats: torch.Size): ...
+    def repeat(self, repeats: torch.Size, *, inplace: bool = False): ...
 
-    def repeat(self, *repeats: int) -> Self:
+    def repeat(self, *repeats: int, inplace: bool = False) -> Self:
         """Repeats this tensor along the specified dimensions.
 
         Unlike :meth:`~.expand()`, this function copies the tensor's data.
@@ -4519,6 +4535,15 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Args:
             repeat (torch.Size, int..., tuple of int or list of int): The number of times to repeat this tensor along
                 each dimension.
+
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf storage is replaced by
+                its repeated counterpart one leaf at a time, keeping peak
+                memory close to ``1x``. ``LazyStackedTensorDict`` is not
+                supported in this mode (the stack dim's repeat factor would
+                rebuild the stack's constituents list) — call
+                ``to_tensordict()`` first. Defaults to ``False``.
 
         Examples:
             >>> import torch
@@ -4564,6 +4589,24 @@ class TensorDictBase(MutableMapping, TensorCollection):
             raise ValueError(
                 f"The number of repeat elements must match the number of dimensions of the tensordict. Got {len(repeats)} but ndim={self.ndimension()}."
             )
+        if inplace:
+            if self._lazy:
+                raise NotImplementedError(
+                    "repeat(inplace=True) is not supported on LazyStackedTensorDict; "
+                    "call .to_tensordict() first or use inplace=False."
+                )
+            new_batch_size = torch.Size(
+                [s * r for s, r in zip(self.batch_size, repeats)]
+            )
+            ndim = self.ndim
+
+            def leaf_fn(leaf):
+                return leaf.repeat(*repeats, *((1,) * (leaf.ndim - ndim)))
+
+            def nested_fn(nested):
+                nested.repeat(*repeats, inplace=True)
+
+            return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return self._repeat(*repeats)
 
     @abc.abstractmethod
@@ -4835,7 +4878,14 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         raise NotImplementedError
 
-    def gather(self, dim: int, index: Tensor, out: T | None = None) -> Self:
+    def gather(
+        self,
+        dim: int,
+        index: Tensor,
+        out: T | None = None,
+        *,
+        inplace: bool = False,
+    ) -> Self:
         """Gathers values along an axis specified by `dim`.
 
         Args:
@@ -4846,6 +4896,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 index to be gathered along the required dimension.
             out (TensorDictBase, optional): a destination tensordict. It must
                 have the same shape as the index.
+
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf storage is replaced by
+                its gathered counterpart one leaf at a time, keeping peak
+                memory close to ``1x``. Requires ``index.ndim ==
+                self.batch_dims`` (the result must have the same number of
+                batch dims as the input). Mutually exclusive with ``out``.
+                Not supported on :class:`~tensordict.LazyStackedTensorDict`.
+                Defaults to ``False``.
 
         Examples:
             >>> td = TensorDict(
@@ -4876,6 +4936,43 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> td_gather.names
             ["a", "b"]
         """
+        if inplace:
+            if out is not None:
+                raise ValueError(
+                    "`out` and `inplace=True` are mutually exclusive in gather."
+                )
+            if self._lazy:
+                raise NotImplementedError(
+                    "gather(inplace=True) is not supported on LazyStackedTensorDict; "
+                    "call .to_tensordict() first or use inplace=False."
+                )
+            if index.ndim != self.batch_dims:
+                raise NotImplementedError(
+                    f"gather(inplace=True) requires index.ndim == self.batch_dims "
+                    f"so the result keeps the same number of batch dims; got "
+                    f"index.ndim={index.ndim} and batch_dims={self.batch_dims}. "
+                    f"Use inplace=False instead."
+                )
+            dim_corrected = dim if dim >= 0 else self.batch_dims + dim
+            if dim_corrected < 0 or dim_corrected >= self.batch_dims:
+                raise RuntimeError(
+                    f"Cannot gather tensordict with shape {self.shape} along dim {dim}."
+                )
+            new_batch_size = torch.Size(index.shape)
+
+            def leaf_fn(leaf):
+                index_expand = index
+                while index_expand.ndim < leaf.ndim:
+                    index_expand = index_expand.unsqueeze(-1)
+                target_shape = list(leaf.shape)
+                target_shape[dim_corrected] = index_expand.shape[dim_corrected]
+                index_expand = index_expand.expand(target_shape)
+                return torch.gather(leaf, dim_corrected, index_expand)
+
+            def nested_fn(nested):
+                nested.gather(dim_corrected, index, inplace=True)
+
+            return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return torch.gather(self, dim, index, out=out)
 
     @overload
@@ -5352,7 +5449,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return self.flip(0)
 
     @_as_context_manager()
-    def roll(self, shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None):
+    def roll(
+        self,
+        shifts: int | tuple[int, ...],
+        dims: int | tuple[int, ...] = None,
+        *,
+        inplace: bool = False,
+    ):
         """Roll the tensordict along the given dimensions.
 
         Elements that are shifted beyond the last position are re-introduced at
@@ -5366,8 +5469,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
             dims (int or tuple of ints, optional): Axis along which to roll.
                 By default, the tensordict is flattened before rolling.
 
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf storage is replaced by
+                its rolled counterpart one leaf at a time, keeping peak memory
+                close to ``1x``. The batch_size is unchanged by ``roll``.
+                Defaults to ``False``.
+
         Returns:
-            a new tensordict with elements rolled.
+            a new tensordict with elements rolled. When ``inplace=True`` this
+            is ``self``.
 
         Examples:
             >>> td = TensorDict({"a": torch.arange(6).view(2, 3)}, batch_size=[2, 3])
@@ -5381,6 +5492,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         def _roll(tensor):
             return tensor.roll(shifts, dims)
+
+        if inplace:
+
+            def nested_fn(nested):
+                nested.roll(shifts, dims, inplace=True)
+
+            return self._inplace_rebind_leaves(_roll, nested_fn, None)
 
         result = self._fast_apply(
             _roll,
@@ -9288,12 +9406,28 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return sorted(self.keys())
 
     @_as_context_manager()
-    def flatten(self, start_dim: int | None = None, end_dim: int | None = None):
+    def flatten(
+        self,
+        start_dim: int | None = None,
+        end_dim: int | None = None,
+        *,
+        inplace: bool = False,
+    ):
         """Flattens all the tensors of a tensordict.
 
         Args:
             start_dim (int): the first dim to flatten
             end_dim (int): the last dim to flatten
+
+        Keyword Args:
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each leaf is flattened one at a
+                time. ``torch.flatten`` may return a view when the flattened
+                range is contiguous in memory; in that case leaves share
+                storage with the originals and the memory benefit does not
+                materialize. Not supported on
+                :class:`~tensordict.LazyStackedTensorDict`. Defaults to
+                ``False``.
 
         Examples:
             >>> td = TensorDict({
@@ -9360,6 +9494,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
             names.insert(start_dim, None)
         else:
             names = None
+        if inplace:
+            if self._lazy:
+                raise NotImplementedError(
+                    "flatten(inplace=True) is not supported on "
+                    "LazyStackedTensorDict; call .to_tensordict() first or use "
+                    "inplace=False."
+                )
+
+            def nested_fn(nested):
+                nested.flatten(start_dim, end_dim, inplace=True)
+
+            return self._inplace_rebind_leaves(
+                flatten, nested_fn, torch.Size(batch_size)
+            )
         out = self._fast_apply(
             flatten,
             batch_size=batch_size,
@@ -9370,7 +9518,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return out
 
     @_as_context_manager()
-    def unflatten(self, dim, unflattened_size):
+    def unflatten(self, dim, unflattened_size, *, inplace: bool = False):
         """Unflattens a tensordict dim expanding it to a desired shape.
 
         Args:
@@ -9406,6 +9554,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         # TODO: check that this works with nested tds of different batch size
+        if inplace:
+            if self._lazy:
+                raise NotImplementedError(
+                    "unflatten(inplace=True) is not supported on "
+                    "LazyStackedTensorDict; call .to_tensordict() first or use "
+                    "inplace=False."
+                )
+
+            def nested_fn(nested):
+                nested.unflatten(dim, unflattened_size, inplace=True)
+
+            return self._inplace_rebind_leaves(
+                unflatten, nested_fn, torch.Size(batch_size)
+            )
         out = self._fast_apply(
             unflatten, batch_size=batch_size, propagate_lock=True, call_on_nested=True
         )
@@ -11085,6 +11247,45 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if propagate_lock and not inplace and self.is_locked and result is not None:
             result.lock_()
         return result
+
+    def _inplace_rebind_leaves(
+        self,
+        leaf_fn: Callable[[Any], Any],
+        nested_fn: Callable[[T], None],
+        new_batch_size: torch.Size | None = None,
+    ) -> Self:
+        """Replace every tensor leaf in this tensordict in place.
+
+        Shared building block for shape-changing inplace ops (repeat, gather,
+        reshape, ...). Iterates over keys, applies ``leaf_fn`` to each tensor
+        leaf and uses ``_set_str`` to swap the entry; the function-local
+        reference to the old leaf is dropped before the swap so its storage
+        refcount falls to zero and the allocator can reuse the block for the
+        next leaf. Nested tensor collections are handled by ``nested_fn``,
+        which is expected to mutate the child in place. ``UnbatchedTensor`` /
+        ``_pass_through`` leaves are left untouched.
+
+        After all leaves are processed, the dict's advertised ``batch_size``
+        is flipped via ``_change_batch_size`` when ``new_batch_size`` is
+        provided and differs from the current one — bypassing the redundant
+        shape check in ``_batch_size_setter``.
+        """
+        keys = list(self.keys())
+        for key in keys:
+            leaf = self._get_str(key, default=None)
+            if leaf is None or _is_unbatched(leaf):
+                continue
+            if _is_tensor_collection(type(leaf)):
+                nested_fn(leaf)
+                continue
+            new_leaf = leaf_fn(leaf)
+            del leaf
+            self._set_str(key, new_leaf, validated=True, inplace=False)
+        if new_batch_size is not None and tuple(new_batch_size) != tuple(
+            self.batch_size
+        ):
+            self._change_batch_size(torch.Size(new_batch_size))
+        return self
 
     def map(
         self,
@@ -15914,7 +16115,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def contiguous(self, *, canonical: bool = False) -> Self:
+    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
         """Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).
 
         Args:
@@ -15926,6 +16127,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 because of size-1 dimensions). When ``False`` (the default),
                 the historical behavior of :meth:`torch.Tensor.contiguous` is
                 preserved. Defaults to ``False``.
+            inplace (bool, optional): If ``True``, this tensordict's identity
+                and key set are preserved; each non-contiguous leaf is
+                replaced by its contiguous counterpart one at a time.
+                ``Tensor.contiguous()`` returns ``self`` when a leaf is
+                already contiguous, so for fully-contiguous tensordicts the
+                operation is effectively a no-op aside from the key walk.
+                Defaults to ``False``.
 
         """
         raise NotImplementedError

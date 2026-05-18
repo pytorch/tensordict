@@ -2456,6 +2456,199 @@ class TestGeneric:
         assert out.a.shape == (4, 6)
         assert out.b.shape == (4, 6, 2)
 
+    def _build_nested_td(self, batch_size=(3, 4), feat=(5,)):
+        return TensorDict(
+            {
+                "a": torch.arange(
+                    int(torch.tensor(batch_size).prod()) * int(torch.tensor(feat).prod())
+                )
+                .view(*batch_size, *feat)
+                .float(),
+                "nested": TensorDict(
+                    {
+                        "b": torch.arange(
+                            int(torch.tensor(batch_size).prod()) * 2
+                        )
+                        .view(*batch_size, 2)
+                        .float()
+                    },
+                    batch_size=list(batch_size),
+                ),
+            },
+            batch_size=list(batch_size),
+        )
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_repeat_inplace(self, inplace):
+        td = self._build_nested_td()
+        ref = TensorDict(
+            {k: v.clone() for k, v in td.items(include_nested=True, leaves_only=True)},
+            batch_size=[3, 4],
+        ).repeat(2, 3)
+        out = td.repeat(2, 3, inplace=inplace)
+        if inplace:
+            assert out is td
+            assert id(out["nested"]) == id(td["nested"])
+        else:
+            assert out is not td
+        assert out.batch_size == torch.Size([6, 12])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    def test_repeat_inplace_releases_storage(self):
+        td = TensorDict({"a": torch.zeros(4, 5, 8)}, batch_size=[4, 5])
+        ref = weakref.ref(td["a"])
+        td.repeat(2, 1, inplace=True)
+        gc.collect()
+        assert ref() is None
+
+    def test_repeat_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(2)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="repeat"):
+            lst.repeat(2, 1, inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_repeat_interleave_inplace(self, inplace):
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat_interleave(2, dim=0)
+        out = td.repeat_interleave(2, dim=0, inplace=inplace)
+        if inplace:
+            assert out is td
+        assert out.batch_size == torch.Size([6, 4])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    def test_repeat_interleave_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(2)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="repeat_interleave"):
+            lst.repeat_interleave(2, dim=1, inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_inplace(self, inplace):
+        td = self._build_nested_td()
+        ref = self._build_nested_td().roll(1, 0)
+        out = td.roll(1, 0, inplace=inplace)
+        if inplace:
+            assert out is td
+            assert id(out["nested"]) == id(td["nested"])
+        assert out.batch_size == torch.Size([3, 4])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    def test_roll_inplace_releases_storage(self):
+        td = TensorDict({"a": torch.zeros(4, 5)}, batch_size=[4, 5])
+        ref = weakref.ref(td["a"])
+        td.roll(1, 0, inplace=True)
+        gc.collect()
+        assert ref() is None
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_gather_inplace(self, inplace):
+        td = self._build_nested_td(batch_size=(3, 4))
+        index = torch.tensor([[0, 2], [1, 3], [2, 0]])
+        ref = self._build_nested_td(batch_size=(3, 4)).gather(dim=1, index=index)
+        out = td.gather(dim=1, index=index, inplace=inplace)
+        if inplace:
+            assert out is td
+            assert id(out["nested"]) == id(td["nested"])
+        assert out.batch_size == torch.Size([3, 2])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    def test_gather_inplace_ndim_mismatch_raises(self):
+        td = TensorDict({"a": torch.zeros(3, 4)}, batch_size=[3, 4])
+        with pytest.raises(NotImplementedError, match="index.ndim"):
+            td.gather(dim=0, index=torch.tensor([0, 1]), inplace=True)
+
+    def test_gather_inplace_out_conflict(self):
+        td = TensorDict({"a": torch.zeros(3, 4)}, batch_size=[3, 4])
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            td.gather(
+                dim=0,
+                index=torch.zeros(3, 4, dtype=torch.long),
+                out=td.clone(),
+                inplace=True,
+            )
+
+    def test_gather_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(3)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="gather"):
+            lst.gather(
+                dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True
+            )
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_reshape_inplace(self, inplace):
+        td = self._build_nested_td(batch_size=(3, 4))
+        ref = self._build_nested_td(batch_size=(3, 4)).reshape((12,))
+        out = td.reshape((12,), inplace=inplace)
+        if inplace:
+            assert out is td
+        assert out.batch_size == torch.Size([12])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_flatten_inplace(self, inplace):
+        td = self._build_nested_td(batch_size=(3, 4))
+        ref = self._build_nested_td(batch_size=(3, 4)).flatten(0, 1)
+        out = td.flatten(0, 1, inplace=inplace)
+        if inplace:
+            assert out is td
+        assert out.batch_size == torch.Size([12])
+        for key in ref.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(out[key], ref[key]), key
+
+    def test_flatten_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(2)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="flatten"):
+            lst.flatten(0, 1, inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_unflatten_inplace(self, inplace):
+        td = TensorDict({"a": torch.arange(12).float()}, batch_size=[12])
+        out = td.unflatten(0, (3, 4), inplace=inplace)
+        if inplace:
+            assert out is td
+        assert out.batch_size == torch.Size([3, 4])
+        assert torch.equal(out["a"], torch.arange(12).view(3, 4).float())
+
+    def test_unflatten_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(3)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="unflatten"):
+            lst.unflatten(0, (3, 1), inplace=True)
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_contiguous_inplace(self, inplace):
+        # Build a TD whose leaf is a non-contiguous view of a larger tensor.
+        big = torch.arange(20).view(4, 5).float()
+        td = TensorDict({"a": big[:, ::2]}, batch_size=[4, 3])
+        assert not td["a"].is_contiguous()
+        old_ptr = td["a"].data_ptr()
+        out = td.contiguous(inplace=inplace)
+        if inplace:
+            assert out is td
+        assert out["a"].is_contiguous()
+        assert out["a"].data_ptr() != old_ptr
+        assert torch.equal(out["a"], big[:, ::2].contiguous())
+
+    def test_contiguous_inplace_lazy_stack_raises(self):
+        lst = lazy_stack(
+            [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(2)], dim=0
+        )
+        with pytest.raises(NotImplementedError, match="contiguous"):
+            lst.contiguous(inplace=True)
+
     def test_pad_sequence_nontensor(self):
         d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
         d2 = TensorDict({"a": torch.tensor([2]), "b": "efg"})

@@ -1977,6 +1977,7 @@ class TensorDict(TensorDictBase):
         *args,
         **kwargs,
     ) -> Self:
+        inplace = kwargs.pop("inplace", False)
         shape = _get_shape_from_args(*args, **kwargs)
         if any(dim < 0 for dim in shape):
             shape = _infer_size_impl(shape, self.numel())
@@ -1988,6 +1989,12 @@ class TensorDict(TensorDictBase):
         def _reshape(tensor):
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
+        if inplace:
+
+            def nested_fn(nested):
+                nested.reshape(shape, inplace=True)
+
+            return self._inplace_rebind_leaves(_reshape, nested_fn, torch.Size(shape))
         return self._fast_apply(
             _reshape,
             batch_size=shape,
@@ -2001,12 +2008,24 @@ class TensorDict(TensorDictBase):
         dim: int | None = None,
         *,
         output_size: int | None = None,
+        inplace: bool = False,
     ) -> Self:
         if self.ndim == 0:
+            if inplace:
+                raise RuntimeError(
+                    "repeat_interleave(inplace=True) is not supported on a "
+                    "scalar tensordict because the operation changes ndim."
+                )
             return self.unsqueeze(0).repeat_interleave(
                 repeats=repeats, dim=dim, output_size=output_size
             )
         if dim is None:
+            if inplace:
+                raise RuntimeError(
+                    "repeat_interleave(inplace=True) requires an explicit dim; "
+                    "the dim=None path reshapes the tensordict to 1D first, "
+                    "which would change ndim."
+                )
             if self.ndim > 1:
                 return self.reshape(-1).repeat_interleave(repeats, dim=0)
             return self.repeat_interleave(repeats, dim=0)
@@ -2031,6 +2050,17 @@ class TensorDict(TensorDictBase):
                 repeats=repeats, dim=dim_corrected, output_size=output_size
             )
 
+        if inplace:
+
+            def nested_fn(nested):
+                nested.repeat_interleave(
+                    repeats=repeats,
+                    dim=dim_corrected,
+                    output_size=output_size,
+                    inplace=True,
+                )
+
+            return self._inplace_rebind_leaves(rep, nested_fn, new_batch_size)
         return self._fast_apply(
             rep,
             batch_size=new_batch_size,
@@ -3468,7 +3498,22 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    def contiguous(self, *, canonical: bool = False) -> Self:
+    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        if inplace:
+            if canonical:
+
+                def leaf_fn(value):
+                    return _canonicalize_tensor(value.contiguous())
+
+            else:
+
+                def leaf_fn(value):
+                    return value.contiguous()
+
+            def nested_fn(nested):
+                nested.contiguous(canonical=canonical, inplace=True)
+
+            return self._inplace_rebind_leaves(leaf_fn, nested_fn, None)
         if canonical:
             source = {
                 key: (
@@ -4346,7 +4391,13 @@ class _SubTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all(value.is_contiguous() for value in self.values())
 
-    def contiguous(self, *, canonical: bool = False) -> Self:
+    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        if inplace:
+            raise NotImplementedError(
+                "contiguous(inplace=True) is not supported on _SubTensorDict "
+                "(view over another tensordict). Call .to_tensordict() first "
+                "or use inplace=False."
+            )
         if canonical:
             source = {
                 key: (
