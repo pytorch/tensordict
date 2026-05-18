@@ -186,16 +186,13 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
     if isinstance(tensordict, LazyStackedTensorDict):
         stack_dim = tensordict.stack_dim
         pairs = [
-            (pad_size[2 * i], pad_size[2 * i + 1])
-            for i in range(len(pad_size) // 2)
+            (pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)
         ]
         if stack_dim < len(pairs):
             non_stack_pairs = pairs[:stack_dim] + pairs[stack_dim + 1 :]
         else:
             non_stack_pairs = pairs
-        constituent_pad_size: list[int] = [
-            p for pair in non_stack_pairs for p in pair
-        ]
+        constituent_pad_size: list[int] = [p for pair in non_stack_pairs for p in pair]
         if constituent_pad_size and any(p != 0 for p in constituent_pad_size):
             for td_i in tensordict.tensordicts:
                 _pad_preflight(td_i, constituent_pad_size)
@@ -243,9 +240,7 @@ def _pad_lazy_stack_inplace(
     constituents. The lazy stack's identity is preserved.
     """
     stack_dim = tensordict.stack_dim
-    pairs = [
-        (pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)
-    ]
+    pairs = [(pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)]
 
     if stack_dim < len(pairs):
         left, right = pairs[stack_dim]

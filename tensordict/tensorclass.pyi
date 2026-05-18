@@ -774,6 +774,13 @@ class TensorClass:
     def moveaxis(
         self, source: int | tuple[int, ...], destination: int | tuple[int, ...]
     ) -> Self: ...
+    def pad(
+        self,
+        pad_size: Sequence[int],
+        value: float = 0.0,
+        inplace: bool = False,
+        safe: bool = True,
+    ) -> Self: ...
     @overload
     def permute(self, *dims: int) -> Self: ...
     @overload

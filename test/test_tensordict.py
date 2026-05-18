@@ -2295,9 +2295,7 @@ class TestGeneric:
             {
                 "a": torch.ones(3, 4, 1),
                 "b": torch.zeros(3, 4, 1, 1),
-                "nested": TensorDict(
-                    {"c": torch.ones(3, 4, 2)}, batch_size=[3, 4]
-                ),
+                "nested": TensorDict({"c": torch.ones(3, 4, 2)}, batch_size=[3, 4]),
             },
             batch_size=[3, 4],
         )
@@ -2445,9 +2443,7 @@ class TestGeneric:
             a: torch.Tensor
             b: torch.Tensor
 
-        s = _Sample(
-            a=torch.ones(3, 4), b=torch.zeros(3, 4, 2), batch_size=[3, 4]
-        )
+        s = _Sample(a=torch.ones(3, 4), b=torch.zeros(3, 4, 2), batch_size=[3, 4])
         inner = s._tensordict
         out = s.pad([0, 1, 0, 2], value=0.0, inplace=True)
         # The tensorclass wrap returns a fresh tensorclass instance bound
