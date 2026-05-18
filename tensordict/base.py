@@ -4575,6 +4575,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         pad_size: Sequence[int],
         value: float = 0.0,
         inplace: bool = False,
+        safe: bool = True,
     ) -> Self:
         """Pads this tensordict along the batch dimensions with a constant value.
 
@@ -4592,6 +4593,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 tensors themselves are still freshly allocated because
                 padding necessarily grows shapes. Defaults to ``False``.
 
+                .. warning::
+                    If ``inplace=True`` and a later leaf's pad fails (e.g.
+                    OOM), the tensordict is left in an inconsistent state.
+                    ``safe=True`` (the default) catches the user-error class
+                    of failures before any mutation occurs.
+            safe (bool, optional): If ``True``, validate that the operation
+                would succeed for every leaf before any mutation occurs. Set
+                to ``False`` to skip the pre-flight walk when the inputs are
+                known to be valid. Defaults to ``True``.
+
         Returns:
             The padded tensordict. When ``inplace=True`` this is ``self``.
 
@@ -4608,7 +4619,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         from tensordict.functional import pad as _pad
 
-        return _pad(self, pad_size, value=value, inplace=inplace)
+        return _pad(self, pad_size, value=value, inplace=inplace, safe=safe)
 
     def copy(self) -> Self:
         """Return a shallow copy of the tensordict (ie, copies the structure but not the data).

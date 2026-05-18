@@ -2397,6 +2397,48 @@ class TestGeneric:
         for key in ref.keys(include_nested=True, leaves_only=True):
             assert torch.equal(out[key], ref[key]), key
 
+    def test_pad_safe_catches_bad_pad_before_mutation(self):
+        td = TensorDict(
+            {"a": torch.ones(3, 4), "b": torch.zeros(3, 4, 2)},
+            batch_size=[3, 4],
+        )
+        old_a = td["a"]
+        old_b = td["b"]
+        # Pad would crop more than the source dim — safe=True raises before
+        # any leaf is rebound.
+        with pytest.raises(RuntimeError, match="negative output size"):
+            td.pad([-10, 0, 0, 0], inplace=True, safe=True)
+        assert td["a"] is old_a
+        assert td["b"] is old_b
+        assert td.batch_size == torch.Size([3, 4])
+
+    def test_pad_safe_default_is_true(self):
+        td = TensorDict({"a": torch.ones(3, 4)}, batch_size=[3, 4])
+        old_a = td["a"]
+        with pytest.raises(RuntimeError, match="negative output size"):
+            td.pad([-10, 0, 0, 0], inplace=True)
+        assert td["a"] is old_a
+
+    def test_pad_safe_false_skips_check(self):
+        td = TensorDict({"a": torch.ones(3, 4)}, batch_size=[3, 4])
+        # With safe=False, the pre-flight is skipped; torch's own pad call
+        # raises mid-loop. The TD ends up inconsistent here, but the
+        # underlying torch error is surfaced rather than ours.
+        with pytest.raises(RuntimeError):
+            td.pad([-10, 0, 0, 0], inplace=True, safe=False)
+
+    def test_pad_safe_lazy_stack(self):
+        td_a = TensorDict({"x": torch.ones(4)}, batch_size=[4])
+        td_b = TensorDict({"x": torch.ones(4) * 2}, batch_size=[4])
+        lst = lazy_stack([td_a, td_b], dim=0)
+        snapshots = [t["x"] for t in lst.tensordicts]
+        with pytest.raises(RuntimeError, match="negative output size"):
+            lst.pad([0, 0, -10, 0], inplace=True)
+        # Constituents untouched.
+        for t, snap in zip(lst.tensordicts, snapshots):
+            assert t["x"] is snap
+        assert lst.batch_size == torch.Size([2, 4])
+
     def test_pad_inplace_tensorclass(self):
         @tensorclass
         class _Sample:

@@ -34,6 +34,7 @@ def pad(
     pad_size: Sequence[int],
     value: float = 0.0,
     inplace: bool = False,
+    safe: bool = True,
 ) -> T:
     """Pads all tensors in a tensordict along the batch dimensions with a constant value.
 
@@ -62,6 +63,25 @@ def pad(
             prepending zero-filled copies of the edge constituents; the lazy
             stack's identity is preserved.
 
+            .. warning::
+                If ``inplace=True`` and the operation fails partway through
+                (for example an out-of-memory error during a leaf's padding),
+                the tensordict is left in an inconsistent state: some leaves
+                will have the new shape and others the old, and the
+                ``batch_size`` will not have been updated. Restoring the
+                original state would require keeping every old leaf alive
+                until the whole pass succeeded, which would defeat the 1x
+                memory contract. Use ``safe=True`` (the default) to catch
+                the realistic user-error class of failures before any
+                mutation happens.
+         safe (bool, optional): If ``True``, validate that the operation
+            would succeed for every leaf before any mutation occurs. This
+            catches errors such as negative pad widths that exceed a leaf's
+            dimension size, leaves that are not paddable, etc., raising
+            before any in-place rebind. Set to ``False`` to skip the
+            pre-flight walk for a small speedup when the inputs are known
+            to be valid. Defaults to ``True``.
+
     Returns:
         The padded tensordict. When ``inplace=True`` this is the same object as
         the input; otherwise a new tensordict.
@@ -88,6 +108,9 @@ def pad(
 
     if len(pad_size) % 2:
         raise RuntimeError("pad_size must have an even number of dimensions")
+
+    if safe:
+        _pad_preflight(tensordict, pad_size)
 
     if inplace and isinstance(tensordict, LazyStackedTensorDict):
         return _pad_lazy_stack_inplace(tensordict, pad_size, value)
@@ -123,7 +146,7 @@ def pad(
             continue
 
         if _is_tensor_collection(type(tensor)):
-            padded = pad(tensor, pad_size, value, inplace=inplace)
+            padded = pad(tensor, pad_size, value, inplace=inplace, safe=False)
             if not inplace:
                 out._set_str(key, padded, validated=True, inplace=False)
             continue
@@ -147,6 +170,65 @@ def pad(
         out._change_batch_size(torch.Size(new_batch_size))
 
     return out
+
+
+def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
+    """Validate that ``pad(tensordict, pad_size, ...)`` would succeed for every
+    leaf without mutating anything.
+
+    Walks the tensordict recursively (including ``LazyStackedTensorDict``
+    constituents) and checks the per-leaf preconditions of
+    ``torch.nn.functional.pad``: that each leaf has enough dimensions for the
+    requested ``pad_size`` and that the resulting size on every padded dim is
+    non-negative. Catches the realistic user-error class of failures before
+    ``inplace=True`` has rebound any leaf.
+    """
+    if isinstance(tensordict, LazyStackedTensorDict):
+        stack_dim = tensordict.stack_dim
+        pairs = [
+            (pad_size[2 * i], pad_size[2 * i + 1])
+            for i in range(len(pad_size) // 2)
+        ]
+        if stack_dim < len(pairs):
+            non_stack_pairs = pairs[:stack_dim] + pairs[stack_dim + 1 :]
+        else:
+            non_stack_pairs = pairs
+        constituent_pad_size: list[int] = [
+            p for pair in non_stack_pairs for p in pair
+        ]
+        if constituent_pad_size and any(p != 0 for p in constituent_pad_size):
+            for td_i in tensordict.tensordicts:
+                _pad_preflight(td_i, constituent_pad_size)
+        return
+
+    reverse_pad = list(pad_size[::-1])
+    for i in range(0, len(reverse_pad), 2):
+        reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
+
+    for key in tensordict.keys():
+        tensor = tensordict._get_str(key, default=None)
+        if tensor is None or _is_unbatched(tensor):
+            continue
+        if _is_tensor_collection(type(tensor)):
+            _pad_preflight(tensor, pad_size)
+            continue
+        shape = _shape(tensor)
+        if len(pad_size) > 2 * len(shape):
+            raise RuntimeError(
+                f"pad_size of length {len(pad_size)} is too long for leaf "
+                f"{key!r} with shape {tuple(shape)}."
+            )
+        cur_pad = reverse_pad
+        if len(pad_size) < len(shape) * 2:
+            cur_pad = [0] * (len(shape) * 2 - len(pad_size)) + reverse_pad
+        for i in range(0, len(cur_pad), 2):
+            dim = len(shape) - 1 - (i // 2)
+            left, right = cur_pad[i], cur_pad[i + 1]
+            if shape[dim] + left + right < 0:
+                raise RuntimeError(
+                    f"Pad ({left}, {right}) on dim {dim} of leaf {key!r} "
+                    f"(size {shape[dim]}) would produce a negative output size."
+                )
 
 
 def _pad_lazy_stack_inplace(
@@ -176,7 +258,7 @@ def _pad_lazy_stack_inplace(
 
     if constituent_pad_size and any(p != 0 for p in constituent_pad_size):
         for td_i in tensordict.tensordicts:
-            pad(td_i, constituent_pad_size, value, inplace=True)
+            pad(td_i, constituent_pad_size, value, inplace=True, safe=False)
 
     if (left > 0 or right > 0) and not tensordict.tensordicts:
         raise RuntimeError(
