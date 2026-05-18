@@ -173,8 +173,7 @@ def pad(
 
 
 def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
-    """Validate that ``pad(tensordict, pad_size, ...)`` would succeed for every
-    leaf without mutating anything.
+    """Validate that ``pad(tensordict, pad_size, ...)`` would succeed for every leaf without mutating anything.
 
     Walks the tensordict recursively (including ``LazyStackedTensorDict``
     constituents) and checks the per-leaf preconditions of
