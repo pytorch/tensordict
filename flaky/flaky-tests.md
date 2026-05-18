@@ -1,17 +1,24 @@
-# Flaky Test Report - 2026-05-17
+# Flaky Test Report - 2026-05-18
 
 ## Summary
 
-- **Flaky tests**: 0
-- **Newly flaky** (last 7 days): 0
-- **Total tests analyzed**: 45148
+- **Flaky tests**: 1
+- **Newly flaky** (last 7 days): 1
+- **Total tests analyzed**: 45150
 - **CI runs analyzed**: 30
 
 ---
 
-## No Flaky Tests Detected!
+## Flaky Tests
 
-All tests are passing consistently across recent CI runs.
+| Test | Failure Rate | Failures | Flaky Score | Last Failed |
+|------|--------------|----------|-------------|-------------|
+| `test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys` **NEW** | 71.4% (35/49) | 35 | 0.57 | 2026-05-15 |
+
+
+### Newly Flaky
+
+- `test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys`
 
 ---
 
@@ -24,4 +31,4 @@ All tests are passing consistently across recent CI runs.
 
 ---
 
-*Generated at 2026-05-17T07:07:13.022026+00:00*
+*Generated at 2026-05-18T07:36:33.215755+00:00*
