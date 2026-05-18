@@ -95,6 +95,32 @@ a few characters (notice that indexing the nth leading dimensions with tree_map 
 One can also use the set method with ``inplace=True`` or the :meth:`~tensordict.TensorDict.set_` method to do inplace updates of the contents.
 The former is a fault-tolerant version of the latter: if no matching key is found, it will write a new one.
 
+In-place conventions
+~~~~~~~~~~~~~~~~~~~~
+
+Throughout the library, two related-but-distinct flavors of in-place
+operation are used:
+
+- A trailing-underscore method (``method_``, for example
+  :meth:`~tensordict.TensorDict.add_`, :meth:`~tensordict.TensorDict.mul_`,
+  :meth:`~tensordict.TensorDict.masked_fill_`) writes into the **same
+  underlying tensor storage** for every leaf. Each leaf's ``data_ptr`` is
+  preserved. This mirrors PyTorch's own convention and is only available
+  when the operation can be performed without changing a tensor's shape,
+  dtype, or layout.
+- An ``inplace=True`` keyword (for example
+  :meth:`~tensordict.TensorDict.pad`, :meth:`~tensordict.TensorDict.update`,
+  :meth:`~tensordict.TensorDict.apply`) preserves the **tensordict's
+  object identity and key set**, but individual leaf storages may be
+  replaced with freshly allocated tensors. The guarantee is "no extra
+  tensordict-shaped allocation", and the implementation will release each
+  old leaf storage as soon as its replacement is written so that peak
+  memory stays close to ``1x`` rather than ``2x``. This is the only
+  meaningful flavor of in-place for shape-changing operations.
+
+In short: ``method_`` keeps the bytes; ``inplace=True`` keeps the
+container.
+
 The contents of the TensorDict can now be manipulated collectively.
 For example, to place all of the contents onto a particular device one can simply do
 

@@ -28,6 +28,29 @@ House rules for LLM-driven contributions to `tensordict`. Sits on top of
   introducing parallel dict-like types.
 - Use `NestedKey` semantics for keys.
 
+## In-place conventions
+
+Two distinct flavors of in-place operations, both supported but with
+different contracts. Don't conflate them, and don't add an underscore
+method for an op that can't honor the same-storage contract.
+
+- **`method_` (trailing underscore)** — writes into the **same leaf
+  tensor storage**; `data_ptr()` is preserved for every leaf. Only
+  appropriate when the op doesn't change shape/dtype/layout (e.g.
+  `add_`, `mul_`, `masked_fill_`). Mirrors PyTorch's own convention.
+- **`method(inplace=True)`** — preserves the **TensorDict object
+  identity and key set**; individual leaf storages may be replaced
+  with freshly allocated tensors. The contract is "no extra
+  TD-shaped allocation" plus "release each old leaf as its
+  replacement is written" so peak memory stays close to ``1x``
+  instead of ``2x``. The only meaningful flavor of in-place for
+  shape-changing ops (e.g. `pad`, `repeat`, `gather`).
+
+Shape-changing ops therefore get ``inplace=True`` only — never an
+underscore variant, because they can't keep the same storage. See
+`docs/source/overview.rst` (section "In-place conventions") for the
+user-facing version.
+
 ## `torch.compile` / cudagraphs
 
 Strongly encouraged — many downstream projects compile through us. Prefer
