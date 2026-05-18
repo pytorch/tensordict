@@ -29,8 +29,13 @@ from tensordict.utils import (
 )
 
 
-def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
-    """Pads all tensors in a tensordict along the batch dimensions with a constant value, returning a new tensordict.
+def pad(
+    tensordict: T,
+    pad_size: Sequence[int],
+    value: float = 0.0,
+    inplace: bool = False,
+) -> T:
+    """Pads all tensors in a tensordict along the batch dimensions with a constant value.
 
     Args:
          tensordict (TensorDict): The tensordict to pad
@@ -42,9 +47,24 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
             (padding_left, padding_right, padding_top, padding_bottom) and so on.
             pad_size must be even and less than or equal to twice the number of batch dimensions.
          value (float, optional): The fill value to pad by, default 0.0
+         inplace (bool, optional): If ``True``, the input tensordict's identity
+            and key set are preserved, and each leaf's storage is replaced by
+            its padded counterpart one at a time. This keeps peak memory close
+            to the size of the tensordict itself rather than 2x (the case when
+            a fresh tensordict is allocated alongside the original). The leaf
+            tensors themselves are still freshly allocated (``pad`` necessarily
+            grows shapes), so this is not a same-storage operation. Defaults to
+            ``False``.
+
+            On :class:`~tensordict.LazyStackedTensorDict`, ``inplace=True`` pads
+            each constituent tensordict along the non-stack dimensions in place
+            and grows the stack along the stack dimension by appending or
+            prepending zero-filled copies of the edge constituents; the lazy
+            stack's identity is preserved.
 
     Returns:
-        A new TensorDict padded along the batch dimensions
+        The padded tensordict. When ``inplace=True`` this is the same object as
+        the input; otherwise a new tensordict.
 
     Examples:
         >>> from tensordict import TensorDict, pad
@@ -69,6 +89,9 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
     if len(pad_size) % 2:
         raise RuntimeError("pad_size must have an even number of dimensions")
 
+    if inplace and isinstance(tensordict, LazyStackedTensorDict):
+        return _pad_lazy_stack_inplace(tensordict, pad_size, value)
+
     new_batch_size = list(tensordict.batch_size)
     for i in range(len(pad_size)):
         new_batch_size[i // 2] += pad_size[i]
@@ -77,27 +100,108 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict._new_unsafe(
-        {},
-        torch.Size(new_batch_size),
-        device=tensordict.device,
-    )
-    for key, tensor in tensordict.items():
+    if inplace:
+        out = tensordict
+    else:
+        out = TensorDict._new_unsafe(
+            {},
+            torch.Size(new_batch_size),
+            device=tensordict.device,
+        )
+
+    # Snapshot keys so mid-iteration rebinds on `out is tensordict` don't
+    # invalidate the iterator under inplace=True.
+    keys = list(tensordict.keys())
+    for key in keys:
+        tensor = tensordict._get_str(key, default=None)
+        if tensor is None:
+            continue
+
         if _is_unbatched(tensor):
-            out._set_str(key, tensor, validated=True, inplace=False)
+            if not inplace:
+                out._set_str(key, tensor, validated=True, inplace=False)
+            continue
+
+        if _is_tensor_collection(type(tensor)):
+            padded = pad(tensor, pad_size, value, inplace=inplace)
+            if not inplace:
+                out._set_str(key, padded, validated=True, inplace=False)
             continue
 
         cur_pad = reverse_pad
         if len(pad_size) < len(_shape(tensor)) * 2:
             cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
 
-        if _is_tensor_collection(type(tensor)):
-            padded = pad(tensor, pad_size, value)
-        else:
-            padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
-        out.set(key, padded)
+        padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
+        # Drop the local ref to the old tensor before rebinding the dict
+        # entry: with no other refs, the _set_str overwrite drops the old
+        # storage's refcount to 0 and the allocator can reuse the block
+        # for the next leaf's pad.
+        del tensor
+        out._set_str(key, padded, validated=True, inplace=False)
+
+    if inplace:
+        # Leaves now all match new_batch_size; flip the dict's advertised
+        # size via the low-level path so we skip the redundant shape check
+        # in `_batch_size_setter`.
+        out._change_batch_size(torch.Size(new_batch_size))
 
     return out
+
+
+def _pad_lazy_stack_inplace(
+    tensordict: LazyStackedTensorDict,
+    pad_size: Sequence[int],
+    value: float,
+) -> LazyStackedTensorDict:
+    """In-place pad for a LazyStackedTensorDict.
+
+    Pads each constituent along the non-stack dimensions in place, then grows
+    the stack dimension by appending/prepending zero-filled copies of the edge
+    constituents. The lazy stack's identity is preserved.
+    """
+    stack_dim = tensordict.stack_dim
+    pairs = [
+        (pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)
+    ]
+
+    if stack_dim < len(pairs):
+        left, right = pairs[stack_dim]
+        non_stack_pairs = pairs[:stack_dim] + pairs[stack_dim + 1 :]
+    else:
+        left, right = 0, 0
+        non_stack_pairs = pairs
+
+    constituent_pad_size: list[int] = [p for pair in non_stack_pairs for p in pair]
+
+    if constituent_pad_size and any(p != 0 for p in constituent_pad_size):
+        for td_i in tensordict.tensordicts:
+            pad(td_i, constituent_pad_size, value, inplace=True)
+
+    if (left > 0 or right > 0) and not tensordict.tensordicts:
+        raise RuntimeError(
+            "Cannot pad along the stack dimension of an empty LazyStackedTensorDict: "
+            "no template constituent is available to fill the new slots."
+        )
+
+    if right > 0:
+        template = tensordict.tensordicts[-1]
+        new_pads = [
+            template.apply(lambda t: torch.full_like(t, value)) for _ in range(right)
+        ]
+        tensordict.tensordicts.extend(new_pads)
+    if left > 0:
+        template = tensordict.tensordicts[0]
+        new_pads = [
+            template.apply(lambda t: torch.full_like(t, value)) for _ in range(left)
+        ]
+        tensordict.tensordicts[:0] = new_pads
+
+    new_batch_size = list(tensordict.batch_size)
+    for i, (l, r) in enumerate(pairs):
+        new_batch_size[i] += l + r
+    tensordict._change_batch_size(torch.Size(new_batch_size))
+    return tensordict
 
 
 def pad_sequence(

@@ -500,6 +500,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "new_tensor",
     "new_zeros",
     "norm",
+    "pad",
     "permute",
     "pin_memory",
     "pin_memory_",

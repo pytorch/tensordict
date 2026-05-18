@@ -4570,6 +4570,46 @@ class TensorDictBase(MutableMapping, TensorCollection):
     def _repeat(self, *repeats: int) -> Self:
         raise NotImplementedError
 
+    def pad(
+        self,
+        pad_size: Sequence[int],
+        value: float = 0.0,
+        inplace: bool = False,
+    ) -> Self:
+        """Pads this tensordict along the batch dimensions with a constant value.
+
+        Args:
+            pad_size (Sequence[int]): The padding size, applied to the batch
+                dimensions starting from the first. For a tensordict of
+                ``ndim`` batch dimensions, ``pad_size`` is a sequence of even
+                length up to ``2 * ndim`` formatted as
+                ``(dim0_left, dim0_right, dim1_left, dim1_right, ...)``.
+            value (float, optional): The fill value. Defaults to ``0.0``.
+            inplace (bool, optional): If ``True``, this tensordict's object
+                identity and key set are preserved; each leaf storage is
+                replaced by its padded counterpart one leaf at a time, keeping
+                peak memory close to ``1x`` instead of ``2x``. The leaf
+                tensors themselves are still freshly allocated because
+                padding necessarily grows shapes. Defaults to ``False``.
+
+        Returns:
+            The padded tensordict. When ``inplace=True`` this is ``self``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": torch.zeros(3, 4)}, batch_size=[3, 4])
+            >>> td.pad([0, 0, 0, 1]).batch_size
+            torch.Size([3, 5])
+            >>> td.pad([0, 0, 0, 1], inplace=True) is td
+            True
+            >>> td.batch_size
+            torch.Size([3, 5])
+        """
+        from tensordict.functional import pad as _pad
+
+        return _pad(self, pad_size, value=value, inplace=inplace)
+
     def copy(self) -> Self:
         """Return a shallow copy of the tensordict (ie, copies the structure but not the data).
 
