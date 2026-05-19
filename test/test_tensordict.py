@@ -2460,15 +2460,14 @@ class TestGeneric:
         return TensorDict(
             {
                 "a": torch.arange(
-                    int(torch.tensor(batch_size).prod()) * int(torch.tensor(feat).prod())
+                    int(torch.tensor(batch_size).prod())
+                    * int(torch.tensor(feat).prod())
                 )
                 .view(*batch_size, *feat)
                 .float(),
                 "nested": TensorDict(
                     {
-                        "b": torch.arange(
-                            int(torch.tensor(batch_size).prod()) * 2
-                        )
+                        "b": torch.arange(int(torch.tensor(batch_size).prod()) * 2)
                         .view(*batch_size, 2)
                         .float()
                     },
@@ -2579,9 +2578,7 @@ class TestGeneric:
             [TensorDict({"x": torch.zeros(4)}, [4]) for _ in range(3)], dim=0
         )
         with pytest.raises(NotImplementedError, match="gather"):
-            lst.gather(
-                dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True
-            )
+            lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_reshape_inplace(self, inplace):
