@@ -1815,7 +1815,15 @@ class LazyStackedTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return False
 
-    def contiguous(self, *, canonical: bool = False) -> Self:
+    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        if inplace:
+            raise NotImplementedError(
+                "contiguous(inplace=True) is not supported on "
+                "LazyStackedTensorDict because the operation materializes the "
+                "stack into a plain TensorDict, which would change the "
+                "object's type. Call .to_tensordict() first or use "
+                "inplace=False."
+            )
         if canonical:
             source = {
                 key: (
@@ -3653,9 +3661,19 @@ class LazyStackedTensorDict(TensorDictBase):
         *args,
         **kwargs,
     ) -> Self:
+        if kwargs.pop("inplace", False):
+            raise NotImplementedError(
+                "reshape(inplace=True) is not supported on LazyStackedTensorDict; "
+                "call .to_tensordict() first or use inplace=False."
+            )
         return self._view(*args, raise_if_not_view=False, **kwargs)
 
-    def flatten(self, start_dim: int = 0, end_dim=-1):
+    def flatten(self, start_dim: int = 0, end_dim=-1, *, inplace: bool = False):
+        if inplace:
+            raise NotImplementedError(
+                "flatten(inplace=True) is not supported on LazyStackedTensorDict; "
+                "call .to_tensordict() first or use inplace=False."
+            )
         end_dim = _maybe_correct_neg_dim(end_dim, shape=self.batch_size)
         start_dim = _maybe_correct_neg_dim(start_dim, shape=self.batch_size)
         new_shape = [
@@ -3664,7 +3682,12 @@ class LazyStackedTensorDict(TensorDictBase):
         new_shape.insert(start_dim, -1)
         return self.view(new_shape)
 
-    def unflatten(self, dim, unflattened_size):
+    def unflatten(self, dim, unflattened_size, *, inplace: bool = False):
+        if inplace:
+            raise NotImplementedError(
+                "unflatten(inplace=True) is not supported on LazyStackedTensorDict; "
+                "call .to_tensordict() first or use inplace=False."
+            )
         dim = _maybe_correct_neg_dim(dim, shape=self.batch_size)
         new_shape = self.batch_size
         if dim == 0:
@@ -3734,7 +3757,14 @@ class LazyStackedTensorDict(TensorDictBase):
         dim: int | None = None,
         *,
         output_size: int | None = None,
+        inplace: bool = False,
     ) -> TensorDictBase:
+        if inplace:
+            raise NotImplementedError(
+                "repeat_interleave(inplace=True) is not supported on "
+                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                "inplace=False."
+            )
         if self.ndim == 0:
             return self.unsqueeze(0).repeat_interleave(
                 repeats=repeats, dim=dim, output_size=output_size
@@ -4225,7 +4255,13 @@ class _CustomOpTensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
 
-    def contiguous(self, *, canonical: bool = False) -> Self:
+    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
+        if inplace:
+            raise NotImplementedError(
+                "contiguous(inplace=True) is not supported on _CustomOpTensorDict "
+                "(views over another tensordict). Call .to_tensordict() first or "
+                "use inplace=False."
+            )
         if canonical:
 
             def contiguous(x):
