@@ -2080,6 +2080,46 @@ class TestTCNonTensorInit:
         torch.testing.assert_close(result, inp * 2)
 
 
+class TestTCPostInitCompile:
+    """__post_init__ must run under torch.compile to match eager semantics (gh-1708)."""
+
+    def test_post_init_runs_under_compile(self):
+        torch._dynamo.reset_code_caches()
+
+        @tensorclass
+        class Foo:
+            x: torch.Tensor
+
+            def __post_init__(self):
+                self.x = self.x * 2
+
+        inp = torch.ones(3)
+        eager = Foo(x=inp).x
+        compiled = torch.compile(lambda x: Foo(x=x).x)(inp)
+        torch.testing.assert_close(eager, torch.full((3,), 2.0))
+        torch.testing.assert_close(compiled, eager)
+
+    def test_post_init_runs_under_compile_from_tensordict(self):
+        torch._dynamo.reset_code_caches()
+
+        @tensorclass
+        class Foo:
+            x: torch.Tensor
+
+            def __post_init__(self):
+                self.x = self.x * 2
+
+        def fn(x):
+            td = TensorDict(x=x, batch_size=())
+            return Foo._from_tensordict(td).x
+
+        inp = torch.ones(3)
+        eager = fn(inp)
+        compiled = torch.compile(fn)(inp)
+        torch.testing.assert_close(eager, torch.full((3,), 2.0))
+        torch.testing.assert_close(compiled, eager)
+
+
 def _count_compiles(fn, *args):
     """Compile fn, run it twice, return (frame_count_first, frame_count_second).
 

@@ -1432,7 +1432,7 @@ def _init_wrapper(
                 _set = type(self).set
                 for key, value in kwargs.items():
                     _set(self, key, value)
-            if not is_compiling() and hasattr(type(self), "__post_init__"):
+            if hasattr(type(self), "__post_init__"):
                 self.__post_init__()
         if lock:
             self._tensordict.lock_()
@@ -1688,7 +1688,7 @@ def _from_tensordict(
         object.__setattr__(tc, "_non_tensordict", non_tensordict)
     # since we aren't calling the dataclass __init__, we need to manually
     # check whether a __post_init__ method has been defined and invoke it
-    if not is_compiling() and hasattr(cls, "__post_init__"):
+    if hasattr(cls, "__post_init__"):
         tc.__post_init__()
     return tc
 
