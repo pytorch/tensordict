@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import dataclasses
 import importlib.util
 import inspect
 import platform
@@ -2118,6 +2119,49 @@ class TestTCPostInitCompile:
         compiled = torch.compile(fn)(inp)
         torch.testing.assert_close(eager, torch.full((3,), 2.0))
         torch.testing.assert_close(compiled, eager)
+
+
+class TestTCDefaultsCompile:
+    """@tensorclass field defaults must be applied under torch.compile (gh-1710)."""
+
+    def test_concrete_default_applied_under_compile(self):
+        torch._dynamo.reset_code_caches()
+
+        @tensorclass
+        class Foo:
+            cache: torch.Tensor = torch.zeros(3)
+
+        eager = Foo().cache
+        compiled = torch.compile(lambda: Foo().cache)()
+        torch.testing.assert_close(eager, torch.zeros(3))
+        torch.testing.assert_close(compiled, eager)
+
+    def test_default_factory_applied_under_compile(self):
+        torch._dynamo.reset_code_caches()
+
+        @tensorclass
+        class Foo:
+            cache: torch.Tensor = dataclasses.field(
+                default_factory=lambda: torch.zeros(3)
+            )
+
+        eager = Foo().cache
+        compiled = torch.compile(lambda: Foo().cache)()
+        torch.testing.assert_close(eager, torch.zeros(3))
+        torch.testing.assert_close(compiled, eager)
+
+    def test_omitted_none_default_under_compile(self):
+        torch._dynamo.reset_code_caches()
+
+        @tensorclass
+        class Foo:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        eager = Foo(x=torch.ones(3)).y
+        compiled = torch.compile(lambda x: Foo(x=x).y)(torch.ones(3))
+        assert eager is None
+        assert compiled is None
 
 
 def _count_compiles(fn, *args):

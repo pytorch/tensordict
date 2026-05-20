@@ -1349,26 +1349,22 @@ def _init_wrapper(
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
                 )
 
-        if not is_compiling():
-            for key, field in type(self).__dataclass_fields__.items():
-                # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
-                if key in self.__expected_keys__:
-                    if field.default_factory not in (
-                        dataclasses.MISSING,
-                    ) and not isinstance(
-                        field.default_factory,
-                        getattr(
-                            dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
-                        ),
-                    ):
-                        default = field.default_factory()
-                    else:
-                        default = field.default
-                    if default not in (None, dataclasses.MISSING):
-                        kwargs.setdefault(key, default)
-        else:
-            # TODO: Decide what to do here
-            pass
+        for key, field in type(self).__dataclass_fields__.items():
+            # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
+            if key in self.__expected_keys__:
+                if field.default_factory not in (
+                    dataclasses.MISSING,
+                ) and not isinstance(
+                    field.default_factory,
+                    getattr(
+                        dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
+                    ),
+                ):
+                    default = field.default_factory()
+                else:
+                    default = field.default
+                if default not in (None, dataclasses.MISSING):
+                    kwargs.setdefault(key, default)
 
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
@@ -1410,9 +1406,8 @@ def _init_wrapper(
             # Fields with None defaults are intentionally skipped by the
             # default-handling above, but the dataclass __init__ would
             # still assign them. Ensure every expected key is present.
-            if not is_compiling():
-                for key in self.__expected_keys__:
-                    kwargs.setdefault(key, None)
+            for key in self.__expected_keys__:
+                kwargs.setdefault(key, None)
             if tensor_only:
                 # Fast path: validate and assign directly to the
                 # underlying dict, skipping the set → _set_str →
