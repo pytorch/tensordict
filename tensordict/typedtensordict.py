@@ -180,11 +180,11 @@ def _make_init(cls: type) -> Callable:
             )
             return
         # NOTE: the natural spelling here is ``required_keys - kwargs.keys()``
-        # and ``kwargs.keys() - expected_keys``, but torch.compile / Dynamo
-        # cannot trace ``frozenset.__sub__(dict_keys)`` and raises
-        # ``Unsupported: unsupported operand type(s) for __sub__``.
-        # We use set comprehensions as a compile-friendly workaround.
-        # See TODO/dynamo_frozenset_sub.md for a repro.
+        # and ``kwargs.keys() - expected_keys``, but older torch.compile /
+        # Dynamo versions cannot trace ``frozenset.__sub__(dict_keys)`` and
+        # raise ``Unsupported: unsupported operand type(s) for __sub__``.
+        # Keep the set comprehensions as a compile-friendly workaround until
+        # TensorDict no longer supports those torch versions.
         missing = {k for k in required_keys if k not in kwargs}
         if missing:
             missing_str = ", ".join(sorted(missing))
@@ -352,7 +352,6 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         # during torch.compile tracing.  Without this, Dynamo falls back to
         # generic Python tracing for TensorDict subclass operations and hits
         # graph breaks (e.g. _has_mps -> torch.backends.mps.is_available()).
-        # See TODO/dynamo_td_subclass_pytree.md for details.
         _register_tensor_class(cls)
         try:
             _register_td_node(cls)
