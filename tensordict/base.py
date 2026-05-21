@@ -30,7 +30,7 @@ from copy import copy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from threading import Thread
+from threading import Thread, local
 from types import ModuleType
 from typing import (
     Any,
@@ -255,29 +255,51 @@ def get_defaults_to_none(set_to_none: bool = True):
     return _GET_DEFAULTS_TO_NONE
 
 
-class _RecordDeviceTransfer:
-    """A class that records the device transfers during a TensorDict initialization."""
+class _RecorderState(local):
+    """Thread-safe, Per-thread state for :class:`_RecordDeviceTransfer`.
+
+    Subclassing :class:`threading.local` is the documented way to get
+    per-thread default attributes: ``__init__`` is invoked once for each
+    thread that first touches the instance, so every thread sees
+    ``marked = False`` / ``has_transfer = False`` initially.
+    """
 
     def __init__(self):
         self.marked = False
-        self._has_transfer = False
+        self.has_transfer = False
+
+
+class _RecordDeviceTransfer:
+    """A class that records the device transfers during a TensorDict initialization.
+
+    State is held per-thread so concurrent ``TensorDict`` constructions
+    on different threads do not race on the ``mark()`` guard.
+    Single-threaded behaviour is unchanged.
+    """
+
+    def __init__(self):
+        self._state = _RecorderState()
+
+    @property
+    def marked(self) -> bool:
+        return self._state.marked
 
     def mark(self):
-        if self.marked:
+        if self._state.marked:
             raise RuntimeError("Can only mark one TensorDict at a time.")
-        self.marked = True
-        self._has_transfer = False
+        self._state.marked = True
+        self._state.has_transfer = False
 
     def unmark(self):
-        self.marked = False
-        self._has_transfer = False
+        self._state.marked = False
+        self._state.has_transfer = False
 
     def record_transfer(self, device):
         # Adds a device to all markers
-        self._has_transfer = True
+        self._state.has_transfer = True
 
     def has_transfer(self):
-        return self._has_transfer
+        return self._state.has_transfer
 
 
 _device_recorder = _RecordDeviceTransfer()

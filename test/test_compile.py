@@ -878,15 +878,13 @@ class TestTTD:
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
 )
-class TestTTDImprovements:
+class TestTTDDynamoCompatibility:
     """Tests that probe known Dynamo limitations we work around.
 
-    Each test uses the *ideal* code path that we'd prefer.  They are marked
-    ``xfail(strict=True)`` so that CI **fails** when PyTorch fixes the
-    upstream issue -- that's the signal to remove the workaround and
-    simplify our code.
-
-    See the corresponding ``TODO/*.md`` files for upstream context.
+    Tests marked ``xfail(strict=True)`` use the ideal code path that we would
+    prefer, but that is not yet traceable by every supported torch version.
+    When an xfail starts passing in the oldest supported torch version, the
+    corresponding workaround can be simplified.
     """
 
     def test_frozenset_sub_dict_keys(self):
@@ -907,8 +905,7 @@ class TestTTDImprovements:
         strict=True,
         reason=(
             "TensorDict subclass arithmetic hits _has_mps graph break "
-            "without explicit pytree registration. "
-            "See TODO/dynamo_td_subclass_pytree.md"
+            "without explicit pytree registration."
         ),
     )
     def test_td_subclass_arithmetic_without_registration(self):

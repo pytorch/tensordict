@@ -346,7 +346,6 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         # during torch.compile tracing.  Without this, Dynamo falls back to
         # generic Python tracing for TensorDict subclass operations and hits
         # graph breaks (e.g. _has_mps -> torch.backends.mps.is_available()).
-        # See TODO/dynamo_td_subclass_pytree.md for details.
         _register_tensor_class(cls)
         try:
             _register_td_node(cls)

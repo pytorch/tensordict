@@ -18,6 +18,7 @@ import platform
 import re
 import sys
 import sysconfig
+import threading
 import warnings
 import weakref
 from collections import UserDict
@@ -2101,7 +2102,7 @@ class TestGeneric:
             assert (td == 1).all()
         for _ in range(10):
             assert not tensordict_base._device_recorder.marked
-            assert not tensordict_base._device_recorder._has_transfer
+            assert not tensordict_base._device_recorder.has_transfer()
             td = TensorDict(
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
@@ -2239,6 +2240,64 @@ class TestGeneric:
             }
             TensorDict(td_dict, device="cpu", non_blocking=False)
             assert _SYNC_COUNTER == 0
+
+    def test_device_recorder_per_thread_state(self):
+        """``_device_recorder`` must keep ``marked`` per-thread (see #1700)."""
+        recorder = tensordict_base._device_recorder
+        assert not recorder.marked
+        recorder.mark()
+        try:
+            assert recorder.marked
+            saw_marked = []
+            barrier = threading.Barrier(2)
+
+            def check_other_thread():
+                barrier.wait()
+                saw_marked.append(recorder.marked)
+
+            t = threading.Thread(target=check_other_thread)
+            t.start()
+            barrier.wait()
+            t.join()
+            assert saw_marked == [False], (
+                "Other thread observed marked=True; recorder state is shared "
+                "across threads."
+            )
+        finally:
+            recorder.unmark()
+        assert not recorder.marked
+
+    def test_non_blocking_thread_safe(self):
+        """Concurrent ``TensorDict(..., device='cpu')`` must not race on
+        ``_device_recorder.mark()`` (regression for #1700)."""
+        source = {f"k{i}": torch.zeros(64, dtype=torch.float32) for i in range(64)}
+
+        num_threads = 8
+        iters_per_thread = 2000
+        barrier = threading.Barrier(num_threads)
+        errors: list[BaseException] = []
+        errors_lock = threading.Lock()
+        stop = threading.Event()
+
+        def worker():
+            try:
+                barrier.wait()
+                for _ in range(iters_per_thread):
+                    if stop.is_set():
+                        return
+                    TensorDict(source, device="cpu")
+            except BaseException as e:
+                with errors_lock:
+                    errors.append(e)
+                stop.set()
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"thread workers raised: {errors[0]!r}"
 
     def test_to_cpu_correctness_many_tensors(self):
         """Transfer many tensors from CUDA to CPU with default .to('cpu').
