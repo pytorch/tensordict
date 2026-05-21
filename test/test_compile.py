@@ -888,9 +888,10 @@ class TestTTDDynamoCompatibility:
     """
 
     @pytest.mark.xfail(
+        TORCH_VERSION < version.parse("2.12.0"),
         strict=True,
         reason=(
-            "Dynamo cannot trace frozenset.__sub__(dict_keys). "
+            "Dynamo cannot trace frozenset.__sub__(dict_keys) before torch 2.12. "
             "See TODO/dynamo_frozenset_sub.md"
         ),
     )
