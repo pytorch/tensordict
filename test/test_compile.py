@@ -71,6 +71,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _reset_dynamo_code_caches():
+    # Tests in this file all exercise torch.compile; a fresh Dynamo code cache
+    # between tests keeps recompile/guard-count assertions reliable and prevents
+    # one test's frame from leaking into the next.
+    torch._dynamo.reset_code_caches()
+
+
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
     def func(x, y):
@@ -1365,8 +1373,6 @@ class TestNN:
 
     @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_nontensor(self, mode):
-        torch._dynamo.reset_code_caches()
-
         # Non tensor
         x = torch.randn(3)
         y = None
@@ -1380,8 +1386,6 @@ class TestNN:
 
     @pytest.mark.skipif(not _v2_5, reason="requires torch 2.5 or higher")
     def test_dispatch_tensor(self, mode):
-        torch._dynamo.reset_code_caches()
-
         x = torch.randn(3)
         y = torch.randn(3)
         mod = Seq(
@@ -1563,7 +1567,6 @@ class TestFunctional:
 )
 class TestExport:
     def test_export_module(self):
-        torch._dynamo.reset_code_caches()
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
         x = torch.randn(3)
         y = torch.randn(3)
@@ -1571,7 +1574,6 @@ class TestExport:
         assert (out.module()(x=x, y=y) == tdm(x=x, y=y)).all()
 
     def test_export_seq(self):
-        torch._dynamo.reset_code_caches()
         tdm = Seq(
             Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"]),
             Mod(lambda z, x: z + x, in_keys=["z", "x"], out_keys=["out"]),
@@ -1596,8 +1598,6 @@ class TestExport:
         _parse_batch_size did not handle torch.SymInt (which does not subclass
         numbers.Number), causing ValueError("batch size was not specified").
         """
-        torch._dynamo.reset_code_caches()
-
         class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor, y: torch.Tensor) -> TensorDict:
                 return TensorDict({"x": x, "y": y}, batch_size=x.shape[0])
@@ -1625,8 +1625,6 @@ class TestExport:
         pytree spec, raising AsPythonConstantNotImplementedError.
         Fix: store batch_dims (int) and reconstruct batch_size from tensor shapes.
         """
-        torch._dynamo.reset_code_caches()
-
         class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor) -> TensorDict:
                 b, t = x.shape[0], x.shape[1]
@@ -2022,19 +2020,15 @@ class TestCompileNontensor:
         return a.tensor
 
     def test_nontensor_no_device_no_batch_size(self, data):
-        torch._dynamo.reset_code_caches()
         torch.compile(self.fn_no_device_no_batch_size)(data)
 
     def test_nontensor_no_device(self, data):
-        torch._dynamo.reset_code_caches()
         torch.compile(self.fn_no_device)(data)
 
     def test_nontensor_with_device(self, data):
-        torch._dynamo.reset_code_caches()
         torch.compile(self.fn_with_device)(data)
 
     def test_nontensor_with_device_without_batch_size(self, data):
-        torch._dynamo.reset_code_caches()
         torch.compile(self.fn_with_device_without_batch_size)(data)
 
 
@@ -2046,8 +2040,6 @@ class TestTCNonTensorInit:
         label: str
 
     def test_tc_nontensor_init_fullgraph(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(a):
             tc = self.MyTC(x=a, label="hello", batch_size=[3])
@@ -2057,8 +2049,6 @@ class TestTCNonTensorInit:
         assert result.shape == (3,)
 
     def test_tc_nontensor_init_roundtrip(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(a):
             tc = self.MyTC(x=a, label="hello", batch_size=[3])
@@ -2069,8 +2059,6 @@ class TestTCNonTensorInit:
         torch.testing.assert_close(result, inp + 1)
 
     def test_tc_nontensor_init_with_device(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(a):
             tc = self.MyTC(x=a, label="world", batch_size=[3], device="cpu")
@@ -2109,8 +2097,6 @@ class TestTCPostInitCompile:
     """__post_init__ must run under torch.compile to match eager semantics (gh-1708)."""
 
     def test_post_init_runs_under_compile(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
             return _PostInitTC(x=x).x
@@ -2120,8 +2106,6 @@ class TestTCPostInitCompile:
         torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
 
     def test_post_init_runs_under_compile_from_tensordict(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
             td = TensorDict(x=x, batch_size=())
@@ -2135,8 +2119,6 @@ class TestTCDefaultsCompile:
     """@tensorclass field defaults must be applied under torch.compile (gh-1710)."""
 
     def test_concrete_default_applied_under_compile(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn():
             return _ConcreteDefaultTC().cache
@@ -2145,8 +2127,6 @@ class TestTCDefaultsCompile:
         torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_default_factory_applied_under_compile(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn():
             return _FactoryDefaultTC().cache
@@ -2155,8 +2135,6 @@ class TestTCDefaultsCompile:
         torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_omitted_none_default_under_compile(self):
-        torch._dynamo.reset_code_caches()
-
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
             return _NoneDefaultTC(x=x).y
@@ -2280,8 +2258,6 @@ class TestGuardCount:
 
     def test_unbatched_clone_preserves_semantics(self):
         """Cloning an UnbatchedTensor must produce independent data."""
-        torch._dynamo.reset_code_caches()
-
         def fn(td):
             cloned = td.clone()
             return cloned
@@ -2305,8 +2281,6 @@ class TestGuardCount:
 class TestNestedCompileRegion:
     def test_nested_compile_region_td(self):
         """TensorDict can be passed through nested_compile_region (gh-1667)."""
-        torch._dynamo.reset_code_caches()
-
         class Model(torch.nn.Module):
             def __init__(self):
                 super().__init__()
