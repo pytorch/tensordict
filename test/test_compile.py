@@ -2081,44 +2081,54 @@ class TestTCNonTensorInit:
         torch.testing.assert_close(result, inp * 2)
 
 
+@tensorclass
+class _PostInitTC:
+    x: torch.Tensor
+
+    def __post_init__(self):
+        self.x = self.x * 2
+
+
+@tensorclass
+class _ConcreteDefaultTC:
+    cache: torch.Tensor = torch.zeros(3)
+
+
+@tensorclass
+class _FactoryDefaultTC:
+    cache: torch.Tensor = dataclasses.field(default_factory=lambda: torch.zeros(3))
+
+
+@tensorclass
+class _NoneDefaultTC:
+    x: torch.Tensor
+    y: torch.Tensor = None
+
+
 class TestTCPostInitCompile:
     """__post_init__ must run under torch.compile to match eager semantics (gh-1708)."""
 
     def test_post_init_runs_under_compile(self):
         torch._dynamo.reset_code_caches()
 
-        @tensorclass
-        class Foo:
-            x: torch.Tensor
-
-            def __post_init__(self):
-                self.x = self.x * 2
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return _PostInitTC(x=x).x
 
         inp = torch.ones(3)
-        eager = Foo(x=inp).x
-        compiled = torch.compile(lambda x: Foo(x=x).x)(inp)
-        torch.testing.assert_close(eager, torch.full((3,), 2.0))
-        torch.testing.assert_close(compiled, eager)
+        torch.testing.assert_close(_PostInitTC(x=inp).x, torch.full((3,), 2.0))
+        torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
 
     def test_post_init_runs_under_compile_from_tensordict(self):
         torch._dynamo.reset_code_caches()
 
-        @tensorclass
-        class Foo:
-            x: torch.Tensor
-
-            def __post_init__(self):
-                self.x = self.x * 2
-
+        @torch.compile(backend="eager", fullgraph=True)
         def fn(x):
             td = TensorDict(x=x, batch_size=())
-            return Foo._from_tensordict(td).x
+            return _PostInitTC._from_tensordict(td).x
 
         inp = torch.ones(3)
-        eager = fn(inp)
-        compiled = torch.compile(fn)(inp)
-        torch.testing.assert_close(eager, torch.full((3,), 2.0))
-        torch.testing.assert_close(compiled, eager)
+        torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
 
 
 class TestTCDefaultsCompile:
@@ -2127,41 +2137,33 @@ class TestTCDefaultsCompile:
     def test_concrete_default_applied_under_compile(self):
         torch._dynamo.reset_code_caches()
 
-        @tensorclass
-        class Foo:
-            cache: torch.Tensor = torch.zeros(3)
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _ConcreteDefaultTC().cache
 
-        eager = Foo().cache
-        compiled = torch.compile(lambda: Foo().cache)()
-        torch.testing.assert_close(eager, torch.zeros(3))
-        torch.testing.assert_close(compiled, eager)
+        torch.testing.assert_close(_ConcreteDefaultTC().cache, torch.zeros(3))
+        torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_default_factory_applied_under_compile(self):
         torch._dynamo.reset_code_caches()
 
-        @tensorclass
-        class Foo:
-            cache: torch.Tensor = dataclasses.field(
-                default_factory=lambda: torch.zeros(3)
-            )
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn():
+            return _FactoryDefaultTC().cache
 
-        eager = Foo().cache
-        compiled = torch.compile(lambda: Foo().cache)()
-        torch.testing.assert_close(eager, torch.zeros(3))
-        torch.testing.assert_close(compiled, eager)
+        torch.testing.assert_close(_FactoryDefaultTC().cache, torch.zeros(3))
+        torch.testing.assert_close(fn(), torch.zeros(3))
 
     def test_omitted_none_default_under_compile(self):
         torch._dynamo.reset_code_caches()
 
-        @tensorclass
-        class Foo:
-            x: torch.Tensor
-            y: torch.Tensor = None
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(x):
+            return _NoneDefaultTC(x=x).y
 
-        eager = Foo(x=torch.ones(3)).y
-        compiled = torch.compile(lambda x: Foo(x=x).y)(torch.ones(3))
-        assert eager is None
-        assert compiled is None
+        inp = torch.ones(3)
+        assert _NoneDefaultTC(x=inp).y is None
+        assert fn(inp) is None
 
 
 def _count_compiles(fn, *args):

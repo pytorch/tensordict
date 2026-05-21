@@ -1349,21 +1349,22 @@ def _init_wrapper(
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
                 )
 
+        # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
+        # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
+        # comparisons against a tensor default value.
+        _missing_type = getattr(
+            dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
+        )
         for key, field in type(self).__dataclass_fields__.items():
             # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
             if key in self.__expected_keys__:
-                if field.default_factory not in (
-                    dataclasses.MISSING,
-                ) and not isinstance(
-                    field.default_factory,
-                    getattr(
-                        dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
-                    ),
+                if field.default_factory is not dataclasses.MISSING and not isinstance(
+                    field.default_factory, _missing_type
                 ):
                     default = field.default_factory()
                 else:
                     default = field.default
-                if default not in (None, dataclasses.MISSING):
+                if default is not None and not isinstance(default, _missing_type):
                     kwargs.setdefault(key, default)
 
         missing_params = [p for p in required_params if p not in kwargs]
