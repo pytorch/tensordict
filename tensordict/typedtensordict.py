@@ -179,19 +179,13 @@ def _make_init(cls: type) -> Callable:
                 lock=lock,
             )
             return
-        # NOTE: the natural spelling here is ``required_keys - kwargs.keys()``
-        # and ``kwargs.keys() - expected_keys``, but older torch.compile /
-        # Dynamo versions cannot trace ``frozenset.__sub__(dict_keys)`` and
-        # raise ``Unsupported: unsupported operand type(s) for __sub__``.
-        # Keep the set comprehensions as a compile-friendly workaround until
-        # TensorDict no longer supports those torch versions.
-        missing = {k for k in required_keys if k not in kwargs}
+        missing = required_keys - kwargs.keys()
         if missing:
             missing_str = ", ".join(sorted(missing))
             raise TypeError(
                 f"{type(self).__name__}() missing required field(s): {missing_str}"
             )
-        extra = {k for k in kwargs if k not in expected_keys}
+        extra = kwargs.keys() - expected_keys
         if extra:
             extra_str = ", ".join(sorted(extra))
             raise TypeError(

@@ -500,6 +500,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "new_tensor",
     "new_zeros",
     "norm",
+    "pad",
     "permute",
     "pin_memory",
     "pin_memory_",
@@ -1348,26 +1349,21 @@ def _init_wrapper(
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
                 )
 
-        if not is_compiling():
-            for key, field in type(self).__dataclass_fields__.items():
-                # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
-                if key in self.__expected_keys__:
-                    if field.default_factory not in (
-                        dataclasses.MISSING,
-                    ) and not isinstance(
-                        field.default_factory,
-                        getattr(
-                            dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
-                        ),
-                    ):
-                        default = field.default_factory()
-                    else:
-                        default = field.default
-                    if default not in (None, dataclasses.MISSING):
-                        kwargs.setdefault(key, default)
-        else:
-            # TODO: Decide what to do here
-            pass
+        # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
+        # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
+        # comparisons against a tensor default value.
+        _missing_type = getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING))
+        for key, field in type(self).__dataclass_fields__.items():
+            # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
+            if key in self.__expected_keys__:
+                if field.default_factory is not dataclasses.MISSING and not isinstance(
+                    field.default_factory, _missing_type
+                ):
+                    default = field.default_factory()
+                else:
+                    default = field.default
+                if default is not None and not isinstance(default, _missing_type):
+                    kwargs.setdefault(key, default)
 
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
@@ -1409,9 +1405,8 @@ def _init_wrapper(
             # Fields with None defaults are intentionally skipped by the
             # default-handling above, but the dataclass __init__ would
             # still assign them. Ensure every expected key is present.
-            if not is_compiling():
-                for key in self.__expected_keys__:
-                    kwargs.setdefault(key, None)
+            for key in self.__expected_keys__:
+                kwargs.setdefault(key, None)
             if tensor_only:
                 # Fast path: validate and assign directly to the
                 # underlying dict, skipping the set → _set_str →
@@ -1431,7 +1426,7 @@ def _init_wrapper(
                 _set = type(self).set
                 for key, value in kwargs.items():
                     _set(self, key, value)
-            if not is_compiling() and hasattr(type(self), "__post_init__"):
+            if hasattr(type(self), "__post_init__"):
                 self.__post_init__()
         if lock:
             self._tensordict.lock_()
@@ -1687,7 +1682,7 @@ def _from_tensordict(
         object.__setattr__(tc, "_non_tensordict", non_tensordict)
     # since we aren't calling the dataclass __init__, we need to manually
     # check whether a __post_init__ method has been defined and invoke it
-    if not is_compiling() and hasattr(cls, "__post_init__"):
+    if hasattr(cls, "__post_init__"):
         tc.__post_init__()
     return tc
 

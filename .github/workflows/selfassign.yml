@@ -19,6 +19,8 @@ concurrency:
 jobs:
   one:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write # assign user to the commented issue
     if: >-
       (github.event.comment.body == '#take' ||
        github.event.comment.body == '#self-assign')
