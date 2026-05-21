@@ -30,7 +30,7 @@ from copy import copy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from threading import Thread, local
+from threading import local, Thread
 from types import ModuleType
 from typing import (
     Any,
