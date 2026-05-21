@@ -1352,9 +1352,7 @@ def _init_wrapper(
         # Use `is`/isinstance instead of `in (..., dataclasses.MISSING)`:
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
         # comparisons against a tensor default value.
-        _missing_type = getattr(
-            dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING)
-        )
+        _missing_type = getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING))
         for key, field in type(self).__dataclass_fields__.items():
             # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
             if key in self.__expected_keys__:

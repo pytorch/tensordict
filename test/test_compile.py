@@ -1598,6 +1598,7 @@ class TestExport:
         _parse_batch_size did not handle torch.SymInt (which does not subclass
         numbers.Number), causing ValueError("batch size was not specified").
         """
+
         class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor, y: torch.Tensor) -> TensorDict:
                 return TensorDict({"x": x, "y": y}, batch_size=x.shape[0])
@@ -1625,6 +1626,7 @@ class TestExport:
         pytree spec, raising AsPythonConstantNotImplementedError.
         Fix: store batch_dims (int) and reconstruct batch_size from tensor shapes.
         """
+
         class Mod(torch.nn.Module):
             def forward(self, x: torch.Tensor) -> TensorDict:
                 b, t = x.shape[0], x.shape[1]
@@ -2258,6 +2260,7 @@ class TestGuardCount:
 
     def test_unbatched_clone_preserves_semantics(self):
         """Cloning an UnbatchedTensor must produce independent data."""
+
         def fn(td):
             cloned = td.clone()
             return cloned
@@ -2281,6 +2284,7 @@ class TestGuardCount:
 class TestNestedCompileRegion:
     def test_nested_compile_region_td(self):
         """TensorDict can be passed through nested_compile_region (gh-1667)."""
+
         class Model(torch.nn.Module):
             def __init__(self):
                 super().__init__()
