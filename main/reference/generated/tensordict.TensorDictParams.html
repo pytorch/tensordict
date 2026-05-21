@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.12.0.dev4074+gf7d8efa00.d20260518)
+                  main (0.12.0.dev4083+g4c1b96a3d.d20260521)
                 </div>
               
             
@@ -1524,14 +1524,23 @@ is returned. Call <a class="reference internal" href="#tensordict.TensorDictPara
 <dd><p>Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>canonical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, every dense tensor leaf
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>canonical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, every dense tensor leaf
 whose strides do not match the canonical C-row-major strides
 for its shape is rematerialized into a freshly allocated
 contiguous tensor (using <code class="docutils literal notranslate"><span class="pre">torch.contiguous_format</span></code>), even if
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.is_contiguous.html#torch.Tensor.is_contiguous" title="(in PyTorch v2.12)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.is_contiguous()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">True</span></code> (e.g.
 because of size-1 dimensions). When <code class="docutils literal notranslate"><span class="pre">False</span></code> (the default),
 the historical behavior of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.contiguous.html#torch.Tensor.contiguous" title="(in PyTorch v2.12)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.contiguous()</span></code></a> is
-preserved. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+preserved. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each non-contiguous leaf is
+replaced by its contiguous counterpart one at a time.
+<code class="docutils literal notranslate"><span class="pre">Tensor.contiguous()</span></code> returns <code class="docutils literal notranslate"><span class="pre">self</span></code> when a leaf is
+already contiguous, so for fully-contiguous tensordicts the
+operation is effectively a no-op aside from the key walk.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -2276,7 +2285,7 @@ strings are acceptable.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.flatten">
-<span class="sig-name descname"><span class="pre">flatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.flatten" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">flatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.flatten" title="Permalink to this definition">¶</a></dt>
 <dd><p>Flattens all the tensors of a tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2284,6 +2293,16 @@ strings are acceptable.</p>
 <li><p><strong>start_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the first dim to flatten</p></li>
 <li><p><strong>end_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the last dim to flatten</p></li>
 </ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf is flattened one at a
+time. <code class="docutils literal notranslate"><span class="pre">torch.flatten</span></code> may return a view when the flattened
+range is contiguous in memory; in that case leaves share
+storage with the originals and the memory benefit does not
+materialize. Not supported on
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -3426,7 +3445,7 @@ should have. Defaults to <code class="docutils literal notranslate"><span class=
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.gather">
-<span class="sig-name descname"><span class="pre">gather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictParams.gather" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">gather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictParams.gather" title="Permalink to this definition">¶</a></dt>
 <dd><p>Gathers values along an axis specified by <cite>dim</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -3439,6 +3458,16 @@ index to be gathered along the required dimension.</p></li>
 <li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a destination tensordict. It must
 have the same shape as the index.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf storage is replaced by
+its gathered counterpart one leaf at a time, keeping peak
+memory close to <code class="docutils literal notranslate"><span class="pre">1x</span></code>. Requires <code class="docutils literal notranslate"><span class="pre">index.ndim</span> <span class="pre">==</span>
+<span class="pre">self.batch_dims</span></code> (the result must have the same number of
+batch dims as the input). Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">out</span></code>.
+Not supported on <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -7500,7 +7529,7 @@ key is already present in the TensorDict.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.repeat">
-<span class="sig-name descname"><span class="pre">repeat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictParams.repeat" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">repeat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictParams.repeat" title="Permalink to this definition">¶</a></dt>
 <dd><p>Repeats this tensor along the specified dimensions.</p>
 <p>Unlike <a class="reference internal" href="#tensordict.TensorDictParams.expand" title="tensordict.TensorDictParams.expand"><code class="xref py py-meth docutils literal notranslate"><span class="pre">expand()</span></code></a>, this function copies the tensor’s data.</p>
 <div class="admonition warning">
@@ -7512,6 +7541,15 @@ key is already present in the TensorDict.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>repeat</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.12)"><em>torch.Size</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em><em>, </em><em>tuple of int</em><em> or </em><em>list of int</em>) – The number of times to repeat this tensor along
 each dimension.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf storage is replaced by
+its repeated counterpart one leaf at a time, keeping peak
+memory close to <code class="docutils literal notranslate"><span class="pre">1x</span></code>. <code class="docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code> is not
+supported in this mode (the stack dim’s repeat factor would
+rebuild the stack’s constituents list) — call
+<code class="docutils literal notranslate"><span class="pre">to_tensordict()</span></code> first. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -7564,8 +7602,15 @@ array, and return a flat output array.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>output_size</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – Total output size for the given axis (e.g. sum of repeats). If given, it
-will avoid stream synchronization needed to calculate output shape of the tensordict.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>output_size</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – Total output size for the given axis (e.g. sum of repeats). If given, it
+will avoid stream synchronization needed to calculate output shape of the tensordict.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf storage is replaced by
+its repeated counterpart one leaf at a time. Not supported on
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> (call
+<code class="docutils literal notranslate"><span class="pre">to_tensordict()</span></code> first). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Repeated TensorDict which has the same shape as input, except along the given axis.</p>
@@ -7638,8 +7683,18 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>*shape</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – new shape of the resulting tensordict.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A TensorDict with reshaped keys</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf is reshaped one at a
+time. Note that the underlying <code class="docutils literal notranslate"><span class="pre">Tensor.reshape</span></code> may return
+a view of the original leaf (when memory layout permits) or
+a copy (otherwise); in the view case <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> keeps
+the leaves sharing storage with the originals and the
+memory benefit does not materialize. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A TensorDict with reshaped keys. When <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> this is
+<code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -7655,7 +7710,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.roll">
-<span class="sig-name descname"><span class="pre">roll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.roll" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">roll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.roll" title="Permalink to this definition">¶</a></dt>
 <dd><p>Roll the tensordict along the given dimensions.</p>
 <p>Elements that are shifted beyond the last position are re-introduced at
 the first position.</p>
@@ -7670,8 +7725,16 @@ corresponding value.</p></li>
 By default, the tensordict is flattened before rolling.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict with elements rolled.</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
+and key set are preserved; each leaf storage is replaced by
+its rolled counterpart one leaf at a time, keeping peak memory
+close to <code class="docutils literal notranslate"><span class="pre">1x</span></code>. The batch_size is unchanged by <code class="docutils literal notranslate"><span class="pre">roll</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a new tensordict with elements rolled. When <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> this
+is <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -9800,7 +9863,7 @@ are mapped back on the original tensordict.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.unflatten">
-<span class="sig-name descname"><span class="pre">unflatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unflattened_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.unflatten" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">unflatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unflattened_size</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.unflatten" title="Permalink to this definition">¶</a></dt>
 <dd><p>Unflattens a tensordict dim expanding it to a desired shape.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
