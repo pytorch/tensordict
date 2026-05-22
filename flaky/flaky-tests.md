@@ -1,10 +1,10 @@
-# Flaky Test Report - 2026-05-21
+# Flaky Test Report - 2026-05-22
 
 ## Summary
 
 - **Flaky tests**: 1
-- **Newly flaky** (last 7 days): 1
-- **Total tests analyzed**: 45187
+- **Newly flaky** (last 7 days): 0
+- **Total tests analyzed**: 45193
 - **CI runs analyzed**: 30
 
 ---
@@ -13,12 +13,8 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys` **NEW** | 55.6% (35/63) | 35 | 0.89 | 2026-05-15 |
+| `test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys` | 50.0% (35/70) | 35 | 1.00 | 2026-05-15 |
 
-
-### Newly Flaky
-
-- `test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys`
 
 ---
 
@@ -31,4 +27,4 @@
 
 ---
 
-*Generated at 2026-05-21T07:28:50.863161+00:00*
+*Generated at 2026-05-22T07:25:16.696008+00:00*

@@ -1,27 +1,27 @@
 {
-  "generated_at": "2026-05-21T07:28:50.863161+00:00",
+  "generated_at": "2026-05-22T07:25:16.696008+00:00",
   "analysis_period": {
-    "start": "2026-04-06",
-    "end": "2026-05-19",
+    "start": "2026-04-20",
+    "end": "2026-05-21",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 45187,
+    "total_tests": 45193,
     "flaky_count": 1,
-    "new_flaky_count": 1,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys",
-      "executions": 63,
+      "executions": 70,
       "failures": 35,
-      "failure_rate": 0.5556,
-      "flaky_score": 0.8889,
-      "passed": 28,
+      "failure_rate": 0.5,
+      "flaky_score": 1.0,
+      "passed": 35,
       "failed": 35,
       "error": 0,
-      "avg_duration_s": 0.593,
+      "avg_duration_s": 0.592,
       "recent_failures": [
         "2026-05-15T08:38:16Z",
         "2026-05-15T08:38:16Z",
@@ -30,7 +30,7 @@
         "2026-05-15T08:38:16Z"
       ],
       "first_seen_flaky": "2026-05-14T21:54:44Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {
