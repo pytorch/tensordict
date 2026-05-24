@@ -82,6 +82,7 @@ from tensordict.utils import (
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
+    _LockedSchema,
     _prune_selected_keys,
     _set_item,
     _set_max_batch_size,
@@ -3484,13 +3485,37 @@ class TensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
 
+    def _build_lock_schema(self) -> None:
+        # Snapshot the current top-level key set as a Python tuple so
+        # locked-fast-paths can iterate it without hitting Dynamo
+        # ``DICT_KEYS_MATCH`` guards on ``_tensordict``. Stored on the
+        # instance dict to override the class-level default of ``None``.
+        self.__dict__["_locked_schema"] = _LockedSchema(
+            keys=tuple(self._tensordict),
+        )
+
     def _clone(self, recurse: bool = True) -> Self:
         if recurse and self.device is not None:
             return self._clone_recurse()
 
         if not recurse and is_compiling():
             result = TensorDict(batch_size=self.batch_size, device=self.device)
-            result._tensordict.update(self._tensordict)
+            schema = self._locked_schema
+            if self._is_locked and schema is not None:
+                # Locked-fast-path: walk the cached immutable key tuple
+                # instead of ``result._tensordict.update(self._tensordict)``
+                # which emits ``DICT_LENGTH`` and related guards on the
+                # underlying Python dict. Reading via the schema replaces
+                # those with cheap ``LENGTH_CHECK`` / ``EQUALS_MATCH``
+                # guards on the immutable schema tuple, which Dynamo can
+                # potentially share across TDs that lock to the same
+                # key set.
+                _src = self._tensordict
+                _dst = result._tensordict
+                for key in schema.keys:
+                    _dst[key] = _src[key]
+            else:
+                result._tensordict.update(self._tensordict)
             return result
 
         result = self._new_unsafe(
