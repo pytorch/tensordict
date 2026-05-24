@@ -2312,12 +2312,12 @@ class TestGuardCount:
         last_op = out.__dict__.get("_last_op")
         if last_op is not None:
             _, (_, _, ref) = last_op
-            assert not isinstance(ref, _wref.ref), (
-                f"weakref leaked into _last_op under compile: {ref}"
-            )
-            assert callable(ref) and ref() is out, (
-                "strong-ref closure must still resolve to the locked TD"
-            )
+            assert not isinstance(
+                ref, _wref.ref
+            ), f"weakref leaked into _last_op under compile: {ref}"
+            assert (
+                callable(ref) and ref() is out
+            ), "strong-ref closure must still resolve to the locked TD"
 
     def test_locked_td_no_recompile(self):
         """A TD locked in eager mode that flows through compile must
@@ -2389,8 +2389,7 @@ class TestGuardCount:
         second = cnt.frame_count
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, (
-            "Mixing eager-built and compile-built TDs recompiled: "
-            f"{second} frames"
+            "Mixing eager-built and compile-built TDs recompiled: " f"{second} frames"
         )
 
 
