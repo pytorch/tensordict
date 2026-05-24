@@ -9,6 +9,7 @@ import importlib.util
 import inspect
 import platform
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Callable
 
@@ -2276,6 +2277,70 @@ class TestGuardCount:
         assert (
             ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"
+
+    def test_lock_inside_compile_no_weakref_leftover(self):
+        """``lock_()`` called inside a compiled region must not leave a
+        ``weakref`` behind in ``_last_op``.
+
+        The ``_as_context_manager`` decorator that wraps ``lock_`` would
+        normally create a ``weakref.ref(self)`` and write it to
+        ``_last_op`` on the locked TD. Under compile, that ``WeakRef``
+        leaks into the returned TD and trips
+        ``Unsupported: reconstruct: WeakRefVariable()`` patterns. The
+        decorator must use a strong-ref closure under ``is_compiling()``
+        so the same bookkeeping still works without weakrefs.
+        """
+        import weakref as _wref
+
+        def fn(td):
+            # Force actual compute so Dynamo doesn't trivially return td.
+            td["c"] = td["a"] + td["b"]
+            td.lock_()
+            return td
+
+        td = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, fullgraph=True, backend="eager")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            out = compiled(td)
+        assert out.is_locked
+        # If `_last_op` was written at all, it must not contain a weakref
+        # (which Dynamo can't reconstruct cleanly across compile
+        # boundaries). A strong-ref callable closure is fine.
+        last_op = out.__dict__.get("_last_op")
+        if last_op is not None:
+            _, (_, _, ref) = last_op
+            assert not isinstance(ref, _wref.ref), (
+                f"weakref leaked into _last_op under compile: {ref}"
+            )
+            assert callable(ref) and ref() is out, (
+                "strong-ref closure must still resolve to the locked TD"
+            )
+
+    def test_locked_td_no_recompile(self):
+        """A TD locked in eager mode that flows through compile must
+        produce stable compile frames.
+        """
+
+        def fn(td):
+            return td["a"] + td["b"]
+
+        td1 = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+        td1.lock_()
+        td2 = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+        td2.lock_()
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td1)
+        first = cnt.frame_count
+        compiled(td2)
+        second = cnt.frame_count
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
 
     def test_td_dim_names_always_on_instance(self):
         """`_td_dim_names` must always live in instance ``__dict__``.
