@@ -6,7 +6,6 @@
 import importlib
 
 
-
 def test_utils_key_json_import_paths_are_preserved():
     utils_module = importlib.import_module("tensordict.utils")
     helper_module = importlib.import_module("tensordict._utils_key_json")
