@@ -2277,6 +2277,57 @@ class TestGuardCount:
             ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"
 
+    def test_td_dim_names_always_on_instance(self):
+        """`_td_dim_names` must always live in instance ``__dict__``.
+
+        A TD constructed via the public ``TensorDict(...)`` constructor
+        inside a compiled region (the hot path in torchrl env stepping,
+        where the env builds a fresh ``next`` TD on every step) must end
+        up with ``_td_dim_names`` in its instance ``__dict__``. Otherwise,
+        when that TD flows back into a compiled region on the next
+        iteration, Dynamo recompiles on
+        ``not ___dict_contains('_td_dim_names', __dict__)``.
+        """
+
+        def make_inside_compile(seed):
+            return TensorDict(
+                {"a": seed + 1, "b": seed + 2},
+                batch_size=seed.shape[:1],
+            )
+
+        seed = torch.randn(4)
+        compiled = torch.compile(make_inside_compile, fullgraph=True, backend="eager")
+        td_from_compile = compiled(seed)
+
+        # The TD that came out of compile must have _td_dim_names on its
+        # instance dict, exactly like a TD built in eager mode.
+        td_from_eager = TensorDict(
+            {"a": seed + 1, "b": seed + 2},
+            batch_size=seed.shape[:1],
+        )
+        assert (
+            "_td_dim_names" in td_from_compile.__dict__
+        ), "_td_dim_names must live on instance dict (got from compile-time __init__)"
+        assert "_td_dim_names" in td_from_eager.__dict__
+
+        # And then feeding that compile-built TD back into a compiled
+        # function must not trigger a recompile relative to the eager TD.
+        def use_td(td):
+            return td["a"] + td["b"]
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled_use = torch.compile(use_td, backend=cnt)
+        compiled_use(td_from_eager)
+        first = cnt.frame_count
+        compiled_use(td_from_compile)
+        second = cnt.frame_count
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, (
+            "Mixing eager-built and compile-built TDs recompiled: "
+            f"{second} frames"
+        )
+
 
 class TestNestedCompileRegion:
     def test_nested_compile_region_td(self):
