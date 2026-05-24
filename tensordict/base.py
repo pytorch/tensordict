@@ -370,6 +370,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
     _is_non_tensor: bool = False
     _memmap_prefix = None
     _stream: torch.cuda.Stream | None = None
+    # Class-level default so `_last_op` is always readable, even on a TD
+    # that has never been passed through a ``_as_context_manager``-wrapped
+    # method (notably under ``torch.compile`` where that decorator
+    # short-circuits and never writes the attribute).
+    _last_op = None
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
