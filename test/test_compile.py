@@ -2324,8 +2324,7 @@ class TestGuardCount:
         second = cnt.frame_count
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, (
-            "Mixing eager-built and compile-built TDs recompiled: "
-            f"{second} frames"
+            "Mixing eager-built and compile-built TDs recompiled: " f"{second} frames"
         )
 
 
