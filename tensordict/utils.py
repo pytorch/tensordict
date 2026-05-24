@@ -29,6 +29,7 @@ from typing import (
     Callable,
     Iterator,
     List,
+    NamedTuple,
     Sequence,
     Tuple,
     TYPE_CHECKING,
@@ -905,6 +906,26 @@ class _StringKeys(KeysView):
 
 
 _StringOnlyDict = dict
+
+
+class _LockedSchema(NamedTuple):
+    """Immutable per-TD snapshot consulted by locked-fast-paths.
+
+    Built once when a :class:`TensorDict` is locked, dropped when it is
+    unlocked. Holds the bits Dynamo would otherwise re-derive (and
+    re-guard on) by iterating ``self._tensordict`` on every call:
+
+    Attributes:
+        keys: tuple of the top-level keys, in the order they were stored
+            when the lock was taken. Used by locked-fast-paths to walk
+            the entry set without emitting ``DICT_KEYS_MATCH`` guards on
+            the underlying Python dict.
+
+    Locked TDs already disallow key insertion/removal, so this snapshot
+    cannot go stale while the TD stays locked.
+    """
+
+    keys: tuple
 
 
 def lock_blocked(func):

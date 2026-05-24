@@ -2342,6 +2342,62 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
+    def test_locked_clone_recurse_false_schema_fast_path(self):
+        """A locked TD's ``clone(recurse=False)`` must:
+
+        - take the schema-driven fast path inside compile (i.e. produce a
+          shallow clone whose leaves are *the same tensors* as the
+          source), and
+        - not trigger recompiles across calls with the same schema.
+
+        The fast path is what avoids the
+        ``len(_tensordict) != N`` / ``list(dict.keys(_tensordict))[i] == ...``
+        guards that the dict-walking path would otherwise produce.
+        """
+
+        def fn(td):
+            c = td.clone(recurse=False)
+            return c["a"] + c["b"] + c["c"]
+
+        td1 = TensorDict(
+            {"a": torch.randn(4), "b": torch.randn(4), "c": torch.randn(4)},
+            batch_size=[4],
+        )
+        td1.lock_()
+        # The schema must be populated by lock_().
+        assert td1._locked_schema is not None
+        assert td1._locked_schema.keys == ("a", "b", "c")
+
+        td2 = TensorDict(
+            {"a": torch.randn(4), "b": torch.randn(4), "c": torch.randn(4)},
+            batch_size=[4],
+        )
+        td2.lock_()
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td1)
+        first = cnt.frame_count
+        compiled(td2)
+        second = cnt.frame_count
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_locked_schema_cleared_on_unlock(self):
+        """unlock_() must drop the locked schema; relock rebuilds it."""
+
+        td = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+        td.lock_()
+        first = td._locked_schema
+        assert first is not None
+        td.unlock_()
+        assert td._locked_schema is None
+        td.lock_()
+        # New schema instance, same keys.
+        assert td._locked_schema is not None
+        assert td._locked_schema.keys == first.keys
+
     def test_td_dim_names_always_on_instance(self):
         """`_td_dim_names` must always live in instance ``__dict__``.
 

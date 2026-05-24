@@ -375,6 +375,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
     # method (notably under ``torch.compile`` where that decorator
     # short-circuits and never writes the attribute).
     _last_op = None
+    # Class-level default; instances populate this on lock_() so locked-
+    # fast-paths can avoid iterating ``_tensordict`` (which would emit
+    # DICT_KEYS_MATCH guards under Dynamo). Cleared on unlock_().
+    _locked_schema = None
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -16642,10 +16646,26 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 )
             lock_parents_weakrefs = list(lock_parents_weakrefs)
             lock_parents_weakrefs.append(weakref.ref(self))
+            # Build a per-TD locked schema so locked-fast-paths can walk
+            # an immutable key tuple instead of iterating ``_tensordict``
+            # under Dynamo (which emits DICT_KEYS_MATCH guards).
+            # Skip under compile: building the schema would itself iterate
+            # the backing dict and add the very guard we're trying to
+            # avoid. Users who want the fast path must lock_() in eager
+            # mode before entering the compiled region.
+            self._build_lock_schema()
 
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
+
+    def _build_lock_schema(self) -> None:
+        """Build the immutable locked schema for this TD.
+
+        Default no-op. Overridden on :class:`TensorDict` (and any other
+        leaf type that benefits from the locked-fast-path).
+        """
+        return
 
     @property
     def _lock_parents_weakrefs(self):
@@ -16707,6 +16727,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         self._is_shared = False
         self._is_memmap = False
+        # Drop the locked schema; it would go stale once keys can be added
+        # or removed again.
+        if "_locked_schema" in self.__dict__:
+            self.__dict__["_locked_schema"] = None
 
         # Remove consolidated metadata when unlocking to prevent silent errors
         if hasattr(self, "_consolidated"):
