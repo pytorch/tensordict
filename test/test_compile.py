@@ -9,6 +9,7 @@ import importlib.util
 import inspect
 import platform
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Callable
 
@@ -2276,6 +2277,121 @@ class TestGuardCount:
         assert (
             ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"
+
+    def test_lock_inside_compile_no_weakref_leftover(self):
+        """``lock_()`` called inside a compiled region must not leave a
+        ``weakref`` behind in ``_last_op``.
+
+        The ``_as_context_manager`` decorator that wraps ``lock_`` would
+        normally create a ``weakref.ref(self)`` and write it to
+        ``_last_op`` on the locked TD. Under compile, that ``WeakRef``
+        leaks into the returned TD and trips
+        ``Unsupported: reconstruct: WeakRefVariable()`` patterns. The
+        decorator must use a strong-ref closure under ``is_compiling()``
+        so the same bookkeeping still works without weakrefs.
+        """
+        import weakref as _wref
+
+        def fn(td):
+            # Force actual compute so Dynamo doesn't trivially return td.
+            td["c"] = td["a"] + td["b"]
+            td.lock_()
+            return td
+
+        td = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, fullgraph=True, backend="eager")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            out = compiled(td)
+        assert out.is_locked
+        # If `_last_op` was written at all, it must not contain a weakref
+        # (which Dynamo can't reconstruct cleanly across compile
+        # boundaries). A strong-ref callable closure is fine.
+        last_op = out.__dict__.get("_last_op")
+        if last_op is not None:
+            _, (_, _, ref) = last_op
+            assert not isinstance(ref, _wref.ref), (
+                f"weakref leaked into _last_op under compile: {ref}"
+            )
+            assert callable(ref) and ref() is out, (
+                "strong-ref closure must still resolve to the locked TD"
+            )
+
+    def test_locked_td_no_recompile(self):
+        """A TD locked in eager mode that flows through compile must
+        produce stable compile frames.
+        """
+
+        def fn(td):
+            return td["a"] + td["b"]
+
+        td1 = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+        td1.lock_()
+        td2 = TensorDict({"a": torch.randn(4), "b": torch.randn(4)}, batch_size=[4])
+        td2.lock_()
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True)
+        compiled(td1)
+        first = cnt.frame_count
+        compiled(td2)
+        second = cnt.frame_count
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_td_dim_names_always_on_instance(self):
+        """`_td_dim_names` must always live in instance ``__dict__``.
+
+        A TD constructed via the public ``TensorDict(...)`` constructor
+        inside a compiled region (the hot path in torchrl env stepping,
+        where the env builds a fresh ``next`` TD on every step) must end
+        up with ``_td_dim_names`` in its instance ``__dict__``. Otherwise,
+        when that TD flows back into a compiled region on the next
+        iteration, Dynamo recompiles on
+        ``not ___dict_contains('_td_dim_names', __dict__)``.
+        """
+
+        def make_inside_compile(seed):
+            return TensorDict(
+                {"a": seed + 1, "b": seed + 2},
+                batch_size=seed.shape[:1],
+            )
+
+        seed = torch.randn(4)
+        compiled = torch.compile(make_inside_compile, fullgraph=True, backend="eager")
+        td_from_compile = compiled(seed)
+
+        # The TD that came out of compile must have _td_dim_names on its
+        # instance dict, exactly like a TD built in eager mode.
+        td_from_eager = TensorDict(
+            {"a": seed + 1, "b": seed + 2},
+            batch_size=seed.shape[:1],
+        )
+        assert (
+            "_td_dim_names" in td_from_compile.__dict__
+        ), "_td_dim_names must live on instance dict (got from compile-time __init__)"
+        assert "_td_dim_names" in td_from_eager.__dict__
+
+        # And then feeding that compile-built TD back into a compiled
+        # function must not trigger a recompile relative to the eager TD.
+        def use_td(td):
+            return td["a"] + td["b"]
+
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled_use = torch.compile(use_td, backend=cnt)
+        compiled_use(td_from_eager)
+        first = cnt.frame_count
+        compiled_use(td_from_compile)
+        second = cnt.frame_count
+        assert first == 1, f"Expected 1 compile frame, got {first}"
+        assert second == 1, (
+            "Mixing eager-built and compile-built TDs recompiled: "
+            f"{second} frames"
+        )
 
 
 class TestNestedCompileRegion:

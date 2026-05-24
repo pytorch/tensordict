@@ -923,8 +923,17 @@ def lock_blocked(func):
     return new_func
 
 
-def _strong_ref(self):
-    return lambda self: self
+def _strong_ref(obj):
+    """Return a zero-arg callable equivalent to ``weakref.ref(obj)`` but holding a strong reference.
+
+    Used under ``torch.compile`` where ``weakref.ref`` cannot be traced
+    cleanly (Dynamo would emit a ``WeakRefVariable`` that fails to be
+    reconstructed when the holding TD is returned from the compiled
+    region). A strong reference is safe here because the compiled graph
+    is transient: the closure is dropped as soon as the outer call ends,
+    so it cannot create a real lifecycle cycle.
+    """
+    return lambda: obj
 
 
 def _as_context_manager(attr=None):
@@ -943,12 +952,20 @@ def _as_context_manager(attr=None):
 
             @wraps(func)
             def func_as_decorator(_self, *args, **kwargs):
+                # Under torch.compile, ``weakref.ref`` cannot be traced
+                # cleanly (Dynamo emits a ``WeakRefVariable`` that fails
+                # reconstruction when the holding TD is returned from the
+                # compiled region). Fall back to a strong-ref closure so
+                # the context-manager semantics (``with td.lock_(): ...``)
+                # still work, but the resulting object is a regular
+                # Python callable that Dynamo can handle.
+                _make_ref = _strong_ref if is_compiling() else weakref.ref
                 _attr_pre = getattr(_self, attr)
                 out = func(_self, *args, **kwargs)
                 _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
-                        ref = weakref.ref(_self)
+                        ref = _make_ref(_self)
                         out_lo = out
                         if is_tensorclass(out_lo):
                             # We write in the tensordict but the ref is still to self (the tensorclass object)
@@ -970,9 +987,11 @@ def _as_context_manager(attr=None):
 
             @wraps(func)
             def func_as_decorator(_self, *args, **kwargs):
+                # See note in the attr-aware branch above.
+                _make_ref = _strong_ref if is_compiling() else weakref.ref
                 out = func(_self, *args, **kwargs)
                 if out is not None:
-                    ref = weakref.ref(_self)
+                    ref = _make_ref(_self)
                     out_lo = out
                     if is_tensorclass(out_lo):
                         # We write in the tensordict but the ref is still to self (the tensorclass object)
@@ -2469,11 +2488,11 @@ _DEVICE2STRDEVICE = KeyDependentDefaultDict(str)
 
 def _lock_warn():
     warnings.warn(
-        "Using lock_() in a compiled graph should "
-        "only be done if users make sure that the code runs in eager mode. "
-        "torch.compile doesn't support weakrefs which are used to reference root tensordicts "
-        "to sub-tensordict and prevent unlocking a node when the graph is locked. "
-        "Such operation will fail in eager mode but won't be captured by torch.compile.",
+        "Using lock_() inside a compiled graph: the parent/child unlock "
+        "enforcement (the 'cannot unlock a child while a parent is locked' "
+        "invariant) relies on weakrefs and is skipped under torch.compile. "
+        "If you need that invariant to be enforced, lock_() in eager mode "
+        "before entering the compiled region.",
         category=UserWarning,
     )
 
