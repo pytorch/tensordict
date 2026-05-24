@@ -708,7 +708,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -722,7 +722,7 @@ class PersistentTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
@@ -735,7 +735,7 @@ class PersistentTensorDict(TensorDictBase):
         tensor: torch.Tensor,
         *,
         copy_data: bool = True,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."

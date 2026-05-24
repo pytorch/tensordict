@@ -2965,7 +2965,7 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace=True,
         like=False,
         share_non_tensor,
-        robust_key: bool = False,
+        robust_key: bool = True,
         existsok,
     ) -> Self:
         if prefix is not None:
@@ -3022,7 +3022,7 @@ class LazyStackedTensorDict(TensorDictBase):
         device: torch.device | None = None,
         *,
         out=None,
-        robust_key: bool = False,
+        robust_key: bool = True,
         **kwargs,
     ) -> LazyStackedTensorDict:
         tensordicts = []

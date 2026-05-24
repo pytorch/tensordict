@@ -5,7 +5,6 @@
 
 import importlib
 
-import pytest
 
 
 def test_utils_key_json_import_paths_are_preserved():
@@ -17,7 +16,7 @@ def test_utils_key_json_import_paths_are_preserved():
         assert getattr(utils_module, name).__module__ == "tensordict.utils"
 
 
-def test_filesystem_key_roundtrip_and_warning():
+def test_filesystem_key_roundtrip_and_default():
     utils_module = importlib.import_module("tensordict.utils")
 
     key = "a/b% c"
@@ -26,8 +25,8 @@ def test_filesystem_key_roundtrip_and_warning():
     assert encoded == "a%2Fb%25%20c"
     assert utils_module._decode_key_from_filesystem(encoded) == key
     assert utils_module._encode_key_for_filesystem(key, robust=False) == key
-    with pytest.warns(FutureWarning):
-        assert utils_module._get_robust_key_setting_with_warning(key, None) is False
+    assert utils_module._get_robust_key_setting_with_warning(key, None) is True
+    assert utils_module._get_robust_key_setting(None) is True
 
 
 def test_json_backend_roundtrip():

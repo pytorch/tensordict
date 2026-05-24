@@ -123,7 +123,7 @@ def load(
     non_blocking: bool = False,
     *,
     out: TensorCollection | None = None,
-    robust_key: bool | None = None,
+    robust_key: bool | None = True,
 ) -> "Self":
     """Loads a tensordict from disk."""
     return load_memmap(
@@ -141,7 +141,7 @@ def load_memmap(
     non_blocking: bool = False,
     *,
     out: TensorCollection | None = None,
-    robust_key: bool | None = None,
+    robust_key: bool | None = True,
 ) -> "Self":
     """Loads a memory-mapped tensordict from disk."""
     return _tensordict_cls().load_memmap(
@@ -161,7 +161,7 @@ def save(
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
-    robust_key: bool | None = None,
+    robust_key: bool | None = True,
 ) -> None:
     """Saves the tensordict to disk."""
     return data.memmap(
@@ -182,7 +182,7 @@ def memmap(
     num_threads: int = 0,
     return_early: bool = False,
     share_non_tensor: bool = False,
-    robust_key: bool | None = None,
+    robust_key: bool | None = True,
 ) -> "Self":
     """Writes all tensors onto memory-mapped tensors in a new tensordict."""
     return data.memmap(

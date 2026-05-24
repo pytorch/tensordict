@@ -2585,19 +2585,19 @@ class TensorDictStore(TensorDictBase):
             "Call `to_tensordict()` or `to_local()` first."
         )
 
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=None):
+    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )
 
     def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=None
+        self, key, storage, shape, *, dtype=None, robust_key=True
     ):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )
 
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=None):
+    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )
@@ -3130,15 +3130,15 @@ class _StoreStackElementView(TensorDictBase):
     def _memmap_(self, **kw):
         raise RuntimeError(f"Cannot call memmap on a {type(self).__name__}.")
 
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=None):
+    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
     def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=None
+        self, key, storage, shape, *, dtype=None, robust_key=True
     ):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=None):
+    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
         raise RuntimeError(f"Cannot make memmap on a {type(self).__name__}.")
 
     def memmap_(self, prefix=None, copy_existing=False, num_threads=0):
@@ -4888,19 +4888,19 @@ class LazyStackedTensorDictStore(TensorDictBase):
     ):
         raise RuntimeError(f"Cannot call memmap on a {type(self).__name__} in-place.")
 
-    def make_memmap(self, key, shape, *, dtype=None, robust_key=None):
+    def make_memmap(self, key, shape, *, dtype=None, robust_key=True):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )
 
     def make_memmap_from_storage(
-        self, key, storage, shape, *, dtype=None, robust_key=None
+        self, key, storage, shape, *, dtype=None, robust_key=True
     ):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )
 
-    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=None):
+    def make_memmap_from_tensor(self, key, tensor, *, copy_data=True, robust_key=True):
         raise RuntimeError(
             f"Cannot make memory-mapped tensor on a {type(self).__name__}."
         )

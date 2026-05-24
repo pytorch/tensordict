@@ -3204,7 +3204,7 @@ class TensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -3260,7 +3260,7 @@ class TensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -3320,7 +3320,7 @@ class TensorDict(TensorDictBase):
         *,
         copy_data: bool = True,
         existsok: bool = True,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         if not self.is_memmap():
             raise RuntimeError(
@@ -4632,7 +4632,7 @@ class _SubTensorDict(TensorDictBase):
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
         raise RuntimeError(
             "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
