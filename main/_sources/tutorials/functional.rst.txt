@@ -145,11 +145,11 @@ exit.
             [0.],
             [0.],
             [0.]])
-    Output with original params: tensor([[0.3701],
-            [0.4280],
-            [0.5513],
-            [0.6268],
-            [0.6183]], grad_fn=<AddmmBackward0>)
+    Output with original params: tensor([[ 0.1001],
+            [ 0.0848],
+            [ 0.0913],
+            [-0.0246],
+            [ 0.1247]], grad_fn=<AddmmBackward0>)
 
 
 
