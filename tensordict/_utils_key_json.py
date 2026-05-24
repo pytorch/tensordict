@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import warnings
 
 __all__ = [
     "_decode_key_from_filesystem",
@@ -44,31 +43,16 @@ def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
 
 
 def _get_robust_key_setting_with_warning(key: str, robust_key) -> bool:
-    """Handle the robust_key parameter with smart deprecation warning."""
-    if robust_key is not None:
-        return robust_key
-
-    robust_encoded = _encode_key_for_filesystem(key, robust=True)
-    legacy_encoded = _encode_key_for_filesystem(key, robust=False)
-
-    if robust_encoded != legacy_encoded:
-        warnings.warn(
-            f"The key '{key}' contains characters that will be handled differently "
-            f"in TensorDict v0.12 for better cross-platform support. "
-            f"To opt into the new behavior now, use `robust_key=True`. "
-            f"To suppress this warning and keep the current behavior, use `robust_key=False`. "
-            f"See https://github.com/pytorch/tensordict/issues/1440 for details.",
-            FutureWarning,
-            stacklevel=3,
-        )
-
-    return False
+    """Handle the robust_key parameter after the robust default migration."""
+    if robust_key is None:
+        return True
+    return robust_key
 
 
 def _get_robust_key_setting(robust_key) -> bool:
     """Handle the robust_key parameter without key-specific logic."""
     if robust_key is None:
-        return False
+        return True
     return robust_key
 
 

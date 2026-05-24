@@ -822,7 +822,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
     def make_memmap(
         self,
@@ -830,7 +830,7 @@ class TensorCollection:
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor: ...
     def make_memmap_from_storage(
         self,
@@ -839,7 +839,7 @@ class TensorCollection:
         shape: torch.Size | torch.Tensor,
         *,
         dtype: torch.dtype | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor: ...
     def make_memmap_from_tensor(
         self,
@@ -847,7 +847,7 @@ class TensorCollection:
         tensor: torch.Tensor,
         *,
         copy_data: bool = True,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> MemoryMappedTensor: ...
     def save(
         self,
@@ -857,7 +857,7 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
     def dumps(
         self,
@@ -867,7 +867,7 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
     def memmap(
         self,
@@ -878,7 +878,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         existsok: bool = True,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
     def memmap_like(
         self,
@@ -889,14 +889,14 @@ class TensorCollection:
         num_threads: int = 0,
         return_early: bool = False,
         share_non_tensor: bool = False,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
     @classmethod
     def load(
-        cls, prefix: str | Path, *args, robust_key: bool | None = None, **kwargs
+        cls, prefix: str | Path, *args, robust_key: bool | None = True, **kwargs
     ) -> Self: ...
     def load_(
-        self, prefix: str | Path, *args, robust_key: bool | None = None, **kwargs
+        self, prefix: str | Path, *args, robust_key: bool | None = True, **kwargs
     ): ...
     @classmethod
     def load_memmap(
@@ -906,9 +906,9 @@ class TensorCollection:
         non_blocking: bool = False,
         *,
         out: TensorCollection | None = None,
-        robust_key: bool | None = None,
+        robust_key: bool | None = True,
     ) -> Self: ...
-    def load_memmap_(self, prefix: str | Path, robust_key: bool | None = None): ...
+    def load_memmap_(self, prefix: str | Path, robust_key: bool | None = True): ...
     def memmap_refresh_(self): ...
     def entry_class(self, key: NestedKey) -> type: ...
     def set(
