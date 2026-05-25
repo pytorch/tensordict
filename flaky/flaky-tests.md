@@ -1,10 +1,10 @@
-# Flaky Test Report - 2026-05-24
+# Flaky Test Report - 2026-05-25
 
 ## Summary
 
 - **Flaky tests**: 1
 - **Newly flaky** (last 7 days): 0
-- **Total tests analyzed**: 45193
+- **Total tests analyzed**: 45201
 - **CI runs analyzed**: 30
 
 ---
@@ -27,4 +27,4 @@
 
 ---
 
-*Generated at 2026-05-24T07:15:38.578144+00:00*
+*Generated at 2026-05-25T07:46:01.915037+00:00*
