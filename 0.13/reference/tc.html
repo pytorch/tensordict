@@ -1,0 +1,1125 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>tensorclass &mdash; tensordict 0.13 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="TensorClass" href="generated/tensordict.TensorClass.html" />
+    <link rel="prev" title="tensordict.nn.rand_one_hot" href="generated/tensordict.nn.rand_one_hot.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'GTM-T8XT4PS');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="active docs-active">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.13
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_shapes.html">Manipulating the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_slicing.html">Slicing, Indexing, and Masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_keys.html">Manipulating the keys of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensordict_module.html">TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/functional.html">Functional Programming with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../compatibility.html">Cross-class compatibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../distributed.html">TensorDict in distributed settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../fx.html">Tracing TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../saving.html">Saving TensorDict and tensorclass objects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../storage.html">Storing large heterogeneous data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../printing.html">Printing and Display</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>tensorclass</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/tc.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+          
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="tensorclass">
+<h1>tensorclass<a class="headerlink" href="#tensorclass" title="Permalink to this heading">¶</a></h1>
+<p>A <em>tensorclass</em> is a dataclass-like container that inherits all of
+<a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>’s machinery — indexing, reshaping,
+<code class="docutils literal notranslate"><span class="pre">to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">stack</span></code>/<code class="docutils literal notranslate"><span class="pre">cat</span></code>, memory-mapped serialization, <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>
+support — while exposing your fields as typed attributes rather than string
+keys. Tensorclasses let you constrain a container to a known set of fields,
+attach custom methods, and get IDE/type-checker support out of the box.</p>
+<p>There are two equivalent entry points:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> — the <strong>inheritance-based</strong> API. Recommended
+for new code. Static type-checkers understand it without help, and the
+parametric form <code class="docutils literal notranslate"><span class="pre">TensorClass[&quot;autocast&quot;,</span> <span class="pre">...]</span></code> makes the configuration
+explicit at the class declaration site.</p></li>
+<li><p><a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> — the <strong>decorator</strong> form. Kept for
+backwards-compatibility and for migrating plain <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> code. See
+<a class="reference internal" href="#tensorclass-legacy-decorator"><span class="std std-ref">Legacy: the &#64;tensorclass decorator</span></a> below.</p></li>
+</ul>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Permalink to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyData</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">floatdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">intdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">non_tensordata</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">... </span>    <span class="n">nested</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyData</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">check_nested</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">nested</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">MyData</span><span class="p">(</span>
+<span class="gp">... </span>  <span class="n">floatdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>  <span class="n">intdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+<span class="gp">... </span>  <span class="n">non_tensordata</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span>
+<span class="gp">... </span>  <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;data:&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="go">data: MyData(</span>
+<span class="go">  floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">  intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">  non_tensordata=&#39;test&#39;,</span>
+<span class="go">  nested=None,</span>
+<span class="go">  batch_size=torch.Size([3, 4]),</span>
+<span class="go">  device=None,</span>
+<span class="go">  is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">nested</span> <span class="o">=</span> <span class="n">MyData</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">floatdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">intdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">non_tensordata</span><span class="o">=</span><span class="s2">&quot;nested_test&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If the batch size is omitted it defaults to an empty shape. With a non-empty
+batch size, tensor fields are indexed elementwise and non-tensor fields are
+preserved:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;indexed:&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
+<span class="go">indexed: MyData(</span>
+<span class="go">   floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">   intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">   non_tensordata=&#39;test&#39;,</span>
+<span class="go">   nested=MyData(</span>
+<span class="go">      floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">      intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">      non_tensordata=&#39;nested_test&#39;,</span>
+<span class="go">      nested=None,</span>
+<span class="go">      batch_size=torch.Size([2, 4]),</span>
+<span class="go">      device=None,</span>
+<span class="go">      is_shared=False),</span>
+<span class="go">   batch_size=torch.Size([2, 4]),</span>
+<span class="go">   device=None,</span>
+<span class="go">   is_shared=False)</span>
+</pre></div>
+</div>
+<p>Tensorclasses support attribute mutation (including on nested instances), the
+usual tensor-shape operations (<code class="docutils literal notranslate"><span class="pre">stack</span></code>, <code class="docutils literal notranslate"><span class="pre">cat</span></code>, <code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">to(device)</span></code>,
+…), and equality. See the <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> documentation for
+the full list of operations.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cat_tc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">data</span><span class="p">,</span> <span class="n">data2</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">cat_tc</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="flags">
+<h2>Flags<a class="headerlink" href="#flags" title="Permalink to this heading">¶</a></h2>
+<p>The behaviour of a tensorclass is controlled by a handful of mutually
+intelligible flags. They can be set in three equivalent forms — pick whichever
+reads best:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>     <span class="c1"># bracket form</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>  <span class="c1"># kwargs form</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span><span class="p">(</span><span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>             <span class="c1"># decorator form</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+</pre></div>
+</div>
+<p>Multiple flags can be combined in the brackets:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Foo</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+</pre></div>
+</div>
+<p>The bracket form is the one that static type-checkers (mypy, pyright) resolve
+correctly via <a class="reference external" href="https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__" title="(in Python v3.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__class_getitem__()</span></code></a>, so IDE completion on instance
+attributes works without further configuration.</p>
+<p>The available flags are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">autocast</span></code> — coerce values back to the field’s annotated type when reading.
+Useful when a field is conceptually a scalar, string, or enum.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nocast</span></code> — store tensor-compatible scalars (<code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>,
+<code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code>, …) as-is, without wrapping them in a tensor.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> — every field must hold a tensor (or be tensor-castable).
+Skips the non-tensor storage path and yields measurable speed-ups on
+attribute access — recommended for performance-critical containers (RL
+trajectories, model I/O batches).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frozen</span></code> — immutable instances, in the spirit of
+<code class="docutils literal notranslate"><span class="pre">&#64;dataclass(frozen=True)</span></code>. Plays well with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and functional
+code paths.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shadow</span></code> — opt out of the check that forbids field names colliding with
+reserved TensorDict attributes (<code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code>, …).</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">autocast</span></code>, <code class="docutils literal notranslate"><span class="pre">nocast</span></code> and <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> are mutually exclusive. See the
+<a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> docstring for per-flag runnable examples.</p>
+<section id="auto-casting">
+<span id="tensorclass-autocasting"></span><h3>Auto-casting<a class="headerlink" href="#auto-casting" title="Permalink to this heading">¶</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Auto-casting is an experimental feature and subject to changes in
+the future. Compatibility with python&lt;=3.9 is limited.</p>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">autocast</span></code> enabled, methods such as <code class="docutils literal notranslate"><span class="pre">__setattr__</span></code>, <code class="docutils literal notranslate"><span class="pre">update</span></code>,
+<code class="docutils literal notranslate"><span class="pre">update_</span></code> and <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> will attempt to cast type-annotated entries to
+the desired TensorDict / tensorclass instance (except in cases detailed below).
+For instance, the following code casts the <code class="docutils literal notranslate"><span class="pre">td</span></code> dictionary to a
+<a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and the <code class="docutils literal notranslate"><span class="pre">tc</span></code> entry to a <code class="docutils literal notranslate"><span class="pre">MyClass</span></code> instance:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="p">:</span> <span class="n">MyClass</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span> <span class="s2">&quot;td&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;tc&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">td</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Type-annotated items that include a <code class="docutils literal notranslate"><span class="pre">typing.Optional</span></code> or
+<code class="docutils literal notranslate"><span class="pre">typing.Union</span></code> will not be compatible with auto-casting, but other items in
+the tensorclass will:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;autocast&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">tc_autocast</span><span class="p">:</span> <span class="n">MyClass</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">... </span>    <span class="n">tc_not_autocast</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyClass</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span>
+<span class="gp">... </span>    <span class="n">tc_autocast</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span>    <span class="n">tc_not_autocast</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc_autocast</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># because the type is Optional or Union, auto-casting is disabled for</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># that variable.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc_not_autocast</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If at least one item in the class is annotated using the <code class="docutils literal notranslate"><span class="pre">type0</span> <span class="pre">|</span> <span class="pre">type1</span></code>
+semantic, the whole class auto-casting capabilities are deactivated.
+Because tensorclass supports non-tensor leaves, setting a dictionary in
+these cases will lead to setting it as a plain dictionary instead of a
+tensor collection subclass (<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> or tensorclass).</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Auto-casting isn’t enabled for leaves (tensors). The reason is that
+this feature isn’t compatible with type annotations that contain the
+<code class="docutils literal notranslate"><span class="pre">type0</span> <span class="pre">|</span> <span class="pre">type1</span></code> type-hint semantics, which are widespread. Allowing
+auto-casting on leaves would result in very similar code having drastically
+different behaviour depending on small annotation differences.</p>
+</div>
+</section>
+<section id="performance-with-tensor-only">
+<h3>Performance with <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code><a class="headerlink" href="#performance-with-tensor-only" title="Permalink to this heading">¶</a></h3>
+<p>The default tensorclass attribute getter first looks in the tensor storage and
+then falls back to the non-tensor storage. <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> skips that fallback,
+which makes <code class="docutils literal notranslate"><span class="pre">self.field</span></code> a direct dict lookup. For containers that genuinely
+hold only tensors (think batched observations, actions, rewards in RL, or model
+inputs/outputs) this can save a meaningful share of per-step overhead.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">TrajectoryBatch</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;tensor_only&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</pre></div>
+</div>
+<p>Non-tensor inputs that are tensor-castable (Python scalars, numpy arrays) are
+still accepted — they are converted to tensors at assignment time.</p>
+</section>
+<section id="immutability-with-frozen">
+<h3>Immutability with <code class="docutils literal notranslate"><span class="pre">frozen</span></code><a class="headerlink" href="#immutability-with-frozen" title="Permalink to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code> makes instances immutable, mirroring <code class="docutils literal notranslate"><span class="pre">&#64;dataclass(frozen=True)</span></code>.
+Frozen tensorclasses are a good fit for state objects passed through
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> or functional pipelines where in-place mutation would be a
+correctness hazard.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">params</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">step</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">step</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">step</span> <span class="o">+</span> <span class="mi">1</span>   <span class="c1"># raises dataclasses.FrozenInstanceError</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">frozen</span></code> is inherited: a non-frozen subclass cannot inherit from a frozen
+base, and vice versa.</p>
+</section>
+</section>
+<section id="migrating-from-a-plain-dataclass">
+<h2>Migrating from a plain dataclass<a class="headerlink" href="#migrating-from-a-plain-dataclass" title="Permalink to this heading">¶</a></h2>
+<p>If you already have a <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>, <a class="reference internal" href="generated/tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> will
+build a tensorclass type or instance from it without rewriting the class
+definition:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_dataclass</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@dataclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">XTc</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>   <span class="c1"># convert the type</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x_tc</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())))</span>  <span class="c1"># convert an instance</span>
+</pre></div>
+</div>
+<p>The same configuration flags (<code class="docutils literal notranslate"><span class="pre">autocast</span></code>, <code class="docutils literal notranslate"><span class="pre">nocast</span></code>, <code class="docutils literal notranslate"><span class="pre">frozen</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tensor_only</span></code>, <code class="docutils literal notranslate"><span class="pre">shadow</span></code>) are accepted.</p>
+</section>
+<section id="non-tensor-data-nontensordata-vs-metadata">
+<h2>Non-tensor data: <code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code> vs <code class="docutils literal notranslate"><span class="pre">MetaData</span></code><a class="headerlink" href="#non-tensor-data-nontensordata-vs-metadata" title="Permalink to this heading">¶</a></h2>
+<p>Tensorclasses transparently support non-tensor fields. Two wrappers carry such
+values and they differ in how they react to shape operations:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> — the default. Behaves like a regular
+TensorDict entry under shape operations: stacking a list of
+<code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code> items along a new dimension keeps every value, expansion
+broadcasts to the requested shape, indexing returns the corresponding entry.</p></li>
+<li><p><a class="reference internal" href="generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a> — broadcasts a single value across the batch.
+Stacking <code class="docutils literal notranslate"><span class="pre">MetaData(&quot;a&quot;)</span></code> and <code class="docutils literal notranslate"><span class="pre">MetaData(&quot;a&quot;)</span></code> returns <code class="docutils literal notranslate"><span class="pre">MetaData(&quot;a&quot;)</span></code>;
+stacking with a different value raises. Use this for static, per-class
+metadata (a string label, a configuration dict) that should not multiply
+under batching.</p></li>
+</ul>
+</section>
+<section id="typed-nn-module-i-o">
+<h2>Typed <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> I/O<a class="headerlink" href="#typed-nn-module-i-o" title="Permalink to this heading">¶</a></h2>
+<p>For modules whose inputs and outputs are tensorclasses, use
+<a class="reference internal" href="generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase" title="tensordict.nn.TensorClassModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClassModuleBase</span></code></a>. The generic parameters declare
+the input and output types, giving IDE completion, refactor safety, and an
+<code class="docutils literal notranslate"><span class="pre">as_td_module()</span></code> adapter for use inside
+<a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> pipelines. See the
+<a class="reference internal" href="nn.html"><span class="doc">tensordict.nn package</span></a> reference for a complete example.</p>
+</section>
+<section id="torch-compile-and-cudagraphs">
+<h2><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and cudagraphs<a class="headerlink" href="#torch-compile-and-cudagraphs" title="Permalink to this heading">¶</a></h2>
+<p>Tensorclasses are designed to compile well. A few practical notes:</p>
+<ul class="simple">
+<li><p>Prefer <code class="docutils literal notranslate"><span class="pre">frozen=True</span></code> for state objects when you can — the compiler reasons
+about immutable containers more cleanly than about mutable ones.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tensor_only=True</span></code> containers avoid the non-tensor lookup branch and tend
+to produce simpler graphs.</p></li>
+<li><p>Avoid data-dependent shapes (<code class="docutils literal notranslate"><span class="pre">.item()</span></code> on a tensor that controls a Python
+branch) and prefer <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> over Python <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">else</span></code> on tensor
+values.</p></li>
+</ul>
+</section>
+<section id="serialization">
+<h2>Serialization<a class="headerlink" href="#serialization" title="Permalink to this heading">¶</a></h2>
+<p>A tensorclass instance can be saved with the <code class="docutils literal notranslate"><span class="pre">memmap</span></code> method. Tensor data is
+written as memory-mapped tensors and JSON-serializable non-tensor data is
+written as JSON; remaining data is pickled via <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>.</p>
+<p>Loading is done with <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>. The instance
+recovers its original type provided the tensorclass is importable in the
+loading process:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="s2">&quot;path/to/saved/directory&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data_loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;path/to/saved/directory&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_loaded</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="edge-cases">
+<h2>Edge cases<a class="headerlink" href="#edge-cases" title="Permalink to this heading">¶</a></h2>
+<p>Tensorclasses support equality and inequality operators, including for nested
+instances. Non-tensor / meta data is not validated by these operators; the
+returned tensorclass has boolean leaves for tensor fields and <code class="docutils literal notranslate"><span class="pre">None</span></code> for
+non-tensor fields.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="n">data2</span><span class="p">)</span>
+<span class="go">MyData(</span>
+<span class="go">   floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">   intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">   non_tensordata=None,</span>
+<span class="go">   nested=MyData(</span>
+<span class="go">       floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">       intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">       non_tensordata=None,</span>
+<span class="go">       nested=None,</span>
+<span class="go">       batch_size=torch.Size([3, 4]),</span>
+<span class="go">       device=None,</span>
+<span class="go">       is_shared=False),</span>
+<span class="go">   batch_size=torch.Size([3, 4]),</span>
+<span class="go">   device=None,</span>
+<span class="go">   is_shared=False)</span>
+</pre></div>
+</div>
+<p>Item assignment performs an <em>identity</em> check on non-tensor / meta data rather
+than equality, for performance reasons. If the values differ, a
+<code class="docutils literal notranslate"><span class="pre">UserWarning</span></code> is emitted; users are responsible for keeping non-tensor data
+in sync.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span><span class="o">.</span><span class="n">non_tensordata</span> <span class="o">=</span> <span class="s2">&quot;test_new&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">data2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">UserWarning: Meta data at &#39;non_tensordata&#39; may or may not be equal, this may result in undefined behaviours</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">torch.cat</span></code> / <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code> work on tensorclasses but do not validate
+non-tensor / meta fields — the operation runs on the tensor leaves and the
+non-tensor data of the <em>first</em> instance in the list is kept. If the inputs
+disagree on a non-tensor field, the output will silently follow the first one:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span><span class="o">.</span><span class="n">non_tensordata</span> <span class="o">=</span> <span class="s2">&quot;test_new&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack_tc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">data</span><span class="p">,</span> <span class="n">data2</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">stack_tc</span><span class="o">.</span><span class="n">non_tensordata</span> <span class="o">==</span> <span class="s2">&quot;test&quot;</span>  <span class="c1"># data&#39;s value wins</span>
+</pre></div>
+</div>
+</section>
+<section id="pre-allocation">
+<h2>Pre-allocation<a class="headerlink" href="#pre-allocation" title="Permalink to this heading">¶</a></h2>
+<p>Fields can be initialised to <code class="docutils literal notranslate"><span class="pre">None</span></code> and assigned later. While <code class="docutils literal notranslate"><span class="pre">None</span></code>, the
+attribute is stored as non-tensor / meta data; on assignment the appropriate
+storage is selected based on the value’s type.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">X</span><span class="p">:</span> <span class="n">Any</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">Any</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="s2">&quot;testing&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="go">MyClass(</span>
+<span class="go">   X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">   y=&#39;testing&#39;,</span>
+<span class="go">   batch_size=torch.Size([3, 4]),</span>
+<span class="go">   device=None,</span>
+<span class="go">   is_shared=False)</span>
+</pre></div>
+</div>
+</section>
+<section id="legacy-the-tensorclass-decorator">
+<span id="tensorclass-legacy-decorator"></span><h2>Legacy: the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator<a class="headerlink" href="#legacy-the-tensorclass-decorator" title="Permalink to this heading">¶</a></h2>
+<p>The <a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> decorator is the original way to declare a
+tensorclass. It is kept for backwards compatibility and remains the most
+convenient option when migrating a body of <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> code. New code is
+encouraged to use <a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> instead, which carries
+identical semantics with better static-type-checker support.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyData</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">floatdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">intdata</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">non_tensordata</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">... </span>    <span class="n">nested</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyData</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</pre></div>
+</div>
+<p>All flags described above are accepted as keyword arguments to the decorator:
+<code class="docutils literal notranslate"><span class="pre">&#64;tensorclass(autocast=True)</span></code>, <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass(frozen=True,</span> <span class="pre">tensor_only=True)</span></code>,
+etc.</p>
+</section>
+<section id="api-reference">
+<h2>API reference<a class="headerlink" href="#api-reference" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorClass</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TensorClass is the inheritance-based version of the <a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensorclass()</span></code></a> decorator.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a>([cls, autocast, frozen, nocast, ...])</p></td>
+<td><p>A decorator to create <a class="reference internal" href="generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> classes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>(data[, _metadata, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MetaData</span></code></a>(data[, _metadata, _is_non_tensor, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs" title="tensordict.TensorAttrs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorAttrs</span></code></a>([tgt_device, tgt_dtype, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>(data)</p></td>
+<td><p>A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_dataclass</span></code></a>(obj, *[, dest_cls, ...])</p></td>
+<td><p>Converts a dataclass instance or a type into a tensorclass instance or type, respectively.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/tensordict.TensorClass.html" class="btn btn-neutral float-right" title="TensorClass" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/tensordict.nn.rand_one_hot.html" class="btn btn-neutral" title="tensordict.nn.rand_one_hot" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">tensorclass</a><ul>
+<li><a class="reference internal" href="#quick-start">Quick start</a></li>
+<li><a class="reference internal" href="#flags">Flags</a><ul>
+<li><a class="reference internal" href="#auto-casting">Auto-casting</a></li>
+<li><a class="reference internal" href="#performance-with-tensor-only">Performance with <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code></a></li>
+<li><a class="reference internal" href="#immutability-with-frozen">Immutability with <code class="docutils literal notranslate"><span class="pre">frozen</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#migrating-from-a-plain-dataclass">Migrating from a plain dataclass</a></li>
+<li><a class="reference internal" href="#non-tensor-data-nontensordata-vs-metadata">Non-tensor data: <code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code> vs <code class="docutils literal notranslate"><span class="pre">MetaData</span></code></a></li>
+<li><a class="reference internal" href="#typed-nn-module-i-o">Typed <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> I/O</a></li>
+<li><a class="reference internal" href="#torch-compile-and-cudagraphs"><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> and cudagraphs</a></li>
+<li><a class="reference internal" href="#serialization">Serialization</a></li>
+<li><a class="reference internal" href="#edge-cases">Edge cases</a></li>
+<li><a class="reference internal" href="#pre-allocation">Pre-allocation</a></li>
+<li><a class="reference internal" href="#legacy-the-tensorclass-decorator">Legacy: the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator</a></li>
+<li><a class="reference internal" href="#api-reference">API reference</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title" class="active">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>
