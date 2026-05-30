@@ -55,6 +55,7 @@ jobs:
       package-name: ${{ matrix.package-name }}
       runner-type: macos-m2-15
       smoke-test-script: ${{ matrix.smoke-test-script }}
+      setup-miniconda: true
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
