@@ -33,7 +33,7 @@ jobs:
       os: linux
       with-cuda: disable
       with-rocm: disable
-      test-infra-repository: pytorch/test-infra
+      test-infra-repository: vmoens/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
   build:
     needs: generate-matrix
@@ -51,7 +51,7 @@ jobs:
     with:
       repository: ${{ matrix.repository }}
       ref: ""
-      test-infra-repository: pytorch/test-infra
+      test-infra-repository: vmoens/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
