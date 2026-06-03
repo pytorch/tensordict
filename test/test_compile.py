@@ -1442,7 +1442,7 @@ class TestFunctional:
         try:
 
             def call(x, td):
-                with td.to_module(module):
+                with td.to_module(module, preserve_module_state=False):
                     return module(x)
 
             call_compile = torch.compile(call, fullgraph=True, mode=mode)
@@ -1488,7 +1488,7 @@ class TestFunctional:
         td_zero.zero_()
 
         def call(x, td):
-            with td.to_module(module):
+            with td.to_module(module, preserve_module_state=False):
                 y = module(x)
             td.clear_refs_for_compile_()
             return y
@@ -1509,7 +1509,7 @@ class TestFunctional:
             assert (td_zero == 0).all()
         # torch.testing.assert_close(call_compile(x, td_zero), module(x))
 
-        td.to_module(module)
+        td.to_module(module, preserve_module_state=False)
         call_compile(x, td_zero)
         assert (call_compile(x, td_zero) == 0).all()
         assert all(
@@ -1539,7 +1539,7 @@ class TestFunctional:
         td_zero = TensorDictParams(td.data.expand(10).clone().zero_())
 
         def call(x, td):
-            with td.to_module(module):
+            with td.to_module(module, preserve_module_state=False):
                 result = module(x)
             return result
 
@@ -1673,7 +1673,7 @@ class TestExport:
                 )
 
             def batch_forward(self, params, x):
-                with params.to_module(self.arch):
+                with params.to_module(self.arch, preserve_module_state=False):
                     return self.arch(x)
                 # This could be an option but dynamo doesn't know how to trace through state_dict ops
                 # sd = self.arch.state_dict()

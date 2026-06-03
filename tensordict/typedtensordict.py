@@ -800,11 +800,20 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # ------------------------------------------------------------------
     # _to_module
     # ------------------------------------------------------------------
-    def _to_module(self, module, *, inplace=None, return_swap=True, **kwargs):
+    def _to_module(
+        self,
+        module,
+        *,
+        inplace=None,
+        return_swap=True,
+        preserve_module_state: bool | None = None,
+        **kwargs,
+    ):
         return self._source._to_module(
             module,
             inplace=inplace,
             return_swap=return_swap,
+            preserve_module_state=preserve_module_state,
             **kwargs,
         )
 

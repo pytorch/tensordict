@@ -594,6 +594,7 @@ class TensorClass:
         swap_dest: Incomplete | None = None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
+        preserve_module_state: bool | None = None,
         memo: Incomplete | None = None,
     ) -> Self: ...
     @property

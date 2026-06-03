@@ -3446,6 +3446,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         swap_dest=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
+        preserve_module_state: bool | None = None,
         memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
@@ -3469,6 +3470,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
             non_blocking (bool, optional): if ``True`` and this copy is between
                 different devices, the copy may occur asynchronously with respect
                 to the host.
+            preserve_module_state (bool, optional): if ``True``, existing
+                :class:`~torch.nn.Parameter` and buffer registrations are
+                preserved when writing tensor leaves to ``module``: parameters
+                remain parameters with their original ``requires_grad`` value,
+                and buffers remain registered buffers. If ``False``, tensor
+                leaves are written with the historical replacement semantics,
+                which may deregister an existing parameter when the source leaf
+                is not an :class:`~torch.nn.Parameter`. If ``None`` (the
+                v0.13 default), the historical behavior is kept but a
+                ``FutureWarning`` is emitted when a write would deregister a
+                parameter. The default will become ``True`` in v0.14.
 
         Examples:
             >>> from torch import nn
@@ -3477,7 +3489,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     num_layers=1)
             >>> params = TensorDict.from_module(module)
             >>> params.data.zero_()
-            >>> params.to_module(module)
+            >>> params.to_module(module, preserve_module_state=True)
             >>> assert (module.layers[0].linear1.weight == 0).all()
 
         Using a tensordict as a context manager can be useful to make functional calls:
@@ -3488,7 +3500,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     num_layers=1)
             >>> params = TensorDict.from_module(module)
             >>> params = params.data * 0 # Use TensorDictParams to remake these tensors regular nn.Parameter instances
-            >>> with params.to_module(module):
+            >>> with params.to_module(module, preserve_module_state=True):
             ...     # Call the module with zeroed params
             ...     y = module(*inputs)
             >>> # The module is repopulated with its original params
@@ -3512,6 +3524,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             memo=memo,
             use_state_dict=use_state_dict,
             non_blocking=non_blocking,
+            preserve_module_state=preserve_module_state,
         )
 
     @abc.abstractmethod
@@ -3525,6 +3538,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
+        preserve_module_state: bool | None = None,
     ):
         raise NotImplementedError
 

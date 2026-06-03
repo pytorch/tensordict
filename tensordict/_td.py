@@ -532,6 +532,7 @@ class TensorDict(TensorDictBase):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
+        preserve_module_state: bool | None = None,
         is_dynamo: bool | None = None,
     ):
         if is_dynamo is None:
@@ -617,9 +618,18 @@ class TensorDict(TensorDictBase):
                         key,
                         value,
                         inplace,
+                        preserve_module_state=preserve_module_state,
+                        memo=memo,
                     )
                 else:
                     if not inplace:
+                        value = _maybe_preserve_module_state(
+                            module,
+                            key,
+                            value,
+                            preserve_module_state=preserve_module_state,
+                            memo=memo,
+                        )
                         local_out = swap_tensor(module, key, value)
                     else:
                         new_val = local_out
@@ -644,6 +654,7 @@ class TensorDict(TensorDictBase):
                         memo=memo,
                         use_state_dict=use_state_dict,
                         non_blocking=non_blocking,
+                        preserve_module_state=preserve_module_state,
                         is_dynamo=is_dynamo,
                     )
 
@@ -5014,6 +5025,73 @@ class _TensorDictKeysView:
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
 
 
+_TO_MODULE_PRESERVE_MODULE_STATE_WARNING = (
+    "TensorDict.to_module() is replacing an existing nn.Parameter in the "
+    "destination module with a tensor leaf that is not an nn.Parameter. This "
+    "historical behavior can remove the key from module.state_dict(). In "
+    "tensordict v0.14, to_module() will preserve existing module parameter "
+    "and buffer registrations by default. Pass preserve_module_state=False "
+    "to keep the current replacement behavior, or preserve_module_state=True "
+    "to opt in to the v0.14 behavior now."
+)
+
+
+def _warn_to_module_preserve_module_state(memo) -> None:
+    if memo is None:
+        warn(
+            _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
+            FutureWarning,
+            stacklevel=3,
+        )
+        return
+    if memo.get("preserve_module_state_warned", False):
+        return
+    memo["preserve_module_state_warned"] = True
+    warn(
+        _TO_MODULE_PRESERVE_MODULE_STATE_WARNING,
+        FutureWarning,
+        stacklevel=3,
+    )
+
+
+def _maybe_preserve_module_state(
+    module: torch.nn.Module,
+    name: str,
+    tensor: torch.Tensor,
+    *,
+    preserve_module_state: bool | None,
+    memo,
+) -> torch.Tensor:
+    if preserve_module_state is False or (
+        preserve_module_state is None and isinstance(tensor, torch.nn.Parameter)
+    ):
+        return tensor
+    try:
+        param = module._parameters.get(name, NO_DEFAULT)
+    except AttributeError:
+        param = NO_DEFAULT
+    if (
+        param is not NO_DEFAULT
+        and param is not None
+        and isinstance(tensor, torch.Tensor)
+    ):
+        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
+            _warn_to_module_preserve_module_state(memo)
+        elif preserve_module_state and (
+            not isinstance(tensor, torch.nn.Parameter)
+            or tensor.requires_grad != param.requires_grad
+        ):
+            return torch.nn.Parameter(tensor, requires_grad=param.requires_grad)
+    elif (
+        preserve_module_state
+        and isinstance(tensor, torch.nn.Parameter)
+        and name in getattr(module, "_buffers", {})
+    ):
+        persistent = name not in module._non_persistent_buffers_set
+        return Buffer(tensor, persistent=persistent)
+    return tensor
+
+
 def _set_tensor_dict(  # noqa: F811
     __dict__,
     _parameters,
@@ -5023,14 +5101,18 @@ def _set_tensor_dict(  # noqa: F811
     name: str,
     tensor: torch.Tensor,
     inplace: bool,
+    *,
+    preserve_module_state: bool | None,
+    memo,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = _parameters.pop(name, None)  # type: ignore[assignment]
-    if out is None:
-        out = _buffers.pop(name, None)
-        was_buffer = out is not None
-    if out is None:
+    out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
+    was_parameter = out is not NO_DEFAULT
+    if out is NO_DEFAULT:
+        out = _buffers.pop(name, NO_DEFAULT)
+        was_buffer = out is not NO_DEFAULT
+    if out is NO_DEFAULT:
         # dynamo doesn't like pop...
         out = __dict__.pop(name)
     if inplace:
@@ -5039,6 +5121,26 @@ def _set_tensor_dict(  # noqa: F811
         out.data.copy_(tensor.data)
         tensor = out
         out = out_tmp
+    elif (
+        preserve_module_state is not False
+        and was_parameter
+        and out is not None
+        and isinstance(tensor, torch.Tensor)
+    ):
+        if preserve_module_state is None and not isinstance(tensor, torch.nn.Parameter):
+            _warn_to_module_preserve_module_state(memo)
+        elif preserve_module_state and (
+            not isinstance(tensor, torch.nn.Parameter)
+            or tensor.requires_grad != out.requires_grad
+        ):
+            tensor = torch.nn.Parameter(tensor, requires_grad=out.requires_grad)
+    elif (
+        preserve_module_state is True
+        and was_buffer
+        and isinstance(tensor, torch.nn.Parameter)
+    ):
+        persistent = name not in module._non_persistent_buffers_set
+        tensor = Buffer(tensor, persistent=persistent)
 
     if isinstance(tensor, torch.nn.Parameter):
         for hook in hooks:

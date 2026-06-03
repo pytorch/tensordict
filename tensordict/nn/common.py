@@ -773,7 +773,7 @@ class TensorDictModuleBase(nn.Module):
             lambda x: x.detach().requires_grad_(), inplace=False
         )
 
-        with sanitized_parameters.to_module(self):
+        with sanitized_parameters.to_module(self, preserve_module_state=False):
             self._reset_parameters(self)
         return sanitized_parameters
 
