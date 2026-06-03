@@ -87,7 +87,7 @@ class EnsembleModule(TensorDictModuleBase):
         self.params_td = TensorDictParams(params_td)
 
     def _func_module_call(self, input, params):
-        with params.to_module(self.module):
+        with params.to_module(self.module, preserve_module_state=False):
             return self.module(input)
 
     def forward(self, tensordict: TensorDict) -> TensorDict:

@@ -13,6 +13,7 @@ import pathlib
 import pickle
 import sys
 import unittest
+import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import MutableSequence
@@ -4330,6 +4331,99 @@ class TestToModule:
     def _x(self):
         return (torch.randn(2, 2, 8),)
 
+    def test_plain_tensor_to_module_warns_for_future_default(self, as_module):
+        module = nn.Linear(4, 2)
+        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+
+        with pytest.warns(FutureWarning, match="preserve_module_state=True"):
+            params.to_module(module)
+
+        assert "weight" not in module.state_dict()
+        assert "bias" not in module.state_dict()
+        assert not isinstance(module.weight, nn.Parameter)
+        assert not isinstance(module.bias, nn.Parameter)
+
+    def test_plain_tensor_to_module_can_preserve_module_state(self, as_module):
+        module = nn.Linear(4, 2)
+        module.weight.requires_grad_(False)
+        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        state_dict_keys = set(module.state_dict())
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            params.to_module(module, preserve_module_state=True)
+
+        assert set(module.state_dict()) == state_dict_keys
+        assert isinstance(module.weight, nn.Parameter)
+        assert isinstance(module.bias, nn.Parameter)
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+        torch.testing.assert_close(module.weight, params["weight"])
+        torch.testing.assert_close(module.bias, params["bias"])
+
+    def test_plain_tensor_to_module_can_keep_current_behavior(self, as_module):
+        module = nn.Linear(4, 2)
+        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            params.to_module(module, preserve_module_state=False)
+
+        assert "weight" not in module.state_dict()
+        assert "bias" not in module.state_dict()
+        assert not isinstance(module.weight, nn.Parameter)
+        assert not isinstance(module.bias, nn.Parameter)
+
+    def test_plain_tensor_to_module_inplace_preserves_module_state(self, as_module):
+        module = nn.Linear(4, 2)
+        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        params.zero_()
+        state_dict_keys = set(module.state_dict())
+        weight = module.weight
+        bias = module.bias
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            params.to_module(module, inplace=True)
+
+        assert set(module.state_dict()) == state_dict_keys
+        assert module.weight is weight
+        assert module.bias is bias
+        assert (module.weight == 0).all()
+        assert (module.bias == 0).all()
+
+    def test_preserve_module_state_with_custom_setattr(self, as_module):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2)
+        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        state_dict_keys = set(module.state_dict())
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            params.to_module(module, preserve_module_state=True)
+
+        assert set(module.state_dict()) == state_dict_keys
+        assert isinstance(module.weight, nn.Parameter)
+        assert isinstance(module.bias, nn.Parameter)
+
+    def test_preserve_module_state_keeps_buffers(self, as_module):
+        module = nn.Module()
+        module.register_buffer("buffer", torch.ones(3))
+        params = TensorDict({"buffer": nn.Parameter(torch.zeros(3))}, [])
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            params.to_module(module, preserve_module_state=True)
+
+        assert "buffer" in module.state_dict()
+        assert "buffer" in dict(module.named_buffers())
+        assert "buffer" not in dict(module.named_parameters())
+        assert not isinstance(module.buffer, nn.Parameter)
+        torch.testing.assert_close(module.buffer, torch.zeros(3))
+
     @pytest.mark.parametrize(
         "module_name,input_name",
         [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
@@ -4344,7 +4438,7 @@ class TestToModule:
             params = params.clone()
         params0 = params.clone().zero_()
         y = module(*x)
-        params0.to_module(module, inplace=inplace)
+        params0.to_module(module, inplace=inplace, preserve_module_state=False)
         y0 = module(*x)
         # check identities
         for k, p1, p2 in zip(
@@ -4356,7 +4450,7 @@ class TestToModule:
                 assert p1 is not p2, k
             else:
                 assert p1 is p2, k
-        params.to_module(module, inplace=inplace)
+        params.to_module(module, inplace=inplace, preserve_module_state=False)
         # check identities
         for p1, p2 in zip(
             TensorDict.from_module(module).values(True, True),
@@ -4383,7 +4477,7 @@ class TestToModule:
         params = TensorDict.from_module(module, as_module=as_module)
         params0 = params.clone().zero_()
         y = module(*x)
-        with params0.to_module(module, inplace=inplace):
+        with params0.to_module(module, inplace=inplace, preserve_module_state=False):
             y0 = module(*x)
             if as_module:
                 # if as_module=False, params0 is not made of parameters anymore
@@ -4416,10 +4510,10 @@ class TestToModule:
         params = TensorDict.from_module(module, as_module=as_module)
         params_meta = params.detach().to("meta")
         y = module(*x)
-        with params_meta.to_module(module):
+        with params_meta.to_module(module, preserve_module_state=False):
             module_meta = copy.deepcopy(module)
         y1 = module(*x)
-        with params.to_module(module_meta):
+        with params.to_module(module_meta, preserve_module_state=False):
             y2 = module_meta(*x)
         torch.testing.assert_close(y, y1)
         torch.testing.assert_close(y, y2)
@@ -4433,7 +4527,7 @@ class TestToModule:
         linear = MyLinear(3, 4)
         params = TensorDict.from_module(linear, as_module=as_module)
         # this will break if the parameters are not deleted before being set
-        with params.detach().to_module(linear):
+        with params.detach().to_module(linear, preserve_module_state=False):
             linear(torch.randn(3))
         assert len(list(linear.parameters())) == 2
         assert (TensorDict.from_module(linear) == params).all()

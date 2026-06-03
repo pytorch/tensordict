@@ -1423,7 +1423,7 @@ class TestGeneric:
         )
 
         def exec_module(params, x):
-            with params.to_module(empty_module):
+            with params.to_module(empty_module, preserve_module_state=False):
                 return empty_module(x)
 
         x = torch.zeros(3)
@@ -1471,7 +1471,7 @@ class TestGeneric:
         )
 
         def exec_module(params, x):
-            with params.to_module(empty_module):
+            with params.to_module(empty_module, preserve_module_state=False):
                 return empty_module(x)
 
         x = torch.zeros(3)
@@ -1508,7 +1508,7 @@ class TestGeneric:
         optim = torch.optim.Adam(list(params.values(True, True)))
 
         def exec_module(params, x):
-            with params.to_module(empty_module):
+            with params.to_module(empty_module, preserve_module_state=False):
                 return empty_module(x)
 
         x = torch.zeros(3, device=device)
@@ -14221,7 +14221,7 @@ class TestFCD(TestTensorDictsBase):
             td = td.expand(param_batch).clone()
             d0 = ftdim.dims(1)
             td = TensorDictParams(td)[d0]
-            td.to_module(module)
+            td.to_module(module, preserve_module_state=False)
             y = module(*make_input())
             assert y.dims == (d0,)
             assert y._tensor.shape[0] == param_batch
