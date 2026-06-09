@@ -27,6 +27,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _pass_through,
+    _pass_through_cls,
     _shape,
     _zip_strict,
     DeviceType,
@@ -867,6 +868,274 @@ def where(condition, input, other, *, out=None):
             "Cannot use a persistent tensordict as output of torch.where."
         )
     return input.where(condition, other, out=out)
+
+
+def _stack_homogeneous_inner(
+    tds: Sequence[TensorDict], dim: int
+) -> TensorDictBase | None:
+    """Recursive stack of plain TensorDicts.
+
+    Uses a lockstep zip when iteration order matches across inputs, and
+    falls back to a td0-driven dict lookup mid-traversal on order mismatch.
+
+    Returns None on bail-out (mismatched leaf types, missing key, ...).
+    Pre-flight has already validated set-equality of keys, so missing keys
+    here would indicate concurrent mutation and are treated as bail-out.
+    """
+    n = len(tds)
+    iters = [iter(td._tensordict.items()) for td in tds]
+    out = {}
+    fallback = False
+    # Inline the Tensor hot path inside the lockstep loop to avoid a Python
+    # function call per leaf in the common case. Anything else routes through
+    # _stack_leaf.
+    for items in zip(*iters):
+        k0 = items[0][0]
+        for i in range(1, n):
+            if items[i][0] != k0:
+                fallback = True
+                break
+        if fallback:
+            break
+        v0 = items[0][1]
+        if type(v0) is Tensor:
+            out[k0] = torch.stack([items[i][1] for i in range(n)], dim)
+        else:
+            leaf = _stack_leaf([items[i][1] for i in range(n)], dim)
+            if leaf is None:
+                return None
+            out[k0] = leaf
+
+    if fallback:
+        # Drive by td0's order, look up by key in others. Skip keys already
+        # processed in the lockstep prefix.
+        td0 = tds[0]
+        others_dicts = [td._tensordict for td in tds[1:]]
+        for k, v0 in td0._tensordict.items():
+            if k in out:
+                continue
+            try:
+                vals = [v0] + [d[k] for d in others_dicts]
+            except KeyError:
+                return None
+            if type(v0) is Tensor:
+                out[k] = torch.stack(vals, dim)
+            else:
+                leaf = _stack_leaf(vals, dim)
+                if leaf is None:
+                    return None
+                out[k] = leaf
+
+    first = tds[0]
+    bs = first.batch_size
+    new_bs = LazyStackedTensorDict._compute_batch_size(bs, dim, len(tds))
+    names = first._maybe_names()
+    if names is not None:
+        if all(td._maybe_names() == names for td in tds[1:]):
+            names = list(names)
+            names.insert(dim, None)
+        else:
+            names = None
+    return TensorDict._new_unsafe(
+        out,
+        batch_size=new_bs,
+        device=first.device,
+        names=names,
+    )
+
+
+def _stack_leaf(vals: list, dim: int):
+    """Stack a list of values that share a key. Returns None on bail-out."""
+    v0 = vals[0]
+    t0 = type(v0)
+    # Hot path: regular Tensor, no subclass.
+    if t0 is Tensor:
+        return torch.stack(vals, dim)
+    if t0 is TensorDict:
+        for v in vals[1:]:
+            if type(v) is not TensorDict:
+                return None
+        return _stack_homogeneous_inner(vals, dim)
+    # Nested LazyStackedTensorDict at a leaf.
+    if t0 is LazyStackedTensorDict:
+        for v in vals[1:]:
+            if type(v) is not LazyStackedTensorDict:
+                return None
+        return _stack_homogeneous_lazy(vals, dim)
+    # Pass-through (NonTensorData, NonTensorStack, MetaData, UnbatchedTensor).
+    # Must come before the tensorclass branch — these are tensorclasses too,
+    # but they have a dedicated _stack_non_tensor path.
+    if _pass_through_cls(t0):
+        for v in vals[1:]:
+            if type(v) is not t0:
+                return None
+        return t0._stack_non_tensor(vals, dim)
+    # Tensorclass leaf: unwrap, route through the dispatcher (so the inner
+    # can be plain TensorDict, LazyStackedTensorDict, or nested tensorclass),
+    # then re-wrap.
+    if _is_tensorclass(t0):
+        for v in vals[1:]:
+            if type(v) is not t0:
+                return None
+        inner = _stack_homogeneous([v._tensordict for v in vals], dim)
+        if inner is None:
+            return None
+        return t0._from_tensordict(inner)
+    # Tensor subclasses: Parameter, MemoryMappedTensor, UninitializedParameter, etc.
+    if isinstance(v0, Tensor):
+        if isinstance(v0, UninitializedTensorMixin):
+            for v in vals[1:]:
+                if not isinstance(v, UninitializedTensorMixin):
+                    return None
+            return _stack_uninit_params(vals, dim)
+        for v in vals[1:]:
+            if not isinstance(v, Tensor) or isinstance(v, UninitializedTensorMixin):
+                return None
+        return torch.stack(vals, dim)
+    return None
+
+
+def _stack_homogeneous(
+    tds: Sequence[TensorDictBase], dim: int
+) -> TensorDictBase | None:
+    """Fast-stack dispatch. Returns None when the fast path is ineligible."""
+    if not tds:
+        return None
+    td0 = tds[0]
+    t0 = type(td0)
+    # All inputs must be the same root type — anything else falls back.
+    for td in tds[1:]:
+        if type(td) is not t0:
+            return None
+
+    bs = td0.batch_size
+    if dim < 0:
+        dim = len(bs) + dim + 1
+    elif dim > len(bs):
+        return None
+
+    # Pass-through types (NonTensorData, NonTensorStack, MetaData):
+    # mirror the top-of-_stack pass-through branch.
+    if _pass_through_cls(t0):
+        return t0._stack_non_tensor(tds, dim)
+
+    # Tensorclass at root: unwrap, recurse via the dispatcher (so the inner
+    # can be a TensorDict, a LazyStackedTensorDict, or another tensorclass),
+    # then re-wrap.
+    if _is_tensorclass(t0):
+        inner = _stack_homogeneous([t._tensordict for t in tds], dim)
+        if inner is None:
+            return None
+        return t0._from_tensordict(inner)
+
+    # Plain TensorDict at root.
+    if t0 is TensorDict:
+        dev = td0.device
+        keys0 = td0._tensordict.keys()
+        for td in tds[1:]:
+            if td.batch_size != bs or td.device != dev:
+                return None
+            if td._tensordict.keys() != keys0:
+                return None
+        return _stack_homogeneous_inner(tds, dim)
+
+    # LazyStackedTensorDict at root.
+    if t0 is LazyStackedTensorDict:
+        return _stack_homogeneous_lazy(tds, dim)
+
+    return None
+
+
+def _stack_homogeneous_lazy(
+    tds: Sequence[LazyStackedTensorDict], dim: int
+) -> TensorDictBase | None:
+    """Stack N LazyStackedTensorDicts via dense-stack of corresponding inner TDs.
+
+    Mirrors the lazy branch of :func:`_stack` (lines 683-714 of this file)
+    but skips the leaf-len consistency check: if any sub-stack bails the
+    caller falls back to ``stack``.
+
+    Returns None on bail-out.
+    """
+    td0 = tds[0]
+    n_subs = len(td0.tensordicts)
+    stack_dim = td0.stack_dim
+    for td in tds[1:]:
+        if td.stack_dim != stack_dim:
+            return None
+        if len(td.tensordicts) != n_subs:
+            return None
+
+    if dim <= stack_dim:
+        new_lazy_stack_dim = stack_dim + 1
+        sub_dim = dim
+    else:
+        new_lazy_stack_dim = stack_dim
+        sub_dim = dim - 1
+
+    sub_results = []
+    for subtds in zip(*[td.tensordicts for td in tds]):
+        sub = _stack_homogeneous(list(subtds), sub_dim)
+        if sub is None:
+            return None
+        sub_results.append(sub)
+
+    return LazyStackedTensorDict(*sub_results, stack_dim=new_lazy_stack_dim)
+
+
+def fast_stack(
+    list_of_tensordicts: Sequence[TensorDictBase],
+    dim: int = 0,
+) -> TensorDictBase:
+    """Strict, fast variant of :func:`tensordict.stack` using a lockstep zip.
+
+    ``fast_stack`` is intended for hot paths where every input is a plain
+    :class:`TensorDict` with the same key set, ``batch_size`` and
+    ``device``, and where every leaf is a regular :class:`torch.Tensor`
+    (no :class:`NonTensorData`, :class:`UninitializedParameter`,
+    :class:`LazyStackedTensorDict`, :class:`PersistentTensorDict`, or
+    tensorclass leaves). Key insertion order does not have to match
+    across inputs: when it does, traversal uses a lockstep zip; otherwise
+    it falls back to a key lookup driven by the first TensorDict.
+
+    The general, permissive entry point is :func:`tensordict.stack` —
+    use it when any of the above preconditions may not hold.
+
+    Args:
+        list_of_tensordicts: sequence of TensorDicts to stack. Must be non-empty.
+        dim: dimension along which to stack.
+
+    Returns:
+        A new :class:`TensorDict` with shape
+        ``batch_size[:dim] + (len(list_of_tensordicts),) + batch_size[dim:]``.
+
+    Raises:
+        RuntimeError: if any precondition fails. Fall back to
+            :func:`tensordict.stack` for the general case.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, fast_stack
+        >>> tds = [TensorDict({"a": torch.zeros(3), "b": {"c": torch.ones(3)}},
+        ...                   batch_size=[3]) for _ in range(4)]
+        >>> stacked = fast_stack(tds, dim=0)
+        >>> stacked.batch_size
+        torch.Size([4, 3])
+    """
+    if not list_of_tensordicts:
+        raise RuntimeError("list_of_tensordicts cannot be empty")
+    result = _stack_homogeneous(list_of_tensordicts, dim)
+    if result is None:
+        raise RuntimeError(
+            "fast_stack could not stack the inputs. All inputs must share "
+            "the same root type (TensorDict, LazyStackedTensorDict, "
+            "tensorclass, or NonTensorData/NonTensorStack/MetaData), with "
+            "matching batch_size, device and key set; LazyStackedTensorDicts "
+            "must additionally agree on stack_dim and inner-TD count. "
+            "PersistentTensorDict, _SubTensorDict and TensorDictParams "
+            "are not supported. Use tensordict.stack for the general case."
+        )
+    return result
 
 
 def _stack_uninit_params(list_of_params, dim: int = 0, out=None):

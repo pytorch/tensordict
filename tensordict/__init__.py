@@ -8,6 +8,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
     cat,
+    fast_stack,
     from_consolidated,
     from_module,
     from_modules,
@@ -136,6 +137,7 @@ __all__ = [
     "make_tensordict",
     # Stacking and concatenation
     "stack",
+    "fast_stack",
     "cat",
     "lazy_stack",
     "maybe_dense_stack",

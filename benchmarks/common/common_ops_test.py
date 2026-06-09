@@ -9,7 +9,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict import is_tensor_collection, TensorDict
+from tensordict import fast_stack, is_tensor_collection, TensorDict
 
 
 @pytest.fixture
@@ -411,6 +411,56 @@ def test_unlock_stack_nested(benchmark):
         rounds=1000,
         iterations=1,
     )
+
+
+def _homogeneous_tds(num_tds: int, num_keys: int, depth: int):
+    """Build N homogeneous TDs sharing the same key set/order at the requested depth."""
+
+    def make_one():
+        td = TensorDict({}, batch_size=[3, 4])
+        for i in range(num_keys):
+            inner = td
+            for d in range(depth):
+                key = f"l{d}_{i}"
+                if d == depth - 1:
+                    inner[key] = torch.zeros(3, 4)
+                else:
+                    sub = TensorDict({}, batch_size=[3, 4])
+                    inner[key] = sub
+                    inner = sub
+            if depth == 0:
+                td[f"k{i}"] = torch.zeros(3, 4)
+        return td
+
+    return [make_one() for _ in range(num_tds)]
+
+
+@pytest.mark.parametrize(
+    "num_tds,num_keys,depth",
+    [
+        (8, 20, 0),
+        (64, 20, 0),
+        (8, 10, 2),
+        (64, 10, 2),
+    ],
+)
+def test_stack_homogeneous(benchmark, num_tds, num_keys, depth):
+    tds = _homogeneous_tds(num_tds, num_keys, depth)
+    benchmark(lambda: torch.stack(tds, dim=0))
+
+
+@pytest.mark.parametrize(
+    "num_tds,num_keys,depth",
+    [
+        (8, 20, 0),
+        (64, 20, 0),
+        (8, 10, 2),
+        (64, 10, 2),
+    ],
+)
+def test_fast_stack_homogeneous(benchmark, num_tds, num_keys, depth):
+    tds = _homogeneous_tds(num_tds, num_keys, depth)
+    benchmark(lambda: fast_stack(tds, dim=0))
 
 
 def test_flatten_speed(benchmark):

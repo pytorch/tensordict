@@ -32,6 +32,7 @@ or ``cat``.
 
     cat
     default_is_leaf
+    fast_stack
     from_any
     from_consolidated
     from_dict

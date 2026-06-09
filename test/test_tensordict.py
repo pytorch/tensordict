@@ -34,6 +34,7 @@ import torch
 from packaging import version
 from tensordict import (
     capture_non_tensor_stack,
+    fast_stack,
     get_defaults_to_none,
     get_printoptions,
     lazy_legacy,
@@ -3910,6 +3911,301 @@ class TestGeneric:
         td_copy.names = ["first", "third"]
         td2 = torch.stack([td, td_copy], dim=0)
         assert td2.names == [None, None, None]
+
+    @pytest.mark.parametrize("dim", [0, 1, -1, -2])
+    def test_fast_stack_equivalence_flat(self, dim):
+        torch.manual_seed(0)
+        tds = [
+            TensorDict(
+                {"a": torch.randn(3, 4), "b": torch.randn(3, 4, 5)},
+                batch_size=[3, 4],
+            )
+            for _ in range(6)
+        ]
+        fast = fast_stack(tds, dim=dim)
+        slow = torch.stack(tds, dim=dim)
+        assert isinstance(fast, TensorDict)
+        assert fast.batch_size == slow.batch_size
+        assert set(fast.keys(True, True)) == set(slow.keys(True, True))
+        torch.testing.assert_close(fast["a"], slow["a"])
+        torch.testing.assert_close(fast["b"], slow["b"])
+
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_fast_stack_equivalence_nested(self, dim):
+        torch.manual_seed(0)
+        tds = [
+            TensorDict(
+                {
+                    "a": torch.randn(3, 4),
+                    "nested": TensorDict(
+                        {"b": torch.randn(3, 4, 5), "c": torch.randn(3, 4)},
+                        batch_size=[3, 4],
+                    ),
+                },
+                batch_size=[3, 4],
+            )
+            for _ in range(5)
+        ]
+        fast = fast_stack(tds, dim=dim)
+        slow = torch.stack(tds, dim=dim)
+        assert fast.batch_size == slow.batch_size
+        torch.testing.assert_close(fast["a"], slow["a"])
+        torch.testing.assert_close(fast["nested", "b"], slow["nested", "b"])
+        torch.testing.assert_close(fast["nested", "c"], slow["nested", "c"])
+
+    def test_fast_stack_names(self):
+        td = TensorDict(
+            {"a": torch.zeros(3, 4)}, batch_size=[3, 4], names=["first", "second"]
+        )
+        out = fast_stack([td, td], dim=0)
+        assert out.names == [None, "first", "second"]
+        out = fast_stack([td, td], dim=1)
+        assert out.names == ["first", None, "second"]
+        # Mismatched names → no stacked names
+        td_copy = td.clone()
+        td_copy.names = ["first", "third"]
+        out = fast_stack([td, td_copy], dim=0)
+        assert out.names == [None, None, None]
+
+    def test_fast_stack_classmethod(self):
+        tds = [TensorDict({"a": torch.randn(3)}, batch_size=[3]) for _ in range(4)]
+        out = TensorDict.fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["a"], ref["a"])
+
+    def test_fast_stack_empty_input(self):
+        with pytest.raises(RuntimeError, match="cannot be empty"):
+            fast_stack([], dim=0)
+
+    def test_fast_stack_lazy_root(self):
+        # Two lazy-stacked TDs each containing 4 inner TDs.
+        def make_lazy():
+            inners = [
+                TensorDict({"a": torch.randn(3)}, batch_size=[3]) for _ in range(4)
+            ]
+            return LazyStackedTensorDict.lazy_stack(inners, dim=0)
+
+        lazies = [make_lazy() for _ in range(2)]
+        out = fast_stack(lazies, dim=0)
+        ref = torch.stack(lazies, dim=0)
+        assert isinstance(out, LazyStackedTensorDict)
+        assert out.batch_size == ref.batch_size
+        torch.testing.assert_close(out["a"], ref["a"])
+
+    def test_fast_stack_lazy_nested(self):
+        def make_td():
+            sub_inners = [
+                TensorDict({"x": torch.randn(3)}, batch_size=[3]) for _ in range(2)
+            ]
+            return TensorDict(
+                {
+                    "y": torch.randn(3, 2),
+                    "lazy": LazyStackedTensorDict.lazy_stack(sub_inners, dim=1),
+                },
+                batch_size=[3],
+            )
+
+        tds = [make_td() for _ in range(4)]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["y"], ref["y"])
+        torch.testing.assert_close(out["lazy", "x"], ref["lazy", "x"])
+
+    def test_fast_stack_lazy_stack_dim_mismatch(self):
+        # Different stack_dims -> bail.
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
+        lazy0 = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
+        lazy1 = LazyStackedTensorDict.lazy_stack([td, td], dim=1)
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([lazy0, lazy1], dim=0)
+
+    def test_fast_stack_rejects_key_mismatch(self):
+        td_a = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        td_b = TensorDict({"b": torch.zeros(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td_a, td_b], dim=0)
+
+    def test_fast_stack_handles_key_order_mismatch(self):
+        # td0 and td1 have the same key set but different insertion order.
+        td0 = TensorDict({}, batch_size=[3])
+        td0["a"] = torch.arange(3, dtype=torch.float32)
+        td0["b"] = torch.arange(3, dtype=torch.float32) * 10
+        td1 = TensorDict({}, batch_size=[3])
+        td1["b"] = torch.arange(3, dtype=torch.float32) * 10 + 100
+        td1["a"] = torch.arange(3, dtype=torch.float32) + 100
+        out = fast_stack([td0, td1], dim=0)
+        ref = torch.stack([td0, td1], dim=0)
+        torch.testing.assert_close(out["a"], ref["a"])
+        torch.testing.assert_close(out["b"], ref["b"])
+
+    def test_fast_stack_handles_nested_key_order_mismatch(self):
+        # Order mismatch inside a nested TD.
+        td0 = TensorDict({"nested": TensorDict({}, batch_size=[3])}, batch_size=[3])
+        td0["nested", "a"] = torch.arange(3, dtype=torch.float32)
+        td0["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10
+        td1 = TensorDict({"nested": TensorDict({}, batch_size=[3])}, batch_size=[3])
+        td1["nested", "b"] = torch.arange(3, dtype=torch.float32) * 10 + 100
+        td1["nested", "a"] = torch.arange(3, dtype=torch.float32) + 100
+        out = fast_stack([td0, td1], dim=0)
+        ref = torch.stack([td0, td1], dim=0)
+        torch.testing.assert_close(out["nested", "a"], ref["nested", "a"])
+        torch.testing.assert_close(out["nested", "b"], ref["nested", "b"])
+
+    def test_fast_stack_rejects_batch_size_mismatch(self):
+        td0 = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        td1 = TensorDict({"a": torch.zeros(4)}, batch_size=[4])
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td0, td1], dim=0)
+
+    def test_fast_stack_handles_non_tensor_leaves(self):
+        td0 = TensorDict(
+            {"a": torch.zeros(3), "meta": NonTensorData("x")}, batch_size=[3]
+        )
+        td1 = td0.clone()
+        out = fast_stack([td0, td1], dim=0)
+        assert out.batch_size == torch.Size([2, 3])
+        torch.testing.assert_close(out["a"], torch.zeros(2, 3))
+
+    def test_fast_stack_handles_uninit_param(self):
+        td0 = TensorDict({"p": nn.parameter.UninitializedParameter()}, batch_size=[])
+        td1 = TensorDict({"p": nn.parameter.UninitializedParameter()}, batch_size=[])
+        out = fast_stack([td0, td1], dim=0)
+        assert out["p"].batch_size == torch.Size([2])
+
+    def test_fast_stack_handles_nn_parameter(self):
+        tds = [
+            TensorDict({"w": nn.Parameter(torch.randn(3, 4))}, batch_size=[3])
+            for _ in range(5)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["w"], ref["w"])
+
+    def test_fast_stack_handles_memory_mapped_tensor(self, tmpdir):
+        tds = []
+        for i in range(4):
+            t = MemoryMappedTensor.from_tensor(
+                torch.randn(3, 4), filename=str(tmpdir / f"t{i}.memmap")
+            )
+            tds.append(TensorDict({"m": t}, batch_size=[3]))
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["m"], ref["m"])
+
+    def test_fast_stack_tensorclass_root(self):
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        tcs = [
+            TC(a=torch.randn(3, 4), b=torch.randn(3, 5), batch_size=[3])
+            for _ in range(5)
+        ]
+        out = fast_stack(tcs, dim=0)
+        ref = torch.stack(tcs, dim=0)
+        assert isinstance(out, TC)
+        assert out.batch_size == torch.Size([5, 3])
+        torch.testing.assert_close(out.a, ref.a)
+        torch.testing.assert_close(out.b, ref.b)
+
+    def test_fast_stack_tensorclass_nested(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        tds = [
+            TensorDict(
+                {
+                    "tc": TC(x=torch.randn(3, 4), batch_size=[3]),
+                    "y": torch.randn(3, 2),
+                },
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        assert isinstance(out["tc"], TC)
+        torch.testing.assert_close(out["tc"].x, ref["tc"].x)
+        torch.testing.assert_close(out["y"], ref["y"])
+
+    def test_fast_stack_tensorclass_wrapping_lazy(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        # Build a tensorclass whose _tensordict is a LazyStackedTensorDict
+        # by lazy_stacking N tensorclass instances together.
+        def make_tc_lazy():
+            inners = [TC(x=torch.randn(3), batch_size=[3]) for _ in range(2)]
+            return lazy_stack(inners, dim=0)  # tensorclass wrapping a lazy stack
+
+        tcs = [make_tc_lazy() for _ in range(3)]
+        # Sanity-check the inner structure.
+        assert isinstance(tcs[0]._tensordict, LazyStackedTensorDict)
+        out = fast_stack(tcs, dim=0)
+        ref = torch.stack(tcs, dim=0)
+        assert isinstance(out, TC)
+        torch.testing.assert_close(out.x, ref.x)
+
+    def test_fast_stack_non_tensor_data_root(self):
+        nts = [NonTensorData("hello", batch_size=[3]) for _ in range(4)]
+        out = fast_stack(nts, dim=0)
+        ref = torch.stack(nts, dim=0)
+        assert out.batch_size == ref.batch_size
+
+    def test_fast_stack_non_tensor_data_nested(self):
+        tds = [
+            TensorDict(
+                {"x": torch.randn(3), "meta": NonTensorData("hi", batch_size=[3])},
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["x"], ref["x"])
+
+    def test_fast_stack_handles_unbatched_tensor(self):
+        shared = torch.randn(2, 2)  # UnbatchedTensor must share data to stack quietly
+        tds = [
+            TensorDict(
+                {"x": torch.randn(3, 4), "u": UnbatchedTensor(shared)},
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        out = fast_stack(tds, dim=0)
+        ref = torch.stack(tds, dim=0)
+        torch.testing.assert_close(out["x"], ref["x"])
+        assert isinstance(out["u"], UnbatchedTensor)
+
+    def test_fast_stack_rejects_dim_out_of_range(self):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td, td], dim=5)
+
+    def test_fast_stack_rejects_mixed_root_types(self):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        lazy = LazyStackedTensorDict.lazy_stack([td, td], dim=0)
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td, lazy], dim=0)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
+    def test_fast_stack_rejects_persistent_td(self, tmpdir):
+        td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        ptd = PersistentTensorDict.from_dict(
+            td.to_dict(), filename=str(tmpdir / "p.h5")
+        )
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([ptd, ptd], dim=0)
+
+    def test_fast_stack_rejects_device_mismatch(self):
+        td0 = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device="cpu")
+        td1 = TensorDict({"a": torch.zeros(3)}, batch_size=[3], device=None)
+        with pytest.raises(RuntimeError, match="fast_stack could not stack"):
+            fast_stack([td0, td1], dim=0)
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_record_stream(self):
@@ -9775,6 +10071,38 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError, match="fast=True"):
             td.copy_at_(newdata, slice(1, None, 2), fast=True)
         assert td.get("val").tolist() == [0] * 10
+
+    def test_prepare_copy_at_(self, td_name, device):
+        td = TensorDict(
+            {
+                "a": torch.zeros(4, 3, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.zeros(4, 3, 2, device=device)},
+                    batch_size=[4, 3],
+                    device=device,
+                ),
+            },
+            batch_size=[4, 3],
+            device=device,
+        )
+        td0 = TensorDict(
+            {
+                "a": torch.ones(4, 5, device=device),
+                "b": TensorDict(
+                    {"c": torch.ones(4, 2, device=device)},
+                    batch_size=[4],
+                    device=device,
+                ),
+            },
+            batch_size=[4],
+            device=device,
+        )
+        writer = td.prepare_copy_at_(dim=1, source=td0)
+        writer.copy_(td0, index=0)
+        writer.copy_(td0.clone().zero_(), index=2)
+        assert (td[:, 0] == td0).all()
+        assert (td[:, 1] == 0).all()
+        assert (td[:, 2] == 0).all()
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator

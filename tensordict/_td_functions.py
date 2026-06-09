@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "cat",
+    "fast_stack",
     "from_consolidated",
     "from_module",
     "from_modules",
@@ -95,6 +96,24 @@ def stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
 def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
     """Creates a lazy stack of tensordicts."""
     return _tensordict_cls().lazy_stack(input, dim=dim, out=out)
+
+
+def fast_stack(input: Sequence["T"], dim: int = 0) -> "T":
+    """Strict, fast variant of :func:`stack` using a lockstep zip traversal.
+
+    Requires every input to be a plain :class:`~tensordict.TensorDict` with
+    identical key set, key insertion order, ``batch_size`` and ``device``,
+    and only regular :class:`torch.Tensor` leaves. Each input TensorDict is
+    traversed exactly once. Raises ``RuntimeError`` if any precondition
+    fails — use :func:`stack` for the general case.
+
+    Args:
+        input: sequence of TensorDicts to stack. Must be non-empty.
+        dim: dimension along which to stack.
+    """
+    from tensordict._torch_func import fast_stack as _fast_stack
+
+    return _fast_stack(input, dim=dim)
 
 
 def cat(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
