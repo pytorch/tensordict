@@ -325,7 +325,10 @@ _FALLBACK_METHOD_FROM_TD = [
     "_grad",
     "_map",
     "_maybe_remove_batch_dim",
-    "_memmap_",
+    # "_memmap_" must NOT be listed here: tensorclasses need the dedicated
+    # _memmap_ (which records the class in meta.json) rather than the
+    # TD-delegating fallback, otherwise the class identity is lost on
+    # load_memmap. See _patch_tc and the explicit assignments below.
     "_permute",
     "_remove_batch_dim",
     "_repeat",
@@ -1171,6 +1174,27 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
+            # A genuine classmethod implementation inherited from a
+            # tensorclass base (e.g. TensorClass._load_memmap) rebinds `cls`
+            # on access and must not be shadowed by the TensorDict
+            # classmethod: shadowing _load_memmap with TensorDict._load_memmap
+            # used to break load_memmap for TensorClass subclasses (an empty
+            # instance was returned because the tensorclass directory layout
+            # was read as a plain TensorDict one). Everything else inherited
+            # from a base -- _wrap_td_method/_wrap_classmethod wrappers and
+            # methods bound to the parent class (e.g. from_list, stack on the
+            # TensorClass base) -- hardcodes the wrong class or the wrong
+            # calling convention and must be re-wrapped for cls as before.
+            inherited = next(
+                (
+                    base.__dict__[attr]
+                    for base in cls.__mro__[1:]
+                    if attr in base.__dict__
+                ),
+                None,
+            )
+            if isinstance(inherited, (classmethod, staticmethod)):
+                continue
             tdcls = func.__self__
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))

@@ -2207,6 +2207,27 @@ class TestTensorClass:
         assert isinstance(stacked_tc._tensordict.get("custom_data"), MetaData[str])
         assert stacked_tc.custom_data == "abc"
 
+    def test_td_classmethods_return_subclass(self):
+        # TensorDict classmethods exposed on TensorClass subclasses must
+        # accept the classmethod calling convention and return the subclass
+        # (they are re-wrapped per subclass; the instance-method fallbacks
+        # inherited from the TensorClass base would bind the first argument
+        # to self and crash).
+        class MC(TensorClass):
+            foo: Any
+            bar: Any
+
+        class MCChild(MC):
+            pass
+
+        out = MC.from_list([{"foo": 1, "bar": 2}, {"foo": 3, "bar": 4}])
+        assert type(out) is MC
+        assert type(MCChild.from_list([{"foo": 1, "bar": 2}])) is MCChild
+        assert type(MC.fromkeys(["foo", "bar"], 0)) is MC
+        mc = MC(foo=torch.zeros(3), bar=torch.ones(3), batch_size=[3])
+        for name in ("stack", "cat", "lazy_stack", "maybe_dense_stack"):
+            assert type(getattr(MC, name)([mc, mc])) is MC, name
+
     def test_to_lazystack(self):
         class MyTensorClass(TensorClass):
             foo: Tensor
@@ -2668,6 +2689,65 @@ class TestMemmap:
         assert isinstance(c.x, MemoryMappedTensor)
         assert isinstance(c.y.x, MemoryMappedTensor)
         assert c.z == "foo"
+
+    def test_memmap_nested_tensorclass_roundtrip(self, tmpdir):
+        # A tensorclass nested (at depth >= 2) inside a plain TensorDict must
+        # come back from a memmap_ / load_memmap roundtrip with its class
+        # identity intact -- for both the decorator and the TensorClass
+        # subclass flavors.
+        @tensorclass
+        class MyDecorated:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        class MySubclassed(TensorClass["nocast"]):
+            a: torch.Tensor
+            meta: str | None = None
+
+        decorated = MyDecorated(a=torch.zeros(5), b=torch.ones(5), batch_size=[5])
+        subclassed = MySubclassed(
+            a=torch.arange(5, dtype=torch.float), meta="hello", batch_size=[5]
+        )
+        td = TensorDict(
+            {
+                "obs": {
+                    "decorated": decorated,
+                    "deep": {"subclassed": subclassed},
+                },
+                "x": torch.zeros(5),
+            },
+            batch_size=[5],
+        )
+        td.memmap_(tmpdir)
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert isinstance(loaded["obs", "decorated"], MyDecorated)
+        assert isinstance(loaded["obs", "deep", "subclassed"], MySubclassed)
+        assert (loaded["obs", "decorated"].a == 0).all()
+        assert (loaded["obs", "decorated"].b == 1).all()
+        assert (
+            loaded["obs", "deep", "subclassed"].a == torch.arange(5, dtype=torch.float)
+        ).all()
+        assert loaded["obs", "deep", "subclassed"].meta == "hello"
+
+    def test_memmap_tensorclass_subclass_roundtrip(self, tmpdir):
+        # A top-level TensorClass subclass must also keep its identity, both
+        # through the generic TensorDict.load_memmap entry point and through
+        # cls.load_memmap (TensorClass subclasses used to delegate _memmap_ /
+        # _load_memmap to TensorDict, dropping the class information).
+        class MySubclassed(TensorClass["nocast"]):
+            a: torch.Tensor
+            meta: str | None = None
+
+        data = MySubclassed(a=torch.zeros(3), meta="hello", batch_size=[3])
+        data.memmap_(tmpdir)
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert isinstance(loaded, MySubclassed)
+        assert (loaded.a == 0).all()
+        assert loaded.meta == "hello"
+        loaded = MySubclassed.load_memmap(tmpdir)
+        assert isinstance(loaded, MySubclassed)
+        assert (loaded.a == 0).all()
+        assert loaded.meta == "hello"
 
     def test_memmap_like(self):
         @tensorclass
