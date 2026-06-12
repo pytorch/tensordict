@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4124+gc41270eb3.d20260604)
+                  main (0.13.0.dev4134+g693066f73.d20260612)
                 </div>
               
             
@@ -906,43 +906,6 @@ recover the original types.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span><span class="n">check</span><span class="p">,</span> <span class="n">pytree</span><span class="p">,</span> <span class="n">pytree_recon</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">weird_key</span> <span class="ow">in</span> <span class="n">pytree_recon</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 </pre></div>
-</div>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="tensordict.MetaData.from_remote_init">
-<span class="sig-name descname"><span class="pre">from_remote_init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_broadcast</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.MetaData.from_remote_init" title="Permalink to this definition">¶</a></dt>
-<dd><p>Creates a new tensordict instance initialized from remotely sent metadata.</p>
-<p>This class method receives consolidated metadata and a single storage buffer
-sent by <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.init_remote" title="tensordict.LazyStackedTensorDict.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a>, then reconstructs the full tensordict.</p>
-<p>Two transport modes are available (must match the sender’s choice):</p>
-<ul class="simple">
-<li><p><strong>Point-to-point</strong> (default): uses <code class="docutils literal notranslate"><span class="pre">recv_object_list</span></code> +
-<code class="docutils literal notranslate"><span class="pre">dist.recv</span></code>.  Only sender and receiver participate.</p></li>
-<li><p><strong>Broadcast</strong> (<code class="docutils literal notranslate"><span class="pre">use_broadcast=True</span></code>): delegates to
-<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.broadcast" title="tensordict.LazyStackedTensorDict.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.  All ranks must participate.</p></li>
-</ul>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The rank of the source process that sent the metadata.</p></li>
-<li><p><strong>group</strong> (<em>&quot;ProcessGroup&quot;</em><em>, </em><em>optional</em>) – The process group to use for communication. Defaults to None.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The device to use for tensor operations. Defaults to None.</p></li>
-<li><p><strong>use_broadcast</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, use <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.broadcast" title="tensordict.LazyStackedTensorDict.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a> instead
-of point-to-point recv.  Must match the sender’s setting.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new tensordict instance initialized with the received metadata and content.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict">TensorDict</a></p>
-</dd>
-</dl>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p>The sending process should have called <cite>~.init_remote</cite> to send the metadata and content.</p>
 </div>
 </dd></dl>
 
