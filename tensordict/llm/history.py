@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import dataclasses
-import importlib.util
 import json
 
 import re
@@ -24,8 +22,6 @@ from tensordict.utils import _maybe_correct_neg_dim, logger as tensordict_logger
 
 if TYPE_CHECKING:
     import transformers
-
-_has_torchrl = importlib.util.find_spec("torchrl") is not None
 
 
 # Global storage for custom templates and their metadata
@@ -1381,76 +1377,6 @@ class History(TensorClass["nocast"]):
             else:
                 history = history.to(self.device)
         return torch.stack(list(self.unbind(dim)) + list(history.unbind(dim)), dim=dim)
-
-    @classmethod
-    def default_spec(cls, shape=(-1,)):
-        """A default spec to use in transforms / envs that return History objects.
-
-        .. note:: This method requires `torchrl` to be installed, since the
-            returned value is a torchrl :class:`~torchrl.data.Composite` spec.
-
-        Args:
-            shape (torch.Size, optional): The shape of the returned History spec. Defaults to `(-1)` (variable length
-                along the time dimension).
-
-        Example:
-            >>> import tensordict
-            >>> from tensordict.llm import History
-            >>> tensordict.set_list_to_stack(True).set()
-            >>>
-            >>> history = History(role=["system", "user"], content=["a message", "another message"], batch_size=(2,))
-            >>> spec = history.default_spec()
-            >>> print(spec)
-            Composite(
-                role: NonTensor(
-                    shape=torch.Size([-1]),
-                    space=None,
-                    device=None,
-                    dtype=None,
-                    domain=None,
-                    example_data=foo),
-                content: NonTensor(
-                    shape=torch.Size([-1]),
-                    space=None,
-                    device=None,
-                    dtype=None,
-                    domain=None,
-                    example_data=foo),
-                device=None,
-                shape=torch.Size([-1]))
-            >>> print(spec.zero())
-            History(
-                content=NonTensorData(data=foo, batch_size=torch.Size([1]), device=None),
-                role=NonTensorData(data=foo, batch_size=torch.Size([1]), device=None),
-                batch_size=torch.Size([1]),
-                device=None,
-                is_shared=False)
-
-        """
-        if not _has_torchrl:
-            raise ImportError(
-                "History.default_spec requires torchrl to be installed, since the "
-                "returned value is a torchrl Composite spec."
-            )
-        from torchrl.data import Composite, NonTensor
-
-        def get_default_value(field):
-            if field.default is not dataclasses.MISSING:
-                return field.default
-            elif field.type in (str, "str"):
-                return "foo"
-            else:
-                return None
-
-        defaults = {
-            k: NonTensor(
-                example_data=get_default_value(cls.__dataclass_fields__[k]),
-                shape=shape,
-            )
-            for k in cls.__dataclass_fields__
-        }
-
-        return Composite(defaults, shape=shape[:-1], data_cls=cls)
 
     @classmethod
     def from_chats(cls, chats: list[list[dict]]) -> History:

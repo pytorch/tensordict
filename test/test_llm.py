@@ -24,7 +24,6 @@ from tensordict.llm.history import (
 from tensordict.utils import logger as tensordict_logger
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
-_has_torchrl = importlib.util.find_spec("torchrl") is not None
 _has_pillow = importlib.util.find_spec("PIL") is not None
 
 
@@ -275,25 +274,6 @@ class TestHistory:
             tokenizer=tokenizer, tokenize=True, add_generation_prompt=False
         )
         recovered = history._inv_chatml(tokenizer.batch_decode(data_token)[0])
-
-    @pytest.mark.skipif(
-        not _has_torchrl, reason="History.default_spec requires torchrl"
-    )
-    def test_history_spec(self):
-        history = History(
-            role=["system", "user", "assistant", "user"],
-            content=[
-                "i'm the system",
-                "i'm the user",
-                "I'm the assistant",
-                "I'm the user again",
-            ],
-        )
-        spec = history.default_spec()
-        r = spec.zero()
-        assert isinstance(r, History)
-        assert spec.is_in(r)
-        assert spec.is_in(history)
 
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
     @pytest.mark.skipif(
