@@ -12,12 +12,14 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import (
+    _is_leaf_nontensor,
     _is_tensor_collection,
     CompatibleType,
     NestedKey,
     T,
     TensorDictBase,
 )
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import (
     _check_keys,
     _is_unbatched,
@@ -47,7 +49,11 @@ def pad(
             (padding_left, padding_right). To pad two dimensions,
             (padding_left, padding_right, padding_top, padding_bottom) and so on.
             pad_size must be even and less than or equal to twice the number of batch dimensions.
-         value (float, optional): The fill value to pad by, default 0.0
+         value (float, optional): The fill value to pad by, default 0.0.
+            Non-tensor entries (:class:`~tensordict.NonTensorData` /
+            :class:`~tensordict.NonTensorStack`) keep their values at the
+            valid positions and hold ``None`` in the pad slots instead of
+            ``value``.
          inplace (bool, optional): If ``True``, the input tensordict's identity
             and key set are preserved, and each leaf's storage is replaced by
             its padded counterpart one at a time. This keeps peak memory close
@@ -112,6 +118,11 @@ def pad(
     if safe:
         _pad_preflight(tensordict, pad_size)
 
+    if is_non_tensor(tensordict):
+        # NonTensorStack is a LazyStackedTensorDict subclass: dispatch before
+        # the lazy-stack branch so non-tensor values are preserved.
+        return _pad_non_tensor(tensordict, pad_size, inplace=inplace)
+
     if inplace and isinstance(tensordict, LazyStackedTensorDict):
         return _pad_lazy_stack_inplace(tensordict, pad_size, value)
 
@@ -143,6 +154,21 @@ def pad(
         if _is_unbatched(tensor):
             if not inplace:
                 out._set_str(key, tensor, validated=True, inplace=False)
+            continue
+
+        if is_non_tensor(tensor):
+            if not tensor.batch_size:
+                # Unbatched non-tensor metadata: not indexed along the batch
+                # dims, so padding leaves it untouched.
+                if not inplace:
+                    out._set_str(key, tensor, validated=True, inplace=False)
+                continue
+            if inplace and isinstance(tensor, NonTensorStack):
+                _pad_non_tensor(tensor, pad_size, inplace=True)
+                continue
+            padded = _pad_non_tensor(tensor, pad_size, inplace=False)
+            del tensor
+            out._set_str(key, padded, validated=True, inplace=False)
             continue
 
         if _is_tensor_collection(type(tensor)):
@@ -182,6 +208,24 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
     non-negative. Catches the realistic user-error class of failures before
     ``inplace=True`` has rebound any leaf.
     """
+    if is_non_tensor(tensordict):
+        shape = tensordict.batch_size
+        if not shape:
+            return
+        if len(pad_size) > 2 * len(shape):
+            raise RuntimeError(
+                f"pad_size of length {len(pad_size)} is too long for non-tensor "
+                f"value with batch size {tuple(shape)}."
+            )
+        for i in range(len(pad_size) // 2):
+            left, right = pad_size[2 * i], pad_size[2 * i + 1]
+            if shape[i] + left + right < 0:
+                raise RuntimeError(
+                    f"Pad ({left}, {right}) on dim {i} of non-tensor value "
+                    f"(size {shape[i]}) would produce a negative output size."
+                )
+        return
+
     if isinstance(tensordict, LazyStackedTensorDict):
         stack_dim = tensordict.stack_dim
         pairs = [
@@ -227,6 +271,100 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
                 )
 
 
+def _pad_non_tensor(
+    tensordict: TensorDictBase,
+    pad_size: Sequence[int],
+    *,
+    inplace: bool = False,
+) -> TensorDictBase:
+    """Pad a ``NonTensorData`` / ``NonTensorStack`` along its leading batch dims.
+
+    Non-tensor values cannot be filled with a numeric constant: the valid
+    positions keep their original values and every pad slot holds a
+    ``NonTensorData`` whose data is ``None``. Negative pad sizes crop, like
+    :func:`torch.nn.functional.pad`.
+    """
+    pairs = [(pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)]
+    if all(left == 0 and right == 0 for left, right in pairs):
+        return tensordict
+    result = _pad_non_tensor_rec(tensordict, pairs)
+    if not inplace:
+        return result
+    if not isinstance(tensordict, NonTensorStack):
+        raise RuntimeError(
+            "pad(..., inplace=True) cannot preserve the identity of a "
+            "NonTensorData input since the padded result is a NonTensorStack. "
+            "Use inplace=False instead."
+        )
+    if tensordict.stack_dim == 0:
+        new_tensordicts = result.tensordicts
+    else:
+        new_tensordicts = result.unbind(tensordict.stack_dim)
+    tensordict.tensordicts[:] = new_tensordicts
+    tensordict._change_batch_size(result.batch_size)
+    return tensordict
+
+
+def _pad_non_tensor_rec(
+    tensordict: TensorDictBase, pairs: list[tuple[int, int]]
+) -> NonTensorStack:
+    left, right = pairs[0]
+    rest = pairs[1:]
+    elements = list(tensordict.unbind(0))
+    if rest and any(p != 0 for pair in rest for p in pair):
+        elements = [_pad_non_tensor_rec(element, rest) for element in elements]
+    if left < 0:
+        elements = elements[-left:]
+        left = 0
+    if right < 0:
+        elements = elements[: len(elements) + right]
+        right = 0
+    inner_shape = list(tensordict.batch_size[1:])
+    for dim, (inner_left, inner_right) in enumerate(rest):
+        inner_shape[dim] += inner_left + inner_right
+    device = tensordict.device
+    items = (
+        [
+            NonTensorData(data=None, batch_size=inner_shape, device=device)
+            for _ in range(left)
+        ]
+        + elements
+        + [
+            NonTensorData(data=None, batch_size=inner_shape, device=device)
+            for _ in range(right)
+        ]
+    )
+    if not items:
+        raise RuntimeError(
+            "Padding a non-tensor value to a zero-sized batch dimension is not "
+            "supported: a NonTensorStack cannot be empty."
+        )
+    return NonTensorStack(*items, stack_dim=0)
+
+
+def _pad_filler_like(template: TensorDictBase, value: float) -> TensorDictBase:
+    """Build a pad-slot constituent shaped like ``template``.
+
+    Tensor leaves are filled with ``value``; non-tensor leaves hold ``None``
+    (a non-tensor value cannot be filled with a numeric constant).
+    """
+    if is_non_tensor(template):
+        return NonTensorData(
+            data=None, batch_size=template.batch_size, device=template.device
+        )
+    filler = template.apply(lambda t: torch.full_like(t, value))
+    for key in template.keys(True, True, is_leaf=_is_leaf_nontensor):
+        leaf = template.get(key)
+        if is_non_tensor(leaf):
+            filler.set(
+                key,
+                NonTensorData(
+                    data=None, batch_size=leaf.batch_size, device=leaf.device
+                ),
+            )
+    return filler
+
+
 def _pad_lazy_stack_inplace(
     tensordict: LazyStackedTensorDict,
     pad_size: Sequence[int],
@@ -262,15 +400,11 @@ def _pad_lazy_stack_inplace(
 
     if right > 0:
         template = tensordict.tensordicts[-1]
-        new_pads = [
-            template.apply(lambda t: torch.full_like(t, value)) for _ in range(right)
-        ]
+        new_pads = [_pad_filler_like(template, value) for _ in range(right)]
         tensordict.tensordicts.extend(new_pads)
     if left > 0:
         template = tensordict.tensordicts[0]
-        new_pads = [
-            template.apply(lambda t: torch.full_like(t, value)) for _ in range(left)
-        ]
+        new_pads = [_pad_filler_like(template, value) for _ in range(left)]
         tensordict.tensordicts[:0] = new_pads
 
     new_batch_size = list(tensordict.batch_size)

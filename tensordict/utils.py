@@ -2940,8 +2940,9 @@ class LinkedList(list):
     def __repr__(self) -> str:
         return f"LinkedList({super().__repr__()})"
 
-    def __str__(self) -> str:
-        return f"LinkedList({super().__str__()})"
+    # No __str__ override: list has no __str__ of its own, so a
+    # super().__str__() call would dispatch back to this class's __repr__
+    # and print a doubly-wrapped "LinkedList(LinkedList([...]))".
 
     def __eq__(self, other: Any) -> bool:
         return list(self) == other
