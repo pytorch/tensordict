@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4134+g693066f73.d20260612)
+                  main (0.13.0.dev4140+ga8b032c92.d20260615)
                 </div>
               
             
@@ -375,7 +375,11 @@ be padded. For example to pad only the first dimension, pad has the form
 (padding_left, padding_right). To pad two dimensions,
 (padding_left, padding_right, padding_top, padding_bottom) and so on.
 pad_size must be even and less than or equal to twice the number of batch dimensions.</p></li>
-<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – The fill value to pad by, default 0.0</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – The fill value to pad by, default 0.0.
+Non-tensor entries (<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> /
+<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>) keep their values at the
+valid positions and hold <code class="docutils literal notranslate"><span class="pre">None</span></code> in the pad slots instead of
+<code class="docutils literal notranslate"><span class="pre">value</span></code>.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – <p>If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input tensordict’s identity
 and key set are preserved, and each leaf’s storage is replaced by
 its padded counterpart one at a time. This keeps peak memory close
