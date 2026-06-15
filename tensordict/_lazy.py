@@ -89,7 +89,6 @@ from tensordict.utils import (
 from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence
 
-
 try:
     from functorch import dim as ftdim
 
@@ -853,10 +852,25 @@ class LazyStackedTensorDict(TensorDictBase):
             cursor_incr = 1
             # if idx is None:
             #     idx = True
+            if (
+                isinstance(idx, torch.Tensor)
+                and idx.ndim == 0
+                and idx.dtype == torch.bool
+            ):
+                # A scalar boolean behaves like a new axis (numpy semantics),
+                # not like a scalar integer index: don't let it fall through
+                # to the _is_number paths below.
+                idx = bool(idx)
             if idx is None or idx is True:
                 out.append(None)
                 num_none += cursor <= self.stack_dim
                 continue
+            if idx is False:
+                raise NotImplementedError(
+                    "Indexing a LazyStackedTensorDict with a scalar False mask "
+                    "inside a tuple index is not supported. Use a length-1 "
+                    "boolean mask on an unsqueezed tensordict instead."
+                )
             if cursor == self.stack_dim:
                 # we need to check which tds need to be indexed
                 if isinstance(idx, ftdim.Dim):
@@ -1012,6 +1026,34 @@ class LazyStackedTensorDict(TensorDictBase):
             "num_none": num_none,
             "num_squash": num_squash,
         }
+
+    def _empty_getitem_result(self, index: IndexType, stack_dim: int) -> Self:
+        """Build the zero-length lazy stack produced by an index that selects nothing.
+
+        ``_new_lazy_unsafe`` re-inserts the stack dim into the batch size it
+        is given, so it must receive the constituents' batch size (the
+        result's batch size with ``stack_dim`` removed), not the result's.
+        The result has zero constituents and therefore no key structure, but
+        it keeps the lazy-stack type so that e.g. ``torch.cat`` with sibling
+        lazy stacks still works.
+        """
+        batch_size = _getitem_batch_size(self.batch_size, index)
+        constituent_batch_size = torch.Size(
+            tuple(batch_size[:stack_dim]) + tuple(batch_size[stack_dim + 1 :])
+        )
+        names = self.names
+        if names is not None and len(names) == len(batch_size):
+            names = names[:stack_dim] + names[stack_dim + 1 :]
+            if not any(name is not None for name in names):
+                names = None
+        else:
+            names = None
+        return self._new_lazy_unsafe(
+            stack_dim=stack_dim,
+            device=self.device,
+            names=names,
+            batch_size=constituent_batch_size,
+        )
 
     def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
         if not validated:
@@ -2442,9 +2484,10 @@ class LazyStackedTensorDict(TensorDictBase):
             isinstance(index, torch.Tensor)
             and index.shape == ()
             and index.dtype == torch.bool
-            and index.all()
         ):
-            self.unsqueeze(0).update(value)
+            if index is None or bool(index):
+                self.unsqueeze(0).update(value)
+            # a scalar False mask selects nothing: no-op
             return self
 
         if is_tensor_collection(value) or isinstance(value, dict):
@@ -2553,9 +2596,12 @@ class LazyStackedTensorDict(TensorDictBase):
             isinstance(index, torch.Tensor)
             and index.shape == ()
             and index.dtype == torch.bool
-            and index.all()
         ):
-            return self.unsqueeze(0)
+            result = self.unsqueeze(0)
+            if index is None or bool(index):
+                return result
+            # x[False] (or a scalar False mask) adds a zero-sized leading dim
+            return result[0:0]
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
@@ -2578,15 +2624,12 @@ class LazyStackedTensorDict(TensorDictBase):
                             result.append(self.tensordicts[i][_idx])
                             result[-1] = result[-1].squeeze(cat_dim)
                 if not result:
-                    batch_size = _getitem_batch_size(self.batch_size, index)
-                else:
-                    batch_size = None
+                    return self._empty_getitem_result(index, cat_dim)
                 return self._new_lazy_unsafe(
                     *result,
                     stack_dim=cat_dim,
                     device=self.device,
                     names=self.names,
-                    batch_size=batch_size,
                 )
             else:
                 for i, _idx in converted_idx.items():
@@ -2637,6 +2680,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         result.append(self.tensordicts[i])
                     else:
                         result.append(self.tensordicts[i][_idx])
+                if not result:
+                    # e.g. an empty slice along the stack dim
+                    return self._empty_getitem_result(index, new_stack_dim)
                 result = LazyStackedTensorDict.lazy_stack(
                     result, new_stack_dim, stack_dim_name=self._td_dim_name
                 )
