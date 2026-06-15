@@ -292,7 +292,7 @@ class TestLazyStackedTensorDict:
                                 "a": torch.zeros(
                                     (
                                         2,
-                                        torch.randint(1, 5, ()).item() if ragged else 4,
+                                        (_i + 2 if ragged else 4),
                                         3,
                                     )
                                 ),
@@ -300,7 +300,7 @@ class TestLazyStackedTensorDict:
                             },
                             [2],
                         )
-                        for _ in range(3)
+                        for _i in range(3)
                     ],
                     stack_dim=1,
                 )

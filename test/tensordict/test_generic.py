@@ -1960,9 +1960,9 @@ class TestGeneric:
         #     },
         #     batch_size=[2, 1],
         #     names=["batch", "time"],
-        # ).memmap(f"{Path(__file__).parent}/artifacts/mmap_example/")
+        # ).memmap(f"{Path(__file__).parent.parent}/artifacts/mmap_example/")
 
-        td = TensorDict.load(f"{Path(__file__).parent}/artifacts/mmap_example/")
+        td = TensorDict.load(f"{Path(__file__).parent.parent}/artifacts/mmap_example/")
         assert td.shape == (2, 1)
         # assert td.names == ("batch", "time")
         assert (td["nested", "int64"] == torch.tensor([[1], [2]])).all()
@@ -1973,7 +1973,7 @@ class TestGeneric:
         ).all()
         assert td["nested", "bfloat16"].dtype == torch.bfloat16
         td_nested = TensorDict.load(
-            f"{Path(__file__).parent}/artifacts/mmap_example/nested"
+            f"{Path(__file__).parent.parent}/artifacts/mmap_example/nested"
         )
         assert (td_nested == td["nested"]).all()
 
