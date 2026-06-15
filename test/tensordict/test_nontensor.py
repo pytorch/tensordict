@@ -855,6 +855,75 @@ class TestNonTensorData:
         result = tensor.where(condition=condition, other=other, out=out, pad=0)
         assert result.tolist() == [["a"], ["a"]]
 
+    def test_linked_list_str(self):
+        td = TensorDict(a=NonTensorStack("foo", "bar"), batch_size=(2,))
+        # str must not double-wrap: list has no __str__ of its own, so a
+        # naive super().__str__() would bounce back to LinkedList.__repr__.
+        assert str(td["a"]) == "LinkedList(['foo', 'bar'])"
+        assert repr(td["a"]) == "LinkedList(['foo', 'bar'])"
+
+    def test_nontensorstack_boolean_mask(self):
+        td = TensorDict(
+            {
+                "x": torch.arange(3),
+                "instr": NonTensorStack("a", "b", "c"),
+            },
+            batch_size=[3],
+        )
+        mask = torch.tensor([True, False, True])
+        masked = td[mask]
+        assert isinstance(masked.get("instr"), NonTensorStack)
+        assert masked.get("instr").batch_size == torch.Size([2])
+        assert masked.get("instr").tolist() == ["a", "c"]
+        assert masked["instr"] == ["a", "c"]
+        # all-False mask
+        empty = td[torch.zeros(3, dtype=torch.bool)]
+        assert empty.batch_size == torch.Size([0])
+        assert empty.get("instr").batch_size == torch.Size([0])
+        assert empty.get("instr").tolist() == []
+
+    def test_nontensorstack_boolean_mask_2d(self):
+        instr = torch.stack(
+            [NonTensorStack(*[f"{i}{j}" for j in range(2)]) for i in range(3)]
+        )
+        td = TensorDict(
+            {"instr": instr, "x": torch.arange(6).view(3, 2)}, batch_size=[3, 2]
+        )
+        # mask along dim 0 of a 2D NonTensorStack used to raise an IndexError
+        mask = torch.tensor([True, False, True])
+        masked = td[mask]
+        assert masked.get("instr").tolist() == [["00", "01"], ["20", "21"]]
+        assert masked["x"].tolist() == [[0, 1], [4, 5]]
+        # full-shape mask flattens
+        full_mask = torch.tensor([[True, False], [False, True], [True, True]])
+        assert td[full_mask].get("instr").tolist() == ["00", "11", "20", "21"]
+        # boolean setitem with nested stacks
+        value = TensorDict(
+            {
+                "instr": torch.stack(
+                    [NonTensorStack("p", "q"), NonTensorStack("r", "s")]
+                ),
+                "x": torch.zeros(2, 2, dtype=torch.long),
+            },
+            batch_size=[2, 2],
+        )
+        td[mask] = value
+        assert td.get("instr").tolist() == [["p", "q"], ["10", "11"], ["r", "s"]]
+
+    def test_nontensorstack_scalar_bool_index(self):
+        stack = NonTensorStack("a", "b")
+        assert stack[torch.tensor(True)].tolist() == [["a", "b"]]
+        assert stack[torch.tensor(False)].batch_size == torch.Size([0, 2])
+        indexed = stack[(torch.tensor(True),)]
+        assert isinstance(indexed, NonTensorStack)
+        assert indexed.batch_size == torch.Size([1, 2])
+        assert indexed.tolist() == [["a", "b"]]
+        # masking to empty keeps the NonTensorStack type
+        empty = stack[torch.zeros(2, dtype=torch.bool)]
+        assert isinstance(empty, NonTensorStack)
+        assert empty.batch_size == torch.Size([0])
+        assert empty.tolist() == []
+
 
 class TestMetaData:
     def test_typed_metadata(self):

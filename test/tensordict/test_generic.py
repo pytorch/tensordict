@@ -4814,6 +4814,110 @@ class TestGeneric:
         assert td_canon.device == td.device
         assert set(td_canon.keys()) == set(td.keys())
 
+    def test_pad_nontensor(self):
+        td = TensorDict(
+            {
+                "x": torch.arange(3).unsqueeze(-1),
+                "instr": NonTensorStack("a", "b", "c"),
+            },
+            batch_size=[3],
+        )
+        padded = pad(td, [0, 2])
+        assert isinstance(padded.get("instr"), NonTensorStack)
+        assert padded.get("instr").batch_size == torch.Size([5])
+        assert padded.get("instr").tolist() == ["a", "b", "c", None, None]
+        assert padded["x"].squeeze(-1).tolist() == [0, 1, 2, 0, 0]
+        # left + right pad
+        assert pad(td, [1, 1]).get("instr").tolist() == [None, "a", "b", "c", None]
+        # negative pad crops
+        assert pad(td, [-1, 1]).get("instr").tolist() == ["b", "c", None]
+
+    def test_pad_nontensor_2dim(self):
+        instr = torch.stack(
+            [NonTensorStack(*[f"{i}{j}" for j in range(2)]) for i in range(3)]
+        )
+        td = TensorDict({"instr": instr, "x": torch.ones(3, 2)}, batch_size=[3, 2])
+        padded = pad(td, [0, 1, 1, 0])
+        assert padded.batch_size == torch.Size([4, 3])
+        assert padded.get("instr").tolist() == [
+            [None, "00", "01"],
+            [None, "10", "11"],
+            [None, "20", "21"],
+            [None, None, None],
+        ]
+
+    def test_pad_nontensor_broadcast_data(self):
+        td = TensorDict(
+            {"meta": NonTensorData("m", batch_size=[3]), "x": torch.ones(3)},
+            batch_size=[3],
+        )
+        padded = pad(td, [0, 2])
+        assert padded.get("meta").tolist() == ["m", "m", "m", None, None]
+
+    def test_pad_nontensor_inplace(self):
+        td = TensorDict(
+            {
+                "x": torch.arange(3).float(),
+                "instr": NonTensorStack("a", "b", "c"),
+            },
+            batch_size=[3],
+        )
+        instr = td.get("instr")
+        out = pad(td, [0, 2], inplace=True)
+        assert out is td
+        # NonTensorStack entries are padded in place: identity preserved.
+        assert out.get("instr") is instr
+        assert out.get("instr").tolist() == ["a", "b", "c", None, None]
+        assert out["x"].tolist() == [0.0, 1.0, 2.0, 0.0, 0.0]
+
+    def test_pad_nontensor_top_level(self):
+        stack = NonTensorStack("a", "b")
+        padded = pad(stack, [1, 1])
+        assert isinstance(padded, NonTensorStack)
+        assert padded.tolist() == [None, "a", "b", None]
+        # inplace preserves the stack's identity
+        out = pad(stack, [0, 1], inplace=True)
+        assert out is stack
+        assert stack.tolist() == ["a", "b", None]
+        # NonTensorData cannot be padded in place (it must become a stack)
+        with pytest.raises(RuntimeError, match="cannot preserve the identity"):
+            pad(NonTensorData("a", batch_size=[2]), [0, 1], inplace=True)
+
+    def test_pad_nontensor_safe(self):
+        td = TensorDict({"instr": NonTensorStack("a", "b", "c")}, batch_size=[3])
+        with pytest.raises(RuntimeError, match="negative output size"):
+            pad(td, [-4, 0])
+
+    def test_pad_nontensor_lazy_stack(self):
+        def _make():
+            return lazy_stack(
+                [
+                    TensorDict(
+                        {
+                            "x": torch.ones(4) * i,
+                            "instr": NonTensorStack(*[f"{i}{j}" for j in range(4)]),
+                        },
+                        batch_size=[4],
+                    )
+                    for i in range(2)
+                ],
+                dim=0,
+            )
+
+        expected = [
+            ["00", "01", "02", "03", None, None],
+            ["10", "11", "12", "13", None, None],
+            [None] * 6,
+        ]
+        # Padding along both the stack dim and the constituent dim keeps
+        # non-tensor values for the valid positions; new slots hold None.
+        padded = pad(_make(), [0, 1, 0, 2], value=9.0)
+        assert padded.get("instr").tolist() == expected
+        lst = _make()
+        out = pad(lst, [0, 1, 0, 2], value=9.0, inplace=True)
+        assert out is lst
+        assert out.get("instr").tolist() == expected
+
 
 _SYNC_COUNTER = 0
 

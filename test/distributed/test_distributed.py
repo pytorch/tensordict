@@ -98,7 +98,7 @@ class TestFSDP:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            tdlogger.info("start method already set to", mp.get_start_method())
+            tdlogger.info("start method already set to %s", mp.get_start_method())
         proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
         proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
         proc0.start()
@@ -162,7 +162,7 @@ class TestNPUFSDP:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            tdlogger.info("start method already set to", mp.get_start_method())
+            tdlogger.info("start method already set to %s", mp.get_start_method())
         proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
         proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
         proc0.start()
@@ -238,7 +238,7 @@ class TestDTensor:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            tdlogger.info("start method already set to", mp.get_start_method())
+            tdlogger.info("start method already set to %s", mp.get_start_method())
         server_queue = mp.Queue(1)
         client_queue = mp.Queue(1)
         server_worker = mp.Process(

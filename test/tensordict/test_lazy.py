@@ -1566,6 +1566,70 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    def test_lazy_mask_nested_stack(self):
+        # Boolean-masking a lazy stack whose constituents are themselves lazy
+        # stacks: the per-constituent scalar masks must behave like new-axis
+        # indices, not integer indices.
+        outer = LazyStackedTensorDict(
+            *[
+                LazyStackedTensorDict(
+                    *[
+                        TensorDict({"a": torch.full((), float(i * 10 + j))}, [])
+                        for j in range(2)
+                    ],
+                    stack_dim=0,
+                )
+                for i in range(3)
+            ],
+            stack_dim=0,
+        )
+        mask = torch.tensor([True, False, True])
+        masked = outer[mask]
+        assert masked.batch_size == torch.Size([2, 2])
+        assert masked["a"].tolist() == [[0.0, 1.0], [20.0, 21.0]]
+
+    def test_lazy_scalar_bool_index(self):
+        lst = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.full((), float(i))}, []) for i in range(2)],
+            stack_dim=0,
+        )
+        # bare scalar masks: True adds a size-1 leading dim, False a size-0 one
+        assert lst[torch.tensor(True)].batch_size == torch.Size([1, 2])
+        assert lst[torch.tensor(False)].batch_size == torch.Size([0, 2])
+        assert lst[True].batch_size == torch.Size([1, 2])
+        assert lst[False].batch_size == torch.Size([0, 2])
+        # scalar True inside a tuple index (matches dense semantics)
+        indexed = lst[(torch.tensor(True),)]
+        assert indexed.batch_size == torch.Size([1, 2])
+        assert indexed["a"].tolist() == [[0.0, 1.0]]
+        with pytest.raises(NotImplementedError, match="scalar False"):
+            lst[(torch.tensor(False),)]
+        # scalar False assignment is a no-op
+        before = lst["a"].tolist()
+        lst[torch.tensor(False)] = TensorDict({"a": torch.full((1, 2), 5.0)}, [1, 2])
+        assert lst["a"].tolist() == before
+
+    def test_lazy_empty_selection_batch_size(self):
+        lst = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.ones(2)}, [2]) for _ in range(3)],
+            stack_dim=0,
+        )
+        # empty slice along the stack dim used to raise "items cannot be empty"
+        assert lst[0:0].batch_size == torch.Size([0, 2])
+        # all-False mask used to return batch_size [0, 0, 2]
+        assert lst[torch.zeros(3, dtype=torch.bool)].batch_size == torch.Size([0, 2])
+        # the empty result keeps the lazy type so cat with siblings still works
+        recat = torch.cat([lst[0:1], lst[0:0], lst[1:]], 0)
+        assert recat.batch_size == torch.Size([3, 2])
+        assert (recat == lst).all()
+        # zero-size in a non-leading position
+        lst_sd1 = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.ones(3)}, [3]) for _ in range(2)],
+            stack_dim=1,
+        )
+        empty = lst_sd1[:, torch.zeros(2, dtype=torch.bool)]
+        assert empty.batch_size == torch.Size([3, 0])
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
