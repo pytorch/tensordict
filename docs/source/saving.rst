@@ -196,6 +196,46 @@ a memory-mapped file:
 See :meth:`~tensordict.TensorDictBase.consolidate` for the full API, including
 options like ``num_threads``, ``device``, ``pin_memory``, and ``share_memory``.
 
+GPU-direct loading and saving with GPUDirect Storage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When the source or destination of a consolidated tensordict is a CUDA device,
+the contiguous-buffer layout is a natural fit for NVIDIA
+`GPUDirect Storage <https://docs.nvidia.com/gpudirect-storage/>`_ (GDS): a
+single buffer registration and one ``cuFileRead`` / ``cuFileWrite`` move all
+leaves between disk and GPU, bypassing host RAM entirely.
+
+Both :meth:`~tensordict.TensorDictBase.from_consolidated` and
+:meth:`~tensordict.TensorDictBase.consolidate` accept ``use_gds=True`` to opt
+into this path:
+
+  >>> # CPU side: write a consolidated file
+  >>> td.consolidate(filename="/path/to/td.pt")
+  >>> # GPU side: load directly into CUDA memory (no host bounce)
+  >>> td_gpu = TensorDict.from_consolidated(
+  ...     "/path/to/td.pt", device="cuda", use_gds=True
+  ... )
+  >>>
+  >>> # Or symmetrically, save a CUDA-resident tensordict directly to disk
+  >>> td_gpu.consolidate(filename="/path/to/td_gds.pt", use_gds=True)
+
+``use_gds`` is **opt-in and disabled by default**. There is no silent fallback:
+any failure (missing API, ``nvidia-fs`` not loaded, unsupported filesystem,
+non-CUDA device) raises immediately.
+
+Prerequisites:
+
+- PyTorch ≥ 2.7 with cuFile bindings (Linux x86_64; not available on macOS or
+  Windows).
+- A CUDA device.
+- The ``nvidia-fs`` kernel module loaded.
+- A GDS-supported filesystem: ext4 with direct I/O, GPFS, Lustre, WekaFS, etc.
+  ``tmpfs`` does **not** qualify (no direct I/O).
+
+With ``use_gds=True``, every leaf of the returned tensordict shares a single
+CUDA storage. This already matches the behaviour of
+``from_consolidated(...).to("cuda")``.
+
 state_dict / load_state_dict
 ----------------------------
 

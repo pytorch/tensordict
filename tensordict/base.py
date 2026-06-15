@@ -6851,6 +6851,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         share_memory: bool = False,
         pin_memory: bool = False,
         metadata: bool = False,
+        use_gds: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -6883,6 +6884,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Storing the metadata can be useful when one wants to control how serialization
                 is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
                 differently if the metadata is or isn't available.
+            use_gds (bool, optional): if ``True`` and ``filename`` is set, the consolidated
+                data region is written directly from CUDA memory to the file via NVIDIA
+                GPUDirect Storage (cuFile), bypassing host RAM. The TD (or ``device``) must
+                be on CUDA. Requires PyTorch ≥ 2.7 with cuFile bindings, the ``nvidia-fs``
+                kernel module, and a GDS-supported filesystem. No silent fallback: any
+                failure raises. Defaults to ``False``.
 
         .. note::
             If the tensordict is already consolidated, all arguments are ignored and ``self``
@@ -6922,18 +6929,39 @@ class TensorDictBase(MutableMapping, TensorCollection):
         )
         filesize = sum(flat_size)
         device = torch.device(device) if device is not None else None
-        if filename is None:
+
+        # GDS save bypasses the CPU-mmap'd file: we allocate the
+        # consolidated storage directly on CUDA, fill it like the
+        # filename=None path, and stream it out via cuFile at the end.
+        gds_save = use_gds and filename is not None
+        if use_gds and filename is None:
+            raise RuntimeError("use_gds=True requires a `filename` to be provided.")
+        gds_metadata_bytes: bytes | None = None
+        gds_len_bytes: bytes | None = None
+        if gds_save:
+            gds_target_device = device
+            if gds_target_device is None and self.device is not None:
+                gds_target_device = self.device
+            if gds_target_device is None or gds_target_device.type != "cuda":
+                raise RuntimeError(
+                    "use_gds=True requires a CUDA device, either via "
+                    "`device=` or on the TensorDict itself."
+                )
+            device = gds_target_device
+
+        if filename is None or gds_save:
             storage = torch.empty(
                 filesize,
                 dtype=torch.uint8,
                 device=device if device else self.device,
-                pin_memory=pin_memory,
+                pin_memory=pin_memory and not gds_save,
             )
             if share_memory and not (
                 device is not None and device.type == "cuda"
             ):  # cuda device is always shared
                 storage.share_memory_()
-        else:
+
+        if filename is not None:
             # Convert the dict to json
             try:
                 from tensordict.utils import json_dumps
@@ -6949,37 +6977,49 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # Represent as a tensor
             if isinstance(metadata_dict_json, str):
                 metadata_dict_json = metadata_dict_json.encode("utf-8")
-            metadata_dict_json = torch.as_tensor(
-                bytearray(metadata_dict_json), dtype=torch.uint8
-            )
-            len_metadata = torch.tensor(
-                [metadata_dict_json.numel()], dtype=torch.int64
-            ).view(torch.uint8)
 
-            if device not in (torch.device("cpu"), None):
-                raise RuntimeError(
-                    "device and filename are mutually exclusive arguments."
+            if gds_save:
+                # Hold trailer bytes on CPU; cuFile only handles the
+                # bulk data region.
+                gds_metadata_bytes = bytes(metadata_dict_json)
+                gds_len_bytes = (
+                    torch.tensor([len(gds_metadata_bytes)], dtype=torch.int64)
+                    .view(torch.uint8)
+                    .tolist()
                 )
-            suffix = len_metadata.numel() + metadata_dict_json.numel()
-            if not use_buffer:
-                total_storage = torch.from_file(
-                    str(filename),
-                    size=filesize + suffix,
-                    dtype=torch.uint8,
-                    shared=True,
-                    # needed when device ctx differs
-                    device=torch.device("cpu"),
-                )
+                gds_len_bytes = bytes(gds_len_bytes)
             else:
-                total_storage = MemoryMappedTensor.empty(
-                    shape=(filesize + suffix,),
-                    dtype=torch.uint8,
+                metadata_dict_json = torch.as_tensor(
+                    bytearray(metadata_dict_json), dtype=torch.uint8
                 )
+                len_metadata = torch.tensor(
+                    [metadata_dict_json.numel()], dtype=torch.int64
+                ).view(torch.uint8)
 
-            total_storage[-8:] = len_metadata
-            total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
-            storage = total_storage[:-suffix]
-            # assert len(storage.untyped_storage()) == filesize
+                if device not in (torch.device("cpu"), None):
+                    raise RuntimeError(
+                        "device and filename are mutually exclusive arguments."
+                    )
+                suffix = len_metadata.numel() + metadata_dict_json.numel()
+                if not use_buffer:
+                    total_storage = torch.from_file(
+                        str(filename),
+                        size=filesize + suffix,
+                        dtype=torch.uint8,
+                        shared=True,
+                        # needed when device ctx differs
+                        device=torch.device("cpu"),
+                    )
+                else:
+                    total_storage = MemoryMappedTensor.empty(
+                        shape=(filesize + suffix,),
+                        dtype=torch.uint8,
+                    )
+
+                total_storage[-8:] = len_metadata
+                total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+                storage = total_storage[:-suffix]
+                # assert len(storage.untyped_storage()) == filesize
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
 
@@ -7149,6 +7189,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         if filename is None:
             device = self.device
+        elif gds_save:
+            device = storage.device
         elif not inplace:
             device = torch.device("cpu")
         elif self.device is not None and self.device != torch.device("cpu"):
@@ -7168,7 +7210,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         # Lock the consolidated TensorDict to prevent modifications that could break consolidation
         result.lock_()
         if filename is not None:
-            if use_buffer:
+            if gds_save:
+                from tensordict._gds import _save_consolidated_gds
+
+                _save_consolidated_gds(
+                    filename,
+                    storage.untyped_storage(),
+                    gds_metadata_bytes,
+                    gds_len_bytes,
+                )
+            elif use_buffer:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
             # with open(Path(filename).with_suffix(".json"), "wb") as f:
@@ -7177,9 +7228,49 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return result
 
     @classmethod
-    def from_consolidated(cls, filename):
-        # with open(Path(filename).with_suffix(".json"), "rb") as f:
-        #     metadata = json.loads(f.read())
+    def from_consolidated(
+        cls,
+        filename,
+        *,
+        device: torch.device | str | int | None = None,
+        use_gds: bool = False,
+    ):
+        """Load a tensordict from a consolidated file.
+
+        Args:
+            filename: path to a file produced by :meth:`~.consolidate` with
+                a ``filename`` argument.
+
+        Keyword Args:
+            device (torch.device, optional): device to place the loaded
+                tensordict on. With ``use_gds=False`` (default) the file is
+                first mapped on CPU and then transferred via ``.to(device)``
+                at the end. With ``use_gds=True`` the data is read directly
+                into a CUDA buffer via cuFile.
+            use_gds (bool, optional): if ``True``, the data region of the
+                consolidated file is loaded directly into CUDA memory via
+                NVIDIA GPUDirect Storage (cuFile), bypassing host RAM.
+                Requires PyTorch ≥ 2.7 with cuFile bindings, a CUDA device,
+                and a GDS-supported filesystem with the ``nvidia-fs`` kernel
+                module loaded. ``device`` must be a CUDA device. No silent
+                fallback: any failure raises. Defaults to ``False``.
+
+        .. note::
+            With ``use_gds=True``, every leaf of the returned tensordict
+            shares a single CUDA storage. This already matches the
+            behaviour of ``from_consolidated(...).to("cuda")``.
+        """
+        if use_gds:
+            if device is None:
+                raise RuntimeError(
+                    "use_gds=True requires a CUDA device to be passed via "
+                    "the `device` argument."
+                )
+            device = torch.device(device)
+            from tensordict._gds import _load_consolidated_gds
+
+            return _load_consolidated_gds(filename, device)
+
         file = torch.from_file(
             str(filename),
             dtype=torch.uint8,
@@ -7193,9 +7284,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         from ._reductions import _rebuild_tensordict_files_consolidated
 
-        return _rebuild_tensordict_files_consolidated(
+        result = _rebuild_tensordict_files_consolidated(
             metadata, file[: -metadata_size - 8]
         )
+        if device is not None:
+            result = result.to(torch.device(device))
+        return result
 
     def is_consolidated(self):
         """Checks if a TensorDict has a consolidated storage."""
