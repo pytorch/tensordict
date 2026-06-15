@@ -122,7 +122,7 @@ def _get_methods_from_class(cls):
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_methods():
     tensorclass_pyi_path = (
-        pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
+        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
     )
     tensorclass_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
 
@@ -148,7 +148,7 @@ def test_tensorclass_instance_methods():
         x: torch.Tensor
 
     tensorclass_pyi_path = (
-        pathlib.Path(__file__).parent.parent / "tensordict/tensorclass.pyi"
+        pathlib.Path(__file__).parents[2] / "tensordict/tensorclass.pyi"
     )
     tensorclass_abstract_methods = _get_methods_from_pyi(str(tensorclass_pyi_path))
 

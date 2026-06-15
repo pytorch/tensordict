@@ -9,13 +9,13 @@
   - changed-files:
     - any-glob-to-any-file:
       - 'tensordict/nn/**'
-      - 'test/test_nn.py'
+      - 'test/nn/test_nn.py'
 
 "store":
   - changed-files:
     - any-glob-to-any-file:
       - 'tensordict/store/**'
-      - 'test/test_store.py'
+      - 'test/store/test_store.py'
 
 "prototype":
   - changed-files:
@@ -27,35 +27,35 @@
     - any-glob-to-any-file:
       - 'tensordict/tensorclass.py'
       - 'tensordict/tensorclass.pyi'
-      - 'test/test_tensorclass.py'
+      - 'test/tensorclass/test_tensorclass.py'
 
 "memmap":
   - changed-files:
     - any-glob-to-any-file:
       - 'tensordict/memmap.py'
-      - 'test/test_memmap.py'
+      - 'test/memmap/test_memmap.py'
 
 "persistent":
   - changed-files:
     - any-glob-to-any-file:
       - 'tensordict/persistent.py'
-      - 'test/test_h5.py'
+      - 'test/memmap/test_h5.py'
 
 "functional":
   - changed-files:
     - any-glob-to-any-file:
       - 'tensordict/functional.py'
-      - 'test/test_functorch.py'
+      - 'test/nn/test_functorch.py'
 
 "Distributed":
   - changed-files:
     - any-glob-to-any-file:
-      - 'test/test_distributed.py'
+      - 'test/distributed/test_distributed.py'
 
 "Compile":
   - changed-files:
     - any-glob-to-any-file:
-      - 'test/test_compile.py'
+      - 'test/compile/test_compile.py'
 
 # =============================================================================
 # Documentation & CI
