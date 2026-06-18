@@ -8,6 +8,7 @@
 #   - Matching is case-insensitive
 #
 # Supported prefixes -> label:
+#   [BE]                                -> BE
 #   [BugFix], [Fix]                     -> bug
 #   [Feature]                           -> Feature
 #   [Doc], [Docs], [Documentation]      -> documentation
@@ -18,12 +19,14 @@
 #   [Performance], [Perf]              -> Performance
 #   [Deprecation], [Deprecated]         -> Deprecation
 #   [Setup]                             -> setup
-#   [Distributed], [Dist]              -> Distributed
+#   [Distributed], [Dist], [DTensor]    -> Distributed
 #   [Benchmark], [Benchmarks], [Bench]  -> Benchmarks
 #   [Typing], [Type]                    -> Typing
 #   [BC-breaking], [BC]                 -> BC-breaking
 #   [Formatting], [Format]             -> Formatting
 #   [Quality]                           -> Quality
+#   [Release]                           -> release
+#   [Versioning]                        -> versioning
 #------------------------------------------------------------
 
 name: PR Label
@@ -65,6 +68,7 @@ jobs:
 
           | Prefix | Label Applied | Example |
           |--------|---------------|---------|
+          | `[BE]` | BE | `[BE] Improve internal plumbing` |
           | `[BugFix]` or `[Fix]` | bug | `[BugFix] Fix memory leak in TensorDict` |
           | `[Feature]` | Feature | `[Feature] Add new storage backend` |
           | `[Doc]` or `[Docs]` | documentation | `[Doc] Update installation guide` |
@@ -75,12 +79,14 @@ jobs:
           | `[Performance]` or `[Perf]` | Performance | `[Perf] Optimize tensor operations` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
           | `[Setup]` | setup | `[Setup] Update build configuration` |
-          | `[Distributed]` or `[Dist]` | Distributed | `[Distributed] Add scatter collective` |
+          | `[Distributed]`, `[Dist]`, or `[DTensor]` | Distributed | `[DTensor] Add cross-mesh transfer` |
           | `[Benchmark]` or `[Bench]` | Benchmarks | `[Benchmark] Add compile benchmark` |
           | `[Typing]` or `[Type]` | Typing | `[Typing] Add type stubs` |
           | `[BC-breaking]` or `[BC]` | BC-breaking | `[BC-breaking] Remove deprecated API` |
           | `[Formatting]` or `[Format]` | Formatting | `[Format] Fix code style` |
           | `[Quality]` | Quality | `[Quality] Improve error messages` |
+          | `[Release]` | release | `[Release] Publish release artifacts` |
+          | `[Versioning]` | versioning | `[Versioning] Bump release version` |
 
           **Note:** Matching is case-insensitive. Common variations (singular/plural) are supported.
           COMMENT_EOF
@@ -109,6 +115,7 @@ jobs:
 
           # Map prefixes to GitHub label names
           case "$PREFIX_LOWER" in
+            be)                        LABEL="BE" ;;
             bugfix|fix|bug)            LABEL="bug" ;;
             feature|features)          LABEL="Feature" ;;
             doc|docs|documentation)    LABEL="documentation" ;;
@@ -119,12 +126,14 @@ jobs:
             performance|perf)          LABEL="Performance" ;;
             deprecation|deprecated)    LABEL="Deprecation" ;;
             setup)                     LABEL="setup" ;;
-            distributed|dist)          LABEL="Distributed" ;;
+            distributed|dist|dtensor)  LABEL="Distributed" ;;
             benchmark|benchmarks|bench) LABEL="Benchmarks" ;;
             typing|type)               LABEL="Typing" ;;
             bc-breaking|bc)            LABEL="BC-breaking" ;;
             formatting|format)         LABEL="Formatting" ;;
             quality)                   LABEL="Quality" ;;
+            release)                   LABEL="release" ;;
+            versioning)                LABEL="versioning" ;;
             *)
               echo "::error::Unknown or invalid prefix '[$PREFIX]'."
               post_help_comment "Unknown or invalid prefix \`[$PREFIX]\`." "$PR_TITLE"
