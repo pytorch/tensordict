@@ -1257,9 +1257,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             },
             [],
         ).unflatten_keys(".")
-        prefix = tuple(key for key in prefix.split(".") if key)
-        if prefix:
-            data = data.get(prefix)
+        nested_prefix = tuple(key for key in prefix.split(".") if key)
+        if nested_prefix:
+            data = data.get(nested_prefix)
+        if data is None:
+            return nn.Module._load_from_state_dict(
+                self,
+                state_dict,
+                prefix,
+                local_metadata,
+                strict,
+                missing_keys,
+                unexpected_keys,
+                error_msgs,
+            )
         self.data.load_state_dict(data)
 
     def items(
