@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
+import operator
 import os
 import platform
 import sys
 import warnings
 from dataclasses import dataclass
 
+import numpy as np
 import pytest
 import torch
 from packaging import version
@@ -1015,6 +1018,26 @@ class TestMetaData:
 
 
 class TestUnbatchedTensor:
+    @staticmethod
+    def _result_or_exception(fun, arg):
+        try:
+            return False, fun(arg)
+        except Exception as err:
+            return True, (type(err), str(err))
+
+    @classmethod
+    def _assert_same_conversion(cls, fun, tensor):
+        expected_is_exc, expected = cls._result_or_exception(fun, tensor)
+        actual_is_exc, actual = cls._result_or_exception(fun, UnbatchedTensor(tensor))
+
+        assert actual_is_exc is expected_is_exc
+        if expected_is_exc:
+            assert actual[0] is expected[0]
+            assert actual[1] == expected[1]
+        else:
+            assert actual == expected
+            assert not isinstance(actual, UnbatchedTensor)
+
     def test_auto_batch_size(self):
         td = TensorDict(a=UnbatchedTensor(0), b=torch.randn(2, 3)).auto_batch_size_(
             batch_dims=2
@@ -1205,6 +1228,59 @@ class TestUnbatchedTensor:
         data = torch.tensor([1, 2, 3])
         ut = UnbatchedTensor(data)
         assert ut.tolist() == [1, 2, 3]
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            torch.tensor(3),
+            torch.tensor([3]),
+            torch.tensor([[3]]),
+            torch.tensor(True),
+            torch.tensor(1.25),
+            torch.tensor(1 + 2j),
+            torch.tensor([1, 2]),
+            torch.empty(0),
+        ],
+    )
+    def test_unbatched_python_conversions_match_tensor(self, data):
+        conversion_funs = [
+            str,
+            format,
+            lambda x: format(x, ".2f"),
+            bool,
+            int,
+            float,
+            complex,
+            operator.index,
+            round,
+            lambda x: round(x, 1),
+            math.trunc,
+            math.floor,
+            math.ceil,
+            lambda x: x.item(),
+        ]
+        for fun in conversion_funs:
+            self._assert_same_conversion(fun, data)
+
+    def test_unbatched_index_protocol(self):
+        data = torch.tensor(1)
+        ut = UnbatchedTensor(data)
+        assert [10, 20, 30][ut] == [10, 20, 30][data]
+        assert hex(ut) == hex(data)
+
+    def test_unbatched_numpy_array_conversion(self):
+        data = torch.tensor([[1, 2], [3, 4]])
+        ut = UnbatchedTensor(data)
+        np.testing.assert_array_equal(np.asarray(ut), np.asarray(data))
+        np.testing.assert_array_equal(
+            np.asarray(ut, dtype=np.float64), np.asarray(data, dtype=np.float64)
+        )
+
+    def test_unbatched_string_representation(self):
+        data = torch.tensor([1.0, 2.0])
+        ut = UnbatchedTensor(data)
+        assert str(ut) == str(data)
+        assert repr(ut) == f"UnbatchedTensor({data!r})"
 
     def test_auto_batch_size_nontensor_not_excluded(self):
         td = TensorDict.from_dict(
