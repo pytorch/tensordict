@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
 import warnings
 
 import torch
@@ -41,12 +42,66 @@ def _has_wrapper_subclass_vmap_fix():
 _HAS_WRAPPER_SUBCLASS_FIX = _has_wrapper_subclass_vmap_fix()
 
 
+class _UnbatchedTensorMixin:
+    """Shared Python protocol delegations for ``UnbatchedTensor`` variants."""
+
+    def _base_tensor(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        return str(self._base_tensor())
+
+    def __format__(self, format_spec):
+        return self._base_tensor().__format__(format_spec)
+
+    def __bool__(self):
+        return bool(self._base_tensor())
+
+    def __int__(self):
+        return int(self._base_tensor())
+
+    def __float__(self):
+        return float(self._base_tensor())
+
+    def __complex__(self):
+        return complex(self._base_tensor())
+
+    def __index__(self):
+        return self._base_tensor().__index__()
+
+    def __round__(self, ndigits=None):
+        if ndigits is None:
+            return round(self._base_tensor())
+        return round(self._base_tensor(), ndigits)
+
+    def __trunc__(self):
+        return math.trunc(self._base_tensor())
+
+    def __floor__(self):
+        return math.floor(self._base_tensor())
+
+    def __ceil__(self):
+        return math.ceil(self._base_tensor())
+
+    def __array__(self, dtype=None):
+        return self._base_tensor().__array__(dtype)
+
+    def item(self):
+        return self._base_tensor().item()
+
+    def numpy(self, *, force=False):
+        return self._base_tensor().numpy(force=force)
+
+    def tolist(self):
+        return self._base_tensor().tolist()
+
+
 if _HAS_WRAPPER_SUBCLASS_FIX:
     # Fast path: _make_wrapper_subclass + __torch_dispatch__
     # Zero Dynamo overhead — no DisableTorchFunctionSubclass context manager
     # or as_subclass() calls appear in the FX graph.
 
-    class UnbatchedTensor(torch.Tensor):
+    class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
         When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
@@ -109,6 +164,9 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
             r._data = data
             return r
 
+        def _base_tensor(self):
+            return self._data
+
         def __tensor_flatten__(self):
             return ["_data"], {}
 
@@ -146,12 +204,6 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         def untyped_storage(self):
             return self._data.untyped_storage()
 
-        def numpy(self, *, force=False):
-            return self._data.numpy(force=force)
-
-        def tolist(self):
-            return self._data.tolist()
-
         def __repr__(self):
             return f"UnbatchedTensor({self._data!r})"
 
@@ -179,7 +231,7 @@ else:
     # Works on all PyTorch versions but emits extra FX graph nodes
     # (DisableTorchFunctionSubclass enter/exit + as_subclass) under Dynamo.
 
-    class UnbatchedTensor(torch.Tensor):  # type: ignore[no-redef]
+    class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):  # type: ignore[no-redef]
         """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
 
         When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
@@ -225,6 +277,10 @@ else:
             if not isinstance(data, torch.Tensor):
                 data = torch.as_tensor(data)
             return torch.Tensor._make_subclass(cls, data)
+
+        def _base_tensor(self):
+            with torch._C.DisableTorchFunctionSubclass():
+                return self.as_subclass(torch.Tensor)
 
         @classmethod
         def __torch_function__(cls, func, types, args=(), kwargs=None):

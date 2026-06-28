@@ -174,6 +174,8 @@ Contract
   without modifying it.
 - **Other operations work normally**: device transfers (``to``), pointwise arithmetic (``+``, ``-``, ``*``, ``/``),
   ``clone``, gradient computation, and key-based access all behave as expected.
+- **Scalar conversions follow PyTorch**: Python conversions such as ``str()``, ``bool()``, ``int()``, ``float()``,
+  ``complex()``, and integer-index conversions delegate to the wrapped tensor.
 
 Usage
 ^^^^^
@@ -201,19 +203,26 @@ Pointwise arithmetic is applied to the underlying data:
     >>> td2.get("config").data
     tensor([2., 4., 6.])
 
+Single-element ``UnbatchedTensor`` values can be converted like regular PyTorch tensors:
+
+    >>> int(UnbatchedTensor(torch.tensor([3])))
+    3
+    >>> f"{UnbatchedTensor(torch.tensor(1.25)):.1f}"
+    '1.2'
+
 Accessing values
 ^^^^^^^^^^^^^^^^
 
-Note that for a plain TensorDict, ``get()`` returns the :class:`~tensordict.UnbatchedTensor` wrapper, while
-``__getitem__()`` (bracket syntax) returns the underlying tensor data:
+For a plain TensorDict, both ``get()`` and ``__getitem__()`` (bracket syntax) return the
+:class:`~tensordict.UnbatchedTensor` wrapper:
 
     >>> type(td.get("config"))  # UnbatchedTensor
     <class 'tensordict._unbatched.UnbatchedTensor'>
-    >>> type(td["config"])      # plain Tensor
-    <class 'torch.Tensor'>
+    >>> type(td["config"])      # UnbatchedTensor
+    <class 'tensordict._unbatched.UnbatchedTensor'>
 
-For :class:`~tensordict.tensorclass` instances, both attribute access and ``get()`` return the underlying tensor
-data (not the wrapper):
+For :class:`~tensordict.tensorclass` instances, both attribute access and ``get()`` also return the
+:class:`~tensordict.UnbatchedTensor` wrapper:
 
     >>> from tensordict import tensorclass
     >>> @tensorclass
@@ -226,9 +235,9 @@ data (not the wrapper):
     ...     batch_size=[3],
     ... )
     >>> type(tc.config)
-    <class 'torch.Tensor'>
+    <class 'tensordict._unbatched.UnbatchedTensor'>
     >>> type(tc.get("config"))
-    <class 'torch.Tensor'>
+    <class 'tensordict._unbatched.UnbatchedTensor'>
 
 Limitations
 ^^^^^^^^^^^
