@@ -1583,7 +1583,9 @@ class TensorDict(TensorDictBase):
 
         def _add_batch_dim_wrapper(key: str, value: Any) -> Any:
             if _is_unbatched(value):
-                return value
+                return value._with_batch_size(td.batch_size)._add_batch_dim(
+                    in_dim=in_dim, vmap_level=vmap_level
+                )
             if is_tensor_collection(value):
                 return value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
 
@@ -1622,7 +1624,9 @@ class TensorDict(TensorDictBase):
 
         def _process_remove(value):
             if _is_unbatched(value):
-                return value
+                return value._with_batch_size(self.batch_size)._remove_batch_dim(
+                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                )
             if is_tensor_collection(value):
                 return value._remove_batch_dim(
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
@@ -1652,7 +1656,12 @@ class TensorDict(TensorDictBase):
 
         def _process_value(value):
             if _is_unbatched(value):
-                return value
+                return value._with_batch_size(self.batch_size)._maybe_remove_batch_dim(
+                    funcname=funcname,
+                    vmap_level=vmap_level,
+                    batch_size=batch_size,
+                    out_dim=out_dim,
+                )
             if is_tensor_collection(value):
                 return value._maybe_remove_batch_dim(
                     funcname=funcname,

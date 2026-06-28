@@ -16,7 +16,7 @@ from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 
-from tensordict.utils import implement_for, strtobool
+from tensordict.utils import _is_unbatched, implement_for, strtobool
 from torch import nn
 from torch.utils._pytree import SUPPORTED_NODES
 
@@ -113,7 +113,6 @@ from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
     _broadcast_to_and_flatten,
     _get_name,
     _maybe_remove_batch_dim,
-    _validate_and_get_batch_size,
     Tensor,
     tree_flatten,
     tree_unflatten,
@@ -145,6 +144,36 @@ class _exclude_td_from_pytree:
 if not strtobool(os.getenv("PYTORCH_TENSORDICT_IMPORT_VMAP", "False")):
     # Monkey-patches
 
+    def _is_tensordict_vmap_leaf(arg: Any) -> bool:
+        return is_tensor_collection(arg) or _is_unbatched(arg)
+
+    def _vmap_dim(arg: Any) -> int:
+        if _is_unbatched(arg):
+            return len(arg.batch_size)
+        return arg.dim()
+
+    def _vmap_size(arg: Any, dim: int) -> int:
+        if _is_unbatched(arg):
+            return arg.batch_size[dim]
+        return arg.size(dim)
+
+    def _validate_tensordict_vmap_batch_size(
+        flat_in_dims: list[int | None], flat_args: list[Any]
+    ) -> int:
+        batch_sizes = [
+            _vmap_size(arg, in_dim)
+            for in_dim, arg in zip(flat_in_dims, flat_args)
+            if in_dim is not None
+        ]
+        if len(batch_sizes) == 0:
+            raise ValueError("vmap: Expected at least one Tensor to vmap over")
+        if batch_sizes and any(size != batch_sizes[0] for size in batch_sizes):
+            raise ValueError(
+                f"vmap: Expected all tensors to have the same size in the mapped "
+                f"dimension, got sizes {batch_sizes} for the mapped dimension"
+            )
+        return batch_sizes[0]
+
     def _process_batched_inputs(
         in_dims: int | tuple[int, ...], args: Any, func: Callable
     ) -> tuple[Any, ...]:
@@ -163,7 +192,7 @@ The latter is unsupported."""
 
         # we want to escape TensorDicts as they take care of adding the batch dimension
         if PYTREE_HAS_ISLEAF:
-            flat_args, args_spec = tree_flatten(args, is_leaf=is_tensor_collection)
+            flat_args, args_spec = tree_flatten(args, is_leaf=_is_tensordict_vmap_leaf)
             flat_in_dims = _broadcast_to_and_flatten(in_dims, args_spec)
             if flat_in_dims is None:
                 raise ValueError(
@@ -205,7 +234,7 @@ please use None as the respective in_dim"""
             if (
                 in_dim is not None
                 and is_tensor_collection(arg)
-                and (in_dim >= arg.dim() or in_dim < -arg.dim())
+                and (in_dim >= _vmap_dim(arg) or in_dim < -_vmap_dim(arg))
             ):
                 # TensorDict with insufficient batch dims (e.g. batch_size=[]
                 # but tensors have dims). This occurs when tree_unflatten
@@ -227,18 +256,20 @@ please use None as the respective in_dim"""
                         arg = arg.clone(False)
                         arg._change_batch_size(new_batch_size)
                         flat_args[i] = arg
-            if in_dim is not None and (in_dim < -arg.dim() or in_dim >= arg.dim()):
+            if in_dim is not None and (
+                in_dim < -_vmap_dim(arg) or in_dim >= _vmap_dim(arg)
+            ):
                 raise ValueError(
                     f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
 Got in_dim={in_dim} for some input, but that input is a Tensor
-of dimensionality {arg.dim()} so expected in_dim to satisfy
--{arg.dim()} <= in_dim < {arg.dim()}."""
+of dimensionality {_vmap_dim(arg)} so expected in_dim to satisfy
+-{_vmap_dim(arg)} <= in_dim < {_vmap_dim(arg)}."""
                 )
             if in_dim is not None and in_dim < 0:
-                flat_in_dims[i] = in_dim % arg.dim()
+                flat_in_dims[i] = in_dim % _vmap_dim(arg)
 
         return (
-            _validate_and_get_batch_size(flat_in_dims, flat_args),
+            _validate_tensordict_vmap_batch_size(flat_in_dims, flat_args),
             flat_in_dims,
             flat_args,
             args_spec,
@@ -267,6 +298,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                     batched_input = arg._add_batch_dim(
                         in_dim=in_dim, vmap_level=vmap_level
                     )
+                elif _is_unbatched(arg):
+                    batched_input = arg._add_batch_dim(
+                        in_dim=in_dim, vmap_level=vmap_level
+                    )
                 else:
                     batched_input = _add_batch_dim(arg, in_dim, vmap_level)
             batched_inputs.append(batched_input)
@@ -283,7 +318,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
     ) -> Any:
         if PYTREE_HAS_ISLEAF:
             flat_batched_outputs, output_spec = tree_flatten(
-                batched_outputs, is_leaf=is_tensor_collection
+                batched_outputs, is_leaf=_is_tensordict_vmap_leaf
             )
         else:
             with _exclude_td_from_pytree():
@@ -297,8 +332,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 f"has structure {output_spec}."
             )
 
-        if isinstance(batched_outputs, torch.Tensor) or is_tensor_collection(
-            batched_outputs
+        if (
+            isinstance(batched_outputs, torch.Tensor)
+            or is_tensor_collection(batched_outputs)
+            or _is_unbatched(batched_outputs)
         ):
             # Some weird edge case requires us to spell out the following
             # see test_out_dims_edge_case
@@ -316,7 +353,14 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 incompatible_error()
         flat_outputs = []
         for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims):
-            if not is_tensor_collection(batched_output):
+            if _is_unbatched(batched_output):
+                out = batched_output._maybe_remove_batch_dim(
+                    _get_name(func),
+                    vmap_level=vmap_level,
+                    batch_size=batch_size,
+                    out_dim=out_dim,
+                )
+            elif not is_tensor_collection(batched_output):
                 out = _maybe_remove_batch_dim(
                     _get_name(func), batched_output, vmap_level, batch_size, out_dim
                 )

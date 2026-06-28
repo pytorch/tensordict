@@ -1193,7 +1193,34 @@ class TestUnbatchedTensor:
         assert result.batch_size == torch.Size([4, 3])
         assert isinstance(result.get("unbatched"), UnbatchedTensor)
         assert result.get("unbatched").data_ptr() == data.data_ptr()
+        assert result.get("unbatched").batch_size == torch.Size([4, 3])
         assert result["a"].shape == (4, 3, 5)
+
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+    def test_unbatched_vmap_return_unbatched_tensor(self):
+        from torch import vmap
+
+        data = torch.randn(7, 11)
+        td = TensorDict(
+            a=torch.randn(4, 3, 5),
+            unbatched=UnbatchedTensor(data),
+            batch_size=[4, 3],
+        )
+        result = vmap(lambda x: x["unbatched"])(td)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data_ptr() == data.data_ptr()
+        assert result.batch_size == torch.Size([4, 3])
+
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+    def test_unbatched_vmap_direct_input(self):
+        from torch import vmap
+
+        data = torch.randn(7, 11)
+        unbatched = UnbatchedTensor(data, batch_size=[4])
+        result = vmap(lambda x: x)(unbatched)
+        assert isinstance(result, UnbatchedTensor)
+        assert result.data_ptr() == data.data_ptr()
+        assert result.batch_size == torch.Size([4])
 
     def test_unbatched_tensorclass_attr_returns_unbatched(self):
         @tensorclass
