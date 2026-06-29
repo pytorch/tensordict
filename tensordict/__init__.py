@@ -187,3 +187,12 @@ __all__ = [
     # Version
     "__version__",
 ]
+
+
+def __getattr__(name):
+    # Lazy import of optional subpackages (PEP 562) to keep `import tensordict` light.
+    if name == "llm":
+        import tensordict.llm
+
+        return tensordict.llm
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
