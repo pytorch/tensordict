@@ -2902,6 +2902,12 @@ class TensorDict(TensorDictBase):
                 continue
             dest = self._get_str(key, NO_DEFAULT)
             if _is_unbatched(dest):
+                self._set_str(
+                    key,
+                    dest._with_batch_size(self.batch_size),
+                    inplace=False,
+                    validated=True,
+                )
                 continue
             new_dest = torch.stack(
                 vals,

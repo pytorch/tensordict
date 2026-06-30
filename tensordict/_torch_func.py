@@ -453,7 +453,7 @@ def _cat(
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
             if _is_unbatched(items[0]):
-                out[key] = items[0]
+                out[key] = items[0]._with_batch_size(batch_size)
             elif not is_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
@@ -495,7 +495,11 @@ def _cat(
             first_item = list_of_tensordicts[0]._get_str(key, NO_DEFAULT)
             if _is_unbatched(first_item):
                 out._set_str(
-                    key, first_item, validated=True, inplace=False, non_blocking=False
+                    key,
+                    first_item._with_batch_size(batch_size),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
             else:
                 with (
@@ -760,12 +764,18 @@ def _stack(
                     out[key].append(tensor)
                 out[key] = (out[key], is_not_init, is_tensor)
 
+            result_batch_size = LazyStackedTensorDict._compute_batch_size(
+                batch_size, dim, len(list_of_tensordicts)
+            )
+
             def stack_fn(key, values, is_not_init, is_tensor):
                 if is_not_init:
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
                     if _is_unbatched(values[0]):
-                        return type(values[0])._stack_non_tensor(values, dim)
+                        return type(values[0])._stack_non_tensor(
+                            values, dim
+                        )._with_batch_size(result_batch_size)
                     return torch.stack(values, dim)
                 with (
                     _ErrorInteceptor(
@@ -790,9 +800,7 @@ def _stack(
 
             result = clz._new_unsafe(
                 out,
-                batch_size=LazyStackedTensorDict._compute_batch_size(
-                    batch_size, dim, len(list_of_tensordicts)
-                ),
+                batch_size=result_batch_size,
                 device=device,
                 names=names,
             )

@@ -1113,8 +1113,12 @@ class TestUnbatchedTensor:
             batch_size=(3,),
         )
         assert torch.unbind(td, 0)[0]["a"] is td["a"]
-        assert torch.stack([td, td], 0)[0]["a"] is td["a"]
-        assert torch.cat([td, td], 0)[0]["a"] is td["a"]
+        stacked = torch.stack([td, td], 0)
+        assert stacked[0]["a"].data_ptr() == td["a"].data_ptr()
+        assert stacked["a"].batch_size == torch.Size([2, 3])
+        catted = torch.cat([td, td], 0)
+        assert catted[0]["a"].data_ptr() == td["a"].data_ptr()
+        assert catted["a"].batch_size == torch.Size([6])
         assert (torch.ones_like(td)["a"] == 1).all()
         assert torch.unsqueeze(td, 0)["a"] is td["a"]
         assert torch.squeeze(td)["a"] is td["a"]
@@ -1178,6 +1182,81 @@ class TestUnbatchedTensor:
         )
         with pytest.warns(UserWarning, match="different data storage"):
             torch.stack([td1, td2])
+
+    @pytest.mark.parametrize(
+        "batch_size, dim, expected_batch_size",
+        [
+            ([], 0, [3]),
+            ([2], 0, [3, 2]),
+            ([2], 1, [2, 3]),
+            ([2, 1], -1, [2, 1, 3]),
+        ],
+    )
+    def test_unbatched_stack_updates_batch_size_metadata(
+        self, batch_size, dim, expected_batch_size
+    ):
+        data = torch.tensor(1)
+        items = [
+            TensorDict(
+                x=torch.zeros(batch_size),
+                ub=UnbatchedTensor(data),
+                batch_size=batch_size,
+            )
+            for _ in range(3)
+        ]
+        result = torch.stack(items, dim)
+        assert result.batch_size == torch.Size(expected_batch_size)
+        assert result["ub"].batch_size == result.batch_size
+        assert result["ub"].shape == torch.Size([])
+        assert result["ub"].data_ptr() == data.data_ptr()
+        assert all(item["ub"].batch_size == torch.Size([]) for item in items)
+
+    def test_unbatched_stack_out_updates_batch_size_metadata(self):
+        data = torch.tensor(1)
+        items = [
+            TensorDict(
+                x=torch.zeros(2),
+                ub=UnbatchedTensor(data),
+                batch_size=[2],
+            )
+            for _ in range(3)
+        ]
+        out = TensorDict(
+            x=torch.empty(3, 2),
+            ub=UnbatchedTensor(data),
+            batch_size=[3, 2],
+        )
+        result = torch.stack(items, 0, out=out)
+        assert result is out
+        assert result["ub"].batch_size == torch.Size([3, 2])
+        assert result["ub"].shape == torch.Size([])
+        assert result["ub"].data_ptr() == data.data_ptr()
+
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_unbatched_cat_updates_batch_size_metadata(self, with_out):
+        data = torch.tensor(1)
+        items = [
+            TensorDict(
+                x=torch.zeros(2),
+                ub=UnbatchedTensor(data),
+                batch_size=[2],
+            )
+            for _ in range(3)
+        ]
+        out = None
+        if with_out:
+            out = TensorDict(
+                x=torch.empty(6),
+                ub=UnbatchedTensor(data),
+                batch_size=[6],
+            )
+        result = torch.cat(items, 0, out=out)
+        if with_out:
+            assert result is out
+        assert result.batch_size == torch.Size([6])
+        assert result["ub"].batch_size == result.batch_size
+        assert result["ub"].shape == torch.Size([])
+        assert result["ub"].data_ptr() == data.data_ptr()
 
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     def test_unbatched_vmap(self):
