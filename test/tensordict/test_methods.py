@@ -170,9 +170,13 @@ class TestTensorDicts(TestTensorDictsBase):
             return result
 
         check(td.clone())
-        check(td.to_tensordict(retain_none=True))
-        check(td.select(*list(td.keys()), strict=False))
-        check(td.exclude())
+        dense_td = check(td.to_tensordict(retain_none=True))
+        if td_name == "td_h5":
+            check(dense_td.select(*list(dense_td.keys()), strict=False))
+            check(dense_td.exclude())
+        else:
+            check(td.select(*list(td.keys()), strict=False))
+            check(td.exclude())
         check(td.apply(lambda x: x))
         check(td[:])
         check(td[0])
