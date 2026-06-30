@@ -46,6 +46,7 @@ from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from tensordict._td import lazy_stack
 from tensordict.base import _GENERIC_NESTED_ERR
 from tensordict.tensorclass import from_dataclass
+from tensordict.utils import _check_recursive_properties
 
 from torch import Tensor
 
@@ -251,6 +252,37 @@ class TCStrings:
 
 
 class TestTensorClass:
+    def test_recursive_properties_common_ops(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        X = torch.ones(3, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [3, 4]
+        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+
+        def check(result):
+            _check_recursive_properties(result)
+            return result
+
+        check(data)
+        check(data._tensordict)
+        check(data.clone())
+        check(data[:2])
+        check(data.reshape(-1))
+        check(data.apply(lambda x: x))
+        check(data.unsqueeze(0))
+        check(torch.stack([data, data.clone()], 0))
+        check(LazyStackedTensorDict.lazy_stack([data, data.clone()], 0))
+
+        updated = data.clone()
+        updated.X = torch.zeros_like(updated.X)
+        check(updated)
+
     def test_get_default(self):
         @tensorclass
         class Data:

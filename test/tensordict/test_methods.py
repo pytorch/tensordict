@@ -37,6 +37,7 @@ from tensordict.functional import pad
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData, NonTensorDataBase
 from tensordict.utils import (
+    _check_recursive_properties,
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
@@ -156,6 +157,50 @@ def _compare_tensors_identity(td0, td1):
     TestTensorDictsBase.TYPES_DEVICES,
 )
 class TestTensorDicts(TestTensorDictsBase):
+    def test_recursive_properties_common_ops(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+
+        def check(result):
+            if isinstance(result, (tuple, list)):
+                for item in result:
+                    check(item)
+            elif isinstance(result, TensorDictBase):
+                _check_recursive_properties(result)
+            return result
+
+        check(td.clone())
+        dense_td = check(td.to_tensordict(retain_none=True))
+        op_td = dense_td if td_name == "td_h5" else td
+        check(op_td.select(*list(op_td.keys()), strict=False))
+        check(op_td.exclude())
+        check(op_td.apply(lambda x: x))
+        check(op_td[:])
+        check(op_td[0])
+        check(op_td.reshape(-1))
+        check(torch.stack([op_td, op_td.contiguous()], 0))
+        check(torch.cat([op_td, op_td.clone()], 0))
+        check(op_td.unbind(0))
+        check(op_td.split(1, 0))
+        check(op_td.chunk(2, 0))
+
+        if td_name not in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+        ):
+            check(op_td.unsqueeze(0))
+            check(op_td.permute(*range(op_td.batch_dims - 1, -1, -1)))
+
+        td_updated = op_td.clone()
+        with td_updated.unlock_():
+            td_updated.update(
+                {"recursive_check": torch.zeros(td_updated.shape, device=device)}
+            )
+        check(td_updated)
+
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):
@@ -1162,7 +1207,10 @@ class TestTensorDicts(TestTensorDictsBase):
             index = index[idx]
             index = index.cumsum(dim=other_dim) - 1
             td_gather = torch.gather(td, dim=dim, index=index)
-            assert td_gather.get("unbatched") is original_unbatched
+            assert (
+                td_gather.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            )
+            assert td_gather.get("unbatched").batch_size == td_gather.batch_size
             return
         index = torch.ones(td.shape, device=td.device, dtype=torch.long)
         other_dim = dim + index.ndim if dim < 0 else dim
@@ -3307,7 +3355,11 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 tds = td.split(2, dim)
             for split_td in tds:
-                assert split_td.get("unbatched") is original_unbatched
+                assert (
+                    split_td.get("unbatched").data_ptr()
+                    == original_unbatched.data_ptr()
+                )
+                assert split_td.get("unbatched").batch_size == split_td.batch_size
             return
         t = torch.zeros(()).expand(td.shape)
         for dim in range(td.batch_dims):
@@ -3856,7 +3908,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            assert tdt.get("unbatched") is original_unbatched
+            assert tdt.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert tdt.get("unbatched").batch_size == tdt.batch_size
             return
         tdt = td.transpose(0, 1)
         assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
@@ -3893,7 +3946,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            assert tdt.get("unbatched") is original_unbatched
+            assert tdt.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert tdt.get("unbatched").batch_size == tdt.batch_size
             return
         is_lazy = td_name in (
             "sub_td",
@@ -3964,7 +4018,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             td_moved = td.movedim(0, -1)
-            assert td_moved.get("unbatched") is original_unbatched
+            assert td_moved.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert td_moved.get("unbatched").batch_size == td_moved.batch_size
             return
         is_lazy = td_name in (
             "sub_td",

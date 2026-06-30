@@ -29,7 +29,13 @@ from tensordict import (
     UnbatchedTensor,
 )
 from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack
-from tensordict.utils import _pass_through, is_non_tensor, LinkedList, set_list_to_stack
+from tensordict.utils import (
+    _check_recursive_properties,
+    _pass_through,
+    is_non_tensor,
+    LinkedList,
+    set_list_to_stack,
+)
 from torch import multiprocessing as mp
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -1062,49 +1068,55 @@ class TestUnbatchedTensor:
             b=torch.randn(3),
             batch_size=(3,),
         )
+
+        def assert_unbatched_metadata(result):
+            assert result["a"].data_ptr() == td["a"].data_ptr()
+            assert result["a"].batch_size == result.batch_size
+            _check_recursive_properties(result)
+
         # get item
-        assert td[0]["a"] is td["a"]
-        assert td[:]["a"] is td["a"]
+        assert_unbatched_metadata(td[0])
+        assert_unbatched_metadata(td[:])
 
         unbind = td.unbind(0)[0]
-        assert unbind["a"] is td["a"]
         assert unbind.batch_size == ()
+        assert_unbatched_metadata(unbind)
 
         split = td.split(1)[0]
-        assert split["a"] is td["a"]
         assert split.batch_size == (1,)
-        assert td.split((2, 1))[0]["a"] is td["a"]
+        assert_unbatched_metadata(split)
+        assert_unbatched_metadata(td.split((2, 1))[0])
 
         reshape = td.reshape((1, 3))
-        assert reshape["a"] is td["a"]
         assert reshape.batch_size == (1, 3)
+        assert_unbatched_metadata(reshape)
         transpose = reshape.transpose(0, 1)
-        assert transpose["a"] is td["a"]
         assert transpose.batch_size == (3, 1)
+        assert_unbatched_metadata(transpose)
         permute = reshape.permute(1, 0)
-        assert permute["a"] is td["a"]
         assert permute.batch_size == (3, 1)
+        assert_unbatched_metadata(permute)
         squeeze = reshape.squeeze()
-        assert squeeze["a"] is td["a"]
         assert squeeze.batch_size == (3,)
+        assert_unbatched_metadata(squeeze)
 
         view = td.view((1, 3))
-        assert view["a"] is td["a"]
         assert view.batch_size == (1, 3)
+        assert_unbatched_metadata(view)
         unsqueeze = td.unsqueeze(0)
-        assert unsqueeze["a"] is td["a"]
         assert unsqueeze.batch_size == (1, 3)
+        assert_unbatched_metadata(unsqueeze)
         gather = td.gather(0, torch.tensor((0,)))
-        assert gather["a"] is td["a"]
         assert gather.batch_size == (1,)
+        assert_unbatched_metadata(gather)
 
         unflatten = td.unflatten(0, (1, 3))
-        assert unflatten["a"] is td["a"]
         assert unflatten.batch_size == (1, 3)
+        assert_unbatched_metadata(unflatten)
 
         flatten = unflatten.flatten(0, 1)
-        assert flatten["a"] is td["a"]
         assert flatten.batch_size == (3,)
+        assert_unbatched_metadata(flatten)
 
     def test_unbatched_torch_func(self):
         td = TensorDict(
@@ -1112,24 +1124,43 @@ class TestUnbatchedTensor:
             b=torch.randn(3),
             batch_size=(3,),
         )
-        assert torch.unbind(td, 0)[0]["a"] is td["a"]
+        unbound = torch.unbind(td, 0)[0]
+        assert unbound["a"].data_ptr() == td["a"].data_ptr()
+        assert unbound["a"].batch_size == unbound.batch_size
+        _check_recursive_properties(unbound)
         stacked = torch.stack([td, td], 0)
         assert stacked[0]["a"].data_ptr() == td["a"].data_ptr()
         assert stacked["a"].batch_size == torch.Size([2, 3])
+        _check_recursive_properties(stacked)
         catted = torch.cat([td, td], 0)
         assert catted[0]["a"].data_ptr() == td["a"].data_ptr()
         assert catted["a"].batch_size == torch.Size([6])
+        _check_recursive_properties(catted)
         assert (torch.ones_like(td)["a"] == 1).all()
-        assert torch.unsqueeze(td, 0)["a"] is td["a"]
-        assert torch.squeeze(td)["a"] is td["a"]
+        unsqueezed = torch.unsqueeze(td, 0)
+        assert unsqueezed["a"].data_ptr() == td["a"].data_ptr()
+        assert unsqueezed["a"].batch_size == unsqueezed.batch_size
+        _check_recursive_properties(unsqueezed)
+        squeezed = torch.squeeze(td)
+        assert squeezed["a"].data_ptr() == td["a"].data_ptr()
+        assert squeezed["a"].batch_size == squeezed.batch_size
+        _check_recursive_properties(squeezed)
         unflatten = torch.unflatten(td, 0, (1, 3))
-        assert unflatten["a"] is td["a"]
+        assert unflatten["a"].data_ptr() == td["a"].data_ptr()
+        assert unflatten["a"].batch_size == unflatten.batch_size
+        _check_recursive_properties(unflatten)
         flatten = torch.flatten(unflatten, 0, 1)
-        assert flatten["a"] is td["a"]
+        assert flatten["a"].data_ptr() == td["a"].data_ptr()
+        assert flatten["a"].batch_size == flatten.batch_size
+        _check_recursive_properties(flatten)
         permute = torch.permute(unflatten, (1, 0))
-        assert permute["a"] is td["a"]
+        assert permute["a"].data_ptr() == td["a"].data_ptr()
+        assert permute["a"].batch_size == permute.batch_size
+        _check_recursive_properties(permute)
         transpose = torch.transpose(unflatten, 1, 0)
-        assert transpose["a"] is td["a"]
+        assert transpose["a"].data_ptr() == td["a"].data_ptr()
+        assert transpose["a"].batch_size == transpose.batch_size
+        _check_recursive_properties(transpose)
 
     def test_unbatched_other_ops(self):
         td = TensorDict(
@@ -1172,6 +1203,7 @@ class TestUnbatchedTensor:
             warnings.simplefilter("error")
             stacked = torch.stack([td1, td2])
         assert stacked["ub"].data_ptr() == data.data_ptr()
+        _check_recursive_properties(stacked)
 
     def test_unbatched_stack_different_data_warns(self):
         td1 = TensorDict(
@@ -1209,7 +1241,8 @@ class TestUnbatchedTensor:
         assert result["ub"].batch_size == result.batch_size
         assert result["ub"].shape == torch.Size([])
         assert result["ub"].data_ptr() == data.data_ptr()
-        assert all(item["ub"].batch_size == torch.Size([]) for item in items)
+        assert all(item["ub"].batch_size == torch.Size(batch_size) for item in items)
+        _check_recursive_properties(result)
 
     def test_unbatched_stack_out_updates_batch_size_metadata(self):
         data = torch.tensor(1)
@@ -1231,6 +1264,7 @@ class TestUnbatchedTensor:
         assert result["ub"].batch_size == torch.Size([3, 2])
         assert result["ub"].shape == torch.Size([])
         assert result["ub"].data_ptr() == data.data_ptr()
+        _check_recursive_properties(result)
 
     @pytest.mark.parametrize("with_out", [False, True])
     def test_unbatched_cat_updates_batch_size_metadata(self, with_out):
@@ -1257,6 +1291,65 @@ class TestUnbatchedTensor:
         assert result["ub"].batch_size == result.batch_size
         assert result["ub"].shape == torch.Size([])
         assert result["ub"].data_ptr() == data.data_ptr()
+        _check_recursive_properties(result)
+
+    def test_lazy_stack_unbatched_updates_batch_size_metadata(self):
+        data = torch.tensor(1)
+        items = [
+            TensorDict(
+                x=torch.zeros(2),
+                ub=UnbatchedTensor(data),
+                batch_size=[2],
+            )
+            for _ in range(3)
+        ]
+        result = lazy_stack(items, 0)
+        assert result.batch_size == torch.Size([3, 2])
+        assert result["ub"].batch_size == result.batch_size
+        assert result["ub"].shape == torch.Size([])
+        assert result["ub"].data_ptr() == data.data_ptr()
+        _check_recursive_properties(result)
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "index",
+            "slice",
+            "gather",
+            "split",
+            "chunk",
+            "masked_select",
+        ],
+    )
+    def test_unbatched_indexing_updates_batch_size_metadata(self, op):
+        data = torch.tensor(1)
+        td = TensorDict(
+            x=torch.zeros(2, 3),
+            ub=UnbatchedTensor(data),
+            batch_size=[2, 3],
+        )
+
+        if op == "index":
+            results = (td[0],)
+        elif op == "slice":
+            results = (td[:, :2],)
+        elif op == "gather":
+            results = (td.gather(0, torch.zeros(1, 3, dtype=torch.long)),)
+        elif op == "split":
+            results = td.split(1, dim=0)
+        elif op == "chunk":
+            results = td.chunk(2, dim=0)
+        elif op == "masked_select":
+            mask = torch.tensor([[True, False, True], [False, True, False]])
+            results = (td.masked_select(mask),)
+        else:
+            raise AssertionError(op)
+
+        for result in results:
+            assert result["ub"].batch_size == result.batch_size
+            assert result["ub"].shape == torch.Size([])
+            assert result["ub"].data_ptr() == data.data_ptr()
+            _check_recursive_properties(result)
 
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     def test_unbatched_vmap(self):
