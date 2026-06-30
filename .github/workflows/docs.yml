@@ -110,6 +110,9 @@ jobs:
     needs: build-docs
     if: github.repository == 'pytorch/tensordict' && github.event_name == 'push' &&
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    concurrency:
+      group: docs-upload-gh-pages
+      cancel-in-progress: false
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -146,6 +149,11 @@ jobs:
         fi
 
         echo "Target Folder: ${TARGET_FOLDER}"
+
+        # Multiple main/tag pushes may build docs concurrently. Refresh the
+        # checked-out gh-pages branch after this upload job has acquired its
+        # concurrency slot so the final push is fast-forward.
+        git pull --ff-only origin gh-pages
 
         mkdir -p "${TARGET_FOLDER}"
         rm -rf "${TARGET_FOLDER}"/*
