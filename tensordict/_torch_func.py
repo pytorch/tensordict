@@ -209,7 +209,7 @@ def _gather(
 
     def _process_gather_value(value):
         if _is_unbatched(value):
-            return value
+            return value._with_batch_size(index.shape)
         return _gather_tensor(value)
 
     if out is None:
@@ -229,7 +229,13 @@ def _gather(
         )
     for key, value in input.items(is_leaf=_is_leaf_nontensor):
         if _is_unbatched(value):
-            out._set_str(key, value, validated=True, inplace=False, non_blocking=False)
+            out._set_str(
+                key,
+                value._with_batch_size(out.batch_size),
+                validated=True,
+                inplace=False,
+                non_blocking=False,
+            )
         else:
             _gather_tensor(value, out, key)
     return out
@@ -773,9 +779,11 @@ def _stack(
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
                     if _is_unbatched(values[0]):
-                        return type(values[0])._stack_non_tensor(
-                            values, dim
-                        )._with_batch_size(result_batch_size)
+                        return (
+                            type(values[0])
+                            ._stack_non_tensor(values, dim)
+                            ._with_batch_size(result_batch_size)
+                        )
                     return torch.stack(values, dim)
                 with (
                     _ErrorInteceptor(

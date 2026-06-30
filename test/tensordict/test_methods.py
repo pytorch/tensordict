@@ -1162,7 +1162,10 @@ class TestTensorDicts(TestTensorDictsBase):
             index = index[idx]
             index = index.cumsum(dim=other_dim) - 1
             td_gather = torch.gather(td, dim=dim, index=index)
-            assert td_gather.get("unbatched") is original_unbatched
+            assert (
+                td_gather.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            )
+            assert td_gather.get("unbatched").batch_size == td_gather.batch_size
             return
         index = torch.ones(td.shape, device=td.device, dtype=torch.long)
         other_dim = dim + index.ndim if dim < 0 else dim
@@ -3307,7 +3310,11 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 tds = td.split(2, dim)
             for split_td in tds:
-                assert split_td.get("unbatched") is original_unbatched
+                assert (
+                    split_td.get("unbatched").data_ptr()
+                    == original_unbatched.data_ptr()
+                )
+                assert split_td.get("unbatched").batch_size == split_td.batch_size
             return
         t = torch.zeros(()).expand(td.shape)
         for dim in range(td.batch_dims):
@@ -3856,7 +3863,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            assert tdt.get("unbatched") is original_unbatched
+            assert tdt.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert tdt.get("unbatched").batch_size == tdt.batch_size
             return
         tdt = td.transpose(0, 1)
         assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
@@ -3893,7 +3901,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             tdt = td.transpose(0, 1)
-            assert tdt.get("unbatched") is original_unbatched
+            assert tdt.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert tdt.get("unbatched").batch_size == tdt.batch_size
             return
         is_lazy = td_name in (
             "sub_td",
@@ -3964,7 +3973,8 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_unbatched":
             original_unbatched = td.get("unbatched")
             td_moved = td.movedim(0, -1)
-            assert td_moved.get("unbatched") is original_unbatched
+            assert td_moved.get("unbatched").data_ptr() == original_unbatched.data_ptr()
+            assert td_moved.get("unbatched").batch_size == td_moved.batch_size
             return
         is_lazy = td_name in (
             "sub_td",

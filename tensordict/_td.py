@@ -1529,10 +1529,11 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 # Pass-through values (e.g., UnbatchedTensor) with shape-changing ops
-                # (indicated by batch_size being set) should be passed through unchanged.
+                # (indicated by batch_size being set) keep their payload unchanged
+                # but must expose the new TensorDict-facing batch metadata.
                 # For other ops (data ops like zero_), apply the function normally.
                 if _is_unbatched(item) and batch_size is not None:
-                    item_trsf = item
+                    item_trsf = item._with_batch_size(batch_size)
                 else:
                     _others = [
                         _other._get_str(key, default=default) for _other in others
@@ -1735,7 +1736,7 @@ class TensorDict(TensorDictBase):
         source = {}
         for key, item in self.items():
             if _is_unbatched(item):
-                source[key] = item
+                source[key] = item._with_batch_size(batch_size)
             elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily
                 new_batch_size = batch_size + item.batch_size[batch_dims:]
@@ -1837,7 +1838,11 @@ class TensorDict(TensorDictBase):
             if _is_unbatched(val):
                 for td in tds:
                     td._set_str(
-                        key, val, validated=True, inplace=False, non_blocking=False
+                        key,
+                        val._with_batch_size(batch_size),
+                        validated=True,
+                        inplace=False,
+                        non_blocking=False,
                     )
                 return
             unbound = (
@@ -1900,6 +1905,10 @@ class TensorDict(TensorDictBase):
         splits = [
             {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
         ]
+        for split, bsz in _zip_strict(splits, batch_sizes):
+            for key, value in split.items():
+                if _is_unbatched(value):
+                    split[key] = value._with_batch_size(bsz)
         device = self.device
         is_shared = self._is_shared
         is_memmap = self._is_memmap
@@ -1943,6 +1952,10 @@ class TensorDict(TensorDictBase):
         splits = [
             {k: v[ss] for k, v in splits.items()} for ss in range(len(batch_sizes))
         ]
+        for split, bsz in _zip_strict(splits, batch_sizes):
+            for key, value in split.items():
+                if _is_unbatched(value):
+                    split[key] = value._with_batch_size(bsz)
         device = self.device
         is_shared = self._is_shared
         is_memmap = self._is_memmap
@@ -1969,16 +1982,15 @@ class TensorDict(TensorDictBase):
             mask_expand = mask_expand.squeeze(-1)
             if mndim == mask_expand.ndimension():  # no more squeeze
                 break
-        for key, value in self.items():
-            if _is_unbatched(value):
-                d[key] = value
-            else:
-                d[key] = value[mask_expand]
         dim = int(mask.sum().item())
         other_dim = self.shape[mask.ndim :]
-        return TensorDict(
-            device=self.device, source=d, batch_size=torch.Size([dim, *other_dim])
-        )
+        batch_size = torch.Size([dim, *other_dim])
+        for key, value in self.items():
+            if _is_unbatched(value):
+                d[key] = value._with_batch_size(batch_size)
+            else:
+                d[key] = value[mask_expand]
+        return TensorDict(device=self.device, source=d, batch_size=batch_size)
 
     def _view(
         self,

@@ -1441,6 +1441,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
                 else:
                     raise RuntimeError
+            elif _is_unbatched(out):
+                out = out._with_batch_size(self.batch_size)
+                if self.hook_out is not None:
+                    out = self.hook_out(out)
             elif self.hook_out is not None:
                 out = self.hook_out(out)
             return out
@@ -1546,6 +1550,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     return torch.nested.as_nested_tensor(items, layout=layout)
                 if as_list:
                     return items
+            if _is_unbatched(items[0]):
+                return type(items[0])._stack_non_tensor(items, dim)
             try:
                 return torch.stack(items, dim=dim, out=out)
             except RuntimeError as err:
@@ -4128,7 +4134,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _transform_value(self, item):
         if _is_unbatched(item):
-            return item
+            return item._with_batch_size(self.batch_size)
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
     def _set_str(

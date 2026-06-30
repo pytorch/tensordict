@@ -1271,6 +1271,431 @@ def _get_leaf_tensordict(
     return tensordict, key[0]
 
 
+class _TensorDictPropertyError(RuntimeError):
+    """Raised when recursive TensorDict metadata validation fails."""
+
+    pass
+
+
+def _check_recursive_properties(
+    tensordict: T,
+    *,
+    batch_size: bool = True,
+    shape: bool = True,
+    device: bool = True,
+    lock: bool = True,
+    names: bool = True,
+    requires_grad: bool | None = None,
+    is_shared: bool | None = None,
+    is_memmap: bool | None = None,
+    allow_none: bool = False,
+    include_non_tensor: bool = True,
+    include_unbatched: bool = True,
+    strict: bool = True,
+    raise_exception: bool = True,
+) -> bool:
+    """Recursively validates TensorDict metadata.
+
+    This private checker is intended for tests and debugging. It walks the
+    logical TensorDict tree and verifies that node metadata and leaf metadata
+    are consistent with their parent context. The function is deliberately
+    conservative: callers can disable individual checks when a test is about a
+    known special case.
+    """
+    from tensordict.base import _is_tensor_collection
+
+    if not _is_tensor_collection(type(tensordict)):
+        raise TypeError(
+            "Expected a TensorDictBase or tensorclass instance, "
+            f"got {type(tensordict)}."
+        )
+
+    _MISSING = object()
+    errors = []
+
+    def _path_str(path):
+        if not path:
+            return "<root>"
+        return repr(path)
+
+    def _type_name(obj):
+        return type(obj).__name__
+
+    def _append_key(path, key):
+        key = _unravel_key_to_tuple(key)
+        if key:
+            return path + key
+        return path + (key,)
+
+    def _add_error(path, message):
+        errors.append(f"{message} at key {_path_str(path)}.")
+
+    def _read_attr(obj, attr, path):
+        try:
+            value = getattr(obj, attr)
+        except Exception as err:
+            _add_error(
+                path,
+                f"Could not read {attr} from {_type_name(obj)}: {err}",
+            )
+            return _MISSING
+        return value
+
+    def _read_call(obj, name, path):
+        try:
+            value = getattr(obj, name)()
+        except Exception as err:
+            _add_error(
+                path,
+                f"Could not call {name} on {_type_name(obj)}: {err}",
+            )
+            return _MISSING
+        return value
+
+    def _as_size(value, path, label):
+        if value is _MISSING:
+            return _MISSING
+        if value is None and allow_none:
+            return value
+        try:
+            return torch.Size(value)
+        except Exception as err:
+            _add_error(
+                path, f"Could not convert {label}={value!r} to torch.Size: {err}"
+            )
+            return _MISSING
+
+    def _same_size(first, second):
+        return tuple(first) == tuple(second)
+
+    def _has_batch_prefix(child_size, parent_size):
+        if len(child_size) < len(parent_size):
+            return False
+        return _same_size(child_size[: len(parent_size)], parent_size)
+
+    def _check_expected_bool(value, expected, path, label):
+        if value is _MISSING:
+            return
+        if value is None and allow_none:
+            return
+        if value is None:
+            _add_error(path, f"{label} mismatch: expected {expected}, got None")
+            return
+        if bool(value) != expected:
+            _add_error(path, f"{label} mismatch: expected {expected}, got {value}")
+
+    def _leaf_is_memmap(value):
+        try:
+            from tensordict.memmap import MemoryMappedTensor
+        except ImportError:
+            return False
+        return isinstance(value, MemoryMappedTensor)
+
+    def _check_node_metadata(node, path, parent_metadata):
+        node_batch_size = _MISSING
+        node_device = _MISSING
+        node_lock = _MISSING
+        node_names = _MISSING
+
+        if batch_size or shape or names:
+            node_batch_size = _as_size(
+                _read_attr(node, "batch_size", path), path, "batch_size"
+            )
+            if (
+                batch_size
+                and node_batch_size is not _MISSING
+                and node_batch_size is not None
+            ):
+                batch_dims = _read_attr(node, "batch_dims", path)
+                if batch_dims is not _MISSING and batch_dims is not None:
+                    if batch_dims != len(node_batch_size):
+                        _add_error(
+                            path,
+                            "Batch-dims mismatch: "
+                            f"batch_dims={batch_dims}, batch_size={node_batch_size}",
+                        )
+
+        if shape:
+            node_shape = _as_size(_read_attr(node, "shape", path), path, "shape")
+            if (
+                node_shape is not _MISSING
+                and node_shape is not None
+                and node_batch_size is not _MISSING
+                and node_batch_size is not None
+                and not _same_size(node_shape, node_batch_size)
+            ):
+                _add_error(
+                    path,
+                    f"Shape mismatch: shape={node_shape}, batch_size={node_batch_size}",
+                )
+
+        if device:
+            node_device = _read_attr(node, "device", path)
+            parent_device = parent_metadata.get("device")
+            if (
+                parent_device not in (None, _MISSING)
+                and node_device not in (None, _MISSING)
+                and torch.device(node_device) != torch.device(parent_device)
+            ):
+                _add_error(
+                    path,
+                    "Device mismatch: "
+                    f"parent device={parent_device}, child device={node_device}",
+                )
+
+        if lock:
+            node_lock = _read_attr(node, "is_locked", path)
+            parent_lock = parent_metadata.get("lock")
+            if (
+                parent_lock is not _MISSING
+                and node_lock is not _MISSING
+                and parent_lock is not None
+                and node_lock is not None
+            ):
+                if bool(parent_lock) and not bool(node_lock):
+                    _add_error(
+                        path,
+                        "Lock mismatch: "
+                        f"parent is_locked={parent_lock}, child is_locked={node_lock}",
+                    )
+                elif strict and bool(node_lock) != bool(parent_lock):
+                    _add_error(
+                        path,
+                        "Lock mismatch: "
+                        f"parent is_locked={parent_lock}, child is_locked={node_lock}",
+                    )
+
+        if names:
+            node_names = _read_attr(node, "names", path)
+            if (
+                node_names is not _MISSING
+                and node_names is not None
+                and node_batch_size is not _MISSING
+                and node_batch_size is not None
+            ):
+                if len(node_names) != len(node_batch_size):
+                    _add_error(
+                        path,
+                        "Names mismatch: "
+                        f"batch_size={node_batch_size}, names={node_names}",
+                    )
+                parent_names = parent_metadata.get("names")
+                parent_batch_size = parent_metadata.get("batch_size")
+                if (
+                    parent_names not in (None, _MISSING)
+                    and parent_batch_size not in (None, _MISSING)
+                    and len(node_names) >= len(parent_names)
+                ):
+                    node_prefix = tuple(node_names[: len(parent_names)])
+                    parent_prefix = tuple(parent_names)
+                    if strict:
+                        names_match = node_prefix == parent_prefix
+                    else:
+                        names_match = all(
+                            parent_name is None or child_name == parent_name
+                            for child_name, parent_name in _zip_strict(
+                                node_prefix, parent_prefix
+                            )
+                        )
+                    if not names_match:
+                        _add_error(
+                            path,
+                            "Names mismatch: "
+                            f"parent names={parent_names}, child names={node_names}",
+                        )
+
+        if parent_metadata.get("batch_size") not in (None, _MISSING):
+            parent_batch_size = parent_metadata["batch_size"]
+            if (
+                batch_size
+                and node_batch_size is not _MISSING
+                and node_batch_size is not None
+                and not _has_batch_prefix(node_batch_size, parent_batch_size)
+            ):
+                _add_error(
+                    path,
+                    "Batch-size mismatch: "
+                    f"parent batch_size={parent_batch_size}, "
+                    f"child batch_size={node_batch_size}, "
+                    f"child type={_type_name(node)}",
+                )
+
+        if is_shared is not None:
+            _check_expected_bool(
+                _read_call(node, "is_shared", path),
+                is_shared,
+                path,
+                "is_shared",
+            )
+        if is_memmap is not None:
+            _check_expected_bool(
+                _read_call(node, "is_memmap", path),
+                is_memmap,
+                path,
+                "is_memmap",
+            )
+
+        return {
+            "batch_size": node_batch_size,
+            "device": node_device,
+            "lock": node_lock,
+            "names": node_names,
+        }
+
+    def _check_leaf_common(value, path, parent_metadata):
+        parent_device = parent_metadata.get("device")
+        if device and parent_device not in (None, _MISSING):
+            leaf_device = _read_attr(value, "device", path)
+            if leaf_device not in (None, _MISSING) and torch.device(
+                leaf_device
+            ) != torch.device(parent_device):
+                _add_error(
+                    path,
+                    "Device mismatch: "
+                    f"parent device={parent_device}, leaf device={leaf_device}",
+                )
+
+        if requires_grad is not None:
+            grad = _read_attr(value, "requires_grad", path)
+            _check_expected_bool(grad, requires_grad, path, "requires_grad")
+
+        if is_shared is not None:
+            try:
+                shared = _is_shared(value)
+            except Exception as err:
+                _add_error(
+                    path,
+                    f"Could not read is_shared from {_type_name(value)}: {err}",
+                )
+            else:
+                _check_expected_bool(shared, is_shared, path, "is_shared")
+
+        if is_memmap is not None:
+            _check_expected_bool(_leaf_is_memmap(value), is_memmap, path, "is_memmap")
+
+    def _check_regular_tensor_leaf(value, path, parent_metadata):
+        parent_batch_size = parent_metadata.get("batch_size")
+        if (batch_size or shape) and parent_batch_size not in (None, _MISSING):
+            leaf_shape = _as_size(_read_attr(value, "shape", path), path, "shape")
+            if (
+                leaf_shape is not _MISSING
+                and leaf_shape is not None
+                and not _has_batch_prefix(leaf_shape, parent_batch_size)
+            ):
+                _add_error(
+                    path,
+                    "Shape mismatch: "
+                    f"parent batch_size={parent_batch_size}, leaf shape={leaf_shape}, "
+                    f"leaf type={_type_name(value)}",
+                )
+        _check_leaf_common(value, path, parent_metadata)
+
+    def _check_unbatched_leaf(value, path, parent_metadata):
+        if not include_unbatched:
+            return
+        parent_batch_size = parent_metadata.get("batch_size")
+        leaf_batch_size = _as_size(
+            _read_attr(value, "batch_size", path), path, "batch_size"
+        )
+        if (
+            batch_size
+            and parent_batch_size not in (None, _MISSING)
+            and leaf_batch_size not in (None, _MISSING)
+            and not _same_size(leaf_batch_size, parent_batch_size)
+            and not (allow_none and len(leaf_batch_size) == 0)
+        ):
+            _add_error(
+                path,
+                "Batch-size mismatch: "
+                f"parent batch_size={parent_batch_size}, "
+                f"leaf batch_size={leaf_batch_size}, "
+                f"leaf type={_type_name(value)}",
+            )
+        _check_leaf_common(value, path, parent_metadata)
+
+    def _check_non_tensor_leaf(value, path, parent_metadata):
+        if not include_non_tensor:
+            return
+        parent_batch_size = parent_metadata.get("batch_size")
+        leaf_batch_size = _as_size(
+            _read_attr(value, "batch_size", path), path, "batch_size"
+        )
+        if (
+            batch_size
+            and parent_batch_size not in (None, _MISSING)
+            and leaf_batch_size not in (None, _MISSING)
+            and not _same_size(leaf_batch_size, parent_batch_size)
+            and not (allow_none and len(leaf_batch_size) == 0)
+        ):
+            _add_error(
+                path,
+                "Batch-size mismatch: "
+                f"parent batch_size={parent_batch_size}, "
+                f"leaf batch_size={leaf_batch_size}, "
+                f"leaf type={_type_name(value)}",
+            )
+        if shape:
+            leaf_shape = _as_size(_read_attr(value, "shape", path), path, "shape")
+            if (
+                leaf_shape not in (None, _MISSING)
+                and leaf_batch_size not in (None, _MISSING)
+                and not _same_size(leaf_shape, leaf_batch_size)
+            ):
+                _add_error(
+                    path,
+                    f"Shape mismatch: shape={leaf_shape}, batch_size={leaf_batch_size}",
+                )
+        _check_leaf_common(value, path, parent_metadata)
+
+    def _visit_leaf(value, path, parent_metadata):
+        if _is_unbatched(value):
+            _check_unbatched_leaf(value, path, parent_metadata)
+        elif is_non_tensor(value):
+            _check_non_tensor_leaf(value, path, parent_metadata)
+        elif isinstance(value, torch.Tensor):
+            _check_regular_tensor_leaf(value, path, parent_metadata)
+        elif strict:
+            _add_error(path, f"Unsupported leaf type {_type_name(value)}")
+
+    def _visit_node(node, path, parent_metadata):
+        node_metadata = _check_node_metadata(node, path, parent_metadata)
+        try:
+            items = tuple(node.items(include_nested=False))
+        except Exception as err:
+            _add_error(path, f"Could not iterate over {_type_name(node)} items: {err}")
+            return
+        for key, value in items:
+            child_path = _append_key(path, key)
+            if is_non_tensor(value):
+                _check_non_tensor_leaf(value, child_path, node_metadata)
+            elif _is_tensor_collection(type(value)):
+                _visit_node(value, child_path, node_metadata)
+            else:
+                _visit_leaf(value, child_path, node_metadata)
+
+    _visit_node(
+        tensordict,
+        (),
+        {
+            "batch_size": _MISSING,
+            "device": _MISSING,
+            "lock": _MISSING,
+            "names": _MISSING,
+        },
+    )
+    if errors:
+        if raise_exception:
+            formatted_errors = "\n".join(
+                f"{idx}. {error}" for idx, error in enumerate(errors, 1)
+            )
+            raise _TensorDictPropertyError(
+                "TensorDict recursive property check failed with "
+                f"{len(errors)} error(s):\n{formatted_errors}"
+            )
+        return False
+    return True
+
+
 def assert_close(
     actual: T,
     expected: T,

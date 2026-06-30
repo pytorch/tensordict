@@ -11311,7 +11311,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         keys = list(self.keys())
         for key in keys:
             leaf = self._get_str(key, default=None)
-            if leaf is None or _is_unbatched(leaf):
+            if leaf is None:
+                continue
+            if _is_unbatched(leaf):
+                if new_batch_size is not None and leaf.batch_size != new_batch_size:
+                    self._set_str(
+                        key,
+                        leaf._with_batch_size(new_batch_size),
+                        validated=True,
+                        inplace=False,
+                    )
                 continue
             if _is_tensor_collection(type(leaf)):
                 nested_fn(leaf)
@@ -14164,6 +14173,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 if _device_recorder.marked and device.type != "cuda":
                     _device_recorder.record_transfer(device)
                 value = value.to(device, non_blocking=non_blocking)
+            if value.batch_size != self.batch_size:
+                value = value._with_batch_size(self.batch_size)
             return value
         batch_size = self.batch_size
         if check_shape and _shape(value)[: self.batch_dims] != batch_size:
@@ -14226,6 +14237,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if _device_recorder.marked and device.type != "cuda":
                 _device_recorder.record_transfer(device)
             value = value.to(device, non_blocking=non_blocking)
+        if _is_unbatched(value):
+            if value.batch_size != self.batch_size:
+                value = value._with_batch_size(self.batch_size)
+            return value
         return value
 
     def _validate_value_devicefree(
@@ -14257,6 +14272,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 ) from err
             is_tc = _is_tensor_collection(cls)
         if _is_unbatched(value):
+            if value.batch_size != self.batch_size:
+                value = value._with_batch_size(self.batch_size)
             return value
 
         batch_size = self.batch_size
@@ -14312,6 +14329,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f"TensorDict conversion only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
+        if _is_unbatched(value):
+            if value.batch_size != self.batch_size:
+                value = value._with_batch_size(self.batch_size)
+            return value
         return value
 
     def __enter__(self):
