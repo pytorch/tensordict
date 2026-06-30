@@ -171,21 +171,18 @@ class TestTensorDicts(TestTensorDictsBase):
 
         check(td.clone())
         dense_td = check(td.to_tensordict(retain_none=True))
-        if td_name == "td_h5":
-            check(dense_td.select(*list(dense_td.keys()), strict=False))
-            check(dense_td.exclude())
-        else:
-            check(td.select(*list(td.keys()), strict=False))
-            check(td.exclude())
-        check(td.apply(lambda x: x))
-        check(td[:])
-        check(td[0])
-        check(td.reshape(-1))
-        check(torch.stack([td, td.contiguous()], 0))
-        check(torch.cat([td, td.clone()], 0))
-        check(td.unbind(0))
-        check(td.split(1, 0))
-        check(td.chunk(2, 0))
+        op_td = dense_td if td_name == "td_h5" else td
+        check(op_td.select(*list(op_td.keys()), strict=False))
+        check(op_td.exclude())
+        check(op_td.apply(lambda x: x))
+        check(op_td[:])
+        check(op_td[0])
+        check(op_td.reshape(-1))
+        check(torch.stack([op_td, op_td.contiguous()], 0))
+        check(torch.cat([op_td, op_td.clone()], 0))
+        check(op_td.unbind(0))
+        check(op_td.split(1, 0))
+        check(op_td.chunk(2, 0))
 
         if td_name not in (
             "sub_td",
@@ -194,10 +191,10 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
         ):
-            check(td.unsqueeze(0))
-            check(td.permute(*range(td.batch_dims - 1, -1, -1)))
+            check(op_td.unsqueeze(0))
+            check(op_td.permute(*range(op_td.batch_dims - 1, -1, -1)))
 
-        td_updated = td.clone()
+        td_updated = op_td.clone()
         with td_updated.unlock_():
             td_updated.update(
                 {"recursive_check": torch.zeros(td_updated.shape, device=device)}
