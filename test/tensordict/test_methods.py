@@ -37,6 +37,7 @@ from tensordict.functional import pad
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData, NonTensorDataBase
 from tensordict.utils import (
+    _check_recursive_properties,
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
@@ -156,6 +157,49 @@ def _compare_tensors_identity(td0, td1):
     TestTensorDictsBase.TYPES_DEVICES,
 )
 class TestTensorDicts(TestTensorDictsBase):
+    def test_recursive_properties_common_ops(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+
+        def check(result):
+            if isinstance(result, (tuple, list)):
+                for item in result:
+                    check(item)
+            elif isinstance(result, TensorDictBase):
+                _check_recursive_properties(result)
+            return result
+
+        check(td.clone())
+        check(td.to_tensordict(retain_none=True))
+        check(td.select(*list(td.keys()), strict=False))
+        check(td.exclude())
+        check(td.apply(lambda x: x))
+        check(td[:])
+        check(td[0])
+        check(td.reshape(-1))
+        check(torch.stack([td, td.contiguous()], 0))
+        check(torch.cat([td, td.clone()], 0))
+        check(td.unbind(0))
+        check(td.split(1, 0))
+        check(td.chunk(2, 0))
+
+        if td_name not in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+        ):
+            check(td.unsqueeze(0))
+            check(td.permute(*range(td.batch_dims - 1, -1, -1)))
+
+        td_updated = td.clone()
+        with td_updated.unlock_():
+            td_updated.update(
+                {"recursive_check": torch.zeros(td_updated.shape, device=device)}
+            )
+        check(td_updated)
+
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):

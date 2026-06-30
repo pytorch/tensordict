@@ -11,6 +11,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import (
     lazy_stack,
+    tensorclass,
     TensorDict,
     UnbatchedTensor,
     unravel_key,
@@ -141,18 +142,51 @@ def test_make_cache_key():
     )
 
 
-def test_check_recursive_properties_valid_tree():
+@tensorclass
+class _RecursivePropertiesTensorClass:
+    tensor: torch.Tensor
+    nested: TensorDict
+    metadata: str
+
+
+def _valid_nested_recursive_properties_tree():
     td = TensorDict(
         {
             "tensor": torch.zeros(3, 2),
             "nested": TensorDict({"value": torch.ones(3, 4)}, batch_size=[3]),
-            "unbatched": UnbatchedTensor(torch.ones(2), batch_size=[3]),
         },
         batch_size=[3],
     )
     td["metadata"] = "value"
+    return td
 
-    assert _check_recursive_properties(td)
+
+def _valid_lazy_recursive_properties_tree():
+    left = _valid_nested_recursive_properties_tree()
+    right = _valid_nested_recursive_properties_tree()
+    return lazy_stack([left, right], 0)
+
+
+def _valid_tensorclass_recursive_properties_tree():
+    return _RecursivePropertiesTensorClass(
+        tensor=torch.zeros(3, 2),
+        nested=TensorDict({"value": torch.ones(3, 4)}, batch_size=[3]),
+        metadata="value",
+        batch_size=[3],
+    )
+
+
+@pytest.mark.parametrize(
+    "make_tree",
+    [
+        _valid_nested_recursive_properties_tree,
+        _valid_lazy_recursive_properties_tree,
+        _valid_tensorclass_recursive_properties_tree,
+    ],
+    ids=["nested", "lazy-stack", "tensorclass"],
+)
+def test_check_recursive_properties_valid_tree(make_tree):
+    assert _check_recursive_properties(make_tree())
 
 
 def test_check_recursive_properties_stale_unbatched_metadata():
