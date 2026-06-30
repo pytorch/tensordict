@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4147+g8f62cd547.d20260628)
+                  main (0.13.0.dev4149+gb350d825d.d20260630)
                 </div>
               
             
@@ -362,7 +362,7 @@
 <h1>UnbatchedTensor<a class="headerlink" href="#unbatchedtensor" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">UnbatchedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">UnbatchedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.</p>
 <p>When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
 squeeze, transpose, etc.) on the parent TensorDict will leave this tensor
@@ -392,6 +392,16 @@ will skip the UnbatchedTensor entries entirely.</p>
 <p><strong>Batch Size Computation:</strong></p>
 <p>UnbatchedTensor is excluded from <code class="docutils literal notranslate"><span class="pre">auto_batch_size_()</span></code> computation. The batch size is determined
 solely by regular tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>torch.Tensor</em></a><em> or </em><em>tensor-like</em>) – payload tensor.</p></li>
+<li><p><strong>batch_size</strong> (<em>torch.Size compatible</em><em>, </em><em>optional</em>) – TensorDict-facing
+batch-size metadata used by <code class="docutils literal notranslate"><span class="pre">torch.vmap</span></code>. The payload shape is
+left unchanged.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.H">
 <span class="sig-name descname"><span class="pre">H</span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.H" title="Permalink to this definition">¶</a></dt>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4147+g8f62cd547.d20260628)
+                  main (0.13.0.dev4149+gb350d825d.d20260630)
                 </div>
               
             
@@ -743,7 +743,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 219.88it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 224.35it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -792,10 +792,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 676.71it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 688.27it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 176.62it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 176.55it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -819,7 +819,8 @@ ImageNetData(
     batch_size=torch.Size([64]),
     device=None,
     is_shared=False)
-ImageNetData(
+
+100%|██████████| 153/153 [00:00&lt;00:00, 376.97it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -832,11 +833,11 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 310.40it/s]
-One iteration over dataloader done! Rate: 765.9640 fps, time:  0.2872s
-One iteration over tensorclass dataloader done! Rate: 1718.3560 fps, time:  0.1280s
-One iteration over val data done! Rate: 514.8437 fps, time:  0.2506s
-One iteration over tensorclass val data done! Rate: 14852.5959 fps, time:  0.0087s
+100%|██████████| 153/153 [00:00&lt;00:00, 309.75it/s]
+One iteration over dataloader done! Rate: 1015.0326 fps, time:  0.2167s
+One iteration over tensorclass dataloader done! Rate: 1803.5751 fps, time:  0.1220s
+One iteration over val data done! Rate: 524.0625 fps, time:  0.2462s
+One iteration over tensorclass val data done! Rate: 18812.4619 fps, time:  0.0069s
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.776 seconds)</p>
