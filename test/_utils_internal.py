@@ -7,6 +7,7 @@ import pathlib
 import shutil
 import tempfile
 import warnings
+from functools import wraps
 
 import numpy as np
 import torch
@@ -25,7 +26,7 @@ from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
 from tensordict.nn.params import TensorDictParams
 from tensordict.persistent import _has_h5 as _has_h5py
-from tensordict.utils import set_lazy_legacy
+from tensordict.utils import _check_recursive_properties, set_lazy_legacy
 
 
 def prod(sequence):
@@ -441,6 +442,29 @@ class _NestedTypedTD(TypedTensorDict):
     b: torch.Tensor
     c: torch.Tensor
     my_nested_td: TensorDict
+
+
+def _wrap_checked_tensordict_factory(name):
+    factory = getattr(TestTensorDictsBase, name)
+
+    @classmethod
+    @wraps(factory.__func__)
+    def checked_factory(cls, device, _factory=factory):
+        td = _factory.__func__(cls, device)
+        _check_recursive_properties(td)
+        return td
+
+    return checked_factory
+
+
+for _td_name in dict.fromkeys(
+    td_name for td_name, _ in TestTensorDictsBase.TYPES_DEVICES
+):
+    setattr(
+        TestTensorDictsBase,
+        _td_name,
+        _wrap_checked_tensordict_factory(_td_name),
+    )
 
 
 def expand_list(list_of_tensors, *dims):
