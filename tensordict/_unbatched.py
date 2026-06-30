@@ -325,7 +325,11 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
                     "per batch element, consider using a regular tensor.",
                     stacklevel=2,
                 )
-            return first
+            batch_size = list(first.batch_size)
+            if dim < 0:
+                dim += len(batch_size) + 1
+            batch_size.insert(dim, len(list_of_non_tensor))
+            return first._with_batch_size(batch_size)
 
 else:
     # Safe fallback: _make_subclass + __torch_function__
@@ -439,4 +443,8 @@ else:
                     "per batch element, consider using a regular tensor.",
                     stacklevel=2,
                 )
-            return first
+            batch_size = list(first.batch_size)
+            if dim < 0:
+                dim += len(batch_size) + 1
+            batch_size.insert(dim, len(list_of_non_tensor))
+            return first._with_batch_size(batch_size)
