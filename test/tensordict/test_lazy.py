@@ -389,6 +389,145 @@ class TestLazyStackedTensorDict:
             index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
             assert assert_allclose_td(res[index], td_lazy_2)
 
+    def test_cat_mixed_lazy_dense_stack_dim(self):
+        td_lazy = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.full((2, 3), float(i))}, [2, 3])
+                for i in range(2)
+            ],
+            stack_dim=0,
+        )
+        td_dense = TensorDict(
+            {"a": torch.arange(12, dtype=torch.float).reshape(2, 2, 3)},
+            [2, 2, 3],
+        )
+
+        res = torch.cat([td_lazy, td_dense], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.stack_dim == 0
+        assert res.batch_size == torch.Size([4, 2, 3])
+        assert len(res.tensordicts) == 4
+        assert assert_allclose_td(res[:2], td_lazy)
+        assert assert_allclose_td(res[2:], td_dense)
+
+        res = torch.cat([td_dense, td_lazy], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.stack_dim == 0
+        assert res.batch_size == torch.Size([4, 2, 3])
+        assert len(res.tensordicts) == 4
+        assert assert_allclose_td(res[:2], td_dense)
+        assert assert_allclose_td(res[2:], td_lazy)
+
+    @pytest.mark.parametrize("cat_dim", [1, -2])
+    def test_cat_mixed_lazy_dense_non_stack_dim(self, cat_dim):
+        td_lazy = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.full((2, 3), float(i))}, [2, 3])
+                for i in range(2)
+            ],
+            stack_dim=0,
+        )
+        td_dense = TensorDict(
+            {"a": torch.arange(18, dtype=torch.float).reshape(2, 3, 3)},
+            [2, 3, 3],
+        )
+
+        res = torch.cat([td_lazy, td_dense], dim=cat_dim)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.stack_dim == 0
+        assert res.batch_size == torch.Size([2, 5, 3])
+        dense_lazy = td_dense.to_lazystack(0)
+        for i, sub_td in enumerate(res.tensordicts):
+            expected = torch.cat([td_lazy.tensordicts[i], dense_lazy.tensordicts[i]], 0)
+            assert assert_allclose_td(sub_td, expected)
+
+    def test_cat_mixed_lazy_dense_preserves_non_densifiable_lazy_stack(self):
+        td_lazy = LazyStackedTensorDict(
+            TensorDict({"a": torch.ones(1), "only0": torch.zeros(1)}, []),
+            TensorDict({"a": torch.ones(2), "only1": torch.zeros(1)}, []),
+            stack_dim=0,
+        )
+        td_dense = TensorDict(
+            {
+                "a": torch.full((1, 3), 3.0),
+                "dense_only": torch.ones(1, 4),
+            },
+            [1],
+        )
+
+        res = torch.cat([td_lazy, td_dense], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.stack_dim == 0
+        assert res.batch_size == torch.Size([3])
+        assert len(res.tensordicts) == 3
+        assert [item.shape for item in res.get("a", as_list=True)] == [
+            torch.Size([1]),
+            torch.Size([2]),
+            torch.Size([3]),
+        ]
+        assert "dense_only" in res.tensordicts[2].keys()
+
+    def test_cat_mixed_lazy_zero_length_dense_stack_dim(self):
+        td_lazy = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.full((2,), float(i))}, [2]) for i in range(2)],
+            stack_dim=0,
+        )
+        td_dense_empty = TensorDict({"a": torch.empty(0, 2)}, [0, 2])
+
+        res = torch.cat([td_lazy, td_dense_empty], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.batch_size == torch.Size([2, 2])
+        assert len(res.tensordicts) == 2
+        assert assert_allclose_td(res, td_lazy)
+
+        res = torch.cat([td_dense_empty, td_lazy], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.batch_size == torch.Size([2, 2])
+        assert len(res.tensordicts) == 2
+        assert assert_allclose_td(res, td_lazy)
+
+        res = torch.cat([td_dense_empty, td_lazy[:0]], dim=0)
+        assert isinstance(res, LazyStackedTensorDict)
+        assert res.batch_size == torch.Size([0, 2])
+        assert len(res.tensordicts) == 0
+
+    def test_cat_mixed_lazy_dense_non_stack_dim_mismatched_slices(self):
+        td_lazy = LazyStackedTensorDict(
+            *[TensorDict({"a": torch.full((2,), float(i))}, [2]) for i in range(2)],
+            stack_dim=0,
+        )
+        td_dense = TensorDict({"a": torch.zeros(3, 2)}, [3, 2])
+
+        with pytest.raises(
+            RuntimeError,
+            match="same number of stacked tensordicts",
+        ):
+            torch.cat([td_lazy, td_dense], dim=1)
+
+    def test_cat_mixed_lazy_dense_out_dense(self):
+        td_lazy = LazyStackedTensorDict(
+            *[
+                TensorDict({"a": torch.full((2, 3), float(i))}, [2, 3])
+                for i in range(2)
+            ],
+            stack_dim=0,
+        )
+        td_dense = TensorDict(
+            {"a": torch.arange(12, dtype=torch.float).reshape(2, 2, 3)},
+            [2, 2, 3],
+        )
+        out = TensorDict({"a": torch.empty(4, 2, 3)}, [4, 2, 3])
+
+        res = torch.cat([td_lazy, td_dense], dim=0, out=out)
+        assert res is out
+        assert assert_allclose_td(
+            out,
+            TensorDict(
+                {"a": torch.cat([td_lazy.get("a"), td_dense.get("a")], 0)},
+                [4, 2, 3],
+            ),
+        )
+
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate(self, device, use_file, tmpdir):

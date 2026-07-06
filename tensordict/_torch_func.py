@@ -433,6 +433,10 @@ def _cat(
 ) -> T:
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
+    if any(isinstance(td, LazyStackedTensorDict) for td in list_of_tensordicts) and (
+        out is None or isinstance(out, LazyStackedTensorDict)
+    ):
+        return _lazy_cat(list_of_tensordicts, dim=dim, out=out)
 
     batch_size = list(list_of_tensordicts[0].batch_size)
     tdtype = type(list_of_tensordicts[0])
@@ -526,13 +530,33 @@ def _cat(
 
 @implements_for_lazy_td(torch.cat)
 def _lazy_cat(
-    list_of_tensordicts: Sequence[LazyStackedTensorDict],
+    list_of_tensordicts: Sequence[TensorDictBase],
     dim: int = 0,
     out: LazyStackedTensorDict | None = None,
 ) -> LazyStackedTensorDict:
     # why aren't they feeding you?
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
+
+    if out is not None and not isinstance(out, LazyStackedTensorDict):
+        return _cat(list_of_tensordicts, dim=dim, out=out)
+
+    lazy_tds = [
+        td for td in list_of_tensordicts if isinstance(td, LazyStackedTensorDict)
+    ]
+    stack_dim = lazy_tds[0].stack_dim
+    if any((td.stack_dim != stack_dim) for td in lazy_tds):
+        raise RuntimeError("cat lazy stacked tds must have same stack dim")
+
+    if len(lazy_tds) != len(list_of_tensordicts):
+        list_of_tensordicts = [
+            (
+                td
+                if isinstance(td, LazyStackedTensorDict)
+                else _to_lazystack_for_lazy_cat(td, stack_dim)
+            )
+            for td in list_of_tensordicts
+        ]
 
     batch_size = list(list_of_tensordicts[0].batch_size)
     if dim < 0:
@@ -542,9 +566,13 @@ def _lazy_cat(
             f"dim must be in the range 0 <= dim < len(batch_size), got dim"
             f"={dim} and batch_size={batch_size}"
         )
-    stack_dim = list_of_tensordicts[0].stack_dim
-    if any((td.stack_dim != stack_dim) for td in list_of_tensordicts):
-        raise RuntimeError("cat lazy stacked tds must have same stack dim")
+    if dim != stack_dim:
+        num_stacked_tds = len(list_of_tensordicts[0].tensordicts)
+        if any(len(td.tensordicts) != num_stacked_tds for td in list_of_tensordicts):
+            raise RuntimeError(
+                "cat lazy stacked tds along a non-stack dimension requires "
+                "all inputs to have the same number of stacked tensordicts"
+            )
 
     batch_size[dim] = sum(td.batch_size[dim] for td in list_of_tensordicts)
     batch_size = torch.Size(batch_size)
@@ -568,6 +596,10 @@ def _lazy_cat(
                         new_dim,
                     )
                 )
+        if not out:
+            return _empty_lazystack_for_lazy_cat(
+                list_of_tensordicts[0], batch_size, stack_dim
+            )
         return type(list_of_tensordicts[0])(*out, stack_dim=stack_dim)
     else:
         if not isinstance(out, LazyStackedTensorDict):
@@ -595,6 +627,46 @@ def _lazy_cat(
                 )
 
         return out
+
+
+def _to_lazystack_for_lazy_cat(
+    td: TensorDictBase,
+    stack_dim: int,
+) -> LazyStackedTensorDict:
+    if stack_dim >= td.batch_dims:
+        raise RuntimeError(
+            "mixed lazy/plain cat requires non-lazy TensorDict inputs to have "
+            "the lazy stack dimension in their batch size, got "
+            f"stack_dim={stack_dim} and batch_size={td.batch_size}"
+        )
+    if td.batch_size[stack_dim] == 0:
+        return _empty_lazystack_for_lazy_cat(td, td.batch_size, stack_dim)
+    return td.to_lazystack(stack_dim)
+
+
+def _empty_lazystack_for_lazy_cat(
+    td: TensorDictBase,
+    batch_size: torch.Size,
+    stack_dim: int,
+) -> LazyStackedTensorDict:
+    batch_size = torch.Size(
+        tuple(batch_size[:stack_dim]) + tuple(batch_size[stack_dim + 1 :])
+    )
+    try:
+        names = td._maybe_names()
+    except IndexError:
+        names = None
+    if names is not None:
+        names = names[:stack_dim] + names[stack_dim + 1 :]
+        if not any(name is not None for name in names):
+            names = None
+    clz = type(td) if isinstance(td, LazyStackedTensorDict) else LazyStackedTensorDict
+    return clz._new_lazy_unsafe(
+        stack_dim=stack_dim,
+        device=td.device,
+        names=names,
+        batch_size=batch_size,
+    )
 
 
 @implements_for_td(torch.stack)
@@ -773,9 +845,11 @@ def _stack(
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
                     if _is_unbatched(values[0]):
-                        return type(values[0])._stack_non_tensor(
-                            values, dim
-                        )._with_batch_size(result_batch_size)
+                        return (
+                            type(values[0])
+                            ._stack_non_tensor(values, dim)
+                            ._with_batch_size(result_batch_size)
+                        )
                     return torch.stack(values, dim)
                 with (
                     _ErrorInteceptor(
