@@ -363,6 +363,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "attrs",
     "auto_batch_size_",
     "auto_device_",
+    "backward",
     "bfloat16",
     "bitwise_and",
     "bool",

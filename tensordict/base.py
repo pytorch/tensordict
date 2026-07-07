@@ -17464,6 +17464,121 @@ class TensorDictBase(MutableMapping, TensorCollection):
             val.requires_grad_(requires_grad)
         return self
 
+    def backward(
+        self,
+        gradient: TensorDictBase | None = None,
+        retain_graph: bool | None = None,
+        create_graph: bool = False,
+        inputs: TensorDictBase | Sequence[torch.Tensor] | None = None,
+    ) -> None:
+        """Computes the gradient of the differentiable leaves of the tensordict w.r.t. graph leaves.
+
+        This method mirrors :meth:`torch.Tensor.backward`: it recursively collects the
+        leaf tensors that require gradients and differentiates the graph through a single
+        :func:`torch.autograd.backward` call. Non-differentiable leaves are ignored.
+
+        If ``gradient`` is ``None``, every differentiable leaf must be scalar (a single
+        element) and an implicit gradient of ``1`` is used, such that for scalar leaves
+        ``td.backward()`` is equivalent to ``td.sum(reduce=True).backward()``. Otherwise,
+        ``gradient`` must be a tensordict whose entries match the differentiable leaves
+        by nested key. Leaves may have heterogeneous shapes, dtypes and devices, as long
+        as each gradient entry matches the leaf it is associated with.
+
+        Args:
+            gradient (TensorDictBase, optional): the gradient w.r.t. the tensordict.
+                Entries are matched to the differentiable leaves by nested key and must
+                have the same shape as the leaf they match. Can be omitted if all
+                differentiable leaves are scalar. Defaults to ``None``.
+            retain_graph (bool, optional): if ``False``, the graph used to compute the
+                grads will be freed. Defaults to the value of ``create_graph``.
+            create_graph (bool, optional): if ``True``, graph of the derivative will be
+                constructed, allowing to compute higher order derivative products.
+                Defaults to ``False``.
+            inputs (TensorDictBase or sequence of Tensor, optional): inputs w.r.t. which
+                the gradient will be accumulated in ``.grad``. All other tensors will be
+                ignored. If not provided, the gradient is accumulated into all the leaf
+                tensors that were used to compute the differentiated tensors.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> x = torch.randn(3, requires_grad=True)
+            >>> loss_td = TensorDict(
+            ...     actor_loss=x.sum(),
+            ...     critic_loss=x.pow(2).sum(),
+            ... )
+            >>> loss_td.backward()  # implicit gradient of 1 for scalar leaves
+            >>> assert x.grad is not None
+            >>> # weighted losses through a matching gradient tensordict
+            >>> x.grad = None
+            >>> loss_td = TensorDict(
+            ...     actor_loss=x.sum(),
+            ...     critic_loss=x.pow(2).sum(),
+            ... )
+            >>> weights = TensorDict(
+            ...     actor_loss=torch.tensor(0.5),
+            ...     critic_loss=torch.tensor(1.0),
+            ... )
+            >>> loss_td.backward(weights)
+
+        """
+        keys = []
+        tensors = []
+        for key, value in self.items(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(value, torch.Tensor) and value.requires_grad:
+                keys.append(key)
+                tensors.append(value)
+        if not tensors:
+            raise RuntimeError(
+                "backward() cannot be called on a tensordict that has no leaf tensor "
+                "requiring gradients."
+            )
+        if gradient is None:
+            grad_tensors = None
+            for key, tensor in zip(keys, tensors):
+                if tensor.numel() != 1:
+                    raise RuntimeError(
+                        "grad can be implicitly created only for scalar outputs: the "
+                        f"leaf at key {key!r} has shape {tuple(tensor.shape)}. Pass a "
+                        "gradient tensordict matching the structure of this tensordict "
+                        "to backward()."
+                    )
+        else:
+            if not isinstance(gradient, TensorDictBase):
+                raise TypeError(
+                    "gradient must be a TensorDictBase instance with entries matching "
+                    "the differentiable leaves of the tensordict, got "
+                    f"{type(gradient).__name__} instead."
+                )
+            grad_tensors = []
+            for key, tensor in zip(keys, tensors):
+                grad = gradient.get(key, default=None)
+                if grad is None:
+                    raise KeyError(
+                        f"Missing gradient entry for key {key!r} in the gradient "
+                        "tensordict passed to backward()."
+                    )
+                if grad.shape != tensor.shape:
+                    raise RuntimeError(
+                        f"Mismatch in shape: the gradient at key {key!r} has shape "
+                        f"{tuple(grad.shape)} but the corresponding leaf has shape "
+                        f"{tuple(tensor.shape)}."
+                    )
+                grad_tensors.append(grad)
+        if isinstance(inputs, TensorDictBase):
+            inputs = tuple(
+                value
+                for value in inputs.values(True, True, is_leaf=_is_leaf_nontensor)
+                if isinstance(value, torch.Tensor)
+            )
+        torch.autograd.backward(
+            tensors,
+            grad_tensors=grad_tensors,
+            retain_graph=retain_graph,
+            create_graph=create_graph,
+            inputs=inputs,
+        )
+
     @abc.abstractmethod
     def detach_(self) -> Self:
         """Detach the tensors in the tensordict in-place.

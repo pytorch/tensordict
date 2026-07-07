@@ -308,6 +308,17 @@ class TestTensorClass:
         assert data.get_at(("td", "missing"), 0, "else") == "else"
         assert data.get_at(("td", "missing"), 0) is None
 
+    def test_backward(self):
+        @tensorclass
+        class Losses:
+            actor: torch.Tensor
+            critic: torch.Tensor
+
+        x = torch.randn(3, requires_grad=True)
+        losses = Losses(actor=x.sum(), critic=x.pow(2).sum(), batch_size=[])
+        losses.backward()
+        assert torch.allclose(x.grad, 1 + 2 * x.detach())
+
     def test_decorator(self):
         @tensorclass
         class MyClass:
