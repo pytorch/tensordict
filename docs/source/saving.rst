@@ -241,6 +241,28 @@ checksums, so this is harmless within tensordict, but call
 archive to tools that do verify them (``unzip``,
 :func:`~tensordict.unpack_memmap`, ...).
 
+How do the three on-disk representations (memmap directory, consolidated
+file, archive) compare speed-wise? All three load lazily through ``mmap``,
+so bulk read throughput is essentially identical; the differences are in the
+per-entry overheads. Opening scales with the number of entries and favors
+the single-file formats (one metadata parse instead of one file open per
+leaf). Saving an archive currently pays an extra staging pass over a
+directory save. Copying the saved artifact is where archives shine: a
+directory pays per-file latency, which dominates for many-small-leaf
+layouts on local disk and grows with round-trip time on network
+filesystems.
+
+.. figure:: _static/img/memmap_formats_benchmark.png
+   :width: 100%
+   :alt: Barplots comparing save, open, read and copy times of memmap
+         directories, consolidated files and zip archives across three
+         tensordict layouts.
+
+   Serialization timings across layouts (log scale, lower is better),
+   measured on a laptop SSD with a warm page cache. ``flat``: 8 large
+   leaves; ``many small``: 2000 leaves in 100 nested groups; ``deep``: a
+   12-level nesting chain with 48 leaves.
+
 Consolidated serialization
 --------------------------
 
