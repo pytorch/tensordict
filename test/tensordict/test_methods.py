@@ -1935,10 +1935,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_memmap_archive(self, td_name, device, tmp_path):
         if td_name == "td_with_unbatched":
             pytest.skip("UnbatchedTensor memmap support not yet implemented")
-        if td_name in ("sub_td", "sub_td2"):
-            # _SubTensorDict memmap round trips are lossy (wrong batch size /
-            # broken idx on reload) for directories and archives alike.
-            pytest.skip("_SubTensorDict memmap round trip is broken")
         td = getattr(self, td_name)(device)
         archive = tmp_path / "saved.tdz"
         td.save(archive, copy_existing=True)
