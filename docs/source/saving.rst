@@ -196,6 +196,28 @@ a memory-mapped file:
 See :meth:`~tensordict.TensorDictBase.consolidate` for the full API, including
 options like ``num_threads``, ``device``, ``pin_memory``, and ``share_memory``.
 
+Serialization speed
+-------------------
+
+The figure below compares the speed of the main serialization paths
+(in-memory consolidation, consolidation to a memory-mapped file, and
+per-leaf directory save), single-threaded and multithreaded, on a payload
+made of a few large leaves and one made of many small leaves. It is
+generated when this documentation is built, so it reflects the machine
+that built these docs; each bar is an average over several runs.
+
+.. figure:: /tutorials/images/sphx_glr_serialization_speed_001.png
+   :alt: Serialization speed of consolidate (in memory and to file) and save, single-threaded and multithreaded.
+   :target: tutorials/serialization_speed.html
+
+   TensorDict serialization speed. Click the figure to open the
+   corresponding tutorial.
+
+To measure your own hardware, download the script from the
+:ref:`serialization speed tutorial <sphx_glr_tutorials_serialization_speed.py>`
+(or run ``python tutorials/sphinx_tuto/serialization_speed.py`` from a
+tensordict checkout) — it only needs ``matplotlib`` on top of tensordict.
+
 state_dict / load_state_dict
 ----------------------------
 
