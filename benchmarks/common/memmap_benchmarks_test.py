@@ -107,6 +107,32 @@ def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+def test_serialize_model_archive(benchmark, tmpdir, pause_when_exit):
+    """Tests efficiency of saving weights as a single-file memmap archive."""
+    has_cuda = torch.cuda.device_count()
+    with torch.device("cuda" if has_cuda else "cpu"):
+        t = nn.Transformer()
+
+    def func(t=t, tmpdir=tmpdir):
+        TensorDict.from_module(t).save(Path(tmpdir) / "model.tdz", num_threads=32)
+
+    benchmark(func)
+    del t
+
+
+def test_load_archive(benchmark, tmpdir, pause_when_exit):
+    """Tests efficiency of loading a single-file memmap archive."""
+    t = nn.Transformer()
+    path = Path(tmpdir) / "model.tdz"
+    TensorDict.from_module(t).save(path, num_threads=32)
+
+    def func(path=path):
+        TensorDict.load_memmap(path)
+
+    benchmark(func)
+    del t
+
+
 def test_serialize_model_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict, including state-dict construction."""
     has_cuda = torch.cuda.device_count()

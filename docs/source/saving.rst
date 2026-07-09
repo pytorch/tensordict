@@ -177,6 +177,57 @@ possible behaviours.
   This feature is implemented to prevent users from inadvertently copying memory-mapped
   tensors from one location to another.
 
+Single-file memmap archives
+---------------------------
+
+A memory-mapped directory is convenient to work with locally, but shipping it
+around means copying many small files. Passing a path ending in ``".tdz"``
+(or ``archive=True``) to :meth:`~tensordict.TensorDictBase.save`,
+:meth:`~tensordict.TensorDictBase.dumps` or
+:meth:`~tensordict.TensorDictBase.memmap` writes the exact same data layout
+as a **single file** instead:
+
+  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+  >>> td.save("data.tdz")
+  >>> td2 = TensorDict.load_memmap("data.tdz")
+  >>> assert (td == td2).all()
+
+The archive is a standard zip file whose entries replicate the memmap
+directory tree (``meta.json`` files and ``*.memmap`` payloads). Tensor
+payloads are stored uncompressed and aligned, so
+:meth:`~tensordict.TensorDictBase.load_memmap` memory-maps the archive once
+and exposes every leaf as a zero-copy view into the mapping: metadata aside,
+nothing is read from disk until a tensor is actually accessed. Because the
+entry tree is the directory tree, the two representations are freely
+convertible -- with :func:`~tensordict.pack_memmap` /
+:func:`~tensordict.unpack_memmap`, or with any zip tool:
+
+.. code-block:: bash
+
+  unzip data.tdz -d data_dir  # yields a loadable memmap directory
+  zip -0 -r data.zip data_dir # yields a loadable archive (see note below)
+
+Partial loading works as with directories: the ``subpath`` argument of
+:meth:`~tensordict.TensorDictBase.load_memmap` selects a nested tensordict
+without touching the rest of the archive:
+
+  >>> sub = TensorDict.load_memmap("model.tdz", subpath="encoder/layers")
+
+Archives can optionally be compressed (``compression="deflate"`` among
+others). Compressed leaves cannot be memory-mapped and are decompressed in
+memory on first access, so this is a trade-off reserved for archival storage;
+data such as ``uint8`` images or boolean masks compress well, whereas float
+weights barely do.
+
+.. note::
+  Two differences with directory-backed tensordicts are worth keeping in
+  mind. First, an archive-loaded tensordict behaves like the result of
+  :meth:`~tensordict.TensorDictBase.from_consolidated`: leaves are views into
+  a single storage and in-place writes do **not** propagate to the file.
+  Second, archives written by external zip tools (without payload alignment)
+  load correctly, but misaligned leaves are copied in memory rather than
+  viewed.
+
 Consolidated serialization
 --------------------------
 

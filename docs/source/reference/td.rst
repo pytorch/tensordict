@@ -45,13 +45,16 @@ or ``cat``.
     fromkeys
     is_batchedtensor
     is_leaf_nontensor
+    is_memmap_archive
     lazy_stack
     load
     load_memmap
     maybe_dense_stack
     memmap
+    pack_memmap
     save
     stack
+    unpack_memmap
 
 TensorDict as a context manager
 -------------------------------

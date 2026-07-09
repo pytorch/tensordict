@@ -31,9 +31,10 @@ from warnings import warn
 import numpy as np
 
 import torch
+
+from tensordict._archive import _memmap_tensor_from_path
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
-
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -3169,17 +3170,17 @@ class TensorDict(TensorDictBase):
             if (device is None or device != torch.device("meta")) and not is_fake:
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it
-                    shape = MemoryMappedTensor.from_filename(
+                    shape = _memmap_tensor_from_path(
                         (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
                     )
                 else:
                     shape = torch.Size(shape)
-                tensor = MemoryMappedTensor.from_filename(
+                tensor = _memmap_tensor_from_path(
+                    prefix / f"{safe_key}.memmap",
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
-                    filename=str(prefix / f"{safe_key}.memmap"),
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
@@ -3210,7 +3211,10 @@ class TensorDict(TensorDictBase):
                         inplace=False,
                         validated=False,
                     )
-        result._memmap_prefix = prefix
+        # Archive paths are read-only views inside a zip file: they cannot be
+        # used as a target for a subsequent memmap_()/refresh, so only real
+        # directories are recorded.
+        result._memmap_prefix = prefix if isinstance(prefix, Path) else None
         return result
 
     def _make_memmap_subtd(self, key):

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import tensordict._reductions
+from tensordict._archive import is_memmap_archive, pack_memmap, unpack_memmap
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
@@ -146,6 +147,9 @@ __all__ = [
     # Saving and loading
     "save",
     "load",
+    "pack_memmap",
+    "unpack_memmap",
+    "is_memmap_archive",
     # Merging and padding
     "merge_tensordicts",
     "pad",
