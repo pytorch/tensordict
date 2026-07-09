@@ -7918,22 +7918,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
+        if device is not None:
+            device = torch.device(device)
         if type_name != str(cls):
             import tensordict
 
             for other_cls in tensordict.base._ACCEPTED_CLASSES:
                 if str(other_cls) == type_name:
-                    return other_cls._load_memmap(
-                        prefix, metadata, robust_key=robust_key
-                    )
+                    break
             else:
                 raise RuntimeError(
                     f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
                     f"Did you call _register_tensor_class(cls) on {type_name}?"
                 )
-        if device is not None:
-            device = torch.device(device)
-        out = cls._load_memmap(
+        else:
+            other_cls = cls
+        out = other_cls._load_memmap(
             prefix, metadata, device=device, out=out, robust_key=robust_key
         )
         if (
@@ -9931,9 +9931,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def send(
         self,
-        dst: int | "TensorDictPipe",  # noqa: F821
+        dst: int | "TensorDictPipe" | None = None,  # noqa: F821
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
@@ -9941,15 +9942,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Sends the content of a tensordict to a distant worker.
 
         Args:
-            dst (int or TensorDictPipe): the rank of the destination worker
-                where the content should be sent, or a
+            dst (int or TensorDictPipe, optional): the global rank of the
+                destination worker where the content should be sent, or a
                 :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
-                transport.
+                transport. Mutually exclusive with ``group_dst``; exactly one
+                of the two must be provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
                 will be used for communication. Otherwise, the default process group
                 will be used.
+                Defaults to ``None``.
+            group_dst (int, optional): the rank of the destination worker
+                *relative to* ``group``. Requires ``group`` to be passed and is
+                mutually exclusive with ``dst``. When set, the p2p calls are
+                issued directly on the group's backend, so ``group`` may be a
+                standalone :class:`~torch.distributed.ProcessGroup` built
+                against a store (never registered through
+                :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`).
                 Defaults to ``None``.
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
@@ -10027,22 +10038,38 @@ class TensorDictBase(MutableMapping, TensorCollection):
         from tensordict._ucxx import TensorDictPipe
 
         if isinstance(dst, TensorDictPipe):
+            if group_dst is not None:
+                raise ValueError(
+                    "`group_dst` cannot be used when `dst` is a TensorDictPipe."
+                )
             dst.send(self)
             return
+        _check_p2p_peer(dst, group_dst, group, "dst", "group_dst")
         if consolidated:
             from torch import distributed as dist
 
             td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
-            dist.send(td_c._consolidated["storage"], dst=dst, group=group)
+            storage = td_c._consolidated["storage"]
+            if group_dst is not None:
+                group.send([storage], group_dst, 0).wait()
+            else:
+                dist.send(storage, dst=dst, group=group)
             return
-        self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
+        self._send(
+            dst,
+            _tag=init_tag - 1,
+            pseudo_rand=pseudo_rand,
+            group=group,
+            group_dst=group_dst,
+        )
 
     def _send(
         self,
-        dst: int,
+        dst: int | None,
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_dst: int | None = None,
     ) -> int:
         from torch import distributed as dist
 
@@ -10051,7 +10078,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(type(value)):
-                _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
+                _tag = value._send(
+                    dst,
+                    _tag=_tag,
+                    pseudo_rand=pseudo_rand,
+                    group=group,
+                    group_dst=group_dst,
+                )
                 continue
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
@@ -10059,15 +10092,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            dist.send(value, dst=dst, tag=_tag, group=group)
+            if group_dst is not None:
+                # Direct backend call: works for raw (unregistered) groups,
+                # which the functional API rejects.
+                group.send([value], group_dst, _tag).wait()
+            else:
+                dist.send(value, dst=dst, tag=_tag, group=group)
 
         return _tag
 
     def recv(
         self,
-        src: int | "TensorDictPipe",  # noqa: F821
+        src: int | "TensorDictPipe" | None = None,  # noqa: F821
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_src: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
@@ -10077,16 +10116,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Check the example in the `send` method for context.
 
         Args:
-            src (int or TensorDictPipe): the rank of the source worker, or a
+            src (int or TensorDictPipe, optional): the global rank of the
+                source worker, or a
                 :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
                 transport.  When a pipe is passed, the data is received
                 in-place into this tensordict's consolidated storage (if
-                available).
+                available). Mutually exclusive with ``group_src``; exactly one
+                of the two must be provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
                 will be used for communication. Otherwise, the default process group
                 will be used.
+                Defaults to ``None``.
+            group_src (int, optional): the rank of the source worker *relative
+                to* ``group``. Requires ``group`` to be passed and is mutually
+                exclusive with ``src``. When set, the p2p calls are issued
+                directly on the group's backend, so ``group`` may be a
+                standalone :class:`~torch.distributed.ProcessGroup` built
+                against a store (never registered through
+                :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`).
                 Defaults to ``None``.
             init_tag (int): the ``init_tag`` used by the source worker.
             pseudo_rand (bool): if True, the sequence of tags will be pseudo-
@@ -10106,14 +10156,28 @@ class TensorDictBase(MutableMapping, TensorCollection):
         from tensordict._ucxx import TensorDictPipe
 
         if isinstance(src, TensorDictPipe):
+            if group_src is not None:
+                raise ValueError(
+                    "`group_src` cannot be used when `src` is a TensorDictPipe."
+                )
             return src.recv(self)
+        _check_p2p_peer(src, group_src, group, "src", "group_src")
         if consolidated:
             from torch import distributed as dist
 
             storage = self._consolidated["storage"]
-            dist.recv(storage, src=src, group=group)
+            if group_src is not None:
+                group.recv([storage], group_src, 0).wait()
+            else:
+                dist.recv(storage, src=src, group=group)
             return
-        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
+        return self._recv(
+            src,
+            _tag=init_tag - 1,
+            pseudo_rand=pseudo_rand,
+            group=group,
+            group_src=group_src,
+        )
 
     async def asend(self, dst: "TensorDictPipe") -> None:  # noqa: F821
         """Sends the content of a tensordict through a UCXX pipe (async).
@@ -10150,11 +10214,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def _recv(
         self,
-        src: int,
+        src: int | None,
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
         non_blocking: bool = False,
+        group_src: int | None = None,
     ) -> int:
         from torch import distributed as dist
 
@@ -10163,7 +10228,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(type(value)):
-                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
+                _tag = value._recv(
+                    src,
+                    _tag=_tag,
+                    pseudo_rand=pseudo_rand,
+                    group=group,
+                    group_src=group_src,
+                )
                 continue
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
@@ -10171,7 +10242,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            dist.recv(value, src=src, tag=_tag, group=group)
+            if group_src is not None:
+                # Direct backend call: works for raw (unregistered) groups,
+                # which the functional API rejects.
+                group.recv([value], group_src, _tag).wait()
+            else:
+                dist.recv(value, src=src, tag=_tag, group=group)
             self._set_str(
                 key, value, inplace=True, validated=True, non_blocking=non_blocking
             )
@@ -10363,9 +10439,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def isend(
         self,
-        dst: int,
+        dst: int | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,  # noqa: F821
+        group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         return_early: bool = False,
@@ -10373,13 +10450,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """Sends the content of the tensordict asynchronously.
 
         Args:
-            dst (int): the rank of the destination worker where the content
-                should be sent.
+            dst (int, optional): the global rank of the destination worker
+                where the content should be sent. Mutually exclusive with
+                ``group_dst``; exactly one of the two must be provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
                 will be used for communication. Otherwise, the default process group
                 will be used.
+                Defaults to ``None``.
+            group_dst (int, optional): the rank of the destination worker
+                *relative to* ``group``. Requires ``group`` to be passed and is
+                mutually exclusive with ``dst``. When set, the p2p calls are
+                issued directly on the group's backend, so ``group`` may be a
+                standalone :class:`~torch.distributed.ProcessGroup` built
+                against a store (never registered through
+                :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`).
                 Defaults to ``None``.
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
@@ -10456,22 +10543,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             ...     secondary_worker.join()
 
         """
+        _check_p2p_peer(dst, group_dst, group, "dst", "group_dst")
         return self._isend(
             dst,
             _tag=init_tag - 1,
             pseudo_rand=pseudo_rand,
             group=group,
+            group_dst=group_dst,
             return_early=return_early,
         )
 
     def _isend(
         self,
-        dst: int,
+        dst: int | None,
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
         return_early: bool = False,
+        group_dst: int | None = None,
     ) -> int:
         from torch import distributed as dist
 
@@ -10489,6 +10579,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     _futures=_futures,
                     group=group,
                     return_early=return_early,
+                    group_dst=group_dst,
                 )
                 continue
             elif isinstance(value, Tensor):
@@ -10499,7 +10590,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            _future = dist.isend(value, dst=dst, tag=_tag, group=group)
+            if group_dst is not None:
+                # Direct backend call: works for raw (unregistered) groups,
+                # which the functional API rejects.
+                _future = group.send([value], group_dst, _tag)
+            else:
+                _future = dist.isend(value, dst=dst, tag=_tag, group=group)
             _futures.append(_future)
         if root and not return_early:
             for _future in _futures:
@@ -10510,9 +10606,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
     def irecv(
         self,
-        src: int,
+        src: int | None = None,
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_src: int | None = None,
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
@@ -10522,12 +10619,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         Check the example in the :meth:`~.isend` method for context.
 
         Args:
-            src (int): the rank of the source worker.
+            src (int, optional): the global rank of the source worker. Mutually
+                exclusive with ``group_src``; exactly one of the two must be
+                provided.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): if set, the specified process group
                 will be used for communication. Otherwise, the default process group
                 will be used.
+                Defaults to ``None``.
+            group_src (int, optional): the rank of the source worker *relative
+                to* ``group``. Requires ``group`` to be passed and is mutually
+                exclusive with ``src``. When set, the p2p calls are issued
+                directly on the group's backend, so ``group`` may be a
+                standalone :class:`~torch.distributed.ProcessGroup` built
+                against a store (never registered through
+                :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`).
                 Defaults to ``None``.
             return_premature (bool): if ``True``, returns a list of futures to wait
                 upon until the tensordict is updated. Defaults to ``False``,
@@ -10545,22 +10653,25 @@ class TensorDictBase(MutableMapping, TensorCollection):
             if ``return_premature=True``, a list of futures to wait
                 upon until the tensordict is updated.
         """
+        _check_p2p_peer(src, group_src, group, "src", "group_src")
         return self._irecv(
             src,
             return_premature=return_premature,
             _tag=init_tag - 1,
             pseudo_rand=pseudo_rand,
             group=group,
+            group_src=group_src,
         )
 
     def _irecv(
         self,
-        src: int,
+        src: int | None,
         return_premature: bool = False,
         _tag: int = -1,
         _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_src: int | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         from torch import distributed as dist
 
@@ -10578,6 +10689,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     _future_list=_future_list,
                     pseudo_rand=pseudo_rand,
                     group=group,
+                    group_src=group_src,
                 )
                 continue
             elif isinstance(value, Tensor):
@@ -10588,7 +10700,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            _future_list.append(dist.irecv(value, src=src, tag=_tag, group=group))
+            if group_src is not None:
+                # Direct backend call: works for raw (unregistered) groups,
+                # which the functional API rejects.
+                _future_list.append(group.recv([value], group_src, _tag))
+            else:
+                _future_list.append(dist.irecv(value, src=src, tag=_tag, group=group))
         if not root:
             return _tag, _future_list
         elif return_premature:
@@ -17639,6 +17756,121 @@ class TensorDictBase(MutableMapping, TensorCollection):
             val.requires_grad_(requires_grad)
         return self
 
+    def backward(
+        self,
+        gradient: TensorDictBase | None = None,
+        retain_graph: bool | None = None,
+        create_graph: bool = False,
+        inputs: TensorDictBase | Sequence[torch.Tensor] | None = None,
+    ) -> None:
+        """Computes the gradient of the differentiable leaves of the tensordict w.r.t. graph leaves.
+
+        This method mirrors :meth:`torch.Tensor.backward`: it recursively collects the
+        leaf tensors that require gradients and differentiates the graph through a single
+        :func:`torch.autograd.backward` call. Non-differentiable leaves are ignored.
+
+        If ``gradient`` is ``None``, every differentiable leaf must be scalar (a single
+        element) and an implicit gradient of ``1`` is used, such that for scalar leaves
+        ``td.backward()`` is equivalent to ``td.sum(reduce=True).backward()``. Otherwise,
+        ``gradient`` must be a tensordict whose entries match the differentiable leaves
+        by nested key. Leaves may have heterogeneous shapes, dtypes and devices, as long
+        as each gradient entry matches the leaf it is associated with.
+
+        Args:
+            gradient (TensorDictBase, optional): the gradient w.r.t. the tensordict.
+                Entries are matched to the differentiable leaves by nested key and must
+                have the same shape as the leaf they match. Can be omitted if all
+                differentiable leaves are scalar. Defaults to ``None``.
+            retain_graph (bool, optional): if ``False``, the graph used to compute the
+                grads will be freed. Defaults to the value of ``create_graph``.
+            create_graph (bool, optional): if ``True``, graph of the derivative will be
+                constructed, allowing to compute higher order derivative products.
+                Defaults to ``False``.
+            inputs (TensorDictBase or sequence of Tensor, optional): inputs w.r.t. which
+                the gradient will be accumulated in ``.grad``. All other tensors will be
+                ignored. If not provided, the gradient is accumulated into all the leaf
+                tensors that were used to compute the differentiated tensors.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> x = torch.randn(3, requires_grad=True)
+            >>> loss_td = TensorDict(
+            ...     actor_loss=x.sum(),
+            ...     critic_loss=x.pow(2).sum(),
+            ... )
+            >>> loss_td.backward()  # implicit gradient of 1 for scalar leaves
+            >>> assert x.grad is not None
+            >>> # weighted losses through a matching gradient tensordict
+            >>> x.grad = None
+            >>> loss_td = TensorDict(
+            ...     actor_loss=x.sum(),
+            ...     critic_loss=x.pow(2).sum(),
+            ... )
+            >>> weights = TensorDict(
+            ...     actor_loss=torch.tensor(0.5),
+            ...     critic_loss=torch.tensor(1.0),
+            ... )
+            >>> loss_td.backward(weights)
+
+        """
+        keys = []
+        tensors = []
+        for key, value in self.items(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(value, torch.Tensor) and value.requires_grad:
+                keys.append(key)
+                tensors.append(value)
+        if not tensors:
+            raise RuntimeError(
+                "backward() cannot be called on a tensordict that has no leaf tensor "
+                "requiring gradients."
+            )
+        if gradient is None:
+            grad_tensors = None
+            for key, tensor in zip(keys, tensors):
+                if tensor.numel() != 1:
+                    raise RuntimeError(
+                        "grad can be implicitly created only for scalar outputs: the "
+                        f"leaf at key {key!r} has shape {tuple(tensor.shape)}. Pass a "
+                        "gradient tensordict matching the structure of this tensordict "
+                        "to backward()."
+                    )
+        else:
+            if not isinstance(gradient, TensorDictBase):
+                raise TypeError(
+                    "gradient must be a TensorDictBase instance with entries matching "
+                    "the differentiable leaves of the tensordict, got "
+                    f"{type(gradient).__name__} instead."
+                )
+            grad_tensors = []
+            for key, tensor in zip(keys, tensors):
+                grad = gradient.get(key, default=None)
+                if grad is None:
+                    raise KeyError(
+                        f"Missing gradient entry for key {key!r} in the gradient "
+                        "tensordict passed to backward()."
+                    )
+                if grad.shape != tensor.shape:
+                    raise RuntimeError(
+                        f"Mismatch in shape: the gradient at key {key!r} has shape "
+                        f"{tuple(grad.shape)} but the corresponding leaf has shape "
+                        f"{tuple(tensor.shape)}."
+                    )
+                grad_tensors.append(grad)
+        if isinstance(inputs, TensorDictBase):
+            inputs = tuple(
+                value
+                for value in inputs.values(True, True, is_leaf=_is_leaf_nontensor)
+                if isinstance(value, torch.Tensor)
+            )
+        torch.autograd.backward(
+            tensors,
+            grad_tensors=grad_tensors,
+            retain_graph=retain_graph,
+            create_graph=create_graph,
+            inputs=inputs,
+        )
+
     @abc.abstractmethod
     def detach_(self) -> Self:
         """Detach the tensors in the tensordict in-place.
@@ -17728,6 +17960,32 @@ _ACCEPTED_CLASSES = (
     Tensor,
     TensorDictBase,
 )
+
+
+def _check_p2p_peer(
+    peer: int | None,
+    group_peer: int | None,
+    group: "torch.distributed.ProcessGroup" | None,
+    peer_name: str,
+    group_peer_name: str,
+) -> None:
+    """Validates the global-rank / group-rank peer arguments of the p2p methods.
+
+    Mirrors the torch functional API contract: the peer is specified either
+    globally (``dst``/``src``) or relative to ``group``
+    (``group_dst``/``group_src``), never both.
+    """
+    if group_peer is not None:
+        if group is None:
+            raise ValueError(f"`{group_peer_name}` requires `group` to be passed.")
+        if peer is not None:
+            raise ValueError(
+                f"`{peer_name}` and `{group_peer_name}` are mutually exclusive."
+            )
+    elif peer is None:
+        raise ValueError(
+            f"Exactly one of `{peer_name}` and `{group_peer_name}` must be provided."
+        )
 
 
 def _resolve_tensorclass_type(type_str: str):

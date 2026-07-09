@@ -1116,18 +1116,20 @@ class TensorClass:
     ) -> Self | None: ...
     def send(
         self,
-        dst: int,
+        dst: int | None = None,
         *,
         group: dist.ProcessGroup | None = None,
+        group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
     ) -> None: ...
     def recv(
         self,
-        src: int,
+        src: int | None = None,
         *,
         group: dist.ProcessGroup | None = None,
+        group_src: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
@@ -1149,17 +1151,20 @@ class TensorClass:
     ) -> Self: ...
     def isend(
         self,
-        dst: int,
+        dst: int | None = None,
         *,
         group: "dist.ProcessGroup" | None = None,  # noqa: F821
+        group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        return_early: bool = False,
     ) -> int: ...
     def irecv(
         self,
-        src: int,
+        src: int | None = None,
         *,
         group: dist.ProcessGroup | None = None,
+        group_src: int | None = None,
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
@@ -1664,6 +1669,13 @@ class TensorClass:
     @property
     def requires_grad(self) -> bool: ...
     def requires_grad_(self, requires_grad: bool = True) -> Self: ...
+    def backward(
+        self,
+        gradient: TensorDictBase | None = None,
+        retain_graph: bool | None = None,
+        create_graph: bool = False,
+        inputs: TensorDictBase | Sequence[Tensor] | None = None,
+    ) -> None: ...
     def detach_(self) -> Self: ...
     def detach(self) -> Self: ...
     def bfloat16(self) -> Self: ...

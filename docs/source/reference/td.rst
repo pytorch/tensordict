@@ -267,6 +267,31 @@ and return another one (for instance via :func:`tensordict.nn.TensorDictModule`)
     >>> grads = torch.autograd.grad(td_out, td_in,
     ...                             torch.ones_like(td_out))
 
+Backpropagation with ``TensorDict.backward``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:meth:`~tensordict.TensorDictBase.backward` mirrors :meth:`torch.Tensor.backward`
+for tensordicts: it recursively collects the differentiable leaves and
+backpropagates through all of them in a single :func:`torch.autograd.backward`
+call. When every leaf is scalar, no gradient is needed — this is the typical
+case of a tensordict of losses:
+
+.. code-block:: python
+
+    >>> loss_td.backward()  # equivalent to loss_td.sum(reduce=True).backward()
+
+For non-scalar leaves, or to weight each loss term, pass a gradient tensordict
+whose entries match the differentiable leaves by nested key:
+
+.. code-block:: python
+
+    >>> loss_td.backward(torch.ones_like(loss_td))
+    >>> # weighted losses
+    >>> weights = TensorDict(
+    ...     actor_loss=torch.tensor(0.5),
+    ...     critic_loss=torch.tensor(1.0),
+    ... )
+    >>> loss_td.backward(weights)
 
 Utils
 -----

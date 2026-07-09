@@ -7,6 +7,7 @@ import abc
 import argparse
 import os
 import sys
+from datetime import timedelta
 
 import pytest
 import torch
@@ -1249,6 +1250,251 @@ class TestSendConsolidated:
             main_worker.join(timeout=TIMEOUT)
             secondary_worker.join(timeout=TIMEOUT)
             assert out == "yuppie"
+
+
+# ========================================================================
+# Test group_dst / group_src over raw (unregistered) process groups
+# ------------------------------------------------------------------------
+
+
+def _make_raw_pair_group(rank, port, backend="gloo"):
+    """Builds a standalone pair process group over a TCPStore.
+
+    No ``init_process_group`` / ``new_group`` anywhere: the group never goes
+    through the c10d registry, so global-rank lookups would fail on it.
+    """
+    store = dist.TCPStore("localhost", port, 2, rank == 0)
+    prefix_store = dist.PrefixStore("raw_pair", store)
+    if backend == "gloo":
+        return dist.ProcessGroupGloo(prefix_store, rank, 2, timedelta(seconds=TIMEOUT))
+    if backend == "nccl":
+        return dist.ProcessGroupNCCL(prefix_store, rank, 2)
+    raise ValueError(f"Unknown backend {backend}")
+
+
+class TestRawGroupSendRecv:
+    """p2p transfer over standalone (unregistered) groups via group_dst/group_src."""
+
+    port = 29520
+
+    @staticmethod
+    def make_td(ones):
+        fun = torch.ones if ones else torch.zeros
+        return TensorDict(
+            {
+                ("a", "b"): fun(2),
+                "c": fun(2, 3),
+                "_": fun(2, 1, 5),
+            },
+            [2],
+        )
+
+    @classmethod
+    def client(cls, mode, pseudo_rand):
+        pg = _make_raw_pair_group(1, cls.port)
+        td = cls.make_td(ones=True)
+        if mode == "isend":
+            td.isend(group=pg, group_dst=0, pseudo_rand=pseudo_rand)
+        elif mode == "consolidated":
+            td.send(group=pg, group_dst=0, consolidated=True)
+        else:
+            td.send(group=pg, group_dst=0, pseudo_rand=pseudo_rand)
+
+    @classmethod
+    def server(cls, queue, mode, pseudo_rand, return_premature):
+        pg = _make_raw_pair_group(0, cls.port)
+        td = cls.make_td(ones=False)
+        if mode == "consolidated":
+            td = td.consolidate(metadata=True)
+            td.recv(group=pg, group_src=1, consolidated=True)
+        elif mode == "irecv":
+            out = td.irecv(
+                group=pg,
+                group_src=1,
+                pseudo_rand=pseudo_rand,
+                return_premature=return_premature,
+            )
+            if return_premature:
+                for fut in out:
+                    fut.wait()
+        else:
+            td.recv(group=pg, group_src=1, pseudo_rand=pseudo_rand)
+        assert (td == 1).all()
+        queue.put("yuppie")
+
+    def _run(self, client_mode, server_mode, pseudo_rand=False, return_premature=False):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(
+            target=type(self).server,
+            args=(queue, server_mode, pseudo_rand, return_premature),
+        )
+        secondary_worker = mp.Process(
+            target=type(self).client, args=(client_mode, pseudo_rand)
+        )
+
+        main_worker.start()
+        secondary_worker.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+            assert out == "yuppie"
+        finally:
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
+    def test_send_recv_raw(self, pseudo_rand, set_context):
+        self._run("send", "recv", pseudo_rand=pseudo_rand)
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
+    def test_isend_recv_raw(self, pseudo_rand, set_context):
+        self._run("isend", "recv", pseudo_rand=pseudo_rand)
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    @pytest.mark.parametrize("return_premature", [True, False])
+    def test_irecv_raw(self, return_premature, set_context):
+        self._run("isend", "irecv", return_premature=return_premature)
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    def test_consolidated_raw(self, set_context):
+        self._run("consolidated", "consolidated")
+
+
+class TestRegisteredGroupSendRecv:
+    """group_dst/group_src also work with groups registered via new_group."""
+
+    @classmethod
+    def client(cls):
+        dist.init_process_group(
+            "gloo",
+            rank=1,
+            world_size=2,
+            init_method="tcp://localhost:29522",
+        )
+        group = dist.new_group([0, 1])
+        td = TensorDict({("a", "b"): torch.ones(2), "c": torch.ones(2, 3)}, [2])
+        td.send(group=group, group_dst=0)
+
+    @classmethod
+    def server(cls, queue):
+        dist.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+            init_method="tcp://localhost:29522",
+        )
+        group = dist.new_group([0, 1])
+        td = TensorDict({("a", "b"): torch.zeros(2), "c": torch.zeros(2, 3)}, [2])
+        td.recv(group=group, group_src=1)
+        assert (td == 1).all()
+        queue.put("yuppie")
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    def test_registered_group(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client)
+
+        main_worker.start()
+        secondary_worker.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+            assert out == "yuppie"
+        finally:
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.device_count() >= 2, reason="not enough cuda devices"
+)
+class TestRawGroupSendRecvNCCL:
+    port = 29523
+
+    @classmethod
+    def client(cls):
+        torch.cuda.set_device(1)
+        pg = _make_raw_pair_group(1, cls.port, backend="nccl")
+        td = TensorDict(
+            {("a", "b"): torch.ones(2), "c": torch.ones(2, 3)},
+            [2],
+            device="cuda:1",
+        )
+        td.send(group=pg, group_dst=0)
+
+    @classmethod
+    def server(cls, queue):
+        torch.cuda.set_device(0)
+        pg = _make_raw_pair_group(0, cls.port, backend="nccl")
+        td = TensorDict(
+            {("a", "b"): torch.zeros(2), "c": torch.zeros(2, 3)},
+            [2],
+            device="cuda:0",
+        )
+        td.recv(group=pg, group_src=1)
+        assert (td == 1).all()
+        queue.put("yuppie")
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    def test_send_recv_raw_nccl(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client)
+
+        main_worker.start()
+        secondary_worker.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+            assert out == "yuppie"
+        finally:
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+
+
+class TestGroupPeerValidation:
+    """Argument validation for group_dst/group_src (single process, no comms)."""
+
+    @staticmethod
+    def make_td():
+        return TensorDict({"a": torch.zeros(1)}, [])
+
+    def test_group_peer_requires_group(self):
+        td = self.make_td()
+        with pytest.raises(ValueError, match="requires `group`"):
+            td.send(group_dst=0)
+        with pytest.raises(ValueError, match="requires `group`"):
+            td.isend(group_dst=0)
+        with pytest.raises(ValueError, match="requires `group`"):
+            td.recv(group_src=0)
+        with pytest.raises(ValueError, match="requires `group`"):
+            td.irecv(group_src=0)
+
+    def test_peer_and_group_peer_mutually_exclusive(self):
+        store = dist.TCPStore("localhost", 29524, 1, True)
+        pg = dist.ProcessGroupGloo(
+            dist.PrefixStore("solo", store), 0, 1, timedelta(seconds=10)
+        )
+        td = self.make_td()
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            td.send(0, group=pg, group_dst=0)
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            td.isend(0, group=pg, group_dst=0)
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            td.recv(0, group=pg, group_src=0)
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            td.irecv(0, group=pg, group_src=0)
+
+    def test_missing_peer(self):
+        td = self.make_td()
+        with pytest.raises(ValueError, match="Exactly one"):
+            td.send()
+        with pytest.raises(ValueError, match="Exactly one"):
+            td.isend()
+        with pytest.raises(ValueError, match="Exactly one"):
+            td.recv()
+        with pytest.raises(ValueError, match="Exactly one"):
+            td.irecv()
 
 
 # ========================================================================

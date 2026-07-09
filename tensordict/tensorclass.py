@@ -363,6 +363,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "attrs",
     "auto_batch_size_",
     "auto_device_",
+    "backward",
     "bfloat16",
     "bitwise_and",
     "bool",
@@ -1409,8 +1410,8 @@ def _init_wrapper(
         )
         # super(type(self), self).__setattr__("_non_tensordict", {})
         # super(type(self), self).__setattr__("_is_initialized", True)
-        self.__setattr_parent__("_non_tensordict", {})
-        self.__setattr_parent__("_is_initialized", True)
+        object.__setattr__(self, "_non_tensordict", {})
+        object.__setattr__(self, "_is_initialized", True)
 
         if _has_custom_setattr:
             # The class defines a custom __setattr__ that must be
@@ -1936,7 +1937,10 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
     ):
         # if we ever decide to allow anything to be written in a tc
         # or key not in self.__dataclass_fields__):
-        return self.__setattr_parent__(key, value)
+        # Call object.__setattr__ directly (not via the __setattr_parent__
+        # class attribute): dynamo re-dispatches a slot wrapper stored as a
+        # class attribute through the custom __setattr__, which recurses.
+        return object.__setattr__(self, key, value)
 
     if key not in self.__expected_keys__:
         raise AttributeError(
@@ -1966,11 +1970,11 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
                 )
             )
         ):
-            return self.__setattr_parent__(key, value)
+            return object.__setattr__(self, key, value)
     else:
         # Pass?
         if key in SET_ATTRIBUTES:
-            return self.__setattr_parent__(key, value)
+            return object.__setattr__(self, key, value)
     if key not in self.__expected_keys__:
         raise AttributeError(
             f"Cannot set attribute {key} in {self} as this entry is not amongst the expected ones ({self.__expected_keys__})."

@@ -38,7 +38,7 @@ from tensordict import (
     unpack_memmap,
 )
 from tensordict._lazy import _CustomOpTensorDict
-from tensordict._td import _SubTensorDict, is_tensor_collection
+from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.functional import pad
@@ -3542,7 +3542,8 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_squeeze_with_none_legacy(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_squeeze = torch.squeeze(td, dim=None)
+        # torch.squeeze no longer accepts dim=None; omitting dim is equivalent
+        td_squeeze = torch.squeeze(td)
         tensor = torch.ones_like(td.get("a").squeeze())
         td_squeeze.set_("a", tensor)
         assert (td_squeeze.get("a") == tensor).all()
@@ -3569,7 +3570,7 @@ class TestTensorDicts(TestTensorDictsBase):
             else contextlib.nullcontext()
         )
         with error_dec:
-            td_squeeze = torch.squeeze(td, dim=None)
+            td_squeeze = torch.squeeze(td)
         if is_lazy:
             return
         assert all(d > 1 for d in td_squeeze.batch_size), td_squeeze.batch_size
@@ -4837,6 +4838,225 @@ class TestTensorDicts(TestTensorDictsBase):
         outputs = inputs + 1
         grads = torch.autograd.grad(outputs, inputs, torch.ones_like(outputs))
         assert (grads == 1).all()
+
+    def test_backward(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        inputs = td.float().requires_grad_()
+        outputs = inputs + 1
+        outputs.backward(torch.ones_like(outputs))
+        assert (inputs.grad == 1).all()
+
+
+class TestSubTensorDictMemmapRoundtrip:
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (slice(None), slice(0, 2)),
+            (slice(None), slice(0, 2, None)),
+            (torch.tensor([0, 2]),),
+            ([0, 2],),
+            1,
+        ],
+    )
+    def test_sub_td_memmap_roundtrip(self, idx, tmp_path):
+        td = TensorDict(
+            {"a": torch.randn(4, 3, 2, 1, 5), "b": {"c": torch.randn(4, 3, 2, 1)}},
+            batch_size=[4, 3, 2, 1],
+        )
+        sub = td._get_sub_tensordict(idx)
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        loaded = TensorDict.load_memmap(tmp_path / "sub")
+        assert isinstance(loaded, _SubTensorDict)
+        assert loaded.batch_size == sub.batch_size
+        assert (loaded["a"] == sub["a"]).all()
+        assert (loaded["b", "c"] == sub["b", "c"]).all()
+
+    def test_sub_td_memmap_device_dispatch(self, tmp_path):
+        # device must be forwarded when load_memmap dispatches to another class
+        td = TensorDict({"a": torch.randn(4, 3)}, batch_size=[4, 3])
+        sub = td._get_sub_tensordict((slice(0, 2),))
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        loaded = TensorDict.load_memmap(tmp_path / "sub", device="meta")
+        assert loaded.device == torch.device("meta")
+        assert loaded["a"].device == torch.device("meta")
+
+    def test_sub_td_load_memmap_(self, tmp_path):
+        td = TensorDict({"a": torch.randn(4, 3)}, batch_size=[4, 3])
+        sub = td._get_sub_tensordict((slice(None), slice(0, 2)))
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        td_dest = TensorDict({"a": torch.zeros(4, 3)}, batch_size=[4, 3])
+        sub_dest = td_dest._get_sub_tensordict((slice(None), slice(0, 2)))
+        sub_dest.load_memmap_(tmp_path / "sub")
+        assert (td_dest["a"] == td["a"]).all()
+
+    def test_str_to_index_legacy_format(self):
+        # metadata saved before the tagged index encoding: tuples arrive as
+        # untagged JSON lists
+        legacy = [
+            ["slice", {"start": None, "stop": None, "step": None}],
+            ["slice", {"start": 0, "stop": 2, "step": None}],
+        ]
+        assert _str_to_index(legacy) == (slice(None), slice(0, 2))
+
+
+class TestBackward:
+    def test_scalar_implicit_gradient(self):
+        x = torch.randn(3, requires_grad=True)
+        loss_td = TensorDict(actor_loss=x.sum(), critic_loss=x.pow(2).sum())
+        loss_td.backward()
+        assert torch.allclose(x.grad, 1 + 2 * x.detach())
+
+    def test_scalar_implicit_matches_sum_reduce(self):
+        x = torch.randn(3, requires_grad=True)
+        y = x.detach().clone().requires_grad_()
+
+        def make_loss(t):
+            return TensorDict(actor_loss=t.sum(), critic_loss=t.pow(2).sum())
+
+        make_loss(x).backward()
+        make_loss(y).sum(reduce=True).backward()
+        assert torch.allclose(x.grad, y.grad)
+
+    def test_sum_semantics_unchanged(self):
+        # plain sum still reduces each leaf independently and returns a TensorDict
+        td = TensorDict(a=torch.ones(3), b=torch.ones(2, 2), batch_size=[])
+        td_sum = td.sum()
+        assert isinstance(td_sum, TensorDict)
+        assert td_sum["a"] == 3
+        assert td_sum["b"] == 4
+        assert isinstance(td.sum(reduce=True), torch.Tensor)
+
+    def test_implicit_nonscalar_raises(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2)
+        with pytest.raises(
+            RuntimeError, match="grad can be implicitly created only for scalar outputs"
+        ):
+            out.backward()
+
+    def test_explicit_gradient(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2, b=(x + 1).sum())
+        out.backward(torch.ones_like(out))
+        assert torch.allclose(x.grad, torch.full((3,), 3.0))
+
+    def test_weighted_gradient(self):
+        x = torch.randn(3, requires_grad=True)
+        loss_td = TensorDict(actor_loss=x.sum(), critic_loss=x.pow(2).sum())
+        weights = TensorDict(
+            actor_loss=torch.tensor(0.5), critic_loss=torch.tensor(1.0)
+        )
+        loss_td.backward(weights)
+        assert torch.allclose(x.grad, 0.5 + 2 * x.detach())
+
+    def test_weighted_matches_weighted_sum(self):
+        x = torch.randn(3, requires_grad=True)
+        y = x.detach().clone().requires_grad_()
+
+        def make_loss(t):
+            return TensorDict(actor_loss=t.sum(), critic_loss=t.pow(2).sum())
+
+        weights = TensorDict(
+            actor_loss=torch.tensor(0.5), critic_loss=torch.tensor(1.0)
+        )
+        make_loss(x).backward(weights)
+        (make_loss(y) * weights).sum(reduce=True).backward()
+        assert torch.allclose(x.grad, y.grad)
+
+    def test_nested_keys(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict({"nested": {"a": x * 2}, "b": x.sum()}, batch_size=[])
+        gradient = TensorDict(
+            {"nested": {"a": torch.ones(3)}, "b": torch.tensor(1.0)}, batch_size=[]
+        )
+        out.backward(gradient)
+        assert torch.allclose(x.grad, torch.full((3,), 3.0))
+
+    def test_heterogeneous_shapes_and_dtypes(self):
+        x = torch.randn(3, requires_grad=True)
+        y = torch.randn(2, 2, dtype=torch.float64, requires_grad=True)
+        out = TensorDict(a=x * 2, b=y * 3)
+        gradient = TensorDict(a=torch.ones(3), b=torch.ones(2, 2, dtype=torch.float64))
+        out.backward(gradient)
+        assert torch.allclose(x.grad, torch.full((3,), 2.0))
+        assert torch.allclose(y.grad, torch.full((2, 2), 3.0, dtype=torch.float64))
+
+    def test_mixed_differentiable_leaves(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=(x * 2).sum(), b=torch.ones(4), c="a non-tensor entry")
+        # non-differentiable leaves are ignored, scalar check only applies to `a`
+        out.backward()
+        assert torch.allclose(x.grad, torch.full((3,), 2.0))
+
+    def test_mixed_differentiable_leaves_gradient(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2, b=torch.ones(4))
+        # no gradient needed for the non-differentiable leaf
+        out.backward(TensorDict(a=torch.ones(3)))
+        assert torch.allclose(x.grad, torch.full((3,), 2.0))
+
+    def test_missing_gradient_key(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2)
+        with pytest.raises(KeyError, match="Missing gradient entry for key 'a'"):
+            out.backward(TensorDict(b=torch.ones(3)))
+
+    def test_gradient_shape_mismatch(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2)
+        with pytest.raises(RuntimeError, match="Mismatch in shape"):
+            out.backward(TensorDict(a=torch.ones(4)))
+
+    def test_gradient_wrong_type(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(a=x * 2)
+        with pytest.raises(TypeError, match="gradient must be a TensorDictBase"):
+            out.backward(torch.ones(3))
+
+    def test_no_differentiable_leaves(self):
+        td = TensorDict(a=torch.randn(3), b=torch.ones(2))
+        with pytest.raises(RuntimeError, match="no leaf tensor requiring gradients"):
+            td.backward()
+
+    def test_retain_graph(self):
+        x = torch.randn(3, requires_grad=True)
+        out = TensorDict(loss=(x**2).sum())
+        out.backward(retain_graph=True)
+        out.backward()
+        assert torch.allclose(x.grad, 4 * x.detach())
+
+    def test_create_graph(self):
+        x = torch.randn(3, requires_grad=True)
+        with warnings.catch_warnings():
+            # torch warns about the reference cycle created by create_graph=True
+            warnings.simplefilter("ignore", UserWarning)
+            TensorDict(loss=(x**2).sum()).backward(create_graph=True)
+        assert x.grad.requires_grad
+        x.grad = None
+
+    def test_inputs(self):
+        x = torch.randn(3, requires_grad=True)
+        y = torch.randn(3, requires_grad=True)
+        out = TensorDict(loss=(x * y).sum())
+        out.backward(inputs=[x])
+        assert torch.allclose(x.grad, y.detach())
+        assert y.grad is None
+
+    def test_inputs_tensordict(self):
+        x = torch.randn(3, requires_grad=True)
+        y = torch.randn(3, requires_grad=True)
+        out = TensorDict(loss=(x * y).sum())
+        out.backward(inputs=TensorDict(x=x))
+        assert torch.allclose(x.grad, y.detach())
+        assert y.grad is None
+
+    def test_parity_with_torch(self):
+        x = torch.randn(3, requires_grad=True)
+        y = x.detach().clone().requires_grad_()
+        gradient = torch.randn(3)
+        TensorDict(a=x * 2).backward(TensorDict(a=gradient))
+        (y * 2).backward(gradient)
+        assert torch.allclose(x.grad, y.grad)
 
 
 def _to_float(td, td_name, tmpdir):
