@@ -24,9 +24,13 @@ Measures, per (layout, total size, format):
 Usage::
 
     python benchmarks/scripts/serialization_formats_bench.py [--plot out.png]
+        [--num-threads N]
 
 The ``--plot`` option renders the figure embedded in
-``docs/source/saving.rst`` (requires matplotlib).
+``docs/source/saving.rst`` (requires matplotlib). ``--num-threads`` adds a
+multithreaded save measurement for the formats that support it (memmap
+directory, consolidated, archive); note that for archives the payload is
+written sequentially and threads only affect the metadata staging.
 """
 from __future__ import annotations
 
@@ -121,7 +125,7 @@ def read_all(td):
     return total
 
 
-def bench(root: Path):
+def bench(root: Path, num_threads: int = 0):
     if _has_safetensors:
         # optional dependency: imported lazily on purpose
         from safetensors import safe_open
@@ -150,6 +154,19 @@ def bench(root: Path):
                 torch.save(dict(td.flatten_keys(".").items()), d)
 
             row["save_pt"] = timeit(save_pt, reps)
+            if num_threads:
+                row["save_mt_dir"] = timeit(
+                    lambda td=td, d=d_dir: td.memmap(d, num_threads=num_threads),
+                    reps,
+                )
+                row["save_mt_cons"] = timeit(
+                    lambda td=td, d=d_cons: td.consolidate(d, num_threads=num_threads),
+                    reps,
+                )
+                row["save_mt_tdz"] = timeit(
+                    lambda td=td, d=d_tdz: td.save(d, num_threads=num_threads),
+                    reps,
+                )
             if _has_safetensors:
 
                 def save_sft(td=td, d=d_sft, save_file=save_file):
@@ -235,6 +252,7 @@ def human(t):
 
 
 def print_tables(results):
+    has_mt = any("save_mt_dir" in r for r in results)
     for op in ("save", "open", "read", "copy"):
         print(f"\n=== {op} ===")
         header = f"{'layout':<26}{'MB':>6} |"
@@ -242,6 +260,8 @@ def print_tables(results):
             header += f" {FORMAT_NAMES[key].split(' ')[0]:>12}"
         if op == "save":
             header += f" {'pack-only':>10}"
+            if has_mt:
+                header += f" {'dir-mt':>8} {'cons-mt':>8} {'tdz-mt':>8}"
         print(header)
         for r in results:
             layout = r["layout"].replace("\n", " ")
@@ -250,6 +270,9 @@ def print_tables(results):
                 line += f" {human(r[f'{op}_{key}']):>12}"
             if op == "save":
                 line += f" {human(r['pack_only']):>10}"
+                if has_mt:
+                    for key in ("dir", "cons", "tdz"):
+                        line += f" {human(r[f'save_mt_{key}']):>8}"
             print(line)
 
 
@@ -328,10 +351,16 @@ def plot(results, out: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plot", default=None, help="path of the figure to render")
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=0,
+        help="also measure multithreaded saves with this many threads",
+    )
     args = parser.parse_args()
     root = Path(tempfile.mkdtemp(prefix="tdbench_"))
     try:
-        results = bench(root)
+        results = bench(root, num_threads=args.num_threads)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print_tables(results)

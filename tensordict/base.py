@@ -7500,7 +7500,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 leaves are views into a single storage, and in-place writes do
                 not propagate to the file. Archives and memmap directories are
                 mutually convertible with :func:`~tensordict.pack_memmap` /
-                :func:`~tensordict.unpack_memmap` (or any zip tool).
+                :func:`~tensordict.unpack_memmap` (or any zip tool). Note that
+                the archive payload is written sequentially: ``num_threads``
+                only parallelizes the (metadata-only) staging step.
             compression (str or int, optional): compression for archive
                 entries (``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``
                 or a :mod:`zipfile` constant). Defaults to ``"stored"``
