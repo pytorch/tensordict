@@ -7731,7 +7731,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out: TensorDictBase | None = None,
         robust_key: bool | None = True,
-        subpath: str | tuple[str, ...] | None = None,
+        subpath: NestedKey | None = None,
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
@@ -7759,9 +7759,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
             robust_key (bool, optional): if ``True`` (default), expects robust key encoding was used
                 when saving and decodes filenames accordingly. If ``False``, uses legacy
                 behavior. If ``None``, uses the default robust behavior.
-            subpath (str or tuple of str, optional): a relative path inside
-                the saved tensordict (e.g. ``"module/0"`` or
-                ``("module", "0")``) pointing to a nested tensordict to load.
+            subpath (NestedKey or str path, optional): the location of a
+                nested tensordict to load, as a nested key (e.g.
+                ``("module", "0")``, with arbitrary nesting allowed as usual)
+                or as a ``"/"``-separated string path (e.g. ``"module/0"``).
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
                 archives.
@@ -7832,7 +7833,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 prefix = _ArchivePath.root(prefix)
         if subpath is not None:
             if isinstance(subpath, str):
+                # "/"-separated path form
                 subpath = tuple(part for part in subpath.split("/") if part)
+            else:
+                # NestedKey form: normalize arbitrary nesting, e.g.
+                # ("module", ("0", "sub")) -> ("module", "0", "sub")
+                subpath = _unravel_key_to_tuple(subpath)
+                if not subpath:
+                    raise ValueError(
+                        "subpath must be a string path or a (nested) tuple of "
+                        "strings."
+                    )
             for part in subpath:
                 prefix = prefix / part
             if not (prefix / "meta.json").exists():

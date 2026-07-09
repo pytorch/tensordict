@@ -4980,8 +4980,13 @@ class TestMemmapArchive:
         assert (part["y"] == 1.0).all()
         part = TensorDict.load_memmap(prefix, subpath=("1", "sub"))
         assert (part["y"] == 1.0).all()
+        # nested keys with arbitrary nesting are accepted
+        part = TensorDict.load_memmap(prefix, subpath=("1", ("sub",)))
+        assert (part["y"] == 1.0).all()
         with pytest.raises(ValueError, match="No tensordict found under subpath"):
             TensorDict.load_memmap(prefix, subpath="does/not/exist")
+        with pytest.raises(ValueError, match="No tensordict found under subpath"):
+            TensorDict.load_memmap(prefix, subpath=("does", ("not", "exist")))
 
     def test_archive_meta_device(self, tmp_path):
         td = self._nested_td()
