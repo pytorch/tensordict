@@ -49,6 +49,7 @@ from tensordict.utils import (
     is_tensorclass,
     set_lazy_legacy,
     set_list_to_stack,
+    TensorDictFuture,
 )
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
@@ -513,6 +514,35 @@ class TestGeneric:
         assert (td_ref._consolidated["storage"] == td_c._consolidated["storage"]).all()
         for key, val in td.items(True, True):
             assert td_c[key].dtype == val.dtype
+
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate_return_early(self, use_file, tmpdir):
+        td = TensorDict(
+            {
+                f"key{i}": torch.full((i % 5 + 1,), i, dtype=torch.float32)
+                for i in range(20)
+            },
+            batch_size=[],
+        )
+        td["nested"] = TensorDict({"a": torch.randn(3)}, batch_size=[])
+        td["string"] = "a string!"
+        kwargs = {"filename": Path(tmpdir) / "file.td"} if use_file else {}
+        future = td.consolidate(num_threads=4, return_early=True, **kwargs)
+        assert isinstance(future, TensorDictFuture)
+        td_c = future.result()
+        assert td_c.is_consolidated()
+        assert (td_c == td).all()
+        assert td_c["string"] == "a string!"
+
+        with pytest.raises(NotImplementedError, match="use_buffer"):
+            td.consolidate(
+                filename=Path(tmpdir) / "file2.td",
+                num_threads=4,
+                return_early=True,
+                use_buffer=True,
+            )
+        with pytest.raises(NotImplementedError, match="non_blocking"):
+            td.consolidate(num_threads=4, return_early=True, non_blocking=True)
 
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not is_npu_available(),
