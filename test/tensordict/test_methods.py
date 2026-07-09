@@ -3514,7 +3514,8 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_squeeze_with_none_legacy(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_squeeze = torch.squeeze(td, dim=None)
+        # torch.squeeze no longer accepts dim=None; omitting dim is equivalent
+        td_squeeze = torch.squeeze(td)
         tensor = torch.ones_like(td.get("a").squeeze())
         td_squeeze.set_("a", tensor)
         assert (td_squeeze.get("a") == tensor).all()
@@ -3541,7 +3542,7 @@ class TestTensorDicts(TestTensorDictsBase):
             else contextlib.nullcontext()
         )
         with error_dec:
-            td_squeeze = torch.squeeze(td, dim=None)
+            td_squeeze = torch.squeeze(td)
         if is_lazy:
             return
         assert all(d > 1 for d in td_squeeze.batch_size), td_squeeze.batch_size
