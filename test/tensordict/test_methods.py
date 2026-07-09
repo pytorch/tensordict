@@ -33,6 +33,7 @@ from tensordict import (
     LazyStackedTensorDict,
     pack_memmap,
     PersistentTensorDict,
+    refresh_archive_checksums,
     TensorDict,
     unpack_memmap,
 )
@@ -5034,6 +5035,51 @@ class TestMemmapArchive:
         bad.write_bytes(b"not a zip file")
         with pytest.raises(ValueError, match="not a memory-mapped tensordict"):
             TensorDict.load_memmap(bad)
+
+    def test_archive_mode_rplus(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive, mode="r+")
+        loaded["a"].add_(1)
+        loaded["b", "d"].add_(2)
+        # writes reached the file
+        reloaded = TensorDict.load_memmap(archive)
+        assert (reloaded["a"] == td["a"] + 1).all()
+        assert (reloaded["b", "d"] == td["b", "d"] + 2).all()
+        # the CRCs are stale: zip-level reads fail until refreshed
+        with pytest.raises(zipfile.BadZipFile), zipfile.ZipFile(archive) as zf:
+            zf.read("a.memmap")
+        refresh_archive_checksums(archive)
+        with zipfile.ZipFile(archive) as zf:
+            zf.read("a.memmap")  # does not raise anymore
+        unpack_memmap(archive, tmp_path / "unpacked")
+        assert (TensorDict.load_memmap(tmp_path / "unpacked")["a"] == td["a"] + 1).all()
+
+    def test_archive_mode_rplus_rejects_non_writable_layouts(self, tmp_path):
+        td = self._nested_td()
+        compressed = tmp_path / "compressed.tdz"
+        td.save(compressed, compression="deflate")
+        with pytest.raises(RuntimeError, match="is compressed"):
+            TensorDict.load_memmap(compressed, mode="r+")
+        # misaligned foreign zip
+        td.memmap(tmp_path / "plain")
+        foreign = tmp_path / "foreign.zip"
+        with zipfile.ZipFile(foreign, "w") as zf:
+            for path in sorted((tmp_path / "plain").rglob("*")):
+                if path.is_file():
+                    zf.write(path, path.relative_to(tmp_path / "plain").as_posix())
+        with pytest.raises(RuntimeError, match="is not aligned"):
+            TensorDict.load_memmap(foreign, mode="r+")
+        # nested tensors cannot write through
+        nt = torch.nested.nested_tensor([torch.randn(2, 3), torch.randn(4, 3)])
+        ntpath = tmp_path / "nt.tdz"
+        TensorDict({"nt": nt}, batch_size=[]).save(ntpath)
+        with pytest.raises(RuntimeError, match="nested tensor"):
+            TensorDict.load_memmap(ntpath, mode="r+")
+        # invalid mode
+        with pytest.raises(ValueError, match="mode must be"):
+            TensorDict.load_memmap(tmp_path / "plain", mode="w")
 
     def test_archive_memmapped_source(self, tmp_path):
         # already-memmapped tensordicts are packed straight from their

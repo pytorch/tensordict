@@ -27,6 +27,7 @@ import struct
 import tempfile
 import time
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 
 import torch
@@ -249,6 +250,95 @@ def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
     return prefix
 
 
+def refresh_archive_checksums(archive_path: str | Path) -> Path:
+    """Recomputes the CRC-32 checksums of a memmap archive after in-place writes.
+
+    A tensordict loaded with ``TensorDict.load_memmap(path, mode="r+")``
+    writes through to the archive without updating the CRC-32 that the zip
+    format stores for each entry. :meth:`~tensordict.TensorDictBase.load_memmap`
+    itself never verifies checksums, so this is only needed before handing
+    the modified archive to tools that do (``unzip``, :mod:`zipfile`,
+    :func:`unpack_memmap`).
+
+    Args:
+        archive_path (str or Path): path to the archive to fix up.
+
+    Returns:
+        the path to the archive.
+    """
+    archive_path = Path(archive_path)
+    if not is_memmap_archive(archive_path):
+        raise ValueError(f"{archive_path} is not a memory-mapped tensordict archive.")
+    with zipfile.ZipFile(archive_path) as zf:
+        infos = zf.infolist()
+        start_dir = zf.start_dir
+    new_crcs = {}
+    with open(archive_path, "r+b") as f:
+        for info in infos:
+            if info.filename.endswith("/"):
+                continue
+            f.seek(info.header_offset)
+            header = f.read(_LOCAL_HEADER_SIZE)
+            if header[:4] != _LOCAL_HEADER_SIG:
+                raise RuntimeError(
+                    f"Corrupted local header for entry {info.filename!r} in "
+                    f"{archive_path}."
+                )
+            name_len, extra_len = struct.unpack_from("<2H", header, 26)
+            payload_offset = (
+                info.header_offset + _LOCAL_HEADER_SIZE + name_len + extra_len
+            )
+            if info.compress_type == zipfile.ZIP_STORED:
+                f.seek(payload_offset)
+                crc = 0
+                remaining = info.file_size
+                while remaining:
+                    chunk = f.read(min(remaining, _COPY_CHUNK_SIZE))
+                    if not chunk:
+                        raise RuntimeError(
+                            f"Truncated payload for entry {info.filename!r} "
+                            f"in {archive_path}."
+                        )
+                    crc = zlib.crc32(chunk, crc)
+                    remaining -= len(chunk)
+            else:
+                # compressed entries cannot have been modified in place
+                crc = info.CRC
+            new_crcs[info.filename] = crc
+            if not info.flag_bits & 0x8:
+                # CRC field of the local file header
+                f.seek(info.header_offset + 14)
+                f.write(struct.pack("<I", crc))
+            else:
+                # CRC lives in the data descriptor after the payload,
+                # optionally preceded by a signature
+                f.seek(payload_offset + info.compress_size)
+                descriptor_offset = f.tell()
+                if f.read(4) == b"PK\x07\x08":
+                    descriptor_offset += 4
+                f.seek(descriptor_offset)
+                f.write(struct.pack("<I", crc))
+        # patch the central directory records
+        pos = start_dir
+        for _ in range(len(infos)):
+            f.seek(pos)
+            record = f.read(46)
+            if record[:4] != b"PK\x01\x02":
+                raise RuntimeError(
+                    f"Corrupted central directory record in {archive_path}."
+                )
+            name_len, extra_len, comment_len = struct.unpack_from("<3H", record, 28)
+            (flag_bits,) = struct.unpack_from("<H", record, 8)
+            # mirror zipfile's name decoding (utf-8 flag vs legacy cp437)
+            name = f.read(name_len).decode("utf-8" if flag_bits & 0x800 else "cp437")
+            crc = new_crcs.get(name)
+            if crc is not None:
+                f.seek(pos + 16)
+                f.write(struct.pack("<I", crc))
+            pos += 46 + name_len + extra_len + comment_len
+    return archive_path
+
+
 class _ArchiveEntry:
     __slots__ = ("offset", "size", "compress_type")
 
@@ -264,10 +354,19 @@ class _ArchiveReader:
     The reader parses the zip central directory once, resolves the payload
     offset of every entry (by reading each local header) and exposes leaves
     as zero-copy views into a single memory-mapped ``uint8`` tensor.
+
+    With ``writable=True`` the file is mapped shared: in-place writes to the
+    leaves propagate to the archive (see ``mode="r+"`` in
+    :meth:`~tensordict.TensorDictBase.load_memmap`).
     """
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, writable: bool = False):
         self.path = Path(path)
+        self.writable = writable
+        if writable and not os.access(self.path, os.W_OK):
+            raise PermissionError(
+                f"Cannot open {self.path} with mode='r+': the file is not " f"writable."
+            )
         self._zf = zipfile.ZipFile(self.path)
         self.entries: dict[str, _ArchiveEntry] = {}
         self.dirs: set[str] = {""}
@@ -310,16 +409,18 @@ class _ArchiveReader:
 
     @property
     def storage(self) -> torch.Tensor:
-        # A single MAP_PRIVATE mapping of the whole archive. Slicing it is
-        # free; pages are only read from disk when a leaf is accessed.
-        # Writes are allowed but copy-on-write: they do not reach the file
-        # (which would invalidate the archive checksums).
+        # A single mapping of the whole archive. Slicing it is free; pages
+        # are only read from disk when a leaf is accessed. By default the
+        # mapping is private (MAP_PRIVATE): writes are allowed but
+        # copy-on-write, they do not reach the file (which would invalidate
+        # the archive checksums). With writable=True the mapping is shared
+        # and writes propagate to the file; see refresh_archive_checksums.
         if self._storage is None:
             self._storage = torch.from_file(
                 str(self.path),
                 dtype=torch.uint8,
                 size=os.path.getsize(self.path),
-                shared=False,
+                shared=self.writable,
                 # needed when device ctx differs
                 device=torch.device("cpu"),
             )
@@ -338,12 +439,28 @@ class _ArchiveReader:
         """
         entry = self.entries[name]
         if entry.compress_type != zipfile.ZIP_STORED:
+            if self.writable:
+                raise RuntimeError(
+                    f"Cannot open {self.path} with mode='r+': entry {name!r} "
+                    f"is compressed, so in-place writes cannot propagate to "
+                    f"the file. Re-save the archive without compression to "
+                    f"make it writable."
+                )
             data = self.read_bytes(name)
             if not data:
                 return torch.empty(0, dtype=dtype)
             return torch.frombuffer(bytearray(data), dtype=torch.uint8).view(dtype)
         flat = self.storage[entry.offset : entry.offset + entry.size]
         if entry.offset % dtype.itemsize:
+            if self.writable:
+                raise RuntimeError(
+                    f"Cannot open {self.path} with mode='r+': the payload of "
+                    f"entry {name!r} is not aligned (the archive was likely "
+                    f"written by an external zip tool), so it must be copied "
+                    f"and in-place writes cannot propagate to the file. "
+                    f"Re-save the archive with tensordict to make it "
+                    f"writable."
+                )
             # Foreign archive without aligned payloads: viewing would fail,
             # copy into fresh (offset-0) storage instead.
             flat = flat.clone()
@@ -360,6 +477,13 @@ class _ArchiveReader:
         """
         flat = self.flat_view(name, dtype)
         if isinstance(shape, torch.Tensor):
+            if self.writable:
+                raise RuntimeError(
+                    f"Cannot open {self.path} with mode='r+': entry {name!r} "
+                    f"is a nested tensor, which must be materialized in "
+                    f"memory when loading from an archive, so in-place "
+                    f"writes cannot propagate to the file."
+                )
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
             )
@@ -398,8 +522,8 @@ class _ArchivePath:
         self.at = at
 
     @classmethod
-    def root(cls, path: str | Path) -> _ArchivePath:
-        return cls(_ArchiveReader(path))
+    def root(cls, path: str | Path, *, writable: bool = False) -> _ArchivePath:
+        return cls(_ArchiveReader(path, writable=writable))
 
     def __truediv__(self, other) -> _ArchivePath:
         other = str(other)

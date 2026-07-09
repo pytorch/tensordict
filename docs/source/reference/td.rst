@@ -52,6 +52,7 @@ or ``cat``.
     maybe_dense_stack
     memmap
     pack_memmap
+    refresh_archive_checksums
     save
     stack
     unpack_memmap

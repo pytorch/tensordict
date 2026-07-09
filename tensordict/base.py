@@ -7732,6 +7732,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out: TensorDictBase | None = None,
         robust_key: bool | None = True,
         subpath: NestedKey | None = None,
+        mode: str = "r",
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
@@ -7766,6 +7767,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
                 archives.
+            mode (str, optional): ``"r"`` (default) or ``"r+"``. Only
+                relevant when loading an archive: with ``"r"`` the archive is
+                mapped copy-on-write and in-place writes to the leaves stay
+                in memory; with ``"r+"`` the mapping is shared and in-place
+                writes propagate to the file, like directory-backed
+                tensordicts. ``"r+"`` requires uncompressed, aligned tensor
+                payloads (i.e. archives written by tensordict without
+                ``compression``) and is not available for nested-tensor
+                leaves. In-place writes do not update the per-entry CRC-32
+                stored by the zip format; :meth:`~.load_memmap` ignores
+                checksums, but call
+                :func:`~tensordict.refresh_archive_checksums` before handing
+                a modified archive to tools that verify them (``unzip``,
+                :func:`~tensordict.unpack_memmap`, ...). Directory prefixes
+                are always write-through and ignore this argument.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7820,6 +7836,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 is_shared=False)
 
         """
+        if mode not in ("r", "r+"):
+            raise ValueError(f"mode must be 'r' or 'r+', got {mode!r}.")
         if not isinstance(prefix, _ArchivePath):
             # nested (recursive) calls pass _ArchivePath instances directly
             prefix = Path(prefix)
@@ -7830,7 +7848,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                         f"archive (expected a zip file with a top-level meta.json "
                         f"entry)."
                     )
-                prefix = _ArchivePath.root(prefix)
+                prefix = _ArchivePath.root(prefix, writable=mode == "r+")
         if subpath is not None:
             if isinstance(subpath, str):
                 # "/"-separated path form

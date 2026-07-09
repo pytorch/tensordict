@@ -221,12 +221,25 @@ weights barely do.
 
 .. note::
   Two differences with directory-backed tensordicts are worth keeping in
-  mind. First, an archive-loaded tensordict behaves like the result of
-  :meth:`~tensordict.TensorDictBase.from_consolidated`: leaves are views into
-  a single storage and in-place writes do **not** propagate to the file.
-  Second, archives written by external zip tools (without payload alignment)
-  load correctly, but misaligned leaves are copied in memory rather than
-  viewed.
+  mind. First, by default an archive-loaded tensordict behaves like the
+  result of :meth:`~tensordict.TensorDictBase.from_consolidated`: leaves are
+  views into a single storage and in-place writes do **not** propagate to
+  the file. Second, archives written by external zip tools (without payload
+  alignment) load correctly, but misaligned leaves are copied in memory
+  rather than viewed.
+
+Write-through loading is available as an explicit opt-in with
+``mode="r+"``, restoring the directory semantics for a single file:
+
+  >>> td = TensorDict.load_memmap("data.tdz", mode="r+")
+  >>> td["a"].add_(1)  # written to the archive
+
+In-place writes leave the per-entry CRC-32 checksums of the zip format
+stale. :meth:`~tensordict.TensorDictBase.load_memmap` never verifies
+checksums, so this is harmless within tensordict, but call
+:func:`~tensordict.refresh_archive_checksums` before handing a modified
+archive to tools that do verify them (``unzip``,
+:func:`~tensordict.unpack_memmap`, ...).
 
 Consolidated serialization
 --------------------------
