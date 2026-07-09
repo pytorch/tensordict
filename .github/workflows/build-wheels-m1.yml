@@ -59,3 +59,9 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
+      # Workaround for the M1 runners' Homebrew miniconda base env moving to
+      # py3.14, where test-infra's `conda install -y conda=25.3.0` no longer
+      # solves. Provisioning a fresh miniconda gives an active py3.10 env where
+      # the pin still solves. Drop once pytorch/test-infra bumps its conda pin
+      # (https://github.com/pytorch/test-infra/pull/7951).
+      setup-miniconda: true
