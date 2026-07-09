@@ -354,7 +354,7 @@ class TestGeneric:
     )
     @pytest.mark.filterwarnings("error")
     @pytest.mark.parametrize("device", [None, *get_available_devices()])
-    @pytest.mark.parametrize("num_threads", [0, 1, 2])
+    @pytest.mark.parametrize("num_threads", [0, 1, 2, 8])
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize(
         "nested,hetdtype",
@@ -485,6 +485,34 @@ class TestGeneric:
                     td.unbind(0), torch.load(filename, weights_only=False).unbind(0)
                 )
             ), td_c.to_dict()
+
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate_many_leaves_num_threads(self, use_file, tmpdir):
+        # Exercises the chunked multithreaded copy path with enough leaves
+        # to get several leaves per chunk, mixed dtypes (padding) and a
+        # nested tensordict structure.
+        dtypes = [torch.float32, torch.float16, torch.uint8, torch.float64]
+        td = TensorDict(
+            {
+                f"key{i}": torch.full((i % 7 + 1,), i, dtype=dtypes[i % len(dtypes)])
+                for i in range(50)
+            },
+            batch_size=[],
+        )
+        td["nested"] = TensorDict(
+            {"a": torch.randn(3), "b": torch.arange(11, dtype=torch.int32)},
+            batch_size=[],
+        )
+        if use_file:
+            td_ref = td.consolidate(filename=Path(tmpdir) / "ref.td", num_threads=0)
+            td_c = td.consolidate(filename=Path(tmpdir) / "threaded.td", num_threads=4)
+        else:
+            td_ref = td.consolidate(num_threads=0)
+            td_c = td.consolidate(num_threads=4)
+        assert (td_c == td).all()
+        assert (td_ref._consolidated["storage"] == td_c._consolidated["storage"]).all()
+        for key, val in td.items(True, True):
+            assert td_c[key].dtype == val.dtype
 
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not is_npu_available(),
