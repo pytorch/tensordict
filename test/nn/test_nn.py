@@ -3266,6 +3266,28 @@ class TestTensorDictParams:
         assert any(isinstance(p, nn.Parameter) for p in params.values(True, True))
         assert weakrefs == {weakref.ref(t) for t in params.values(True, True)}
 
+    def test_load_state_dict_missing_entries(self):
+        # A checkpoint that lacks entries for the TensorDictParams prefix must
+        # not raise: loading is a no-op for the missing submodule.
+        with torch.random.fork_rng(devices=[]):
+            params = TensorDict.from_module(nn.Linear(2, 2), as_module=True)
+
+        class MyModule(nn.Module):
+            pass
+
+        module = MyModule()
+        module.params = params
+        before = params.detach().clone()
+        # state_dict that has no key under the "params" prefix
+        incompatible_keys = module.load_state_dict({}, strict=False)
+        assert set(incompatible_keys.missing_keys) == {
+            "params.bias",
+            "params.weight",
+        }
+        assert (params == before).all()
+        with pytest.raises(RuntimeError, match="Missing key"):
+            module.load_state_dict({}, strict=True)
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
