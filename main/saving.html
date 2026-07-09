@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4194+g277933a62.d20260709)
+                  main (0.13.0.dev4197+g775571c73.d20260709)
                 </div>
               
             
@@ -262,6 +262,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">TensorDictModule</a></li>
@@ -541,6 +542,26 @@ a memory-mapped file:</p>
 <p>See <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> for the full API, including
 options like <code class="docutils literal notranslate"><span class="pre">num_threads</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>, and <code class="docutils literal notranslate"><span class="pre">share_memory</span></code>.</p>
 </section>
+<section id="serialization-speed">
+<h2>Serialization speed<a class="headerlink" href="#serialization-speed" title="Permalink to this heading">¶</a></h2>
+<p>The figure below compares the speed of the main serialization paths
+(in-memory consolidation, consolidation to a memory-mapped file, and
+per-leaf directory save), single-threaded and multithreaded, on a payload
+made of a few large leaves and one made of many small leaves. It is
+generated when this documentation is built, so it reflects the machine
+that built these docs; each bar is an average over several runs.</p>
+<figure class="align-default" id="id1">
+<a class="reference external image-reference" href="tutorials/serialization_speed.html"><img alt="Serialization speed of consolidate (in memory and to file) and save, single-threaded and multithreaded." src="_images/sphx_glr_serialization_speed_001.png" /></a>
+<figcaption>
+<p><span class="caption-text">TensorDict serialization speed. Click the figure to open the
+corresponding tutorial.</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>To measure your own hardware, download the script from the
+<a class="reference internal" href="tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py"><span class="std std-ref">serialization speed tutorial</span></a>
+(or run <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">tutorials/sphinx_tuto/serialization_speed.py</span></code> from a
+tensordict checkout) — it only needs <code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> on top of tensordict.</p>
+</section>
 <section id="state-dict-load-state-dict">
 <h2>state_dict / load_state_dict<a class="headerlink" href="#state-dict-load-state-dict" title="Permalink to this heading">¶</a></h2>
 <p>TensorDict and tensorclass support <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> and
@@ -694,6 +715,7 @@ mimics the TensorDict’s one.</p>
 </ul>
 </li>
 <li><a class="reference internal" href="#consolidated-serialization">Consolidated serialization</a></li>
+<li><a class="reference internal" href="#serialization-speed">Serialization speed</a></li>
 <li><a class="reference internal" href="#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
 <li><a class="reference internal" href="#legacy-torchsnapshot-compatibility">Legacy: TorchSnapshot compatibility</a></li>
 </ul>

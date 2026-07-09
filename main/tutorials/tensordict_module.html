@@ -37,7 +37,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Functional Programming with TensorDict" href="functional.html" />
-    <link rel="prev" title="Building tensordicts from streams" href="streamed_tensordict.html" />
+    <link rel="prev" title="Benchmarking TensorDict serialization speed" href="serialization_speed.html" />
   <!-- Google Analytics -->
   
     <script async src="https://www.googletagmanager.com/gtag/js?id=GTM-T8XT4PS"></script>
@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4194+g277933a62.d20260709)
+                  main (0.13.0.dev4197+g775571c73.d20260709)
                 </div>
               
             
@@ -262,6 +262,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
 </ul>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">TensorDictModule</a></li>
@@ -564,13 +565,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  216.6092 us
-TDM:  282.9112 us
-Sequential:  497.6114 us
+Regular:  215.3048 us
+TDM:  284.2687 us
+Sequential:  507.7026 us
 Compiled versions
-Compiled regular:  305.0860 us
-Compiled TDM:  327.7010 us
-Compiled sequential:  323.0160 us
+Compiled regular:  301.2460 us
+Compiled TDM:  323.6670 us
+Compiled sequential:  331.9120 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -670,7 +671,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.265 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.188 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>
@@ -697,7 +698,7 @@ tensordict-free version of their module.</p>
         <a href="functional.html" class="btn btn-neutral float-right" title="Functional Programming with TensorDict" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="streamed_tensordict.html" class="btn btn-neutral" title="Building tensordicts from streams" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="serialization_speed.html" class="btn btn-neutral" title="Benchmarking TensorDict serialization speed" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

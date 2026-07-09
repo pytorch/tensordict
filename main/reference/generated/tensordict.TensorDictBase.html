@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4194+g277933a62.d20260709)
+                  main (0.13.0.dev4197+g775571c73.d20260709)
                 </div>
               
             
@@ -262,6 +262,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensordict_module.html">TensorDictModule</a></li>
@@ -1385,15 +1386,23 @@ to use as a storage for the tensordict.</p>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>num_threads</strong> (<em>integer</em><em>, </em><em>optional</em>) – the number of threads to use for populating
-the storage.</p></li>
+the storage. The leaves are copied by contiguous chunks of
+roughly equal byte size, one chunk per thread. When writing to
+a memory-mapped file with all leaves already on the target
+device, <code class="docutils literal notranslate"><span class="pre">num_threads</span></code> is ignored and a single fused copy is
+used instead, as concurrent writes to a fresh file mapping are
+slower than a sequential one on most filesystems.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em>, </em><em>optional</em>) – an optional device where the storage must be
 instantiated.</p></li>
 <li><p><strong>non_blocking</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">non_blocking</span></code> argument passed to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">copy_()</span></code></a>.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict is the same
 as <code class="docutils literal notranslate"><span class="pre">self</span></code> with updated values. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>return_early</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">num_threads&gt;0</span></code>,
-the method will return a future of the tensordict. The resulting
-tensordict can be queried using <cite>future.result()</cite>.</p></li>
+<li><p><strong>return_early</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">num_threads&gt;1</span></code>,
+the method will return a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictFuture</span></code>
+while the copies keep running in the background. The consolidated
+tensordict can be queried using <code class="docutils literal notranslate"><span class="pre">future.result()</span></code>. Incompatible
+with <code class="docutils literal notranslate"><span class="pre">use_buffer=True</span></code> and <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>use_buffer</strong> (<a class="reference internal" href="#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and a filename is passed, an intermediate
 local buffer will be created in shared memory, and the data will be copied at
 the storage location as a last step. This may be faster than writing directly

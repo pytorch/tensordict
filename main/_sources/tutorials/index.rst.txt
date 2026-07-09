@@ -132,6 +132,23 @@ README Tutos
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_serialization_speed_thumb.png
+    :alt:
+
+  :doc:`/tutorials/serialization_speed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Benchmarking TensorDict serialization speed</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens">
 
 .. only:: html
@@ -232,6 +249,7 @@ README Tutos
    /tutorials/export
    /tutorials/tensordict_keys
    /tutorials/streamed_tensordict
+   /tutorials/serialization_speed
    /tutorials/tensordict_module
    /tutorials/tensordict_shapes
    /tutorials/tensorclass_fashion

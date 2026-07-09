@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4194+g277933a62.d20260709)
+                  main (0.13.0.dev4197+g775571c73.d20260709)
                 </div>
               
             
@@ -262,6 +262,7 @@
 <li class="toctree-l1"><a class="reference internal" href="tensordict_preallocation.html">Pre-allocating memory with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tensordict_memory.html">Simplifying PyTorch Memory Management with TensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="streamed_tensordict.html">Building tensordicts from streams</a></li>
+<li class="toctree-l1"><a class="reference internal" href="serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="tensordict_module.html">TensorDictModule</a></li>
@@ -434,11 +435,11 @@ exit.</p>
         [0.],
         [0.],
         [0.]])
-Output with original params: tensor([[0.5211],
-        [0.4616],
-        [0.7032],
-        [0.3019],
-        [0.7627]], grad_fn=&lt;AddmmBackward0&gt;)
+Output with original params: tensor([[0.2381],
+        [0.2589],
+        [0.0494],
+        [0.2848],
+        [0.1412]], grad_fn=&lt;AddmmBackward0&gt;)
 </pre></div>
 </div>
 </section>
@@ -493,7 +494,7 @@ convert it to a regular dict and pass it directly.</p>
 straightforward to do things like compute per-sample gradients, run
 model ensembles, or implement meta-learning inner loops – all without
 leaving the standard PyTorch API.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.006 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.007 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-functional-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/105b30183ad4a9afd272c38cb842a9b7/functional.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">functional.ipynb</span></code></a></p>
