@@ -7771,6 +7771,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         robust_key: bool | None = True,
         subpath: NestedKey | None = None,
         mode: str = "r",
+        num_threads: int = 0,
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
@@ -7820,6 +7821,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 a modified archive to tools that verify them (``unzip``,
                 :func:`~tensordict.unpack_memmap`, ...). Directory prefixes
                 are always write-through and ignore this argument.
+            num_threads (int, optional): number of threads used to decompress
+                the leaves of a compressed archive (deflate entries are
+                inflated in parallel, which scales nearly linearly). Without
+                compression, loading is a metadata-only operation and this
+                argument has no effect. Defaults to ``0`` (sequential).
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7907,6 +7913,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f"No tensordict found under subpath {'/'.join(subpath)!r} "
                     f"(missing meta.json in {prefix})."
                 )
+        if num_threads > 1 and isinstance(prefix, _ArchivePath):
+            prefix.reader.prefetch_compressed(prefix.at, num_threads)
 
         metadata = _load_metadata(prefix)
         type_name = metadata["_type"]

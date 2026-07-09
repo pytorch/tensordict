@@ -28,6 +28,7 @@ import tempfile
 import time
 import zipfile
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
 import torch
@@ -396,12 +397,13 @@ def refresh_archive_checksums(archive_path: str | Path) -> Path:
 
 
 class _ArchiveEntry:
-    __slots__ = ("offset", "size", "compress_type")
+    __slots__ = ("offset", "size", "compress_type", "compress_size")
 
-    def __init__(self, offset: int, size: int, compress_type: int):
+    def __init__(self, offset: int, size: int, compress_type: int, compress_size: int):
         self.offset = offset
         self.size = size
         self.compress_type = compress_type
+        self.compress_size = compress_size
 
 
 class _ArchiveReader:
@@ -428,6 +430,7 @@ class _ArchiveReader:
         self.dirs: set[str] = {""}
         self.children: dict[str, set[str]] = {"": set()}
         self._storage = None
+        self._decompressed: dict[str, bytes] = {}
         with open(self.path, "rb") as f:
             for info in self._zf.infolist():
                 if info.flag_bits & 0x1:
@@ -449,7 +452,10 @@ class _ArchiveReader:
                     info.header_offset + _LOCAL_HEADER_SIZE + name_len + extra_len
                 )
                 self.entries[name] = _ArchiveEntry(
-                    payload_offset, info.file_size, info.compress_type
+                    payload_offset,
+                    info.file_size,
+                    info.compress_type,
+                    info.compress_size,
                 )
                 parent = posixpath.dirname(name)
                 self._register_dir(parent)
@@ -485,6 +491,38 @@ class _ArchiveReader:
     def read_bytes(self, name: str) -> bytes:
         return self._zf.read(name)
 
+    def prefetch_compressed(self, scope: str, num_threads: int) -> None:
+        """Decompresses deflated tensor entries under ``scope`` in parallel.
+
+        Raw inflate releases the GIL, so this scales nearly linearly with
+        ``num_threads``. Results are cached and consumed (freed) by
+        :meth:`flat_view`. Entries using other compression methods keep the
+        sequential :mod:`zipfile` path.
+        """
+        prefix = f"{scope}/" if scope else ""
+        names = [
+            name
+            for name, entry in self.entries.items()
+            if name.startswith(prefix)
+            and name.endswith(".memmap")
+            and entry.compress_type == zipfile.ZIP_DEFLATED
+        ]
+        if len(names) < 2 or num_threads < 2:
+            return
+        fd = os.open(self.path, os.O_RDONLY)
+        try:
+
+            def inflate(name):
+                entry = self.entries[name]
+                raw = os.pread(fd, entry.compress_size, entry.offset)
+                return name, zlib.decompressobj(-15).decompress(raw)
+
+            with ThreadPoolExecutor(num_threads) as executor:
+                for name, data in executor.map(inflate, names):
+                    self._decompressed[name] = data
+        finally:
+            os.close(fd)
+
     def flat_view(self, name: str, dtype: torch.dtype) -> torch.Tensor:
         """Returns the payload of ``name`` as a flat tensor of ``dtype``.
 
@@ -502,7 +540,9 @@ class _ArchiveReader:
                     f"the file. Re-save the archive without compression to "
                     f"make it writable."
                 )
-            data = self.read_bytes(name)
+            data = self._decompressed.pop(name, None)
+            if data is None:
+                data = self.read_bytes(name)
             if not data:
                 return torch.empty(0, dtype=dtype)
             return torch.frombuffer(bytearray(data), dtype=torch.uint8).view(dtype)

@@ -4956,6 +4956,30 @@ class TestMemmapArchive:
         assert compressed.stat().st_size < stored.stat().st_size
         assert (TensorDict.load_memmap(compressed) == td).all()
 
+    @pytest.mark.parametrize("subpath", [None, "b"])
+    def test_archive_compressed_parallel_load(self, tmp_path, subpath):
+        td = TensorDict(
+            {
+                "a": torch.randn(100, 10),
+                "b": {f"t{i}": torch.randn(100) for i in range(8)},
+            },
+            batch_size=[100],
+        )
+        archive = tmp_path / "comp.tdz"
+        td.save(archive, compression="deflate")
+        loaded = TensorDict.load_memmap(archive, subpath=subpath, num_threads=4)
+        expected = td if subpath is None else td.get(subpath)
+        assert (loaded == expected).all()
+        # num_threads is a no-op on uncompressed archives and directories
+        td.save(tmp_path / "plain.tdz")
+        assert (
+            TensorDict.load_memmap(tmp_path / "plain.tdz", num_threads=4) == td
+        ).all()
+        td.memmap(tmp_path / "plaindir")
+        assert (
+            TensorDict.load_memmap(tmp_path / "plaindir", num_threads=4) == td
+        ).all()
+
     def test_archive_compression_requires_archive(self, tmp_path):
         td = self._nested_td()
         with pytest.raises(ValueError, match="compression is only supported"):
