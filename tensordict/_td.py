@@ -4655,13 +4655,27 @@ class _SubTensorDict(TensorDictBase):
         device: torch.device | None = None,
         *,
         robust_key,
+        out=None,
     ):
-        index = metadata["index"]
+        index = _str_to_index(metadata["index"])
+        if out is not None:
+            if not isinstance(out, _SubTensorDict):
+                raise TypeError(
+                    f"Loading a _SubTensorDict into a {type(out).__name__} output is not supported. "
+                    "Provide a _SubTensorDict as `out` or None."
+                )
+            TensorDict.load_memmap(
+                prefix / "_source",
+                device=device,
+                out=out._source,
+                robust_key=robust_key,
+            )
+            return out
         return _SubTensorDict(
             TensorDict.load_memmap(
                 prefix / "_source", device=device, robust_key=robust_key
             ),
-            _str_to_index(index),
+            index,
         )
 
     def make_memmap(
@@ -5189,31 +5203,46 @@ def _set_tensor_dict(  # noqa: F811
 
 
 def _index_to_str(index: IndexType) -> Any:
+    # Tag containers explicitly: JSON round-trips tuples as lists, so an
+    # untagged encoding cannot distinguish a tuple of indices from an
+    # advanced (list) index when loading back.
     if isinstance(index, tuple):
-        return tuple(_index_to_str(elt) for elt in index)
+        return ("tuple", [_index_to_str(elt) for elt in index])
+    if isinstance(index, list):
+        return ("list", [_index_to_str(elt) for elt in index])
     if isinstance(index, slice):
         return ("slice", {"start": index.start, "stop": index.stop, "step": index.step})
     if isinstance(index, range):
         return ("range", {"start": index.start, "stop": index.stop, "step": index.step})
     if isinstance(index, Tensor):
         return ("tensor", index.tolist(), str(index.device))
+    if index is Ellipsis:
+        return ("ellipsis",)
     return index
 
 
 def _str_to_index(index: Any) -> IndexType:
-    if isinstance(index, tuple):
+    if isinstance(index, (tuple, list)):
         if not len(index):
-            return index
-        if index[0] == "slice":
-            index = index[1]
-            return slice(index["start"], index["stop"], index["step"])
-        if index[0] == "range":
-            index = index[1]
-            return range(index["start"], index["stop"], index["step"])
-        if index[0] == "tensor":
-            index, device = index[1:]
-            return torch.tensor(index, device=device)
-        return tuple(_index_to_str(elt) for elt in index)
+            return ()
+        tag = index[0]
+        if tag == "tuple":
+            return tuple(_str_to_index(elt) for elt in index[1])
+        if tag == "list":
+            return [_str_to_index(elt) for elt in index[1]]
+        if tag == "slice":
+            content = index[1]
+            return slice(content["start"], content["stop"], content["step"])
+        if tag == "range":
+            content = index[1]
+            return range(content["start"], content["stop"], content["step"])
+        if tag == "tensor":
+            content, device = index[1:]
+            return torch.tensor(content, device=device)
+        if tag == "ellipsis":
+            return Ellipsis
+        # Legacy (untagged) metadata: a sequence of indices saved as a tuple.
+        return tuple(_str_to_index(elt) for elt in index)
     return index
 
 

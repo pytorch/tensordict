@@ -7743,22 +7743,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
+        if device is not None:
+            device = torch.device(device)
         if type_name != str(cls):
             import tensordict
 
             for other_cls in tensordict.base._ACCEPTED_CLASSES:
                 if str(other_cls) == type_name:
-                    return other_cls._load_memmap(
-                        prefix, metadata, robust_key=robust_key
-                    )
+                    break
             else:
                 raise RuntimeError(
                     f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
                     f"Did you call _register_tensor_class(cls) on {type_name}?"
                 )
-        if device is not None:
-            device = torch.device(device)
-        out = cls._load_memmap(
+        else:
+            other_cls = cls
+        out = other_cls._load_memmap(
             prefix, metadata, device=device, out=out, robust_key=robust_key
         )
         if (

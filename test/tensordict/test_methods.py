@@ -30,7 +30,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._lazy import _CustomOpTensorDict
-from tensordict._td import _SubTensorDict, is_tensor_collection
+from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.functional import pad
@@ -4816,6 +4816,58 @@ class TestTensorDicts(TestTensorDictsBase):
         outputs = inputs + 1
         outputs.backward(torch.ones_like(outputs))
         assert (inputs.grad == 1).all()
+
+
+class TestSubTensorDictMemmapRoundtrip:
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (slice(None), slice(0, 2)),
+            (slice(None), slice(0, 2, None)),
+            (torch.tensor([0, 2]),),
+            ([0, 2],),
+            1,
+        ],
+    )
+    def test_sub_td_memmap_roundtrip(self, idx, tmp_path):
+        td = TensorDict(
+            {"a": torch.randn(4, 3, 2, 1, 5), "b": {"c": torch.randn(4, 3, 2, 1)}},
+            batch_size=[4, 3, 2, 1],
+        )
+        sub = td._get_sub_tensordict(idx)
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        loaded = TensorDict.load_memmap(tmp_path / "sub")
+        assert isinstance(loaded, _SubTensorDict)
+        assert loaded.batch_size == sub.batch_size
+        assert (loaded["a"] == sub["a"]).all()
+        assert (loaded["b", "c"] == sub["b", "c"]).all()
+
+    def test_sub_td_memmap_device_dispatch(self, tmp_path):
+        # device must be forwarded when load_memmap dispatches to another class
+        td = TensorDict({"a": torch.randn(4, 3)}, batch_size=[4, 3])
+        sub = td._get_sub_tensordict((slice(0, 2),))
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        loaded = TensorDict.load_memmap(tmp_path / "sub", device="meta")
+        assert loaded.device == torch.device("meta")
+        assert loaded["a"].device == torch.device("meta")
+
+    def test_sub_td_load_memmap_(self, tmp_path):
+        td = TensorDict({"a": torch.randn(4, 3)}, batch_size=[4, 3])
+        sub = td._get_sub_tensordict((slice(None), slice(0, 2)))
+        sub.memmap(tmp_path / "sub", copy_existing=True)
+        td_dest = TensorDict({"a": torch.zeros(4, 3)}, batch_size=[4, 3])
+        sub_dest = td_dest._get_sub_tensordict((slice(None), slice(0, 2)))
+        sub_dest.load_memmap_(tmp_path / "sub")
+        assert (td_dest["a"] == td["a"]).all()
+
+    def test_str_to_index_legacy_format(self):
+        # metadata saved before the tagged index encoding: tuples arrive as
+        # untagged JSON lists
+        legacy = [
+            ["slice", {"start": None, "stop": None, "step": None}],
+            ["slice", {"start": 0, "stop": 2, "step": None}],
+        ]
+        assert _str_to_index(legacy) == (slice(None), slice(0, 2))
 
 
 class TestBackward:
