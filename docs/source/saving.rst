@@ -251,28 +251,36 @@ archive to tools that do verify them (``unzip``,
 :func:`~tensordict.unpack_memmap`, ...).
 
 How do the three on-disk representations (memmap directory, consolidated
-file, archive) compare speed-wise? All three load lazily through ``mmap``,
-so bulk read throughput is essentially identical; the differences are in the
-per-entry overheads. Opening scales with the number of entries and favors
-the single-file formats (one metadata parse instead of one file open per
-leaf). Saving an archive streams the tensor bytes into the file in a single
-pass and is comparable to a directory save, with a per-entry overhead that
-shows for many-small-leaf layouts. Copying the saved artifact is where
-archives shine: a directory pays per-file latency, which dominates for
+file, archive) compare speed-wise, including against ``torch.save`` and
+safetensors? All of these load lazily through ``mmap``, so bulk read
+throughput is essentially identical; the differences are in the per-entry
+overheads. Opening scales with the number of entries and favors the
+single-file formats (one metadata parse instead of one file open per leaf).
+Saving an archive streams the tensor bytes into the file in a single pass
+and is comparable to a directory save, with a per-entry overhead that shows
+for many-small-leaf layouts. Copying the saved artifact is where single
+files shine: a directory pays per-file latency, which dominates for
 many-small-leaf layouts on local disk and grows with round-trip time on
-network filesystems.
+network filesystems. Note that ``torch.save`` and safetensors are measured
+on their fastest paths (flat tensor dicts, ``torch.load(mmap=True,
+weights_only=True)`` and mmap-backed loading respectively) and do not
+represent tensordict structure natively: keys are flattened at save time
+and the nesting rebuilt at load time.
 
 .. figure:: _static/img/memmap_formats_benchmark.png
    :width: 100%
    :alt: Barplots comparing save, open, read and copy times of memmap
-         directories, consolidated files and zip archives across three
-         tensordict layouts.
+         directories, consolidated files, zip archives, torch.save files
+         and safetensors files across three tensordict layouts.
 
    Serialization timings across layouts (log scale, lower is better),
    measured on a laptop SSD with a warm page cache. ``flat``: 8 large
    leaves; ``many small``: 2000 leaves in 100 nested groups; ``deep``: a
-   12-level nesting chain with 48 leaves. Reproducible with
-   ``benchmarks/scripts/serialization_formats_bench.py``.
+   12-level nesting chain with 48 leaves. Reproduce (and re-render this
+   figure) with::
+
+       python benchmarks/scripts/serialization_formats_bench.py \
+           --plot docs/source/_static/img/memmap_formats_benchmark.png
 
 Consolidated serialization
 --------------------------
