@@ -4720,7 +4720,7 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
         True
     """
 
-    def _legacy_squeeze(self, dim: int | None) -> Self:
+    def _legacy_squeeze(self, dim: int | None = None) -> Self:
         if dim is not None and dim < 0:
             dim = self.batch_dims + dim
         if dim == self.custom_op_kwargs.get("dim"):
