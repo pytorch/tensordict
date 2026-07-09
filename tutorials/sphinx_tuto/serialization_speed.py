@@ -31,6 +31,7 @@ of the same kind of payload: a few large leaves and many small leaves.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -77,8 +78,8 @@ def summarize(times):
 ##############################################################################
 # The serialization methods
 # -------------------------
-# Files and directories are created fresh for every run (a new name each
-# time), so that we measure cold writes rather than in-place overwrites.
+# Each method returns the path it wrote (or ``None`` for the in-memory
+# variant) so that the benchmark loop can clean up between runs.
 
 
 def make_methods(td, tmpdir):
@@ -88,19 +89,38 @@ def make_methods(td, tmpdir):
         td.consolidate(num_threads=num_threads)
 
     def consolidate_to_file(num_threads):
-        td.consolidate(
-            filename=Path(tmpdir) / f"consolidate{next(counter)}.td",
-            num_threads=num_threads,
-        )
+        filename = Path(tmpdir) / f"consolidate{next(counter)}.td"
+        td.consolidate(filename=filename, num_threads=num_threads)
+        return filename
 
     def save(num_threads):
-        td.save(Path(tmpdir) / f"save{next(counter)}", num_threads=num_threads)
+        prefix = Path(tmpdir) / f"save{next(counter)}"
+        td.save(prefix, num_threads=num_threads)
+        return prefix
 
     return {
         "consolidate\n(memory)": consolidate,
         "consolidate\n(file)": consolidate_to_file,
         "save\n(directory)": save,
     }
+
+
+def cleanup(path):
+    """Removes a written artifact and flushes the writeback backlog.
+
+    Runs outside the timed region: it keeps disk usage bounded and, more
+    importantly, makes the runs independent. Without it, dirty pages from
+    earlier runs accumulate and the operating system throttles later
+    writes, which inflates both the timings and their spread.
+    """
+    if path is None:
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+    if hasattr(os, "sync"):
+        os.sync()
 
 
 ##############################################################################
@@ -117,12 +137,13 @@ for layout_name, td in LAYOUTS.items():
         for method_name, method in make_methods(td, tmpdir).items():
             times = {0: [], NUM_THREADS: []}
             for num_threads in times:  # warmup
-                method(num_threads)
+                cleanup(method(num_threads))
             for _ in range(N_REPEATS):
                 for num_threads in times:
                     t0 = time.perf_counter()
-                    method(num_threads)
+                    path = method(num_threads)
                     times[num_threads].append((time.perf_counter() - t0) * 1000)
+                    cleanup(path)
             for num_threads, values in times.items():
                 results[layout_name, method_name, num_threads] = summarize(values)
 
