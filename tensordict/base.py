@@ -73,6 +73,7 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _DTYPE_TO_STR_DTYPE,
     _GENERIC_NESTED_ERR,
+    _get_shared_executor,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_non_tensor,
@@ -7079,13 +7080,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 raise NotImplementedError(
                     "return_early is not implemented yet for `consolidate`."
                 )
-            with ThreadPoolExecutor(num_threads) as executor:
-                wait(
-                    [
-                        executor.submit(_copy_chunk, start_idx, stop_idx)
-                        for start_idx, stop_idx in chunks
-                    ]
-                )
+            executor = _get_shared_executor(num_threads)
+            wait(
+                [
+                    executor.submit(_copy_chunk, start_idx, stop_idx)
+                    for start_idx, stop_idx in chunks
+                ]
+            )
             if non_blocking and (device is None or device.type != "cuda"):
                 # sync if needed
                 self._sync_all()
@@ -7271,30 +7272,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=True,
-                    like=False,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            executor = _get_shared_executor(num_threads)
+            futures = []
+            result = self._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=True,
+                like=False,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -7501,30 +7495,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
 
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                    like=False,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            executor = _get_shared_executor(num_threads)
+            futures = []
+            result = self._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=False,
+                like=False,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
 
         return self._memmap_(
             prefix=prefix,
@@ -7603,40 +7590,31 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
+            executor = _get_shared_executor(num_threads)
+            futures = []
 
-                # we create an empty copy of self
-                # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
-                # if both are in filesystem
-                def empty(x):
-                    return torch.empty((), device=x.device, dtype=x.dtype).expand(
-                        x.shape
-                    )
+            # we create an empty copy of self
+            # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
+            # if both are in filesystem
+            def empty(x):
+                return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-                input = self.apply(empty)
-                result = input._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                    like=True,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            input = self.apply(empty)
+            result = input._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=False,
+                like=True,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
 
         def empty_expand(x):
             return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
