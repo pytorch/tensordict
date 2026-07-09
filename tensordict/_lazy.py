@@ -2863,23 +2863,31 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _send(
         self,
-        dst: int,
+        dst: int | None,
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_dst: int | None = None,
     ) -> int:
         for td in self.tensordicts:
-            _tag = td._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
+            _tag = td._send(
+                dst,
+                _tag=_tag,
+                pseudo_rand=pseudo_rand,
+                group=group,
+                group_dst=group_dst,
+            )
         return _tag
 
     def _isend(
         self,
-        dst: int,
+        dst: int | None,
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
         return_early: bool = False,
+        group_dst: int | None = None,
     ) -> int | list[torch.Future]:
         if _futures is None:
             is_root = True
@@ -2888,7 +2896,12 @@ class LazyStackedTensorDict(TensorDictBase):
             is_root = False
         for td in self.tensordicts:
             _tag = td._isend(
-                dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures, group=group
+                dst,
+                _tag=_tag,
+                pseudo_rand=pseudo_rand,
+                _futures=_futures,
+                group=group,
+                group_dst=group_dst,
             )
         if is_root and not return_early:
             for _future in _futures:
@@ -2899,23 +2912,33 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _recv(
         self,
-        src: int,
+        src: int | None,
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        non_blocking: bool = False,
+        group_src: int | None = None,
     ) -> int:
         for td in self.tensordicts:
-            _tag = td._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
+            _tag = td._recv(
+                src,
+                _tag=_tag,
+                pseudo_rand=pseudo_rand,
+                group=group,
+                non_blocking=non_blocking,
+                group_src=group_src,
+            )
         return _tag
 
     def _irecv(
         self,
-        src: int,
+        src: int | None,
         return_premature: bool = False,
         _tag: int = -1,
         _future_list: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
+        group_src: int | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         root = False
         if _future_list is None:
@@ -2929,6 +2952,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 _future_list=_future_list,
                 pseudo_rand=pseudo_rand,
                 group=group,
+                group_src=group_src,
             )
 
         if not root:
