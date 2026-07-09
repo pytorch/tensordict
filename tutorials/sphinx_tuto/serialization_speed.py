@@ -53,7 +53,7 @@ from tensordict import TensorDict
 # occasionally hiccup (page-cache writeback), which would dominate a mean.
 
 SCALE = 1
-N_REPEATS = 7
+N_REPEATS = 20
 NUM_THREADS = min(8, os.cpu_count() or 1)
 
 LAYOUTS = {
@@ -68,18 +68,8 @@ LAYOUTS = {
 }
 
 
-def timed(fn):
-    """Runs ``fn`` once as warmup, then ``N_REPEATS`` times.
-
-    Returns the median and the (lower, upper) distances to the 25th/75th
-    percentiles, in milliseconds.
-    """
-    fn()
-    times = []
-    for _ in range(N_REPEATS):
-        t0 = time.perf_counter()
-        fn()
-        times.append((time.perf_counter() - t0) * 1000)
+def summarize(times):
+    """Returns the median and the (lower, upper) distances to the 25th/75th percentiles."""
     q25, median, q75 = np.percentile(times, [25, 50, 75])
     return median, (median - q25, q75 - median)
 
@@ -116,15 +106,25 @@ def make_methods(td, tmpdir):
 ##############################################################################
 # Running the benchmark
 # ---------------------
+# For each method, the single-threaded and multithreaded runs are
+# interleaved rather than run in two separate batches: repeated writes make
+# the filesystem progressively slower (page-cache fill, writeback backlog),
+# and interleaving spreads that drift equally over both settings.
 
 results = {}
 for layout_name, td in LAYOUTS.items():
     with tempfile.TemporaryDirectory() as tmpdir:
         for method_name, method in make_methods(td, tmpdir).items():
-            for num_threads in (0, NUM_THREADS):
-                results[layout_name, method_name, num_threads] = timed(
-                    lambda method=method, num_threads=num_threads: method(num_threads)
-                )
+            times = {0: [], NUM_THREADS: []}
+            for num_threads in times:  # warmup
+                method(num_threads)
+            for _ in range(N_REPEATS):
+                for num_threads in times:
+                    t0 = time.perf_counter()
+                    method(num_threads)
+                    times[num_threads].append((time.perf_counter() - t0) * 1000)
+            for num_threads, values in times.items():
+                results[layout_name, method_name, num_threads] = summarize(values)
 
 ##############################################################################
 # Plotting
