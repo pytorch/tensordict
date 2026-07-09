@@ -6872,9 +6872,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
             inplace (bool, optional): if ``True``, the resulting tensordict is the same
                 as ``self`` with updated values. Defaults to ``False``.
-            return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict. The resulting
-                tensordict can be queried using `future.result()`.
+            return_early (bool, optional): if ``True`` and ``num_threads>1``,
+                the method will return a :class:`~tensordict.utils.TensorDictFuture`
+                while the copies keep running in the background. The consolidated
+                tensordict can be queried using ``future.result()``. Incompatible
+                with ``use_buffer=True`` and ``non_blocking=True``. Defaults to
+                ``False``.
             use_buffer (bool, optional): if ``True`` and a filename is passed, an intermediate
                 local buffer will be created in shared memory, and the data will be copied at
                 the storage location as a last step. This may be faster than writing directly
@@ -6998,14 +7001,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
         if num_threads is None:
             num_threads = 0
 
-        use_threads = num_threads > 1 and len(flat_dict) > 1
-        if use_threads and filename is not None:
+        if return_early and num_threads > 1:
+            if use_buffer:
+                raise NotImplementedError(
+                    "return_early=True is not supported with use_buffer=True in `consolidate`: "
+                    "the buffer must be written to the file once the copies are done."
+                )
+            if non_blocking:
+                raise NotImplementedError(
+                    "return_early=True is not supported with non_blocking=True in `consolidate`: "
+                    "the storage cannot be synchronized once the copies are done."
+                )
+        use_threads = num_threads > 1 and (return_early or len(flat_dict) > 1)
+        if use_threads and filename is not None and not return_early:
             # Concurrent writes into a freshly created memory-mapped file are
             # dominated by page-fault and writeback contention and measure
             # 2x-4x slower than a single fused copy on local filesystems.
             # Threads only pay off there when they can overlap device
-            # transfers.
+            # transfers. With return_early=True threading is about freeing the
+            # main thread rather than raw speed, so it is kept in that case.
             use_threads = any(v.device != storage.device for v in flat_dict.values())
+        consolidate_futures = None
         if use_threads:
             values = list(flat_dict.values())
 
@@ -7075,21 +7091,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     if idx > chunk_start:
                         chunks.append((chunk_start, idx))
                     chunk_start = idx
-            if return_early:
-                # TODO: We'd need to make the result construction lazy to make this a thing
-                raise NotImplementedError(
-                    "return_early is not implemented yet for `consolidate`."
-                )
             executor = _get_shared_executor(num_threads)
-            wait(
-                [
-                    executor.submit(_copy_chunk, start_idx, stop_idx)
-                    for start_idx, stop_idx in chunks
-                ]
-            )
-            if non_blocking and (device is None or device.type != "cuda"):
-                # sync if needed
-                self._sync_all()
+            futures = [
+                executor.submit(_copy_chunk, start_idx, stop_idx)
+                for start_idx, stop_idx in chunks
+            ]
+            if return_early:
+                # the result construction below only manipulates storage
+                # views and metadata, so it can proceed while the copies are
+                # still running
+                consolidate_futures = futures
+            else:
+                wait(futures)
+                if non_blocking and (device is None or device.type != "cuda"):
+                    # sync if needed
+                    self._sync_all()
         else:
 
             def _view_and_pad(tensor):
@@ -7187,6 +7203,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # with open(Path(filename).with_suffix(".json"), "wb") as f:
             #     metadata_dict["size"] = filesize
             #     f.write(json.dumps(metadata_dict))
+        if consolidate_futures is not None:
+            return TensorDictFuture(consolidate_futures, result)
         return result
 
     @classmethod
