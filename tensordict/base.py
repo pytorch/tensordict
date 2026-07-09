@@ -53,6 +53,7 @@ import numpy as np
 import torch
 from tensordict._archive import (
     _ArchivePath,
+    _make_archive_like,
     _save_as_archive,
     is_memmap_archive,
     TENSORDICT_ARCHIVE_SUFFIX,
@@ -7601,12 +7602,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
     ) -> Self:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
                 be stored. The directory tree structure will mimic the tensordict's.
+                If ``prefix`` ends with ``".tdz"`` (or ``archive=True`` is
+                passed), a preallocated single-file archive is created
+                instead. See ``archive`` below.
             copy_existing (bool): If False (default), an exception will be raised if an
                 entry in the tensordict is already a tensor stored on disk
                 with an associated file, but is not saved in the correct
@@ -7630,6 +7635,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 handles keys with path separators and special characters. If ``False``,
                 uses legacy behavior (keys used as-is). If ``None``, uses the default
                 robust behavior.
+            archive (bool, optional): if ``True``, ``prefix`` designates a
+                single file and a preallocated, zero-filled memmap archive is
+                created and loaded back with
+                ``load_memmap(prefix, mode="r+")``: the returned tensordict
+                writes through to the archive. If ``None`` (default), archive
+                mode is enabled when ``prefix`` ends with ``".tdz"``.
+                In-place writes leave the zip per-entry checksums stale; call
+                :func:`~tensordict.refresh_archive_checksums` before handing
+                the archive to tools that verify them. Nested tensors are not
+                supported in this mode.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -7654,6 +7669,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        if archive is None:
+            archive = (
+                prefix is not None and Path(prefix).suffix == TENSORDICT_ARCHIVE_SUFFIX
+            )
+        if archive:
+            if prefix is None:
+                raise ValueError("A path is required to write a memmap archive.")
+            if return_early:
+                raise NotImplementedError(
+                    "return_early is not supported when writing a memmap archive."
+                )
+            _make_archive_like(
+                self,
+                prefix,
+                num_threads=num_threads,
+                copy_existing=copy_existing,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            return TensorDictBase.load_memmap(prefix, mode="r+")
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             with (

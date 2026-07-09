@@ -234,6 +234,15 @@ Write-through loading is available as an explicit opt-in with
   >>> td = TensorDict.load_memmap("data.tdz", mode="r+")
   >>> td["a"].add_(1)  # written to the archive
 
+The preallocation workflow of :meth:`~tensordict.TensorDictBase.memmap_like`
+works with archives as well: pointing it at a ``".tdz"`` path creates a
+zero-filled archive and returns a write-through tensordict backed by it,
+i.e. a dataset buffer that lives in a single file:
+
+  >>> data = datum.expand(1_000_000)
+  >>> buffer = data.memmap_like("/path/to/data.tdz")
+  >>> buffer[0] = datum  # written to the archive
+
 In-place writes leave the per-entry CRC-32 checksums of the zip format
 stale. :meth:`~tensordict.TensorDictBase.load_memmap` never verifies
 checksums, so this is harmless within tensordict, but call
@@ -246,11 +255,12 @@ file, archive) compare speed-wise? All three load lazily through ``mmap``,
 so bulk read throughput is essentially identical; the differences are in the
 per-entry overheads. Opening scales with the number of entries and favors
 the single-file formats (one metadata parse instead of one file open per
-leaf). Saving an archive currently pays an extra staging pass over a
-directory save. Copying the saved artifact is where archives shine: a
-directory pays per-file latency, which dominates for many-small-leaf
-layouts on local disk and grows with round-trip time on network
-filesystems.
+leaf). Saving an archive streams the tensor bytes into the file in a single
+pass and is comparable to a directory save, with a per-entry overhead that
+shows for many-small-leaf layouts. Copying the saved artifact is where
+archives shine: a directory pays per-file latency, which dominates for
+many-small-leaf layouts on local disk and grows with round-trip time on
+network filesystems.
 
 .. figure:: _static/img/memmap_formats_benchmark.png
    :width: 100%
@@ -261,7 +271,8 @@ filesystems.
    Serialization timings across layouts (log scale, lower is better),
    measured on a laptop SSD with a warm page cache. ``flat``: 8 large
    leaves; ``many small``: 2000 leaves in 100 nested groups; ``deep``: a
-   12-level nesting chain with 48 leaves.
+   12-level nesting chain with 48 leaves. Reproducible with
+   ``benchmarks/scripts/serialization_formats_bench.py``.
 
 Consolidated serialization
 --------------------------

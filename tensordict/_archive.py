@@ -33,6 +33,7 @@ from pathlib import Path, PurePosixPath
 import torch
 
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
 
 # Suffix that triggers archive mode by default in ``save``/``memmap``.
 TENSORDICT_ARCHIVE_SUFFIX = ".tdz"
@@ -126,10 +127,34 @@ def _padding_extra(header_offset: int, name_len: int, alignment: int) -> bytes:
     return struct.pack("<HH", _PAD_EXTRA_ID, pad) + b"\x00" * pad
 
 
+def _file_chunks(path: Path):
+    """Yields the content of a file in bounded chunks."""
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(_COPY_CHUNK_SIZE)
+            if not chunk:
+                return
+            yield chunk
+
+
+def _tensor_chunks(tensor: torch.Tensor):
+    """Yields the raw bytes of a tensor in bounded chunks."""
+    if tensor.requires_grad:
+        tensor = tensor.data
+    if tensor.device.type != "cpu":
+        tensor = tensor.cpu()
+    if not tensor.is_contiguous():
+        tensor = tensor.contiguous()
+    array = tensor.view(-1).view(torch.uint8).numpy()
+    view = memoryview(array)
+    for i in range(0, len(view), _COPY_CHUNK_SIZE):
+        yield view[i : i + _COPY_CHUNK_SIZE]
+
+
 def _write_entry(
     zf: zipfile.ZipFile,
     arcname: str,
-    src,
+    chunks,
     size: int,
     *,
     compress_type: int,
@@ -153,7 +178,8 @@ def _write_entry(
                 "change in the zipfile local header layout; please file an "
                 "issue on the tensordict repository."
             )
-        shutil.copyfileobj(src, dst, _COPY_CHUNK_SIZE)
+        for chunk in chunks:
+            dst.write(chunk)
 
 
 def pack_memmap(
@@ -205,23 +231,53 @@ def pack_memmap(
             f"{prefix} does not look like a memory-mapped tensordict directory "
             f"(no meta.json found)."
         )
+    _pack_dir(
+        prefix, archive_path, compression=compression, compresslevel=compresslevel
+    )
+    return archive_path
+
+
+def _pack_dir(
+    prefix: Path,
+    archive_path: Path,
+    *,
+    compression: str | int | None,
+    compresslevel: int | None = None,
+    file_to_source: dict | None = None,
+) -> None:
+    """Streams a memmap directory into a zip archive.
+
+    ``file_to_source`` optionally maps staging file paths to in-memory
+    tensors: the entry bytes are then streamed from the tensor rather than
+    from the (possibly empty) staging file. This is what lets the direct
+    writer stage metadata-only (sparse) directories.
+    """
     compress_type = _resolve_compression(compression)
     with zipfile.ZipFile(archive_path, "w", allowZip64=True) as zf:
         for filepath in _iter_memmap_dir(prefix):
             arcname = filepath.relative_to(prefix).as_posix()
             align = filepath.suffix == ".memmap"
             entry_compression = compress_type if align else zipfile.ZIP_STORED
-            with open(filepath, "rb") as src:
-                _write_entry(
-                    zf,
-                    arcname,
-                    src,
-                    filepath.stat().st_size,
-                    compress_type=entry_compression,
-                    compresslevel=compresslevel,
-                    align=align,
-                )
-    return archive_path
+            source = (
+                file_to_source.get(filepath.resolve())
+                if file_to_source is not None
+                else None
+            )
+            if source is not None:
+                chunks = _tensor_chunks(source)
+                size = source.numel() * source.element_size()
+            else:
+                chunks = _file_chunks(filepath)
+                size = filepath.stat().st_size
+            _write_entry(
+                zf,
+                arcname,
+                chunks,
+                size,
+                compress_type=entry_compression,
+                compresslevel=compresslevel,
+                align=align,
+            )
 
 
 def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
@@ -601,6 +657,90 @@ def _memmap_tensor_from_path(
     )
 
 
+def _check_archive_target(archive_path: Path, existsok: bool) -> None:
+    if archive_path.is_dir():
+        raise ValueError(
+            f"Cannot write an archive at {archive_path}: it is an existing "
+            f"directory."
+        )
+    if archive_path.exists() and not existsok:
+        raise RuntimeError(
+            f"A file already exists at {archive_path}, cannot save the "
+            f"tensordict there. Set existsok=True to overwrite."
+        )
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _write_archive_from_td(
+    td,
+    archive_path: Path,
+    *,
+    like: bool,
+    num_threads: int = 0,
+    compression: str | int | None = None,
+    copy_existing: bool = False,
+    share_non_tensor: bool = False,
+    robust_key: bool | None = True,
+) -> Path:
+    """Writes ``td`` to an archive through a metadata-only staging directory.
+
+    ``memmap_like`` stages the directory structure (``meta.json`` files and
+    empty, sparse ``*.memmap`` files), which yields the exact archive layout
+    without writing any tensor data. Tensor bytes are then streamed straight
+    from ``td`` into the zip -- a single data pass. With ``like=True`` the
+    (zero) staging bytes themselves are streamed, producing a preallocated
+    writable archive.
+
+    Nested-tensor leaves are not supported by ``memmap_like``; tensordicts
+    containing them fall back to full staging via ``memmap``.
+    """
+    # circular import: base imports this module
+    from tensordict.base import _NESTED_TENSORS_AS_LISTS
+
+    leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+    has_nested = any(getattr(v, "is_nested", False) for v in leaves)
+    staging = tempfile.mkdtemp(dir=archive_path.parent, prefix=f".{archive_path.name}.")
+    try:
+        file_to_source = None
+        if like or not has_nested:
+            td_stage = td.memmap_like(
+                prefix=staging,
+                copy_existing=copy_existing,
+                num_threads=num_threads,
+                share_non_tensor=share_non_tensor,
+                robust_key=robust_key,
+                existsok=True,
+            )
+            if not like:
+                staged_leaves = td_stage.values(
+                    True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+                )
+                file_to_source = {}
+                for source, staged in _zip_strict(leaves, staged_leaves):
+                    filename = getattr(staged, "filename", None)
+                    if filename is not None:
+                        file_to_source[Path(filename).resolve()] = source
+        else:
+            # nested tensors are not supported by memmap_like: fall back to
+            # writing the data to the staging directory
+            td.memmap(
+                prefix=staging,
+                copy_existing=copy_existing,
+                num_threads=num_threads,
+                share_non_tensor=share_non_tensor,
+                robust_key=robust_key,
+            )
+        _pack_dir(
+            Path(staging),
+            archive_path,
+            compression=compression,
+            file_to_source=file_to_source,
+        )
+        return archive_path
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def _save_as_archive(
     td,
     archive_path: str | Path,
@@ -615,21 +755,13 @@ def _save_as_archive(
     """Writes ``td`` to a single-file memmap archive.
 
     If ``td`` is already memory-mapped on disk, its directory is packed
-    directly. Otherwise the tensordict is staged to a temporary memmap
-    directory next to ``archive_path`` (so both live on the same
-    filesystem) and packed, after which the staging directory is removed.
+    directly. Otherwise the tensordict is written through a metadata-only
+    staging directory next to ``archive_path`` (see
+    :func:`_write_archive_from_td`): tensor bytes are streamed from memory
+    into the zip in a single pass.
     """
     archive_path = Path(archive_path)
-    if archive_path.is_dir():
-        raise ValueError(
-            f"Cannot write an archive at {archive_path}: it is an existing "
-            f"directory."
-        )
-    if archive_path.exists() and not existsok:
-        raise RuntimeError(
-            f"A file already exists at {archive_path}, cannot save the "
-            f"tensordict there. Set existsok=True to overwrite."
-        )
+    _check_archive_target(archive_path, existsok)
     saved_prefix = getattr(td, "_memmap_prefix", None)
     if (
         td.is_memmap()
@@ -637,16 +769,37 @@ def _save_as_archive(
         and (saved_prefix / "meta.json").exists()
     ):
         return pack_memmap(saved_prefix, archive_path, compression=compression)
-    archive_path.parent.mkdir(parents=True, exist_ok=True)
-    staging = tempfile.mkdtemp(dir=archive_path.parent, prefix=f".{archive_path.name}.")
-    try:
-        td.memmap(
-            prefix=staging,
-            copy_existing=copy_existing,
-            num_threads=num_threads,
-            share_non_tensor=share_non_tensor,
-            robust_key=robust_key,
-        )
-        return pack_memmap(staging, archive_path, compression=compression)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    return _write_archive_from_td(
+        td,
+        archive_path,
+        like=False,
+        num_threads=num_threads,
+        compression=compression,
+        copy_existing=copy_existing,
+        share_non_tensor=share_non_tensor,
+        robust_key=robust_key,
+    )
+
+
+def _make_archive_like(
+    td,
+    archive_path: str | Path,
+    *,
+    num_threads: int = 0,
+    copy_existing: bool = False,
+    share_non_tensor: bool = False,
+    existsok: bool = True,
+    robust_key: bool | None = True,
+) -> Path:
+    """Preallocates a writable, zero-filled memmap archive shaped like ``td``."""
+    archive_path = Path(archive_path)
+    _check_archive_target(archive_path, existsok)
+    return _write_archive_from_td(
+        td,
+        archive_path,
+        like=True,
+        num_threads=num_threads,
+        copy_existing=copy_existing,
+        share_non_tensor=share_non_tensor,
+        robust_key=robust_key,
+    )

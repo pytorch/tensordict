@@ -5090,6 +5090,51 @@ class TestMemmapArchive:
         tdm.save(archive)
         assert (TensorDict.load_memmap(archive) == td).all()
 
+    def test_archive_memmap_like(self, tmp_path):
+        td = TensorDict(
+            {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 2)}}, batch_size=[3]
+        )
+        archive = tmp_path / "buf.tdz"
+        buf = td.memmap_like(archive)
+        assert is_memmap_archive(archive)
+        # contentless: the buffer is zero-filled, not a copy of td
+        assert (buf["a"] == 0).all()
+        assert buf.batch_size == td.batch_size
+        assert buf["a"].shape == td["a"].shape
+        # the buffer writes through to the archive
+        buf["a"].copy_(td["a"])
+        buf["b", "c"].copy_(td["b", "c"])
+        reloaded = TensorDict.load_memmap(archive)
+        assert (reloaded == td).all()
+        # a refreshed archive works with zip-level tooling
+        refresh_archive_checksums(archive)
+        unpack_memmap(archive, tmp_path / "unpacked")
+        assert (TensorDict.load_memmap(tmp_path / "unpacked") == td).all()
+
+    def test_archive_memmap_like_expanded(self, tmp_path):
+        # preallocating a buffer from an expanded (stride-0) tensordict
+        # does not materialize the data
+        datum = TensorDict(
+            {"img": torch.zeros(3, 8, 8, dtype=torch.uint8)}, batch_size=[]
+        )
+        buf = datum.expand(1000).memmap_like(tmp_path / "ds.tdz")
+        assert buf["img"].shape == (1000, 3, 8, 8)
+        buf[42] = TensorDict(
+            {"img": torch.full((3, 8, 8), 7, dtype=torch.uint8)}, batch_size=[]
+        )
+        reloaded = TensorDict.load_memmap(tmp_path / "ds.tdz")
+        assert (reloaded["img"][42] == 7).all()
+        assert (reloaded["img"][41] == 0).all()
+
+    def test_archive_memmap_like_errors(self, tmp_path):
+        td = TensorDict({"a": torch.randn(3)}, batch_size=[])
+        archive = tmp_path / "buf.tdz"
+        td.memmap_like(archive)
+        with pytest.raises(RuntimeError, match="already exists"):
+            td.memmap_like(archive, existsok=False)
+        with pytest.raises(NotImplementedError, match="return_early"):
+            td.memmap_like(archive, num_threads=2, return_early=True)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
