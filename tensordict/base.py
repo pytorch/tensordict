@@ -73,6 +73,7 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _DTYPE_TO_STR_DTYPE,
     _GENERIC_NESTED_ERR,
+    _get_shared_executor,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_non_tensor,
@@ -6860,7 +6861,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         Keyword Args:
             num_threads (integer, optional): the number of threads to use for populating
-                the storage.
+                the storage. The leaves are copied by contiguous chunks of
+                roughly equal byte size, one chunk per thread. When writing to
+                a memory-mapped file with all leaves already on the target
+                device, ``num_threads`` is ignored and a single fused copy is
+                used instead, as concurrent writes to a fresh file mapping are
+                slower than a sequential one on most filesystems.
             device (torch.device, optional): an optional device where the storage must be
                 instantiated.
             non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
@@ -6991,90 +6997,97 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         if num_threads is None:
             num_threads = 0
-        if num_threads > 0:
 
-            def assign(
-                *,
-                k,
-                v,
-                start,
-                stop,
-                njts,
-                storage=storage,
-                non_blocking=non_blocking,
-            ):
-                """Reads a slice of the storage and assigns the resulting tensor in flat_dict."""
-                # v may need padding
-                if k[-1].startswith("<NJT>"):
-                    njts[k] = v
-                    return
-                v_pad = v.view(-1).view(torch.uint8)
-                exp_length = stop - start
-                pad = exp_length - v_pad.numel()
-                if pad:
-                    v_pad = torch.cat([v_pad, v_pad.new_zeros(pad)])
-                storage[start:stop].copy_(v_pad, non_blocking=non_blocking)
+        use_threads = num_threads > 1 and len(flat_dict) > 1
+        if use_threads and filename is not None:
+            # Concurrent writes into a freshly created memory-mapped file are
+            # dominated by page-fault and writeback contention and measure
+            # 2x-4x slower than a single fused copy on local filesystems.
+            # Threads only pay off there when they can overlap device
+            # transfers.
+            use_threads = any(v.device != storage.device for v in flat_dict.values())
+        if use_threads:
+            values = list(flat_dict.values())
 
-                storage_slice = storage[start:stop]
-                shape, dtype = v.shape, v.dtype
-                new_v = storage_slice.view(dtype)
-                if pad:
-                    new_v = new_v[: v.numel()]
-                new_v = new_v.view(shape)
-                flat_dict[k] = new_v
+            if all(v.device == storage.device for v in values):
+                # Prepare the flat uint8 views on the main thread: this work
+                # is cheap but GIL-bound, so running it inside the workers
+                # only adds contention. The workers then execute one fused,
+                # GIL-releasing copy per chunk.
+                flat_views = []
+                for idx, v in enumerate(values):
+                    if v.is_nested:
+                        flat_views.append(None)
+                        continue
+                    stride = v.stride()
+                    if (stride and stride[-1] != 1) or v.storage_offset():
+                        v = v.clone(memory_format=torch.contiguous_format)
+                    flat_view = v.view(-1).view(torch.uint8)
+                    pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
+                    if pad:
+                        flat_view = torch.cat([flat_view, flat_view.new_zeros(pad)])
+                    flat_views.append(flat_view)
 
-            njts = {}
-            if num_threads > 1:
-                executor = ThreadPoolExecutor(num_threads)
-                r = []
-                for i, (k, v) in enumerate(flat_dict.items()):
-                    r.append(
-                        executor.submit(
-                            assign,
-                            k=k,
-                            v=v,
-                            start=offsets[i],
-                            stop=offsets[i + 1],
-                            njts=njts,
+                def _copy_chunk(start_idx, stop_idx):
+                    """Copies values[start_idx:stop_idx] into their storage slices."""
+                    items = [
+                        flat_view
+                        for flat_view in flat_views[start_idx:stop_idx]
+                        if flat_view is not None
+                    ]
+                    if items:
+                        torch.cat(
+                            items, out=storage[offsets[start_idx] : offsets[stop_idx]]
                         )
-                    )
-                if not return_early:
-                    wait(r)
-                else:
-                    # TODO: We'd need to merge the second half of this function to make this a thing
-                    raise NotImplementedError(
-                        "return_early is not implemented yet for `consolidate`."
-                    )
-            else:
-                for i, (k, v) in enumerate(flat_dict.items()):
-                    assign(
-                        k=k,
-                        v=v,
-                        start=offsets[i],
-                        stop=offsets[i + 1],
-                        njts=njts,
-                    )
-            for njt_key, njt in njts.items():
-                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
-                njt_key_values = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_VALUES>"),
-                )
-                njt_key_offset = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
-                )
-                njt_key_lengths = njt_key[:-1] + (
-                    njt_key[-1].replace("<NJT>", "<NJT_LENGTHS>"),
-                )
-                val = _rebuild_njt_from_njt(
-                    njt,
-                    values=flat_dict.pop(njt_key_values),
-                    offsets=flat_dict.pop(njt_key_offset),
-                    lengths=flat_dict.pop(njt_key_lengths, None),
-                )
-                del flat_dict[njt_key]
-                flat_dict[newkey] = val
 
-            if non_blocking and device.type != "cuda":
+            else:
+
+                def _copy_chunk(start_idx, stop_idx):
+                    """Copies values[start_idx:stop_idx] into their storage slices.
+
+                    Each leaf is copied individually so that the device
+                    transfers run from this worker thread.
+                    """
+                    for idx in range(start_idx, stop_idx):
+                        v = values[idx]
+                        if v.is_nested:
+                            continue
+                        flat_view = v.contiguous().view(-1).view(torch.uint8)
+                        start, stop = offsets[idx], offsets[idx + 1]
+                        pad = stop - start - flat_view.numel()
+                        storage[start : stop - pad].copy_(
+                            flat_view, non_blocking=non_blocking
+                        )
+                        if pad:
+                            storage[stop - pad : stop].zero_()
+
+            # split the leaves in contiguous chunks of roughly equal byte size
+            # and run one fused copy per chunk: per-leaf tasks are dominated
+            # by task and per-copy overhead when the leaves are small
+            target_bytes = max(1, -(-filesize // num_threads))
+            chunks = []
+            chunk_start = 0
+            for idx in range(1, len(values) + 1):
+                if (
+                    idx == len(values)
+                    or offsets[idx] - offsets[chunk_start] >= target_bytes
+                ):
+                    if idx > chunk_start:
+                        chunks.append((chunk_start, idx))
+                    chunk_start = idx
+            if return_early:
+                # TODO: We'd need to make the result construction lazy to make this a thing
+                raise NotImplementedError(
+                    "return_early is not implemented yet for `consolidate`."
+                )
+            executor = _get_shared_executor(num_threads)
+            wait(
+                [
+                    executor.submit(_copy_chunk, start_idx, stop_idx)
+                    for start_idx, stop_idx in chunks
+                ]
+            )
+            if non_blocking and (device is None or device.type != "cuda"):
                 # sync if needed
                 self._sync_all()
         else:
@@ -7103,44 +7116,44 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
-            if non_blocking and device.type != "cuda":
+            if non_blocking and (device is None or device.type != "cuda"):
                 # sync if needed
                 self._sync_all()
             if items:
                 torch.cat(items, out=storage)
-            for v, (k, oldv) in _zip_strict(
-                storage.split(flat_size), list(flat_dict.items())
-            ):
-                if not k[-1].startswith("<"):
-                    flat_dict[k] = view_old_as_new(v, oldv)
-                elif k[-1].startswith("<NJT>"):
-                    # NJT/NT always comes before offsets/shapes
-                    nt = oldv
-                    nt_lengths = None
-                    del flat_dict[k]
-                elif k[-1].startswith("<NJT_VALUES>"):
-                    nt_vaues = view_old_as_new(v, oldv)
-                    del flat_dict[k]
-                elif k[-1].startswith("<NJT_LENGTHS>"):
-                    nt_lengths = view_old_as_new(v, oldv)
-                    del flat_dict[k]
-                elif k[-1].startswith("<NJT_OFFSETS>"):
-                    newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
-                    nt_offsets = view_old_as_new(v, oldv)
-                    del flat_dict[k]
+        for v, (k, oldv) in _zip_strict(
+            storage.split(flat_size), list(flat_dict.items())
+        ):
+            if not k[-1].startswith("<"):
+                flat_dict[k] = view_old_as_new(v, oldv)
+            elif k[-1].startswith("<NJT>"):
+                # NJT/NT always comes before offsets/shapes
+                nt = oldv
+                nt_lengths = None
+                del flat_dict[k]
+            elif k[-1].startswith("<NJT_VALUES>"):
+                nt_vaues = view_old_as_new(v, oldv)
+                del flat_dict[k]
+            elif k[-1].startswith("<NJT_LENGTHS>"):
+                nt_lengths = view_old_as_new(v, oldv)
+                del flat_dict[k]
+            elif k[-1].startswith("<NJT_OFFSETS>"):
+                newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
+                nt_offsets = view_old_as_new(v, oldv)
+                del flat_dict[k]
 
-                    val = _rebuild_njt_from_njt(
-                        nt, values=nt_vaues, offsets=nt_offsets, lengths=nt_lengths
-                    )
+                val = _rebuild_njt_from_njt(
+                    nt, values=nt_vaues, offsets=nt_offsets, lengths=nt_lengths
+                )
 
-                    flat_dict[newk] = val
+                flat_dict[newk] = val
 
-                    # delete the nested value to make sure that if there was an
-                    # ordering mismatch we wouldn't be looking at the value key of
-                    # another nested tensor.
-                    del nt, nt_vaues, nt_offsets, nt_lengths
-                else:
-                    flat_dict[k] = view_old_as_new(v, oldv)
+                # delete the nested value to make sure that if there was an
+                # ordering mismatch we wouldn't be looking at the value key of
+                # another nested tensor.
+                del nt, nt_vaues, nt_offsets, nt_lengths
+            else:
+                flat_dict[k] = view_old_as_new(v, oldv)
 
         def assign_val(key, val):
             if isinstance(key, str):
@@ -7259,30 +7272,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=True,
-                    like=False,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            executor = _get_shared_executor(num_threads)
+            futures = []
+            result = self._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=True,
+                like=False,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -7489,30 +7495,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
 
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                    like=False,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            executor = _get_shared_executor(num_threads)
+            futures = []
+            result = self._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=False,
+                like=False,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
 
         return self._memmap_(
             prefix=prefix,
@@ -7591,40 +7590,31 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
-            with (
-                ThreadPoolExecutor(max_workers=num_threads)
-                if not return_early
-                else contextlib.nullcontext()
-            ) as executor:
-                if return_early:
-                    executor = ThreadPoolExecutor(max_workers=num_threads)
-                futures = []
+            executor = _get_shared_executor(num_threads)
+            futures = []
 
-                # we create an empty copy of self
-                # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
-                # if both are in filesystem
-                def empty(x):
-                    return torch.empty((), device=x.device, dtype=x.dtype).expand(
-                        x.shape
-                    )
+            # we create an empty copy of self
+            # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
+            # if both are in filesystem
+            def empty(x):
+                return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
-                input = self.apply(empty)
-                result = input._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                    like=True,
-                    share_non_tensor=share_non_tensor,
-                    existsok=existsok,
-                    robust_key=robust_key,
-                )
-                if not return_early:
-                    concurrent.futures.wait(futures)
-                    return result
-                else:
-                    return TensorDictFuture(futures, result)
+            input = self.apply(empty)
+            result = input._memmap_(
+                prefix=prefix,
+                copy_existing=copy_existing,
+                executor=executor,
+                futures=futures,
+                inplace=False,
+                like=True,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            if not return_early:
+                concurrent.futures.wait(futures)
+                return result
+            return TensorDictFuture(futures, result)
 
         def empty_expand(x):
             return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)

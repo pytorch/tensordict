@@ -20,6 +20,7 @@ from tensordict import (
 from tensordict._C import _unravel_key_to_tuple
 from tensordict.utils import (
     _check_recursive_properties,
+    _get_shared_executor,
     _getitem_batch_size,
     _make_cache_key,
     _TensorDictPropertyError,
@@ -487,6 +488,19 @@ def test_parse_tensor_dict_string():
         batch_size=[1],
     )
     assert str(td) == str(parse_tensor_dict_string(str(td)))
+
+
+def test_get_shared_executor():
+    executor = _get_shared_executor(2)
+    # repeated calls with the same thread count reuse the pool
+    assert _get_shared_executor(2) is executor
+    # distinct thread counts get distinct pools
+    assert _get_shared_executor(3) is not executor
+    assert executor.submit(lambda: 1).result() == 1
+    # the pool survives (i.e. is not shut down by) a threaded save
+    td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
+    td.consolidate(num_threads=2)
+    assert executor.submit(lambda: 2).result() == 2
 
 
 if __name__ == "__main__":
