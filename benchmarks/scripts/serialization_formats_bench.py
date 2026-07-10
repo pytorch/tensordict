@@ -29,8 +29,8 @@ Usage::
 The ``--plot`` option renders the figure embedded in
 ``docs/source/saving.rst`` (requires matplotlib). ``--num-threads`` adds a
 multithreaded save measurement for the formats that support it (memmap
-directory, consolidated, archive); note that for archives the payload is
-written sequentially and threads only affect the metadata staging.
+directory, consolidated, archive); note that archives are written
+sequentially and ``num_threads`` has no effect on them.
 """
 from __future__ import annotations
 

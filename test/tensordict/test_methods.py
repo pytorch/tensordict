@@ -5321,6 +5321,22 @@ class TestMemmapArchive:
         with pytest.raises(ValueError, match="mode must be"):
             TensorDict.load_memmap(tmp_path / "plain", mode="w")
 
+    def test_archive_threaded_save(self, tmp_path):
+        # regression: num_threads>1 must not scramble the pairing between
+        # source tensors and archive entries (staging insertion order used
+        # to follow thread completion order)
+        td = TensorDict(
+            {
+                f"g{i}": {f"t{j}": torch.randn(4 + (7 * i + j) % 96) for j in range(8)}
+                for i in range(16)
+            },
+            batch_size=[],
+        )
+        for i in range(3):
+            archive = tmp_path / f"data{i}.tdz"
+            td.save(archive, num_threads=32)
+            assert (TensorDict.load_memmap(archive) == td).all()
+
     def test_archive_memmapped_source(self, tmp_path):
         # already-memmapped tensordicts are packed straight from their
         # directory, without re-staging

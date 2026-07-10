@@ -267,6 +267,14 @@ def _pack_dir(
             if source is not None:
                 chunks = _tensor_chunks(source)
                 size = source.numel() * source.element_size()
+                if size != filepath.stat().st_size:
+                    raise RuntimeError(
+                        f"Mismatch between the source tensor of entry "
+                        f"{arcname!r} ({size} bytes) and its staged layout "
+                        f"({filepath.stat().st_size} bytes). This is an "
+                        f"internal error; please file an issue on the "
+                        f"tensordict repository."
+                    )
             else:
                 chunks = _file_chunks(filepath)
                 size = filepath.stat().st_size
@@ -743,10 +751,14 @@ def _write_archive_from_td(
     try:
         file_to_source = None
         if like or not has_nested:
+            # The staging is written sequentially on purpose: it only holds
+            # metadata and empty (sparse) payloads, and with num_threads > 1
+            # the staged tensordict's insertion order would follow thread
+            # completion order, breaking the positional pairing between
+            # `leaves` and the staged leaves below.
             td_stage = td.memmap_like(
                 prefix=staging,
                 copy_existing=copy_existing,
-                num_threads=num_threads,
                 share_non_tensor=share_non_tensor,
                 robust_key=robust_key,
                 existsok=True,
