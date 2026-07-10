@@ -1,5 +1,6 @@
 matplotlib
 numpy
+safetensors
 sphinx-copybutton
 sphinx-gallery
 sphinx==5.0.0

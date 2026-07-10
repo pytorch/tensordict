@@ -5,17 +5,18 @@ Benchmarking TensorDict serialization speed
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
 In this example you will learn how the main TensorDict serialization paths
-compare in terms of speed, and how ``num_threads`` affects each of them.
+compare in terms of speed, how ``num_threads`` affects each of them, and
+how the on-disk formats compare with ``torch.save`` and safetensors.
 
-The script runs each serialization method several times, averages the
-timings and renders them as a bar plot. It is executed during the
-documentation build, so the figure below reflects the machine that built
-these docs; download the script at the bottom of this page (or run
+The script runs each measurement 32 times and renders the median with the
+interquartile range as error bars. It is executed during the documentation
+build, so the figures below reflect the machine that built these docs;
+download the script at the bottom of this page (or run
 ``python tutorials/sphinx_tuto/serialization_speed.py`` from a tensordict
-checkout) to measure your own hardware. The only extra dependency is
-``matplotlib``.
+checkout) to measure your own hardware. The only extra dependencies are
+``matplotlib`` and, optionally, ``safetensors``.
 
-The methods compared are:
+The first benchmark compares the write paths:
 
 - :meth:`~tensordict.TensorDictBase.consolidate`: fuse all leaves into a
   single in-memory storage;
@@ -26,10 +27,14 @@ The methods compared are:
 
 Each method is measured single-threaded and multithreaded, on two layouts
 of the same kind of payload: a few large leaves and many small leaves.
+The second benchmark compares the on-disk formats (memmap directory,
+consolidated file, ``.tdz`` archive, ``torch.save``, safetensors) on
+saving, opening and copying the saved artifact.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import tempfile
@@ -43,6 +48,8 @@ import torch
 
 from tensordict import TensorDict
 
+_has_safetensors = importlib.util.find_spec("safetensors") is not None
+
 ##############################################################################
 # Benchmark configuration
 # -----------------------
@@ -54,7 +61,7 @@ from tensordict import TensorDict
 # occasionally hiccup (page-cache writeback), which would dominate a mean.
 
 SCALE = 1
-N_REPEATS = 20
+N_REPEATS = 32
 NUM_THREADS = min(8, os.cpu_count() or 1)
 
 LAYOUTS = {
@@ -201,10 +208,193 @@ plt.show()
 # prefer larger payloads (``SCALE=4`` or more, i.e. 1 GiB+) for stable
 # measurements.
 #
+# Choosing an on-disk format
+# --------------------------
+# The second benchmark compares the on-disk formats tensordict can write --
+# the per-leaf memmap directory, the consolidated single file and the
+# ``.tdz`` zip archive -- with ``torch.save`` and, when installed,
+# safetensors. The two external formats are measured on their fastest
+# paths: a flat dict of tensors, written with ``torch.save`` /
+# ``save_file`` and reloaded with ``torch.load(mmap=True,
+# weights_only=True)`` / the mmap-backed ``load_file``. They do not
+# represent tensordict structure natively, so keys are flattened at save
+# time and the nesting is rebuilt at load time.
+#
+# Three operations are timed. *Save* writes a fresh artifact (removed
+# outside the timed region). *Open* constructs a lazy tensordict over an
+# existing artifact: every format here memory-maps its payload, so this is
+# a metadata and view-construction cost -- bulk read throughput is
+# essentially identical across formats once open. *Copy* duplicates the
+# saved artifact, which is where single files beat directories: a
+# directory pays per-file latency, which grows with the number of leaves
+# (and with round-trip time on network filesystems).
+
+
+def make_formats(td, tmpdir):
+    """Maps format name -> (save() -> path, open(path)) for one layout."""
+    base = Path(tmpdir)
+    counter = iter(range(1_000_000))
+
+    def fresh(suffix):
+        return base / f"artifact{next(counter)}{suffix}"
+
+    def save_dir():
+        prefix = fresh("")
+        td.save(prefix)
+        return prefix
+
+    def open_dir(path):
+        TensorDict.load_memmap(path)
+
+    def save_consolidated():
+        filename = fresh(".td")
+        td.consolidate(filename=filename)
+        return filename
+
+    def open_consolidated(path):
+        TensorDict.from_consolidated(path)
+
+    def save_archive():
+        filename = fresh(".tdz")
+        td.save(filename)
+        return filename
+
+    def save_pt():
+        filename = fresh(".pt")
+        torch.save(dict(td.flatten_keys(".").items()), filename)
+        return filename
+
+    def open_pt(path):
+        flat = torch.load(path, mmap=True, weights_only=True)
+        TensorDict(flat, batch_size=[]).unflatten_keys(".")
+
+    formats = {
+        "memmap\ndirectory": (save_dir, open_dir),
+        "consolidated\nfile": (save_consolidated, open_consolidated),
+        "archive\n(.tdz)": (save_archive, open_dir),
+        "torch.save": (save_pt, open_pt),
+    }
+    if _has_safetensors:
+        from safetensors.torch import load_file, save_file
+
+        def save_safetensors():
+            filename = fresh(".safetensors")
+            save_file(dict(td.flatten_keys(".").items()), filename)
+            return filename
+
+        def open_safetensors(path):
+            TensorDict(load_file(path), batch_size=[]).unflatten_keys(".")
+
+        formats["safetensors"] = (save_safetensors, open_safetensors)
+    return formats
+
+
+def copy_artifact(path, dst):
+    if path.is_dir():
+        shutil.copytree(path, dst)
+    else:
+        shutil.copyfile(path, dst)
+
+
+def bench_format(save, open_):
+    """Times save / open / copy for one format on one layout."""
+    out = {}
+    cleanup(save())  # warmup
+    times = []
+    for _ in range(N_REPEATS):
+        t0 = time.perf_counter()
+        path = save()
+        times.append((time.perf_counter() - t0) * 1000)
+        cleanup(path)
+    out["save"] = summarize(times)
+
+    # open and copy operate on a single saved artifact
+    artifact = save()
+    open_(artifact)  # warmup
+    times = []
+    for _ in range(N_REPEATS):
+        t0 = time.perf_counter()
+        open_(artifact)
+        times.append((time.perf_counter() - t0) * 1000)
+    out["open"] = summarize(times)
+
+    dst = artifact.parent / f"copy_{artifact.name}"
+    copy_artifact(artifact, dst)  # warmup
+    cleanup(dst)
+    times = []
+    for _ in range(N_REPEATS):
+        t0 = time.perf_counter()
+        copy_artifact(artifact, dst)
+        times.append((time.perf_counter() - t0) * 1000)
+        cleanup(dst)
+    out["copy"] = summarize(times)
+    cleanup(artifact)
+    return out
+
+
+format_results = {}
+for layout_name, td in LAYOUTS.items():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for format_name, (save, open_) in make_formats(td, tmpdir).items():
+            format_results[layout_name, format_name] = bench_format(save, open_)
+
+##############################################################################
+# One row per operation, one panel per layout, one bar per format. The time
+# axis is logarithmic: opening is orders of magnitude faster than saving,
+# and the formats differ by orders of magnitude on copying.
+
+OPERATIONS = ("save", "open", "copy")
+fig, axes = plt.subplots(
+    len(OPERATIONS),
+    len(LAYOUTS),
+    figsize=(5 * len(LAYOUTS), 3.2 * len(OPERATIONS)),
+    sharey="row",
+)
+for i, operation in enumerate(OPERATIONS):
+    for j, layout_name in enumerate(LAYOUTS):
+        ax = axes[i, j]
+        names = [f for (l, f) in format_results if l == layout_name]
+        medians = [format_results[layout_name, f][operation][0] for f in names]
+        errors = np.array(
+            [format_results[layout_name, f][operation][1] for f in names]
+        ).T
+        x = np.arange(len(names))
+        ax.bar(
+            x,
+            medians,
+            0.6,
+            yerr=errors,
+            capsize=3,
+            color=plt.cm.tab10.colors[: len(names)],
+        )
+        ax.set_yscale("log")
+        ax.set_xticks(x, names, fontsize=8)
+        if j == 0:
+            ax.set_ylabel(f"{operation} time (ms)\nlower is better")
+        if i == 0:
+            size_mb = total_bytes[layout_name] / 2**20
+            ax.set_title(f"{layout_name} ({size_mb:.0f} MiB)")
+fig.suptitle(f"On-disk format comparison (median over {N_REPEATS} runs, log scale)")
+fig.tight_layout()
+plt.show()
+
+##############################################################################
+# The single-file formats (consolidated, archive, ``torch.save``,
+# safetensors) open with a single metadata parse and copy at raw disk
+# bandwidth, while the directory pays a per-file cost on both operations,
+# which dominates with many small leaves. Saving is bandwidth-bound for
+# every format, with per-entry overheads showing in the many-small-leaves
+# layout. Keep in mind that the tensordict formats carry nested structure,
+# lazy stacks, non-tensor data and (for directories and archives)
+# in-place writability, which the flat external formats do not.
+#
 # Further reading
 # ---------------
 #
 # - The :ref:`saving documentation <saving>` covers the full
 #   serialization API, including ``memmap_like`` and ``return_early``.
 # - The benchmark suite in ``benchmarks/common/memmap_benchmarks_test.py``
-#   tracks these operations with ``pytest-benchmark``.
+#   tracks these operations with ``pytest-benchmark``, and
+#   ``benchmarks/scripts/serialization_formats_bench.py`` runs a larger
+#   offline version of the format comparison (bigger payloads, more
+#   layouts, read timings).

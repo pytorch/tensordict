@@ -267,20 +267,20 @@ weights_only=True)`` and mmap-backed loading respectively) and do not
 represent tensordict structure natively: keys are flattened at save time
 and the nesting rebuilt at load time.
 
-.. figure:: _static/img/memmap_formats_benchmark.png
+.. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
    :width: 100%
-   :alt: Barplots comparing save, open, read and copy times of memmap
+   :alt: Barplots comparing save, open and copy times of memmap
          directories, consolidated files, zip archives, torch.save files
-         and safetensors files across three tensordict layouts.
+         and safetensors files across two tensordict layouts.
+   :target: tutorials/serialization_speed.html
 
-   Serialization timings across layouts (log scale, lower is better),
-   measured on a laptop SSD with a warm page cache. ``flat``: 8 large
-   leaves; ``many small``: 2000 leaves in 100 nested groups; ``deep``: a
-   12-level nesting chain with 48 leaves. Reproduce (and re-render this
-   figure) with::
-
-       python benchmarks/scripts/serialization_formats_bench.py \
-           --plot docs/source/_static/img/memmap_formats_benchmark.png
+   Serialization timings across formats and layouts (log scale, lower is
+   better; median over 32 runs with the interquartile range as error
+   bars). The figure is generated on the machine that builds this
+   documentation -- click it to open the corresponding tutorial and
+   download the script. For a larger offline run (bigger payloads, more
+   layouts, read timings), see
+   ``benchmarks/scripts/serialization_formats_bench.py``.
 
 Consolidated serialization
 --------------------------
