@@ -232,6 +232,38 @@ def test_serialize_model_filesystem(benchmark, pause_when_exit):
     del t
 
 
+@pytest.fixture(params=["few_large", "many_small"])
+def td_consolidate(request):
+    if request.param == "few_large":
+        # 8 leaves x 8 MB
+        td = TensorDict({f"k{i}": torch.randn(2 * 2**20) for i in range(8)})
+    else:
+        # 1024 leaves x 64 KB
+        td = TensorDict({f"k{i}": torch.randn(2**14) for i in range(1024)})
+    yield td
+    del td
+
+
+@pytest.mark.parametrize("num_threads", [0, 8])
+def test_consolidate(benchmark, td_consolidate, num_threads):
+    """Tests efficiency of consolidating a tensordict in memory."""
+    benchmark(td_consolidate.consolidate, num_threads=num_threads)
+
+
+@pytest.mark.parametrize("num_threads", [0, 8])
+def test_consolidate_to_file(benchmark, td_consolidate, num_threads, tmpdir):
+    """Tests efficiency of consolidating a tensordict in a memory-mapped file."""
+    count = [0]
+
+    def consolidate():
+        count[0] += 1
+        td_consolidate.consolidate(
+            filename=Path(tmpdir) / f"file{count[0]}.td", num_threads=num_threads
+        )
+
+    benchmark(consolidate)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

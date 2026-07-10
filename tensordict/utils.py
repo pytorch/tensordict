@@ -2398,6 +2398,33 @@ class TensorDictFuture:
         return self.resulting_td
 
 
+_SHARED_EXECUTORS: dict[int, concurrent.futures.ThreadPoolExecutor] = {}
+_SHARED_EXECUTORS_LOCK = threading.Lock()
+
+
+def _get_shared_executor(num_threads: int) -> concurrent.futures.ThreadPoolExecutor:
+    """Returns a process-wide executor with ``num_threads`` workers.
+
+    Repeated serialization calls (e.g. checkpoint loops) reuse the pool
+    instead of spawning and tearing down threads on every call. The tasks
+    submitted to it must not themselves submit to (and wait on) the shared
+    pool, or they may deadlock.
+    """
+    with _SHARED_EXECUTORS_LOCK:
+        executor = _SHARED_EXECUTORS.get(num_threads)
+        if executor is None:
+            executor = _SHARED_EXECUTORS[num_threads] = (
+                concurrent.futures.ThreadPoolExecutor(max_workers=num_threads)
+            )
+        return executor
+
+
+# the workers don't survive a fork: drop the executors in the child so that
+# they are recreated on first use
+if hasattr(os, "register_at_fork"):  # not available on Windows, which cannot fork
+    os.register_at_fork(after_in_child=_SHARED_EXECUTORS.clear)
+
+
 def _is_json_serializable(item):
     if isinstance(item, dict):
         for key, val in item.items():

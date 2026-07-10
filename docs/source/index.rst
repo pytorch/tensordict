@@ -77,6 +77,7 @@ Basics
    tutorials/tensordict_preallocation
    tutorials/tensordict_memory
    tutorials/streamed_tensordict
+   tutorials/serialization_speed
 
 tensordict.nn
 -------------
