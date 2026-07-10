@@ -1,36 +1,2516 @@
 {
-  "generated_at": "2026-07-09T07:21:23.365483+00:00",
+  "generated_at": "2026-07-10T07:18:48.640120+00:00",
   "analysis_period": {
-    "start": "2026-05-12",
-    "end": "2026-07-07",
+    "start": "2026-05-15",
+    "end": "2026-07-09",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 90253,
-    "flaky_count": 1,
-    "new_flaky_count": 0,
+    "total_tests": 90304,
+    "flaky_count": 129,
+    "new_flaky_count": 129,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
-      "nodeid": "test.test_compile.TestTTDImprovements::test_frozenset_sub_dict_keys",
-      "executions": 70,
-      "failures": 35,
-      "failure_rate": 0.5,
-      "flaky_score": 1.0,
-      "passed": 35,
-      "failed": 35,
+      "nodeid": "test.compile.test_compile.TestNN::test_dispatch_nontensor[None]",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.592,
+      "avg_duration_s": 1.021,
       "recent_failures": [
-        "2026-05-15T08:38:16Z",
-        "2026-05-15T08:38:16Z",
-        "2026-05-15T08:38:16Z",
-        "2026-05-15T08:38:16Z",
-        "2026-05-15T08:38:16Z"
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
       ],
-      "first_seen_flaky": "2026-05-14T21:54:44Z",
-      "is_new": false
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestNN::test_dispatch_nontensor[reduce-overhead]",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.529,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_fullgraph",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.258,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_roundtrip",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.287,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_with_device",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.289,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCPostInitCompile::test_post_init_runs_under_compile",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.203,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCDefaultsCompile::test_concrete_default_applied_under_compile",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.159,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCDefaultsCompile::test_default_factory_applied_under_compile",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.174,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestTCDefaultsCompile::test_omitted_none_default_under_compile",
+      "executions": 98,
+      "failures": 14,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 84,
+      "failed": 14,
+      "error": 0,
+      "avg_duration_s": 0.173,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td-device0]",
+      "executions": 140,
+      "failures": 20,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 120,
+      "failed": 20,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device0]",
+      "executions": 140,
+      "failures": 20,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 120,
+      "failed": 20,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device1]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device2]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device3]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[stacked_td-device4]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[idx_td-device5]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td-device6]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td2-device7]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[memmap_td-device8]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[permute_td-device9]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[unsqueezed_td-device10]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[squeezed_td-device11]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_reset_bs-device12]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_h5-device13]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.01,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_params-device14]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor-device15]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor_and_metadata-device16]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_unbatched-device17]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[typed_td-device18]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_typed_td-device19]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_td-device1]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_tensorclass-device2]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_stacked_td-device3]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[stacked_td-device4]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[idx_td-device5]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td-device6]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td2-device7]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[memmap_td-device8]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[permute_td-device9]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[unsqueezed_td-device10]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[squeezed_td-device11]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_reset_bs-device12]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_h5-device13]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.008,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_params-device14]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor-device15]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor_and_metadata-device16]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_unbatched-device17]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[typed_td-device18]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_typed_td-device19]",
+      "executions": 112,
+      "failures": 16,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2857,
+      "passed": 96,
+      "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestCompileNontensor::test_nontensor_no_device_no_batch_size",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.374,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestCompileNontensor::test_nontensor_no_device",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.236,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestCompileNontensor::test_nontensor_with_device",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.241,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.compile.test_compile.TestCompileNontensor::test_nontensor_with_device_without_batch_size",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.241,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td-device1]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device2]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device3]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device4]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device5]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device6]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.008,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device7]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.008,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[stacked_td-device8]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[stacked_td-device9]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[idx_td-device10]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[idx_td-device11]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td-device12]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td-device13]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td2-device14]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td2-device15]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[memmap_td-device16]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[permute_td-device17]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[permute_td-device18]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[unsqueezed_td-device19]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[unsqueezed_td-device20]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[squeezed_td-device21]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[squeezed_td-device22]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_reset_bs-device23]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_reset_bs-device24]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_h5-device25]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.011,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_h5-device26]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.012,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_params-device27]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_params-device28]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor-device29]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor-device30]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor_and_metadata-device31]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor_and_metadata-device32]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_unbatched-device33]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_with_unbatched-device34]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[typed_td-device35]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[typed_td-device36]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_typed_td-device37]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_typed_td-device38]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device1]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_td-device2]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_td-device3]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_tensorclass-device4]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_tensorclass-device5]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_stacked_td-device6]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.008,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_stacked_td-device7]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.008,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[stacked_td-device8]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[stacked_td-device9]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[idx_td-device10]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[idx_td-device11]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td-device12]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td-device13]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td2-device14]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[sub_td2-device15]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[memmap_td-device16]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[permute_td-device17]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[permute_td-device18]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[unsqueezed_td-device19]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[unsqueezed_td-device20]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[squeezed_td-device21]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[squeezed_td-device22]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_reset_bs-device23]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_reset_bs-device24]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_h5-device25]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.01,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_h5-device26]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.01,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_params-device27]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_params-device28]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor-device29]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor-device30]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor_and_metadata-device31]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_non_tensor_and_metadata-device32]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.007,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_unbatched-device33]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td_with_unbatched-device34]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[typed_td-device35]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[typed_td-device36]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_typed_td-device37]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[nested_typed_td-device38]",
+      "executions": 28,
+      "failures": 4,
+      "failure_rate": 0.1429,
+      "flaky_score": 0.2286,
+      "passed": 24,
+      "failed": 4,
+      "error": 0,
+      "avg_duration_s": 0.006,
+      "recent_failures": [
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T09:09:35Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
     }
   ],
   "thresholds": {
