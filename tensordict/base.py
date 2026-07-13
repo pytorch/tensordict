@@ -7922,7 +7922,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f"(missing meta.json in {prefix})."
                 )
         if num_threads > 1 and isinstance(prefix, _ArchivePath):
-            prefix.reader.prefetch_compressed(prefix.at, num_threads)
+            # Defer decompression until a leaf is actually materialized so
+            # meta-device and FakeTensor loads remain metadata-only.
+            prefix.reader.schedule_compressed_prefetch(prefix.at, num_threads)
 
         metadata = _load_metadata(prefix)
         type_name = metadata["_type"]

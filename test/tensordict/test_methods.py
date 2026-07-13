@@ -37,13 +37,14 @@ from tensordict import (
     TensorDict,
     unpack_memmap,
 )
+from tensordict._archive import _ArchiveReader
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.functional import pad
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, NonTensorDataBase
+from tensordict.tensorclass import NonTensorData, NonTensorDataBase, NonTensorStack
 from tensordict.utils import (
     _check_recursive_properties,
     _getitem_batch_size,
@@ -53,6 +54,7 @@ from tensordict.utils import (
     is_non_tensor,
     set_lazy_legacy,
 )
+from torch._subclasses import FakeTensor, FakeTensorMode
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -5128,6 +5130,17 @@ class TestMemmapArchive:
         loaded["a"] += 1
         assert archive.read_bytes() == before
 
+    @pytest.mark.parametrize("view_kind", ["conjugate", "negative"])
+    def test_archive_tensor_view_bits(self, tmp_path, view_kind):
+        if view_kind == "conjugate":
+            tensor = torch.tensor([1 + 2j, 3 + 4j]).conj()
+        else:
+            tensor = torch.tensor([1.0, 2.0])._neg_view()
+        expected = tensor.resolve_conj().resolve_neg()
+        archive = tmp_path / f"{view_kind}.tdz"
+        loaded = TensorDict({"x": tensor}, batch_size=[]).save(archive)
+        torch.testing.assert_close(loaded["x"], expected)
+
     def test_archive_explicit_flag(self, tmp_path):
         # archive mode can target any file name when requested explicitly
         td = self._nested_td()
@@ -5196,6 +5209,21 @@ class TestMemmapArchive:
             TensorDict.load_memmap(tmp_path / "plaindir", num_threads=4) == td
         ).all()
 
+    def test_archive_compressed_metadata_only_load(self, tmp_path, monkeypatch):
+        td = TensorDict({"a": torch.randn(10), "b": torch.randn(10)}, batch_size=[])
+        archive = tmp_path / "compressed.tdz"
+        td.save(archive, compression="deflate")
+
+        def fail_prefetch(*args, **kwargs):
+            pytest.fail("compressed payloads were prefetched")
+
+        monkeypatch.setattr(_ArchiveReader, "prefetch_compressed", fail_prefetch)
+        meta = TensorDict.load_memmap(archive, device="meta", num_threads=4)
+        assert meta["a"].device.type == "meta"
+        with FakeTensorMode():
+            fake = TensorDict.load_memmap(archive, num_threads=4)
+        assert isinstance(fake["a"], FakeTensor)
+
     def test_archive_compression_requires_archive(self, tmp_path):
         td = self._nested_td()
         with pytest.raises(ValueError, match="compression is only supported"):
@@ -5260,6 +5288,15 @@ class TestMemmapArchive:
         td.save(archive)
         loaded = TensorDict.load_memmap(archive)
         assert (pickle.loads(pickle.dumps(loaded)) == td).all()
+
+    def test_archive_pickled_non_tensor_stack(self, tmp_path):
+        values = [1 + 2j, 3 + 4j]
+        stack = NonTensorStack(
+            *(NonTensorData(value, batch_size=[]) for value in values), stack_dim=0
+        )
+        td = TensorDict({"values": stack}, batch_size=[2])
+        loaded = td.save(tmp_path / "non_tensor.tdz")
+        assert loaded.to_dict()["values"] == values
 
     def test_archive_existsok(self, tmp_path):
         td = self._nested_td()

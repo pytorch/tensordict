@@ -142,6 +142,7 @@ def _tensor_chunks(tensor: torch.Tensor):
     """Yields the raw bytes of a tensor in bounded chunks."""
     if tensor.requires_grad:
         tensor = tensor.data
+    tensor = tensor.resolve_conj().resolve_neg()
     if tensor.device.type != "cpu":
         tensor = tensor.cpu()
     if not tensor.is_contiguous():
@@ -439,6 +440,7 @@ class _ArchiveReader:
         self.children: dict[str, set[str]] = {"": set()}
         self._storage = None
         self._decompressed: dict[str, bytes] = {}
+        self._prefetch_request: tuple[str, int] | None = None
         with open(self.path, "rb") as f:
             for info in self._zf.infolist():
                 if info.flag_bits & 0x1:
@@ -499,6 +501,16 @@ class _ArchiveReader:
     def read_bytes(self, name: str) -> bytes:
         return self._zf.read(name)
 
+    def schedule_compressed_prefetch(self, scope: str, num_threads: int) -> None:
+        """Schedules parallel decompression for the first materialized leaf."""
+        self._prefetch_request = (scope, num_threads)
+
+    def _run_scheduled_prefetch(self) -> None:
+        request = self._prefetch_request
+        self._prefetch_request = None
+        if request is not None:
+            self.prefetch_compressed(*request)
+
     def prefetch_compressed(self, scope: str, num_threads: int) -> None:
         """Decompresses deflated tensor entries under ``scope`` in parallel.
 
@@ -517,19 +529,16 @@ class _ArchiveReader:
         ]
         if len(names) < 2 or num_threads < 2:
             return
-        fd = os.open(self.path, os.O_RDONLY)
-        try:
+        archive = memoryview(self.storage.numpy())
 
-            def inflate(name):
-                entry = self.entries[name]
-                raw = os.pread(fd, entry.compress_size, entry.offset)
-                return name, zlib.decompressobj(-15).decompress(raw)
+        def inflate(name):
+            entry = self.entries[name]
+            raw = archive[entry.offset : entry.offset + entry.compress_size]
+            return name, zlib.decompress(raw, wbits=-15)
 
-            with ThreadPoolExecutor(num_threads) as executor:
-                for name, data in executor.map(inflate, names):
-                    self._decompressed[name] = data
-        finally:
-            os.close(fd)
+        with ThreadPoolExecutor(num_threads) as executor:
+            for name, data in executor.map(inflate, names):
+                self._decompressed[name] = data
 
     def flat_view(self, name: str, dtype: torch.dtype) -> torch.Tensor:
         """Returns the payload of ``name`` as a flat tensor of ``dtype``.
@@ -548,6 +557,7 @@ class _ArchiveReader:
                     f"the file. Re-save the archive without compression to "
                     f"make it writable."
                 )
+            self._run_scheduled_prefetch()
             data = self._decompressed.pop(name, None)
             if data is None:
                 data = self.read_bytes(name)

@@ -25,11 +25,14 @@ The first benchmark compares the write paths:
 - :meth:`~tensordict.TensorDictBase.save`: write one memory-mapped file per
   leaf in a directory tree.
 
-Each method is measured single-threaded and multithreaded, on two layouts
-of the same kind of payload: a few large leaves and many small leaves.
-The second benchmark compares the on-disk formats (memmap directory,
-consolidated file, ``.tdz`` archive, ``torch.save``, safetensors) on
-saving, opening and copying the saved artifact.
+Each method is measured single-threaded and with 8 and 16 threads, on two
+layouts of the same kind of payload: a few large leaves and many small
+leaves. The ``.tdz`` archive does not appear in this first benchmark: its
+writer is a single sequential pass and takes no ``num_threads`` argument;
+it is covered by the second benchmark, which compares the on-disk formats
+(memmap directory, consolidated file, ``.tdz`` archive, ``torch.save``,
+safetensors) on saving (single- and multithreaded where supported) and
+opening.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import torch
+from matplotlib.patches import Patch
 
 from tensordict import TensorDict
 
@@ -62,7 +66,11 @@ _has_safetensors = importlib.util.find_spec("safetensors") is not None
 
 SCALE = 1
 N_REPEATS = 32
-NUM_THREADS = min(8, os.cpu_count() or 1)
+NUM_THREADS = 8
+# Thread settings for the write-path benchmark: single-threaded, moderate,
+# and oversubscribed on most machines -- the last one shows where the
+# scaling saturates.
+THREAD_COUNTS = (0, NUM_THREADS, 2 * NUM_THREADS)
 
 LAYOUTS = {
     # 8 leaves of 32 MiB each (per unit of SCALE)
@@ -142,7 +150,7 @@ results = {}
 for layout_name, td in LAYOUTS.items():
     with tempfile.TemporaryDirectory() as tmpdir:
         for method_name, method in make_methods(td, tmpdir).items():
-            times = {0: [], NUM_THREADS: []}
+            times = {num_threads: [] for num_threads in THREAD_COUNTS}
             for num_threads in times:  # warmup
                 cleanup(method(num_threads))
             for _ in range(N_REPEATS):
@@ -157,8 +165,8 @@ for layout_name, td in LAYOUTS.items():
 ##############################################################################
 # Plotting
 # --------
-# One panel per layout; within each panel, one pair of bars per method
-# (single-threaded vs. multithreaded), with the interquartile range as
+# One panel per layout; within each panel, one group of bars per method
+# (single-threaded, 8 and 16 threads), with the interquartile range as
 # error bars.
 
 fig, axes = plt.subplots(1, len(LAYOUTS), figsize=(5 * len(LAYOUTS), 4), sharey=False)
@@ -169,11 +177,10 @@ total_bytes = {
 for ax, layout_name in zip(axes, LAYOUTS):
     methods = [m for (l, m, n) in results if l == layout_name and n == 0]
     x = np.arange(len(methods))
-    width = 0.38
-    for offset, num_threads, label in (
-        (-width / 2, 0, "single-threaded"),
-        (width / 2, NUM_THREADS, f"num_threads={NUM_THREADS}"),
-    ):
+    width = 0.8 / len(THREAD_COUNTS)
+    offsets = (np.arange(len(THREAD_COUNTS)) - (len(THREAD_COUNTS) - 1) / 2) * width
+    for offset, num_threads in zip(offsets, THREAD_COUNTS):
+        label = "single-threaded" if num_threads == 0 else f"num_threads={num_threads}"
         medians = [results[layout_name, m, num_threads][0] for m in methods]
         errors = np.array([results[layout_name, m, num_threads][1] for m in methods]).T
         ax.bar(x + offset, medians, width, yerr=errors, capsize=3, label=label)
@@ -202,6 +209,9 @@ plt.show()
 # - The per-leaf directory format (:meth:`~tensordict.TensorDictBase.save`)
 #   pays a per-file cost, which dominates with many small leaves whatever
 #   the thread count.
+# - Thread scaling saturates quickly: past the point where the storage
+#   bandwidth is the bottleneck, extra threads (the 16-thread bars) buy
+#   little or regress slightly from per-task overhead.
 #
 # Absolute numbers depend heavily on the filesystem and the state of the
 # page cache: benchmark on your own storage before picking a strategy, and
@@ -220,46 +230,54 @@ plt.show()
 # represent tensordict structure natively, so keys are flattened at save
 # time and the nesting is rebuilt at load time.
 #
-# Three operations are timed. *Save* writes a fresh artifact (removed
-# outside the timed region). *Open* constructs a lazy tensordict over an
-# existing artifact: every format here memory-maps its payload, so this is
-# a metadata and view-construction cost -- bulk read throughput is
-# essentially identical across formats once open. *Copy* duplicates the
-# saved artifact, which is where single files beat directories: a
-# directory pays per-file latency, which grows with the number of leaves
-# (and with round-trip time on network filesystems).
+# Two operations are timed. *Save* writes a fresh artifact (removed
+# outside the timed region); the tensordict formats that take a
+# ``num_threads`` argument -- the memmap directory and the consolidated
+# file -- are measured single-threaded and multithreaded (the archive
+# writer is a single sequential pass by design, and ``torch.save`` /
+# safetensors have no threading knob). *Open* constructs a lazy tensordict
+# over an existing artifact: every format here memory-maps its payload, so
+# this is a metadata and view-construction cost -- bulk read throughput is
+# essentially identical across formats once open. Copying the artifact is
+# not plotted: it is a plain filesystem operation, and single files
+# trivially win it (a directory pays per-file latency, which grows with
+# the number of leaves and with round-trip time on network filesystems).
 
 
 def make_formats(td, tmpdir):
-    """Maps format name -> (save() -> path, open(path)) for one layout."""
+    """Maps format name -> (save(num_threads) -> path or None, open(path))."""
     base = Path(tmpdir)
     counter = iter(range(1_000_000))
 
     def fresh(suffix):
         return base / f"artifact{next(counter)}{suffix}"
 
-    def save_dir():
+    def save_dir(num_threads):
         prefix = fresh("")
-        td.save(prefix)
+        td.save(prefix, num_threads=num_threads)
         return prefix
 
     def open_dir(path):
         TensorDict.load_memmap(path)
 
-    def save_consolidated():
+    def save_consolidated(num_threads):
         filename = fresh(".td")
-        td.consolidate(filename=filename)
+        td.consolidate(filename=filename, num_threads=num_threads)
         return filename
 
     def open_consolidated(path):
         TensorDict.from_consolidated(path)
 
-    def save_archive():
+    def save_archive(num_threads):
+        if num_threads:
+            return None  # the archive writer is sequential by design
         filename = fresh(".tdz")
         td.save(filename)
         return filename
 
-    def save_pt():
+    def save_pt(num_threads):
+        if num_threads:
+            return None
         filename = fresh(".pt")
         torch.save(dict(td.flatten_keys(".").items()), filename)
         return filename
@@ -277,7 +295,9 @@ def make_formats(td, tmpdir):
     if _has_safetensors:
         from safetensors.torch import load_file, save_file
 
-        def save_safetensors():
+        def save_safetensors(num_threads):
+            if num_threads:
+                return None
             filename = fresh(".safetensors")
             save_file(dict(td.flatten_keys(".").items()), filename)
             return filename
@@ -289,27 +309,29 @@ def make_formats(td, tmpdir):
     return formats
 
 
-def copy_artifact(path, dst):
-    if path.is_dir():
-        shutil.copytree(path, dst)
-    else:
-        shutil.copyfile(path, dst)
-
-
 def bench_format(save, open_):
-    """Times save / open / copy for one format on one layout."""
+    """Times save (single/multithreaded) and open for one format."""
     out = {}
-    cleanup(save())  # warmup
-    times = []
+    probe = save(NUM_THREADS)
+    threaded = probe is not None
+    cleanup(probe)
+    settings = (0, NUM_THREADS) if threaded else (0,)
+    times = {num_threads: [] for num_threads in settings}
+    for num_threads in settings:  # warmup
+        cleanup(save(num_threads))
     for _ in range(N_REPEATS):
-        t0 = time.perf_counter()
-        path = save()
-        times.append((time.perf_counter() - t0) * 1000)
-        cleanup(path)
-    out["save"] = summarize(times)
+        # single- and multithreaded runs are interleaved, as above
+        for num_threads in settings:
+            t0 = time.perf_counter()
+            path = save(num_threads)
+            times[num_threads].append((time.perf_counter() - t0) * 1000)
+            cleanup(path)
+    out["save"] = summarize(times[0])
+    if threaded:
+        out["save_mt"] = summarize(times[NUM_THREADS])
 
-    # open and copy operate on a single saved artifact
-    artifact = save()
+    # open operates on a single saved artifact
+    artifact = save(0)
     open_(artifact)  # warmup
     times = []
     for _ in range(N_REPEATS):
@@ -317,17 +339,6 @@ def bench_format(save, open_):
         open_(artifact)
         times.append((time.perf_counter() - t0) * 1000)
     out["open"] = summarize(times)
-
-    dst = artifact.parent / f"copy_{artifact.name}"
-    copy_artifact(artifact, dst)  # warmup
-    cleanup(dst)
-    times = []
-    for _ in range(N_REPEATS):
-        t0 = time.perf_counter()
-        copy_artifact(artifact, dst)
-        times.append((time.perf_counter() - t0) * 1000)
-        cleanup(dst)
-    out["copy"] = summarize(times)
     cleanup(artifact)
     return out
 
@@ -339,54 +350,89 @@ for layout_name, td in LAYOUTS.items():
             format_results[layout_name, format_name] = bench_format(save, open_)
 
 ##############################################################################
-# One row per operation, one panel per layout, one bar per format. The time
-# axis is logarithmic: opening is orders of magnitude faster than saving,
-# and the formats differ by orders of magnitude on copying.
+# One row per operation, one panel per layout, one bar (or one
+# single/multithreaded pair) per format, with the median time printed above
+# each bar. The panels use independent linear scales -- the printed values
+# are what makes bars comparable across panels.
 
-OPERATIONS = ("save", "open", "copy")
-fig, axes = plt.subplots(
-    len(OPERATIONS),
-    len(LAYOUTS),
-    figsize=(5 * len(LAYOUTS), 3.2 * len(OPERATIONS)),
-    sharey="row",
-)
-for i, operation in enumerate(OPERATIONS):
-    for j, layout_name in enumerate(LAYOUTS):
+
+def format_ms(value):
+    return f"{value:.2f}" if value < 10 else f"{value:.0f}"
+
+
+def draw_bar(ax, x, result, color, width=0.38, hatch=None):
+    median, err = result
+    (bar,) = ax.bar(
+        x,
+        median,
+        width,
+        yerr=np.array([err]).T,
+        capsize=3,
+        color=color,
+        hatch=hatch,
+        edgecolor="white" if hatch else None,
+    ).patches
+    ax.annotate(
+        format_ms(median),
+        (bar.get_x() + bar.get_width() / 2, median + err[1]),
+        textcoords="offset points",
+        xytext=(0, 3),
+        ha="center",
+        fontsize=8,
+    )
+
+
+fig, axes = plt.subplots(2, len(LAYOUTS), figsize=(6 * len(LAYOUTS), 8), sharey=False)
+for j, layout_name in enumerate(LAYOUTS):
+    names = [f for (l, f) in format_results if l == layout_name]
+    x = np.arange(len(names))
+    for i, operation in enumerate(("save", "open")):
         ax = axes[i, j]
-        names = [f for (l, f) in format_results if l == layout_name]
-        medians = [format_results[layout_name, f][operation][0] for f in names]
-        errors = np.array(
-            [format_results[layout_name, f][operation][1] for f in names]
-        ).T
-        x = np.arange(len(names))
-        ax.bar(
-            x,
-            medians,
-            0.6,
-            yerr=errors,
-            capsize=3,
-            color=plt.cm.tab10.colors[: len(names)],
-        )
-        ax.set_yscale("log")
+        for k, name in enumerate(names):
+            result = format_results[layout_name, name]
+            color = plt.cm.tab10.colors[k]
+            if operation == "save" and "save_mt" in result:
+                draw_bar(ax, k - 0.21, result["save"], color)
+                draw_bar(ax, k + 0.21, result["save_mt"], color, hatch="//")
+            else:
+                draw_bar(ax, k, result[operation], color, width=0.6)
         ax.set_xticks(x, names, fontsize=8)
+        ax.margins(y=0.18)
+        ax.grid(axis="y", alpha=0.3)
+        ax.set_axisbelow(True)
         if j == 0:
             ax.set_ylabel(f"{operation} time (ms)\nlower is better")
         if i == 0:
             size_mb = total_bytes[layout_name] / 2**20
             ax.set_title(f"{layout_name} ({size_mb:.0f} MiB)")
-fig.suptitle(f"On-disk format comparison (median over {N_REPEATS} runs, log scale)")
+axes[0, 0].legend(
+    handles=[
+        Patch(facecolor="0.6", label="single-threaded"),
+        Patch(
+            facecolor="0.6",
+            hatch="//",
+            edgecolor="white",
+            label=f"num_threads={NUM_THREADS}",
+        ),
+    ],
+    fontsize=8,
+)
+fig.suptitle(
+    f"On-disk format comparison "
+    f"(median over {N_REPEATS} runs, interquartile range as error bars)"
+)
 fig.tight_layout()
 plt.show()
 
 ##############################################################################
 # The single-file formats (consolidated, archive, ``torch.save``,
-# safetensors) open with a single metadata parse and copy at raw disk
-# bandwidth, while the directory pays a per-file cost on both operations,
-# which dominates with many small leaves. Saving is bandwidth-bound for
-# every format, with per-entry overheads showing in the many-small-leaves
-# layout. Keep in mind that the tensordict formats carry nested structure,
-# lazy stacks, non-tensor data and (for directories and archives)
-# in-place writability, which the flat external formats do not.
+# safetensors) open with a single metadata parse, while the directory pays
+# a per-file cost that dominates with many small leaves. Saving is
+# bandwidth-bound for every format, with per-entry overheads showing in
+# the many-small-leaves layout; the threaded bars show where
+# ``num_threads`` pays off. Keep in mind that the tensordict formats carry
+# nested structure, lazy stacks, non-tensor data and (for directories and
+# archives) in-place writability, which the flat external formats do not.
 #
 # Further reading
 # ---------------

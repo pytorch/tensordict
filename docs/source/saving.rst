@@ -204,8 +204,8 @@ convertible -- with :func:`~tensordict.pack_memmap` /
 
 .. code-block:: bash
 
-  unzip data.tdz -d data_dir  # yields a loadable memmap directory
-  zip -0 -r data.zip data_dir # yields a loadable archive (see note below)
+  unzip data.tdz -d data_dir                # yields a loadable memmap directory
+  (cd data_dir && zip -0 -r ../data.zip .)  # yields a loadable archive
 
 Partial loading works as with directories: the ``subpath`` argument of
 :meth:`~tensordict.TensorDictBase.load_memmap` selects a nested tensordict
@@ -269,18 +269,19 @@ and the nesting rebuilt at load time.
 
 .. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
    :width: 100%
-   :alt: Barplots comparing save, open and copy times of memmap
-         directories, consolidated files, zip archives, torch.save files
-         and safetensors files across two tensordict layouts.
+   :alt: Barplots comparing save (single- and multithreaded) and open
+         times of memmap directories, consolidated files, zip archives,
+         torch.save files and safetensors files across two tensordict
+         layouts, with the median time printed above each bar.
    :target: tutorials/serialization_speed.html
 
-   Serialization timings across formats and layouts (log scale, lower is
-   better; median over 32 runs with the interquartile range as error
-   bars). The figure is generated on the machine that builds this
-   documentation -- click it to open the corresponding tutorial and
-   download the script. For a larger offline run (bigger payloads, more
-   layouts, read timings), see
-   ``benchmarks/scripts/serialization_formats_bench.py``.
+   Serialization timings across formats and layouts (lower is better;
+   median over 32 runs printed above each bar, interquartile range as
+   error bars; hatched bars are multithreaded saves). The figure is
+   generated on the machine that builds this documentation -- click it to
+   open the corresponding tutorial and download the script. For a larger
+   offline run (bigger payloads, more layouts, read and copy timings),
+   see ``benchmarks/scripts/serialization_formats_bench.py``.
 
 Consolidated serialization
 --------------------------

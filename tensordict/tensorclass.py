@@ -4998,7 +4998,7 @@ class NonTensorStack(LazyStackedTensorDict):
         data = metadata.get("data")
         if data is not None:
             if isinstance(data, str):
-                with open(prefix / data, "rb") as file:
+                with (prefix / data).open("rb") as file:
                     data = pickle.load(file)
             device = metadata["device"]
             if device is not None:

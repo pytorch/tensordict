@@ -128,7 +128,6 @@ def read_all(td):
 def bench(root: Path, num_threads: int = 0):
     if _has_safetensors:
         # optional dependency: imported lazily on purpose
-        from safetensors import safe_open
         from safetensors.torch import load_file, save_file
 
     results = []
@@ -200,11 +199,7 @@ def bench(root: Path, num_threads: int = 0):
                 def load_sft(d=d_sft, load_file=load_file):
                     return TensorDict(load_file(d), batch_size=[]).unflatten_keys(".")
 
-                def open_sft(d=d_sft, safe_open=safe_open):
-                    with safe_open(d, framework="pt") as f:
-                        return list(f.keys())
-
-                row["open_sft"] = timeit(open_sft, reps * 2)
+                row["open_sft"] = timeit(load_sft, reps * 2)
 
             row["read_dir"] = timeit(
                 lambda d=d_dir: read_all(TensorDict.load_memmap(d)), reps
