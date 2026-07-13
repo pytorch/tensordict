@@ -11,11 +11,14 @@ import gc
 import importlib.util
 import json
 import os
+import pickle
 import platform
 import re
+import struct
 import sys
 import sysconfig
 import warnings
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -24,18 +27,24 @@ import tensordict.base as tensordict_base
 import torch
 from packaging import version
 from tensordict import (
+    is_memmap_archive,
     lazy_legacy,
+    lazy_stack,
     LazyStackedTensorDict,
+    pack_memmap,
     PersistentTensorDict,
+    refresh_archive_checksums,
     TensorDict,
+    unpack_memmap,
 )
+from tensordict._archive import _ArchiveReader
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _str_to_index, _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.functional import pad
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, NonTensorDataBase
+from tensordict.tensorclass import NonTensorData, NonTensorDataBase, NonTensorStack
 from tensordict.utils import (
     _check_recursive_properties,
     _getitem_batch_size,
@@ -45,6 +54,7 @@ from tensordict.utils import (
     is_non_tensor,
     set_lazy_legacy,
 )
+from torch._subclasses import FakeTensor, FakeTensorMode
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -1923,6 +1933,22 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td2 = td.load_memmap(tmp_path / "tensordict", device=device)
         assert (td.cpu() == td2.cpu()).all()
+
+    def test_memmap_archive(self, td_name, device, tmp_path):
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
+        td = getattr(self, td_name)(device)
+        archive = tmp_path / "saved.tdz"
+        td.save(archive, copy_existing=True)
+        assert archive.is_file()
+        assert is_memmap_archive(archive)
+        loaded = TensorDict.load_memmap(archive, device=device)
+        assert (td.cpu() == loaded.cpu()).all()
+        # the archive is a plain zip: extracting it yields a loadable
+        # memmap directory
+        unpack_memmap(archive, tmp_path / "unpacked")
+        loaded_dir = TensorDict.load_memmap(tmp_path / "unpacked", device=device)
+        assert (td.cpu() == loaded_dir.cpu()).all()
 
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [2])
@@ -5046,6 +5072,361 @@ def _to_float(td, td_name, tmpdir):
         assert isinstance(td_typed, type(td))
         td = td_typed
     return td
+
+
+class TestMemmapArchive:
+    """Format-level tests for single-file memmap archives (.tdz)."""
+
+    @staticmethod
+    def _nested_td():
+        return TensorDict(
+            {
+                "a": torch.randn(3, 4),
+                "b": {
+                    "c": torch.ones(3, 2, dtype=torch.bool),
+                    "d": torch.arange(3, dtype=torch.int16),
+                },
+                "e": NonTensorData("hello", batch_size=[3]),
+            },
+            batch_size=[3],
+        )
+
+    @staticmethod
+    def _payload_offsets(archive):
+        offsets = {}
+        with zipfile.ZipFile(archive) as zf, open(archive, "rb") as f:
+            for info in zf.infolist():
+                f.seek(info.header_offset + 26)
+                name_len, extra_len = struct.unpack("<2H", f.read(4))
+                offsets[info.filename] = info.header_offset + 30 + name_len + extra_len
+        return offsets
+
+    def test_archive_tensor_payloads_are_aligned(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        offsets = self._payload_offsets(archive)
+        memmap_offsets = {
+            name: off for name, off in offsets.items() if name.endswith(".memmap")
+        }
+        assert memmap_offsets
+        for name, off in memmap_offsets.items():
+            assert off % 64 == 0, (name, off)
+
+    def test_archive_zero_copy(self, tmp_path):
+        # every leaf is a view into a single mapping of the archive
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive)
+        ptrs = {
+            v.untyped_storage().data_ptr()
+            for v in loaded.values(True, True)
+            if isinstance(v, torch.Tensor)
+        }
+        assert len(ptrs) == 1
+        # in-place writes are copy-on-write: the file is not modified
+        before = archive.read_bytes()
+        loaded["a"] += 1
+        assert archive.read_bytes() == before
+
+    @pytest.mark.parametrize("view_kind", ["conjugate", "negative"])
+    def test_archive_tensor_view_bits(self, tmp_path, view_kind):
+        if view_kind == "conjugate":
+            tensor = torch.tensor([1 + 2j, 3 + 4j]).conj()
+        else:
+            tensor = torch.tensor([1.0, 2.0])._neg_view()
+        expected = tensor.resolve_conj().resolve_neg()
+        archive = tmp_path / f"{view_kind}.tdz"
+        loaded = TensorDict({"x": tensor}, batch_size=[]).save(archive)
+        torch.testing.assert_close(loaded["x"], expected)
+
+    def test_archive_explicit_flag(self, tmp_path):
+        # archive mode can target any file name when requested explicitly
+        td = self._nested_td()
+        archive = tmp_path / "weights.bin"
+        td.save(archive, archive=True)
+        assert is_memmap_archive(archive)
+        loaded = TensorDict.load_memmap(archive)
+        assert (loaded == td).all()
+
+    def test_archive_foreign_zip(self, tmp_path):
+        # `zip -0 -r` over a memmap dir (no alignment) is loadable: unaligned
+        # leaves fall back to a copying read
+        td = self._nested_td()
+        td.memmap(tmp_path / "plain")
+        foreign = tmp_path / "foreign.zip"
+        with zipfile.ZipFile(foreign, "w") as zf:
+            for path in sorted((tmp_path / "plain").rglob("*")):
+                if path.is_file():
+                    zf.write(path, path.relative_to(tmp_path / "plain").as_posix())
+        loaded = TensorDict.load_memmap(foreign)
+        assert (loaded == td).all()
+
+    def test_pack_unpack_roundtrip(self, tmp_path):
+        td = self._nested_td()
+        td.memmap(tmp_path / "plain")
+        archive = pack_memmap(tmp_path / "plain", tmp_path / "packed.tdz")
+        assert is_memmap_archive(archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+        unpack_memmap(archive, tmp_path / "unpacked")
+        assert (TensorDict.load_memmap(tmp_path / "unpacked") == td).all()
+
+    @pytest.mark.parametrize("compression", ["deflate", "lzma"])
+    def test_archive_compression(self, tmp_path, compression):
+        td = TensorDict(
+            {"a": torch.zeros(1000, dtype=torch.uint8), "b": {"c": torch.zeros(100)}},
+            batch_size=[],
+        )
+        stored = tmp_path / "stored.tdz"
+        compressed = tmp_path / "compressed.tdz"
+        td.save(stored)
+        td.save(compressed, compression=compression)
+        assert compressed.stat().st_size < stored.stat().st_size
+        assert (TensorDict.load_memmap(compressed) == td).all()
+
+    @pytest.mark.parametrize("subpath", [None, "b"])
+    def test_archive_compressed_parallel_load(self, tmp_path, subpath):
+        td = TensorDict(
+            {
+                "a": torch.randn(100, 10),
+                "b": {f"t{i}": torch.randn(100) for i in range(8)},
+            },
+            batch_size=[100],
+        )
+        archive = tmp_path / "comp.tdz"
+        td.save(archive, compression="deflate")
+        loaded = TensorDict.load_memmap(archive, subpath=subpath, num_threads=4)
+        expected = td if subpath is None else td.get(subpath)
+        assert (loaded == expected).all()
+        # num_threads is a no-op on uncompressed archives and directories
+        td.save(tmp_path / "plain.tdz")
+        assert (
+            TensorDict.load_memmap(tmp_path / "plain.tdz", num_threads=4) == td
+        ).all()
+        td.memmap(tmp_path / "plaindir")
+        assert (
+            TensorDict.load_memmap(tmp_path / "plaindir", num_threads=4) == td
+        ).all()
+
+    def test_archive_compressed_metadata_only_load(self, tmp_path, monkeypatch):
+        td = TensorDict({"a": torch.randn(10), "b": torch.randn(10)}, batch_size=[])
+        archive = tmp_path / "compressed.tdz"
+        td.save(archive, compression="deflate")
+
+        def fail_prefetch(*args, **kwargs):
+            pytest.fail("compressed payloads were prefetched")
+
+        monkeypatch.setattr(_ArchiveReader, "prefetch_compressed", fail_prefetch)
+        meta = TensorDict.load_memmap(archive, device="meta", num_threads=4)
+        assert meta["a"].device.type == "meta"
+        with FakeTensorMode():
+            fake = TensorDict.load_memmap(archive, num_threads=4)
+        assert isinstance(fake["a"], FakeTensor)
+
+    def test_archive_compression_requires_archive(self, tmp_path):
+        td = self._nested_td()
+        with pytest.raises(ValueError, match="compression is only supported"):
+            td.save(tmp_path / "plain", compression="deflate")
+
+    @pytest.mark.parametrize("archive", [True, False])
+    def test_subpath(self, tmp_path, archive):
+        td = lazy_stack(
+            [
+                TensorDict(
+                    {"x": torch.full((2,), float(i)), "sub": {"y": torch.ones(2) * i}},
+                    batch_size=[2],
+                )
+                for i in range(3)
+            ]
+        )
+        prefix = tmp_path / ("saved.tdz" if archive else "saved")
+        td.save(prefix)
+        loaded = TensorDict.load_memmap(prefix)
+        assert isinstance(loaded, LazyStackedTensorDict)
+        assert (loaded == td).all()
+        part = TensorDict.load_memmap(prefix, subpath="1/sub")
+        assert (part["y"] == 1.0).all()
+        part = TensorDict.load_memmap(prefix, subpath=("1", "sub"))
+        assert (part["y"] == 1.0).all()
+        # nested keys with arbitrary nesting are accepted
+        part = TensorDict.load_memmap(prefix, subpath=("1", ("sub",)))
+        assert (part["y"] == 1.0).all()
+        with pytest.raises(ValueError, match="No tensordict found under subpath"):
+            TensorDict.load_memmap(prefix, subpath="does/not/exist")
+        with pytest.raises(ValueError, match="No tensordict found under subpath"):
+            TensorDict.load_memmap(prefix, subpath=("does", ("not", "exist")))
+
+    def test_archive_meta_device(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        meta = TensorDict.load_memmap(archive, device="meta")
+        assert meta["a"].device.type == "meta"
+        assert meta["a"].shape == td["a"].shape
+
+    def test_archive_nested_tensor(self, tmp_path):
+        nt = torch.nested.nested_tensor([torch.randn(2, 3), torch.randn(4, 3)])
+        td = TensorDict({"nt": nt}, batch_size=[])
+        archive = tmp_path / "nt.tdz"
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive)
+        assert (loaded["nt"][0] == nt[0]).all()
+        assert (loaded["nt"][1] == nt[1]).all()
+
+    def test_archive_load_memmap_(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        dest = td.clone().zero_()
+        dest.load_memmap_(archive)
+        assert (dest == td).all()
+
+    def test_archive_pickle(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive)
+        assert (pickle.loads(pickle.dumps(loaded)) == td).all()
+
+    def test_archive_pickled_non_tensor_stack(self, tmp_path):
+        values = [1 + 2j, 3 + 4j]
+        stack = NonTensorStack(
+            *(NonTensorData(value, batch_size=[]) for value in values), stack_dim=0
+        )
+        td = TensorDict({"values": stack}, batch_size=[2])
+        loaded = td.save(tmp_path / "non_tensor.tdz")
+        assert loaded.to_dict()["values"] == values
+
+    def test_archive_existsok(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        with pytest.raises(RuntimeError, match="already exists"):
+            td.memmap(archive, existsok=False)
+        # overwriting is fine by default
+        td.save(archive)
+
+    def test_archive_bad_file(self, tmp_path):
+        bad = tmp_path / "bad.tdz"
+        bad.write_bytes(b"not a zip file")
+        with pytest.raises(ValueError, match="not a memory-mapped tensordict"):
+            TensorDict.load_memmap(bad)
+
+    def test_archive_mode_rplus(self, tmp_path):
+        td = self._nested_td()
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive, mode="r+")
+        loaded["a"].add_(1)
+        loaded["b", "d"].add_(2)
+        # writes reached the file
+        reloaded = TensorDict.load_memmap(archive)
+        assert (reloaded["a"] == td["a"] + 1).all()
+        assert (reloaded["b", "d"] == td["b", "d"] + 2).all()
+        # the CRCs are stale: zip-level reads fail until refreshed
+        with pytest.raises(zipfile.BadZipFile), zipfile.ZipFile(archive) as zf:
+            zf.read("a.memmap")
+        refresh_archive_checksums(archive)
+        with zipfile.ZipFile(archive) as zf:
+            zf.read("a.memmap")  # does not raise anymore
+        unpack_memmap(archive, tmp_path / "unpacked")
+        assert (TensorDict.load_memmap(tmp_path / "unpacked")["a"] == td["a"] + 1).all()
+
+    def test_archive_mode_rplus_rejects_non_writable_layouts(self, tmp_path):
+        td = self._nested_td()
+        compressed = tmp_path / "compressed.tdz"
+        td.save(compressed, compression="deflate")
+        with pytest.raises(RuntimeError, match="is compressed"):
+            TensorDict.load_memmap(compressed, mode="r+")
+        # misaligned foreign zip
+        td.memmap(tmp_path / "plain")
+        foreign = tmp_path / "foreign.zip"
+        with zipfile.ZipFile(foreign, "w") as zf:
+            for path in sorted((tmp_path / "plain").rglob("*")):
+                if path.is_file():
+                    zf.write(path, path.relative_to(tmp_path / "plain").as_posix())
+        with pytest.raises(RuntimeError, match="is not aligned"):
+            TensorDict.load_memmap(foreign, mode="r+")
+        # nested tensors cannot write through
+        nt = torch.nested.nested_tensor([torch.randn(2, 3), torch.randn(4, 3)])
+        ntpath = tmp_path / "nt.tdz"
+        TensorDict({"nt": nt}, batch_size=[]).save(ntpath)
+        with pytest.raises(RuntimeError, match="nested tensor"):
+            TensorDict.load_memmap(ntpath, mode="r+")
+        # invalid mode
+        with pytest.raises(ValueError, match="mode must be"):
+            TensorDict.load_memmap(tmp_path / "plain", mode="w")
+
+    def test_archive_threaded_save(self, tmp_path):
+        # regression: num_threads>1 must not scramble the pairing between
+        # source tensors and archive entries (staging insertion order used
+        # to follow thread completion order)
+        td = TensorDict(
+            {
+                f"g{i}": {f"t{j}": torch.randn(4 + (7 * i + j) % 96) for j in range(8)}
+                for i in range(16)
+            },
+            batch_size=[],
+        )
+        for i in range(3):
+            archive = tmp_path / f"data{i}.tdz"
+            td.save(archive, num_threads=32)
+            assert (TensorDict.load_memmap(archive) == td).all()
+
+    def test_archive_memmapped_source(self, tmp_path):
+        # already-memmapped tensordicts are packed straight from their
+        # directory, without re-staging
+        td = self._nested_td()
+        tdm = td.memmap(tmp_path / "plain")
+        archive = tmp_path / "data.tdz"
+        tdm.save(archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+
+    def test_archive_memmap_like(self, tmp_path):
+        td = TensorDict(
+            {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 2)}}, batch_size=[3]
+        )
+        archive = tmp_path / "buf.tdz"
+        buf = td.memmap_like(archive)
+        assert is_memmap_archive(archive)
+        # contentless: the buffer is zero-filled, not a copy of td
+        assert (buf["a"] == 0).all()
+        assert buf.batch_size == td.batch_size
+        assert buf["a"].shape == td["a"].shape
+        # the buffer writes through to the archive
+        buf["a"].copy_(td["a"])
+        buf["b", "c"].copy_(td["b", "c"])
+        reloaded = TensorDict.load_memmap(archive)
+        assert (reloaded == td).all()
+        # a refreshed archive works with zip-level tooling
+        refresh_archive_checksums(archive)
+        unpack_memmap(archive, tmp_path / "unpacked")
+        assert (TensorDict.load_memmap(tmp_path / "unpacked") == td).all()
+
+    def test_archive_memmap_like_expanded(self, tmp_path):
+        # preallocating a buffer from an expanded (stride-0) tensordict
+        # does not materialize the data
+        datum = TensorDict(
+            {"img": torch.zeros(3, 8, 8, dtype=torch.uint8)}, batch_size=[]
+        )
+        buf = datum.expand(1000).memmap_like(tmp_path / "ds.tdz")
+        assert buf["img"].shape == (1000, 3, 8, 8)
+        buf[42] = TensorDict(
+            {"img": torch.full((3, 8, 8), 7, dtype=torch.uint8)}, batch_size=[]
+        )
+        reloaded = TensorDict.load_memmap(tmp_path / "ds.tdz")
+        assert (reloaded["img"][42] == 7).all()
+        assert (reloaded["img"][41] == 0).all()
+
+    def test_archive_memmap_like_errors(self, tmp_path):
+        td = TensorDict({"a": torch.randn(3)}, batch_size=[])
+        archive = tmp_path / "buf.tdz"
+        td.memmap_like(archive)
+        with pytest.raises(RuntimeError, match="already exists"):
+            td.memmap_like(archive, existsok=False)
+        with pytest.raises(NotImplementedError, match="return_early"):
+            td.memmap_like(archive, num_threads=2, return_early=True)
 
 
 if __name__ == "__main__":

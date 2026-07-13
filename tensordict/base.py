@@ -51,6 +51,13 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict._archive import (
+    _ArchivePath,
+    _make_archive_like,
+    _save_as_archive,
+    is_memmap_archive,
+    TENSORDICT_ARCHIVE_SUFFIX,
+)
 from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
@@ -7440,6 +7447,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
     ) -> Self:
         """Saves the tensordict to disk.
 
@@ -7452,6 +7461,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return_early=return_early,
             share_non_tensor=share_non_tensor,
             robust_key=robust_key,
+            archive=archive,
+            compression=compression,
         )
 
     dumps = save
@@ -7466,12 +7477,18 @@ class TensorDictBase(MutableMapping, TensorCollection):
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
     ) -> Self:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
                 be stored. The directory tree structure will mimic the tensordict's.
+                If ``prefix`` ends with ``".tdz"`` (or ``archive=True`` is
+                passed), a single-file archive is written instead of a
+                directory: a standard zip file whose entries replicate the
+                memmap directory layout. See ``archive`` below.
             copy_existing (bool): If False (default), an exception will be raised if an
                 entry in the tensordict is already a tensor stored on disk
                 with an associated file, but is not saved in the correct
@@ -7495,6 +7512,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 handles keys with path separators and special characters. If ``False``,
                 uses legacy behavior (keys used as-is). If ``None``, uses the default
                 robust behavior.
+            archive (bool, optional): if ``True``, ``prefix`` designates a
+                single file rather than a directory and the tensordict is
+                written as a memmap archive: a zip file mirroring the memmap
+                directory tree, with tensor payloads stored uncompressed and
+                aligned so that :meth:`~.load_memmap` can memory-map the file
+                and expose every leaf as a zero-copy view. If ``None``
+                (default), archive mode is enabled when ``prefix`` ends with
+                ``".tdz"``. The result of :meth:`~.load_memmap` on an archive
+                behaves like the result of :meth:`~.from_consolidated`: all
+                leaves are views into a single storage, and in-place writes do
+                not propagate to the file. Archives and memmap directories are
+                mutually convertible with :func:`~tensordict.pack_memmap` /
+                :func:`~tensordict.unpack_memmap` (or any zip tool). Note that
+                archives are written sequentially (single data pass) and
+                ``num_threads`` has no effect on them.
+            compression (str or int, optional): compression for archive
+                entries (``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``
+                or a :mod:`zipfile` constant). Defaults to ``"stored"``
+                (uncompressed), which is what enables zero-copy loading.
+                Compressed archives load correctly but leaves are
+                decompressed in memory on access. Only valid in archive mode.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -7510,6 +7548,36 @@ class TensorDictBase(MutableMapping, TensorCollection):
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        if archive is None:
+            archive = (
+                prefix is not None and Path(prefix).suffix == TENSORDICT_ARCHIVE_SUFFIX
+            )
+        if archive:
+            if prefix is None:
+                raise ValueError("A path is required to write a memmap archive.")
+            if return_early:
+                raise NotImplementedError(
+                    "return_early is not supported when writing a memmap archive."
+                )
+            _save_as_archive(
+                self,
+                prefix,
+                num_threads=num_threads,
+                compression=compression,
+                copy_existing=copy_existing,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            # dispatch on the class recorded in the archive metadata rather
+            # than type(self): some views (e.g. sub-tensordicts) are saved as
+            # a different class than the one they are created from.
+            return TensorDictBase.load_memmap(prefix)
+        if compression is not None:
+            raise ValueError(
+                "compression is only supported when writing a memmap archive "
+                "(pass archive=True or use a '.tdz' prefix)."
+            )
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
 
         if num_threads > 1:
@@ -7553,12 +7621,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
     ) -> Self:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
                 be stored. The directory tree structure will mimic the tensordict's.
+                If ``prefix`` ends with ``".tdz"`` (or ``archive=True`` is
+                passed), a preallocated single-file archive is created
+                instead. See ``archive`` below.
             copy_existing (bool): If False (default), an exception will be raised if an
                 entry in the tensordict is already a tensor stored on disk
                 with an associated file, but is not saved in the correct
@@ -7582,6 +7654,16 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 handles keys with path separators and special characters. If ``False``,
                 uses legacy behavior (keys used as-is). If ``None``, uses the default
                 robust behavior.
+            archive (bool, optional): if ``True``, ``prefix`` designates a
+                single file and a preallocated, zero-filled memmap archive is
+                created and loaded back with
+                ``load_memmap(prefix, mode="r+")``: the returned tensordict
+                writes through to the archive. If ``None`` (default), archive
+                mode is enabled when ``prefix`` ends with ``".tdz"``.
+                In-place writes leave the zip per-entry checksums stale; call
+                :func:`~tensordict.refresh_archive_checksums` before handing
+                the archive to tools that verify them. Nested tensors are not
+                supported in this mode.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -7606,6 +7688,27 @@ class TensorDictBase(MutableMapping, TensorCollection):
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        if archive is None:
+            archive = (
+                prefix is not None and Path(prefix).suffix == TENSORDICT_ARCHIVE_SUFFIX
+            )
+        if archive:
+            if prefix is None:
+                raise ValueError("A path is required to write a memmap archive.")
+            if return_early:
+                raise NotImplementedError(
+                    "return_early is not supported when writing a memmap archive."
+                )
+            _make_archive_like(
+                self,
+                prefix,
+                num_threads=num_threads,
+                copy_existing=copy_existing,
+                share_non_tensor=share_non_tensor,
+                existsok=existsok,
+                robust_key=robust_key,
+            )
+            return TensorDictBase.load_memmap(prefix, mode="r+")
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
@@ -7674,12 +7777,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         out: TensorDictBase | None = None,
         robust_key: bool | None = True,
+        subpath: NestedKey | None = None,
+        mode: str = "r",
+        num_threads: int = 0,
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
         Args:
             prefix (str or Path to folder): the path to the folder where the
-                saved tensordict should be fetched.
+                saved tensordict should be fetched, or the path to a memmap
+                archive file written through
+                ``save(..., archive=True)`` / a ``".tdz"`` prefix (or packed
+                with :func:`~tensordict.pack_memmap`). Archives are
+                memory-mapped once and every leaf is exposed as a zero-copy
+                view into the mapping: only the pages of the leaves that are
+                actually accessed are read from disk. Unlike directory-backed
+                tensordicts, in-place writes to the leaves of an
+                archive-loaded tensordict do not propagate to the file.
             device (torch.device or equivalent, optional): if provided, the
                 data will be asynchronously cast to that device.
                 Supports `"meta"` device, in which case the data isn't loaded
@@ -7693,6 +7807,33 @@ class TensorDictBase(MutableMapping, TensorCollection):
             robust_key (bool, optional): if ``True`` (default), expects robust key encoding was used
                 when saving and decodes filenames accordingly. If ``False``, uses legacy
                 behavior. If ``None``, uses the default robust behavior.
+            subpath (NestedKey or str path, optional): the location of a
+                nested tensordict to load, as a nested key (e.g.
+                ``("module", "0")``, with arbitrary nesting allowed as usual)
+                or as a ``"/"``-separated string path (e.g. ``"module/0"``).
+                Only that subtree is loaded. Works both for directories
+                (equivalent to appending the path to ``prefix``) and for
+                archives.
+            mode (str, optional): ``"r"`` (default) or ``"r+"``. Only
+                relevant when loading an archive: with ``"r"`` the archive is
+                mapped copy-on-write and in-place writes to the leaves stay
+                in memory; with ``"r+"`` the mapping is shared and in-place
+                writes propagate to the file, like directory-backed
+                tensordicts. ``"r+"`` requires uncompressed, aligned tensor
+                payloads (i.e. archives written by tensordict without
+                ``compression``) and is not available for nested-tensor
+                leaves. In-place writes do not update the per-entry CRC-32
+                stored by the zip format; :meth:`~.load_memmap` ignores
+                checksums, but call
+                :func:`~tensordict.refresh_archive_checksums` before handing
+                a modified archive to tools that verify them (``unzip``,
+                :func:`~tensordict.unpack_memmap`, ...). Directory prefixes
+                are always write-through and ignore this argument.
+            num_threads (int, optional): number of threads used to decompress
+                the leaves of a compressed archive (deflate entries are
+                inflated in parallel, which scales nearly linearly). Without
+                compression, loading is a metadata-only operation and this
+                argument has no effect. Defaults to ``0`` (sequential).
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7747,7 +7888,43 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 is_shared=False)
 
         """
-        prefix = Path(prefix)
+        if mode not in ("r", "r+"):
+            raise ValueError(f"mode must be 'r' or 'r+', got {mode!r}.")
+        if not isinstance(prefix, _ArchivePath):
+            # nested (recursive) calls pass _ArchivePath instances directly
+            prefix = Path(prefix)
+            if prefix.is_file():
+                if not is_memmap_archive(prefix):
+                    raise ValueError(
+                        f"{prefix} is a file but not a memory-mapped tensordict "
+                        f"archive (expected a zip file with a top-level meta.json "
+                        f"entry)."
+                    )
+                prefix = _ArchivePath.root(prefix, writable=mode == "r+")
+        if subpath is not None:
+            if isinstance(subpath, str):
+                # "/"-separated path form
+                subpath = tuple(part for part in subpath.split("/") if part)
+            else:
+                # NestedKey form: normalize arbitrary nesting, e.g.
+                # ("module", ("0", "sub")) -> ("module", "0", "sub")
+                subpath = _unravel_key_to_tuple(subpath)
+                if not subpath:
+                    raise ValueError(
+                        "subpath must be a string path or a (nested) tuple of "
+                        "strings."
+                    )
+            for part in subpath:
+                prefix = prefix / part
+            if not (prefix / "meta.json").exists():
+                raise ValueError(
+                    f"No tensordict found under subpath {'/'.join(subpath)!r} "
+                    f"(missing meta.json in {prefix})."
+                )
+        if num_threads > 1 and isinstance(prefix, _ArchivePath):
+            # Defer decompression until a leaf is actually materialized so
+            # meta-device and FakeTensor loads remain metadata-only.
+            prefix.reader.schedule_compressed_prefetch(prefix.at, num_threads)
 
         metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
@@ -17967,7 +18144,9 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
 def _load_metadata(prefix: Path):
     filepath = prefix / "meta.json"
-    with open(filepath, "rb") as json_metadata:
+    # `open` as a method so that archive paths (zip entries) can be read
+    # through the same code path as regular files.
+    with filepath.open("rb") as json_metadata:
         metadata = json.loads(json_metadata.read())
     return metadata
 

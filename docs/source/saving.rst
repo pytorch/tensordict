@@ -177,6 +177,112 @@ possible behaviours.
   This feature is implemented to prevent users from inadvertently copying memory-mapped
   tensors from one location to another.
 
+Single-file memmap archives
+---------------------------
+
+A memory-mapped directory is convenient to work with locally, but shipping it
+around means copying many small files. Passing a path ending in ``".tdz"``
+(or ``archive=True``) to :meth:`~tensordict.TensorDictBase.save`,
+:meth:`~tensordict.TensorDictBase.dumps` or
+:meth:`~tensordict.TensorDictBase.memmap` writes the exact same data layout
+as a **single file** instead:
+
+  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+  >>> td.save("data.tdz")
+  >>> td2 = TensorDict.load_memmap("data.tdz")
+  >>> assert (td == td2).all()
+
+The archive is a standard zip file whose entries replicate the memmap
+directory tree (``meta.json`` files and ``*.memmap`` payloads). Tensor
+payloads are stored uncompressed and aligned, so
+:meth:`~tensordict.TensorDictBase.load_memmap` memory-maps the archive once
+and exposes every leaf as a zero-copy view into the mapping: metadata aside,
+nothing is read from disk until a tensor is actually accessed. Because the
+entry tree is the directory tree, the two representations are freely
+convertible -- with :func:`~tensordict.pack_memmap` /
+:func:`~tensordict.unpack_memmap`, or with any zip tool:
+
+.. code-block:: bash
+
+  unzip data.tdz -d data_dir                # yields a loadable memmap directory
+  (cd data_dir && zip -0 -r ../data.zip .)  # yields a loadable archive
+
+Partial loading works as with directories: the ``subpath`` argument of
+:meth:`~tensordict.TensorDictBase.load_memmap` selects a nested tensordict
+without touching the rest of the archive:
+
+  >>> sub = TensorDict.load_memmap("model.tdz", subpath="encoder/layers")
+
+Archives can optionally be compressed (``compression="deflate"`` among
+others). Compressed leaves cannot be memory-mapped and are decompressed in
+memory on first access, so this is a trade-off reserved for archival storage;
+data such as ``uint8`` images or boolean masks compress well, whereas float
+weights barely do.
+
+.. note::
+  Two differences with directory-backed tensordicts are worth keeping in
+  mind. First, by default an archive-loaded tensordict behaves like the
+  result of :meth:`~tensordict.TensorDictBase.from_consolidated`: leaves are
+  views into a single storage and in-place writes do **not** propagate to
+  the file. Second, archives written by external zip tools (without payload
+  alignment) load correctly, but misaligned leaves are copied in memory
+  rather than viewed.
+
+Write-through loading is available as an explicit opt-in with
+``mode="r+"``, restoring the directory semantics for a single file:
+
+  >>> td = TensorDict.load_memmap("data.tdz", mode="r+")
+  >>> td["a"].add_(1)  # written to the archive
+
+The preallocation workflow of :meth:`~tensordict.TensorDictBase.memmap_like`
+works with archives as well: pointing it at a ``".tdz"`` path creates a
+zero-filled archive and returns a write-through tensordict backed by it,
+i.e. a dataset buffer that lives in a single file:
+
+  >>> data = datum.expand(1_000_000)
+  >>> buffer = data.memmap_like("/path/to/data.tdz")
+  >>> buffer[0] = datum  # written to the archive
+
+In-place writes leave the per-entry CRC-32 checksums of the zip format
+stale. :meth:`~tensordict.TensorDictBase.load_memmap` never verifies
+checksums, so this is harmless within tensordict, but call
+:func:`~tensordict.refresh_archive_checksums` before handing a modified
+archive to tools that do verify them (``unzip``,
+:func:`~tensordict.unpack_memmap`, ...).
+
+How do the three on-disk representations (memmap directory, consolidated
+file, archive) compare speed-wise, including against ``torch.save`` and
+safetensors? All of these load lazily through ``mmap``, so bulk read
+throughput is essentially identical; the differences are in the per-entry
+overheads. Opening scales with the number of entries and favors the
+single-file formats (one metadata parse instead of one file open per leaf).
+Saving an archive streams the tensor bytes into the file in a single pass
+and is comparable to a directory save, with a per-entry overhead that shows
+for many-small-leaf layouts. Copying the saved artifact is where single
+files shine: a directory pays per-file latency, which dominates for
+many-small-leaf layouts on local disk and grows with round-trip time on
+network filesystems. Note that ``torch.save`` and safetensors are measured
+on their fastest paths (flat tensor dicts, ``torch.load(mmap=True,
+weights_only=True)`` and mmap-backed loading respectively) and do not
+represent tensordict structure natively: keys are flattened at save time
+and the nesting rebuilt at load time.
+
+.. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
+   :width: 100%
+   :alt: Barplots comparing save (single- and multithreaded) and open
+         times of memmap directories, consolidated files, zip archives,
+         torch.save files and safetensors files across two tensordict
+         layouts, with the median time printed above each bar.
+   :target: tutorials/serialization_speed.html
+
+   Serialization timings across formats and layouts (lower is better;
+   median over 32 runs printed above each bar, interquartile range as
+   error bars; hatched bars are multithreaded saves). The figure is
+   generated on the machine that builds this documentation -- click it to
+   open the corresponding tutorial and download the script. For a larger
+   offline run (bigger payloads, more layouts, read and copy timings),
+   see ``benchmarks/scripts/serialization_formats_bench.py``.
+
 Consolidated serialization
 --------------------------
 

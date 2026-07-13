@@ -1807,10 +1807,12 @@ def _share_memory_(self):
 def _load_memmap(cls, prefix: Path, metadata: dict, *, robust_key, **kwargs):
     non_tensordict = dict(metadata)
     del non_tensordict["_type"]
-    if os.path.exists(prefix / "other.pickle"):
-        with open(prefix / "other.pickle", "rb") as pickle_file:
+    # Path methods (rather than os.path) so that archive paths can be
+    # traversed through the same code path as regular directories.
+    if (prefix / "other.pickle").exists():
+        with (prefix / "other.pickle").open("rb") as pickle_file:
             non_tensordict.update(pickle.load(pickle_file))
-    if os.path.exists(prefix / "_tensordict"):
+    if (prefix / "_tensordict").exists():
         td = TensorDict.load_memmap(
             prefix / "_tensordict", **kwargs, non_blocking=False, robust_key=robust_key
         )
@@ -4996,7 +4998,7 @@ class NonTensorStack(LazyStackedTensorDict):
         data = metadata.get("data")
         if data is not None:
             if isinstance(data, str):
-                with open(prefix / data, "rb") as file:
+                with (prefix / data).open("rb") as file:
                     data = pickle.load(file)
             device = metadata["device"]
             if device is not None:
