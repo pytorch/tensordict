@@ -39,13 +39,16 @@ each worker:
 
 Some operations offered by TensorDict can be done via tree_map too, but with a greater degree of complexity:
 
+>>> import torch
+>>> from torch.utils._pytree import tree_map
+>>> from tensordict import TensorDict
 >>> td = TensorDict(
 ...     {"a": torch.randn(3, 11), "b": torch.randn(3, 3)}, batch_size=3
 ... )
 >>> regular_dict = {"a": td["a"], "b": td["b"]}
 >>> td0, td1, td2 = td.unbind(0)
 >>> # similar structure with pytree
->>> regular_dicts = tree_map(lambda x: x.unbind(0))
+>>> regular_dicts = tree_map(lambda x: x.unbind(0), regular_dict)
 >>> regular_dict1, regular_dict2, regular_dict3 = [
 ...     {"a": regular_dicts["a"][i], "b": regular_dicts["b"][i]}
 ...     for i in range(3)]
@@ -58,10 +61,10 @@ The nested case is even more compelling:
 >>> regular_dict = {"a": {"c": td["a", "c"]}, "b": td["b"]}
 >>> td0, td1, td2 = td.unbind(0)
 >>> # similar structure with pytree
->>> regular_dicts = tree_map(lambda x: x.unbind(0))
+>>> regular_dicts = tree_map(lambda x: x.unbind(0), regular_dict)
 >>> regular_dict1, regular_dict2, regular_dict3 = [
 ...     {"a": {"c": regular_dicts["a"]["c"][i]}, "b": regular_dicts["b"][i]}
-...     for i in range(3)
+...     for i in range(3)]
 
 Decomposing the output dictionary in three similarly structured dictionaries after applying the unbind operation quickly
 becomes significantly cumbersome when working naively with pytree. With tensordict, we provide a simple API for users
@@ -134,13 +137,13 @@ The :meth:`~tensordict.TensorDict.to` method can also be used as a context manag
 
     >>> def op(td):
     ...     return td + 1
-    >>> tensordict = TensorDict({"x": torch.zeros(3)}, batch_size=[3], device="cpu")
-    >>> with tensordict.to("cuda:0") as td_gpu:
-    ...     # Process data on GPU and update in-place -- anything that affects td_gpu in place will also affect tensordict during __exit__
-    ...     td_gpu.update(some_gpu_operation(td_gpu))
+    >>> td_cpu = TensorDict({"x": torch.zeros(3)}, batch_size=[3], device="cpu")
+    >>> with td_cpu.to("cuda:0") as td_gpu:
+    ...     # Process data on GPU and update in-place -- anything that affects td_gpu in place will also affect td_cpu during __exit__
+    ...     td_gpu.update(op(td_gpu))
     >>> # Data is automatically restored to original device
-    >>> assert tensordict.device == torch.device("cpu")
-    >>> assert (tensordict == 1).all()
+    >>> assert td_cpu.device == torch.device("cpu")
+    >>> assert (td_cpu == 1).all()
 
 To reshape the batch dimensions one can do
 
@@ -188,20 +191,20 @@ Usage
     ...     batch_size=[2, 3],
     ... )
 
-Shape operations on the TensorDict leave the ``UnbatchedTensor`` unchanged:
+Shape operations on the TensorDict leave the ``UnbatchedTensor`` storage unchanged:
 
     >>> reshaped = td.reshape(6)
-    >>> reshaped["config"] is td["config"]
+    >>> reshaped["config"].data_ptr() == td["config"].data_ptr()
     True
     >>> parts = td.unbind(0)
-    >>> parts[0]["config"] is parts[1]["config"]
+    >>> parts[0]["config"].data_ptr() == parts[1]["config"].data_ptr()
     True
 
 Pointwise arithmetic is applied to the underlying data:
 
     >>> td2 = td * 2
-    >>> td2.get("config").data
-    tensor([2., 4., 6.])
+    >>> torch.equal(td2["config"], torch.tensor([2.0, 4.0, 6.0]))
+    True
 
 Single-element ``UnbatchedTensor`` values can be converted like regular PyTorch tensors:
 
@@ -257,7 +260,7 @@ Creating a TensorDict with Non-Tensor Data
 
 You can create a TensorDict with non-tensor data using the :class:`~tensordict.NonTensorData` class.
 
-    >>> from tensordict import TensorDict, NonTensorData
+    >>> from tensordict import MetaData, NonTensorData, NonTensorStack, TensorDict
     >>> import torch
     >>> td = TensorDict(
     ...     a=NonTensorData("a string!"),
@@ -415,10 +418,10 @@ The names can be given at construction time or refined later. The semantic is
 similar to the torch.Tensor dimension name feature:
 
 >>> tensordict = TensorDict({}, batch_size=[3, 4], names=["a", None])
->>> tensordict.refine_names(..., "b")
+>>> tensordict = tensordict.refine_names(..., "b")
 >>> tensordict.names = ["z", "y"]
->>> tensordict.rename("m", "n")
->>> tensordict.rename(m="h")
+>>> tensordict = tensordict.rename("m", "n")
+>>> tensordict = tensordict.rename(m="h")
 
 Nested TensorDicts
 ------------------
@@ -446,16 +449,17 @@ Accessing or setting nested keys can be done with tuples of strings
 Lazy evaluation
 ---------------
 
-Some operations on :class:`~tensordict.TensorDict` defer execution until items are accessed. For example stacking,
+Some operations on :class:`~tensordict.TensorDict` defer execution until items are accessed. For example lazy stacking,
 squeezing, unsqueezing, permuting batch dimensions and creating a view are not executed immediately on all the contents
 of the :class:`~tensordict.TensorDict`. Instead they are performed lazily when values in the :class:`~tensordict.TensorDict`
 are accessed. This can save a lot of unnecessary calculation should the :class:`~tensordict.TensorDict` contain many values.
 
+>>> from tensordict import lazy_stack
 >>> tensordicts = [TensorDict({
 ...     "a": torch.rand(10),
 ...     "b": torch.rand(10, 1000, 1000)}, [10])
 ...     for _ in range(3)]
->>> stacked = torch.stack(tensordicts, 0)  # no stacking happens here
+>>> stacked = lazy_stack(tensordicts, 0)  # no stacking happens here
 >>> stacked_a = stacked["a"]  # we stack the a values, b values are not stacked
 
 It also has the advantage that we can manipulate the original tensordicts in a stack:
@@ -524,7 +528,10 @@ pass :class:`~tensordict.TensorDict` instances to :class:`~torch.nn.Module` obje
 
 :class:`~tensordict.nn.TensorDictModule` wraps :class:`~torch.nn.Module` and accepts a single :class:`~tensordict.TensorDict` as an input. You can specify where the underlying module should take its input from, and where it should write its output. This is a key reason we can write reusable, generic high-level code such as the training loop in the motivation section.
 
->>> from tensordict.nn import TensorDictModule
+>>> import torch
+>>> import torch.nn as nn
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule, TensorDictSequential
 >>> class Net(nn.Module):
 ...     def __init__(self):
 ...         super().__init__()
@@ -569,8 +576,7 @@ predecessors, or take additional input from the tensordict as necessary. Here's 
 ...     def forward(self, x):
 ...         x = torch.relu(self.fc1(x))
 ...         return self.fc2(x)
-...
-... class Masker(nn.Module):
+>>> class Masker(nn.Module):
 ...     def forward(self, x, mask):
 ...         return torch.softmax(x * mask, dim=1)
 >>> net = TensorDictModule(
