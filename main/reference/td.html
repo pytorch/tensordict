@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4203+g91c71643e.d20260713)
+                  main (0.13.0.dev4204+g401f3ae34.d20260713)
                 </div>
               
             
@@ -436,26 +436,38 @@ or <code class="docutils literal notranslate"><span class="pre">cat</span></code
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_leaf_nontensor</span></code></a>(cls)</p></td>
 <td><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if a type is not a tensor collection (tensordict or tensorclass) or is a non-tensor.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lazy_stack</span></code></a>(input[, dim, out])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.is_memmap_archive.html#tensordict.is_memmap_archive" title="tensordict.is_memmap_archive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_memmap_archive</span></code></a>(path)</p></td>
+<td><p>Checks whether <code class="docutils literal notranslate"><span class="pre">path</span></code> points to a memmap tensordict archive.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lazy_stack</span></code></a>(input[, dim, out])</p></td>
 <td><p>Creates a lazy stack of tensordicts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.load.html#tensordict.load" title="tensordict.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>(prefix[, device, non_blocking, out, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.load.html#tensordict.load" title="tensordict.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>(prefix[, device, non_blocking, out, ...])</p></td>
 <td><p>Loads a tensordict from disk.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.load_memmap.html#tensordict.load_memmap" title="tensordict.load_memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_memmap</span></code></a>(prefix[, device, non_blocking, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.load_memmap.html#tensordict.load_memmap" title="tensordict.load_memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_memmap</span></code></a>(prefix[, device, non_blocking, ...])</p></td>
 <td><p>Loads a memory-mapped tensordict from disk.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maybe_dense_stack</span></code></a>(input[, dim, out])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maybe_dense_stack</span></code></a>(input[, dim, out])</p></td>
 <td><p>Attempts to make a dense stack and falls back on lazy stack when required.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.memmap.html#tensordict.memmap" title="tensordict.memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">memmap</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.memmap.html#tensordict.memmap" title="tensordict.memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">memmap</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
 <td><p>Writes all tensors onto memory-mapped tensors in a new tensordict.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.save.html#tensordict.save" title="tensordict.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pack_memmap</span></code></a>(prefix, archive_path, *[, ...])</p></td>
+<td><p>Packs a memory-mapped tensordict directory into a single-file zip archive.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums" title="tensordict.refresh_archive_checksums"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_archive_checksums</span></code></a>(archive_path)</p></td>
+<td><p>Recomputes the CRC-32 checksums of a memmap archive after in-place writes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.save.html#tensordict.save" title="tensordict.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(data[, prefix, copy_existing, ...])</p></td>
 <td><p>Saves the tensordict to disk.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.stack.html#tensordict.stack" title="tensordict.stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stack</span></code></a>(input[, dim, out])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.stack.html#tensordict.stack" title="tensordict.stack"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stack</span></code></a>(input[, dim, out])</p></td>
 <td><p>Stacks tensordicts into a single tensordict along the given dimension.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unpack_memmap</span></code></a>(archive_path, prefix)</p></td>
+<td><p>Extracts a memmap tensordict archive into a memmap directory.</p></td>
 </tr>
 </tbody>
 </table>

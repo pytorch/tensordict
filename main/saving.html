@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4203+g91c71643e.d20260713)
+                  main (0.13.0.dev4204+g401f3ae34.d20260713)
                 </div>
               
             
@@ -524,6 +524,104 @@ tensors from one location to another.</p>
 </ul>
 </section>
 </section>
+<section id="single-file-memmap-archives">
+<h2>Single-file memmap archives<a class="headerlink" href="#single-file-memmap-archives" title="Permalink to this heading">¶</a></h2>
+<p>A memory-mapped directory is convenient to work with locally, but shipping it
+around means copying many small files. Passing a path ending in <code class="docutils literal notranslate"><span class="pre">&quot;.tdz&quot;</span></code>
+(or <code class="docutils literal notranslate"><span class="pre">archive=True</span></code>) to <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>,
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.dumps" title="tensordict.TensorDictBase.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> or
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> writes the exact same data layout
+as a <strong>single file</strong> instead:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">10</span><span class="p">)}},</span> <span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;data.tdz&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;data.tdz&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td</span> <span class="o">==</span> <span class="n">td2</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The archive is a standard zip file whose entries replicate the memmap
+directory tree (<code class="docutils literal notranslate"><span class="pre">meta.json</span></code> files and <code class="docutils literal notranslate"><span class="pre">*.memmap</span></code> payloads). Tensor
+payloads are stored uncompressed and aligned, so
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> memory-maps the archive once
+and exposes every leaf as a zero-copy view into the mapping: metadata aside,
+nothing is read from disk until a tensor is actually accessed. Because the
+entry tree is the directory tree, the two representations are freely
+convertible – with <a class="reference internal" href="reference/generated/tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a> /
+<a class="reference internal" href="reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>, or with any zip tool:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>unzip<span class="w"> </span>data.tdz<span class="w"> </span>-d<span class="w"> </span>data_dir<span class="w">                </span><span class="c1"># yields a loadable memmap directory</span>
+<span class="o">(</span><span class="nb">cd</span><span class="w"> </span>data_dir<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>zip<span class="w"> </span>-0<span class="w"> </span>-r<span class="w"> </span>../data.zip<span class="w"> </span>.<span class="o">)</span><span class="w">  </span><span class="c1"># yields a loadable archive</span>
+</pre></div>
+</div>
+<p>Partial loading works as with directories: the <code class="docutils literal notranslate"><span class="pre">subpath</span></code> argument of
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> selects a nested tensordict
+without touching the rest of the archive:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sub</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;model.tdz&quot;</span><span class="p">,</span> <span class="n">subpath</span><span class="o">=</span><span class="s2">&quot;encoder/layers&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Archives can optionally be compressed (<code class="docutils literal notranslate"><span class="pre">compression=&quot;deflate&quot;</span></code> among
+others). Compressed leaves cannot be memory-mapped and are decompressed in
+memory on first access, so this is a trade-off reserved for archival storage;
+data such as <code class="docutils literal notranslate"><span class="pre">uint8</span></code> images or boolean masks compress well, whereas float
+weights barely do.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Two differences with directory-backed tensordicts are worth keeping in
+mind. First, by default an archive-loaded tensordict behaves like the
+result of <code class="xref py py-meth docutils literal notranslate"><span class="pre">from_consolidated()</span></code>: leaves are
+views into a single storage and in-place writes do <strong>not</strong> propagate to
+the file. Second, archives written by external zip tools (without payload
+alignment) load correctly, but misaligned leaves are copied in memory
+rather than viewed.</p>
+</div>
+<p>Write-through loading is available as an explicit opt-in with
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;r+&quot;</span></code>, restoring the directory semantics for a single file:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;data.tdz&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;r+&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># written to the archive</span>
+</pre></div>
+</div>
+<p>The preallocation workflow of <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a>
+works with archives as well: pointing it at a <code class="docutils literal notranslate"><span class="pre">&quot;.tdz&quot;</span></code> path creates a
+zero-filled archive and returns a write-through tensordict backed by it,
+i.e. a dataset buffer that lives in a single file:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">datum</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="s2">&quot;/path/to/data.tdz&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">datum</span>  <span class="c1"># written to the archive</span>
+</pre></div>
+</div>
+<p>In-place writes leave the per-entry CRC-32 checksums of the zip format
+stale. <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> never verifies
+checksums, so this is harmless within tensordict, but call
+<a class="reference internal" href="reference/generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums" title="tensordict.refresh_archive_checksums"><code class="xref py py-func docutils literal notranslate"><span class="pre">refresh_archive_checksums()</span></code></a> before handing a modified
+archive to tools that do verify them (<code class="docutils literal notranslate"><span class="pre">unzip</span></code>,
+<a class="reference internal" href="reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>, …).</p>
+<p>How do the three on-disk representations (memmap directory, consolidated
+file, archive) compare speed-wise, including against <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and
+safetensors? All of these load lazily through <code class="docutils literal notranslate"><span class="pre">mmap</span></code>, so bulk read
+throughput is essentially identical; the differences are in the per-entry
+overheads. Opening scales with the number of entries and favors the
+single-file formats (one metadata parse instead of one file open per leaf).
+Saving an archive streams the tensor bytes into the file in a single pass
+and is comparable to a directory save, with a per-entry overhead that shows
+for many-small-leaf layouts. Copying the saved artifact is where single
+files shine: a directory pays per-file latency, which dominates for
+many-small-leaf layouts on local disk and grows with round-trip time on
+network filesystems. Note that <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and safetensors are measured
+on their fastest paths (flat tensor dicts, <code class="docutils literal notranslate"><span class="pre">torch.load(mmap=True,</span>
+<span class="pre">weights_only=True)</span></code> and mmap-backed loading respectively) and do not
+represent tensordict structure natively: keys are flattened at save time
+and the nesting rebuilt at load time.</p>
+<figure class="align-default" id="id1">
+<a class="reference external image-reference" href="tutorials/serialization_speed.html"><img alt="Barplots comparing save (single- and multithreaded) and open times of memmap directories, consolidated files, zip archives, torch.save files and safetensors files across two tensordict layouts, with the median time printed above each bar." src="_images/sphx_glr_serialization_speed_002.png" style="width: 100%;" /></a>
+<figcaption>
+<p><span class="caption-text">Serialization timings across formats and layouts (lower is better;
+median over 32 runs printed above each bar, interquartile range as
+error bars; hatched bars are multithreaded saves). The figure is
+generated on the machine that builds this documentation – click it to
+open the corresponding tutorial and download the script. For a larger
+offline run (bigger payloads, more layouts, read and copy timings),
+see <code class="docutils literal notranslate"><span class="pre">benchmarks/scripts/serialization_formats_bench.py</span></code>.</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
 <section id="consolidated-serialization">
 <h2>Consolidated serialization<a class="headerlink" href="#consolidated-serialization" title="Permalink to this heading">¶</a></h2>
 <p>For fast transfer (e.g. across the network, or to GPU), you can consolidate all
@@ -550,11 +648,11 @@ per-leaf directory save), single-threaded and multithreaded, on a payload
 made of a few large leaves and one made of many small leaves. It is
 generated when this documentation is built, so it reflects the machine
 that built these docs; each bar is an average over several runs.</p>
-<figure class="align-default" id="id1">
+<figure class="align-default" id="id2">
 <a class="reference external image-reference" href="tutorials/serialization_speed.html"><img alt="Serialization speed of consolidate (in memory and to file) and save, single-threaded and multithreaded." src="_images/sphx_glr_serialization_speed_001.png" /></a>
 <figcaption>
 <p><span class="caption-text">TensorDict serialization speed. Click the figure to open the
-corresponding tutorial.</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+corresponding tutorial.</span><a class="headerlink" href="#id2" title="Permalink to this image">¶</a></p>
 </figcaption>
 </figure>
 <p>To measure your own hardware, download the script from the
@@ -714,6 +812,7 @@ mimics the TensorDict’s one.</p>
 <li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#single-file-memmap-archives">Single-file memmap archives</a></li>
 <li><a class="reference internal" href="#consolidated-serialization">Consolidated serialization</a></li>
 <li><a class="reference internal" href="#serialization-speed">Serialization speed</a></li>
 <li><a class="reference internal" href="#state-dict-load-state-dict">state_dict / load_state_dict</a></li>
