@@ -199,9 +199,11 @@ plt.show()
 # A few rules of thumb emerge (see the docstring of
 # :meth:`~tensordict.TensorDictBase.consolidate` for details):
 #
-# - In-memory consolidation benefits the most from ``num_threads``: the
-#   leaves are copied by contiguous chunks of roughly equal byte size, one
-#   fused copy per thread.
+# - In-memory consolidation is by far the fastest path (no disk write on
+#   the timed path). ``num_threads`` helps when the leaves are large (the
+#   data is copied by contiguous chunks of roughly equal byte size, one
+#   fused copy per thread) but with many small leaves the copy is already
+#   cheap and the per-chunk overhead can outweigh the gain.
 # - When consolidating to a memory-mapped file, threads are only used when
 #   the data needs a device change (e.g. CUDA to CPU): concurrent writes to
 #   a fresh file mapping are slower than a single sequential copy on most
