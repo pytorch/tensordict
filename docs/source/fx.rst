@@ -86,8 +86,7 @@ We demonstrate by tracing the sequential example from the overview.
    ...     def forward(self, x):
    ...         x = torch.relu(self.fc1(x))
    ...         return self.fc2(x)
-   ...
-   ... class Masker(nn.Module):
+   >>> class Masker(nn.Module):
    ...     def forward(self, x, mask):
    ...         return torch.softmax(x * mask, dim=1)
    >>> net = TensorDictModule(
