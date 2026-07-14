@@ -1,10 +1,10 @@
-# Flaky Test Report - 2026-07-13
+# Flaky Test Report - 2026-07-14
 
 ## Summary
 
 - **Flaky tests**: 129
 - **Newly flaky** (last 7 days): 129
-- **Total tests analyzed**: 90304
+- **Total tests analyzed**: 90390
 - **CI runs analyzed**: 30
 
 ---
@@ -13,36 +13,36 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `test.compile.test_compile.TestNN::test_dispatch_nontensor[None]` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `test.compile.test_compile.TestNN::test_dispatch_nontensor[reduce-overhead]` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_fullgraph` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_roundtrip` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `....compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_with_device` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `...compile.test_compile.TestTCPostInitCompile::test_post_init_runs_under_compile` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `...st_compile.TestTCDefaultsCompile::test_concrete_default_applied_under_compile` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `...est_compile.TestTCDefaultsCompile::test_default_factory_applied_under_compile` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `...e.test_compile.TestTCDefaultsCompile::test_omitted_none_default_under_compile` **NEW** | 14.3% (14/98) | 14 | 0.29 | 2026-07-09 |
-| `...rdict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td-device0]` **NEW** | 14.3% (20/140) | 20 | 0.29 | 2026-07-09 |
-| `test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device0]` **NEW** | 14.3% (20/140) | 20 | 0.29 | 2026-07-09 |
-| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device1]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...ds.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device2]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...ods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device3]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[stacked_td-device4]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[idx_td-device5]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td-device6]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `....test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td2-device7]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[memmap_td-device8]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[permute_td-device9]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...ethods.TestTensorDicts::test_squeeze_with_none_legacy[unsqueezed_td-device10]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `..._methods.TestTensorDicts::test_squeeze_with_none_legacy[squeezed_td-device11]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `..._methods.TestTensorDicts::test_squeeze_with_none_legacy[td_reset_bs-device12]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_h5-device13]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_params-device14]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...s.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor-device15]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...icts::test_squeeze_with_none_legacy[td_with_non_tensor_and_metadata-device16]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...ds.TestTensorDicts::test_squeeze_with_none_legacy[td_with_unbatched-device17]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[typed_td-device18]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
-| `...hods.TestTensorDicts::test_squeeze_with_none_legacy[nested_typed_td-device19]` **NEW** | 14.3% (16/112) | 16 | 0.29 | 2026-07-09 |
+| `test.compile.test_compile.TestNN::test_dispatch_nontensor[None]` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `test.compile.test_compile.TestNN::test_dispatch_nontensor[reduce-overhead]` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_fullgraph` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `test.compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_roundtrip` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `....compile.test_compile.TestTCNonTensorInit::test_tc_nontensor_init_with_device` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `...compile.test_compile.TestTCPostInitCompile::test_post_init_runs_under_compile` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `...st_compile.TestTCDefaultsCompile::test_concrete_default_applied_under_compile` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `...est_compile.TestTCDefaultsCompile::test_default_factory_applied_under_compile` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `...e.test_compile.TestTCDefaultsCompile::test_omitted_none_default_under_compile` **NEW** | 12.5% (14/112) | 14 | 0.25 | 2026-07-09 |
+| `...rdict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td-device0]` **NEW** | 12.5% (20/160) | 20 | 0.25 | 2026-07-09 |
+| `test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device0]` **NEW** | 12.5% (20/160) | 20 | 0.25 | 2026-07-09 |
+| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device1]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...ds.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device2]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...ods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device3]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[stacked_td-device4]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[idx_td-device5]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td-device6]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `....test_methods.TestTensorDicts::test_squeeze_with_none_legacy[sub_td2-device7]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[memmap_td-device8]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[permute_td-device9]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...ethods.TestTensorDicts::test_squeeze_with_none_legacy[unsqueezed_td-device10]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `..._methods.TestTensorDicts::test_squeeze_with_none_legacy[squeezed_td-device11]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `..._methods.TestTensorDicts::test_squeeze_with_none_legacy[td_reset_bs-device12]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...t.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_h5-device13]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...st_methods.TestTensorDicts::test_squeeze_with_none_legacy[td_params-device14]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...s.TestTensorDicts::test_squeeze_with_none_legacy[td_with_non_tensor-device15]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...icts::test_squeeze_with_none_legacy[td_with_non_tensor_and_metadata-device16]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...ds.TestTensorDicts::test_squeeze_with_none_legacy[td_with_unbatched-device17]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[typed_td-device18]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
+| `...hods.TestTensorDicts::test_squeeze_with_none_legacy[nested_typed_td-device19]` **NEW** | 12.5% (16/128) | 16 | 0.25 | 2026-07-09 |
 
 
 ### Newly Flaky
@@ -188,4 +188,4 @@
 
 ---
 
-*Generated at 2026-07-13T07:16:48.018455+00:00*
+*Generated at 2026-07-14T06:52:15.530082+00:00*
