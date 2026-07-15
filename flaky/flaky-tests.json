@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-14T06:52:15.530082+00:00",
+  "generated_at": "2026-07-15T06:53:49.188428+00:00",
   "analysis_period": {
     "start": "2026-05-18",
     "end": "2026-07-13",
@@ -194,26 +194,6 @@
     },
     {
       "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[td-device0]",
-      "executions": 160,
-      "failures": 20,
-      "failure_rate": 0.125,
-      "flaky_score": 0.25,
-      "passed": 140,
-      "failed": 20,
-      "error": 0,
-      "avg_duration_s": 0.005,
-      "recent_failures": [
-        "2026-07-09T14:05:10Z",
-        "2026-07-09T14:05:10Z",
-        "2026-07-09T14:05:10Z",
-        "2026-07-09T14:05:10Z",
-        "2026-07-09T14:05:10Z"
-      ],
-      "first_seen_flaky": "2026-07-09T09:09:35Z",
-      "is_new": true
-    },
-    {
-      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device0]",
       "executions": 160,
       "failures": 20,
       "failure_rate": 0.125,
@@ -600,6 +580,26 @@
       "flaky_score": 0.25,
       "passed": 112,
       "failed": 16,
+      "error": 0,
+      "avg_duration_s": 0.005,
+      "recent_failures": [
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z",
+        "2026-07-09T14:05:10Z"
+      ],
+      "first_seen_flaky": "2026-07-09T09:09:35Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none[td-device0]",
+      "executions": 160,
+      "failures": 20,
+      "failure_rate": 0.125,
+      "flaky_score": 0.25,
+      "passed": 140,
+      "failed": 20,
       "error": 0,
       "avg_duration_s": 0.005,
       "recent_failures": [
