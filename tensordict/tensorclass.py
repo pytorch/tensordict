@@ -4913,6 +4913,15 @@ class NonTensorStack(LazyStackedTensorDict):
     def to_tensordict(self, *, retain_none: bool | None = None):
         return self
 
+    def contiguous(
+        self, *, canonical: bool = False, inplace: bool = False
+    ) -> NonTensorStack:
+        # A NonTensorStack is already the materialized form of stacked
+        # non-tensor data: it has no tensor leaves to make contiguous, and
+        # the parent implementation would materialize it into an empty
+        # TensorDict, silently dropping the data.
+        return self
+
     def _memmap_(
         self,
         *,
