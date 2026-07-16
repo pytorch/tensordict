@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4204+g401f3ae34.d20260713)
+                  main (0.13.0.dev4206+g9221ae3ac.d20260716)
                 </div>
               
             
@@ -423,7 +423,7 @@ left unchanged.</p></li>
 <code class="docutils literal notranslate"><span class="pre">x.T</span></code> is equivalent to <code class="docutils literal notranslate"><span class="pre">x.permute(n-1,</span> <span class="pre">n-2,</span> <span class="pre">...,</span> <span class="pre">0)</span></code>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>The use of <code class="xref py py-func docutils literal notranslate"><span class="pre">Tensor.T()</span></code> on tensors of dimension other than 2 to reverse their shape
+<p>The use of <code class="xref py py-attr docutils literal notranslate"><span class="pre">Tensor.T</span></code> on tensors of dimension other than 2 to reverse their shape
 is deprecated and it will throw an error in a future release. Consider <code class="xref py py-attr docutils literal notranslate"><span class="pre">mT</span></code>
 to transpose batches of matrices or <cite>x.permute(*torch.arange(x.ndim - 1, -1, -1))</cite> to reverse
 the dimensions of a tensor.</p>
