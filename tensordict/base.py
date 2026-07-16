@@ -7045,7 +7045,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     stride = v.stride()
                     if (stride and stride[-1] != 1) or v.storage_offset():
                         v = v.clone(memory_format=torch.contiguous_format)
-                    flat_view = v.view(-1).view(torch.uint8)
+                    flat_view = v.reshape(-1).view(torch.uint8)
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
                     if pad:
                         flat_view = torch.cat([flat_view, flat_view.new_zeros(pad)])
@@ -7116,7 +7116,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
 
             def _view_and_pad(tensor):
-                result = tensor.view(-1).view(torch.uint8)
+                result = tensor.reshape(-1).view(torch.uint8)
                 # result must always have a multiple of 8 elements
                 pad = 0
                 if need_padding:
