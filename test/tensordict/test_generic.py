@@ -487,6 +487,42 @@ class TestGeneric:
                 )
             ), td_c.to_dict()
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_non_contiguous(self, device, num_threads):
+        transposed = (
+            torch.arange(24, dtype=torch.float32, device=device)
+            .reshape(2, 3, 4)
+            .transpose(0, 1)
+        )
+        strided = torch.arange(48, dtype=torch.int64, device=device).reshape(3, 4, 4)[
+            ..., ::2
+        ]
+        with pytest.raises(RuntimeError):
+            transposed.view(-1)
+        assert strided.stride(-1) == 2
+
+        td = TensorDict({"transposed": transposed, "strided": strided}, batch_size=[])
+        td_c = td.consolidate(num_threads=num_threads)
+
+        for key, expected in td.items():
+            actual = td_c[key]
+            assert torch.equal(actual, expected)
+            assert actual.shape == expected.shape
+            assert actual.dtype == expected.dtype
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_consolidate_non_contiguous_requires_grad(self, device):
+        base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)
+        transposed = base.reshape(2, 3, 4).transpose(0, 1)
+
+        actual = TensorDict({"value": transposed}, batch_size=[]).consolidate()["value"]
+
+        assert torch.equal(actual, transposed)
+        assert not actual.requires_grad
+        transposed.sum().backward()
+        assert torch.equal(base.grad, torch.ones_like(base))
+
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate_many_leaves_num_threads(self, use_file, tmpdir):
         # Exercises the chunked multithreaded copy path with enough leaves
