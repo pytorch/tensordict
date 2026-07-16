@@ -158,6 +158,40 @@ class TestNonTensorData:
         tdcr = pickle.loads(pickle.dumps(tdc))
         assert (tdcr == td).all()
 
+    @pytest.mark.parametrize("canonical", [False, True])
+    def test_contiguous_preserves_nontensor_stack(self, canonical):
+        # Regression test: contiguous() used to materialize NonTensorStack
+        # entries into empty TensorDicts, silently dropping the data.
+        tds = [
+            TensorDict(query=NonTensorData(f"abc{i}"), x=torch.zeros(()))
+            for i in range(3)
+        ]
+        ls = lazy_stack(tds)
+        assert isinstance(ls.get("query"), NonTensorStack)
+
+        c = ls.contiguous(canonical=canonical)
+        assert not isinstance(c, LazyStackedTensorDict)
+        query = c.get("query")
+        assert isinstance(query, NonTensorStack)
+        assert query.tolist() == ["abc0", "abc1", "abc2"]
+        # indexing round-trip
+        for i in range(3):
+            assert c[i]["query"] == f"abc{i}"
+
+        # a NonTensorStack is its own contiguous form
+        stack = NonTensorStack("a", "b")
+        assert stack.contiguous(canonical=canonical) is stack
+
+        # nested case
+        ls_nested = lazy_stack(
+            [
+                TensorDict(sub=TensorDict(q=NonTensorData(f"s{i}"), y=torch.ones(2)))
+                for i in range(2)
+            ]
+        )
+        c_nested = ls_nested.contiguous(canonical=canonical)
+        assert c_nested["sub", "q"] == ["s0", "s1"]
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
