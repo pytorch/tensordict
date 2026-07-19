@@ -25,3 +25,5 @@ dependencies:
     - pandas
     - pyarrow
     - redis
+    - transformers
+    - pillow

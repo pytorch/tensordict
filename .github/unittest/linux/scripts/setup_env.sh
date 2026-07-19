@@ -99,6 +99,7 @@ if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     pip install h5py || echo "h5py not available for Python 3.14t, skipping"
     pip install orjson || echo "orjson not available for Python 3.14t, skipping"
     pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
+    pip install transformers pillow || echo "transformers not available for Python 3.14t, skipping"
 else
     # For regular Python, use conda
     echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
