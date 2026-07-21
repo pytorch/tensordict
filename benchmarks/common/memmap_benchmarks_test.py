@@ -16,6 +16,13 @@ import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from torch import nn
 
+try:
+    import zarr
+
+    _has_zarr = int(zarr.__version__.split(".")[0]) >= 3
+except ImportError:
+    _has_zarr = False
+
 
 def get_available_devices():
     devices = [torch.device("cpu")]
@@ -128,6 +135,39 @@ def test_load_archive(benchmark, tmpdir, pause_when_exit):
 
     def func(path=path):
         TensorDict.load_memmap(path)
+
+    benchmark(func)
+    del t
+
+
+@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
+def test_serialize_model_zarr(benchmark, tmpdir, pause_when_exit):
+    """Tests efficiency of saving weights as a zarr store."""
+    import shutil
+
+    has_cuda = torch.cuda.device_count()
+    with torch.device("cuda" if has_cuda else "cpu"):
+        t = nn.Transformer()
+    path = Path(tmpdir) / "model.zarr"
+
+    def func(t=t, path=path):
+        if path.exists():
+            shutil.rmtree(path)
+        TensorDict.from_module(t).data.to_zarr(path)
+
+    benchmark(func)
+    del t
+
+
+@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
+def test_load_zarr(benchmark, tmpdir, pause_when_exit):
+    """Tests efficiency of loading and materializing a zarr store."""
+    t = nn.Transformer()
+    path = Path(tmpdir) / "model.zarr"
+    TensorDict.from_module(t).data.to_zarr(path)
+
+    def func(path=path):
+        TensorDict.from_zarr(path).to_tensordict()
 
     benchmark(func)
     del t

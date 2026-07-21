@@ -5,12 +5,14 @@
 """Compares the on-disk tensordict representations with external formats.
 
 Formats: memmap directory, consolidated file, zip archive (``.tdz``),
-``torch.save`` and, when installed, safetensors. ``torch.save`` and
+``torch.save`` and, when installed, safetensors and zarr. ``torch.save`` and
 safetensors are measured on their fastest path: a flat dict of tensors
 (keys flattened with ``"."``, since neither format represents tensordict
 structure natively), loaded with ``torch.load(mmap=True,
 weights_only=True)`` / mmap-backed ``load_file`` respectively, with the
-nested structure rebuilt on load.
+nested structure rebuilt on load. zarr is measured through
+``td.to_zarr`` / ``TensorDict.from_zarr`` with the default layout (one
+uncompressed chunk per leaf).
 
 Measures, per (layout, total size, format):
 
@@ -49,16 +51,27 @@ from tensordict import pack_memmap, TensorDict
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None
 _has_safetensors = importlib.util.find_spec("safetensors") is not None
+try:
+    import zarr as _zarr
+
+    _has_zarr = int(_zarr.__version__.split(".")[0]) >= 3
+except ImportError:
+    _has_zarr = False
 
 MB = 1024 * 1024
 
-FORMAT_KEYS = ["dir", "cons", "tdz", "pt"] + (["sft"] if _has_safetensors else [])
+FORMAT_KEYS = (
+    ["dir", "cons", "tdz", "pt"]
+    + (["sft"] if _has_safetensors else [])
+    + (["zarr"] if _has_zarr else [])
+)
 FORMAT_NAMES = {
     "dir": "memmap dir",
     "cons": "consolidated",
     "tdz": "archive (tdz)",
     "pt": "torch.save",
     "sft": "safetensors",
+    "zarr": "zarr",
 }
 FORMAT_COLORS = {
     "dir": "#4C72B0",
@@ -66,6 +79,7 @@ FORMAT_COLORS = {
     "tdz": "#55A868",
     "pt": "#C44E52",
     "sft": "#8172B3",
+    "zarr": "#937860",
 }
 
 
@@ -141,6 +155,7 @@ def bench(root: Path, num_threads: int = 0):
 
             d_pt = base / "t.pt"
             d_sft = base / "m.safetensors"
+            d_zarr = base / "z.zarr"
 
             row = {"layout": lname, "size_mb": size // MB}
             row["save_dir"] = timeit(lambda td=td, d=d_dir: td.memmap(d), reps)
@@ -172,6 +187,14 @@ def bench(root: Path, num_threads: int = 0):
                     save_file(dict(td.flatten_keys(".").items()), d)
 
                 row["save_sft"] = timeit(save_sft, reps)
+            if _has_zarr:
+
+                def save_zarr(td=td, d=d_zarr):
+                    if d.exists():
+                        shutil.rmtree(d)
+                    td.to_zarr(d)
+
+                row["save_zarr"] = timeit(save_zarr, reps)
             d_packed = base / "packed.tdz"
 
             def pack(d_dir=d_dir, d_packed=d_packed):
@@ -200,6 +223,10 @@ def bench(root: Path, num_threads: int = 0):
                     return TensorDict(load_file(d), batch_size=[]).unflatten_keys(".")
 
                 row["open_sft"] = timeit(load_sft, reps * 2)
+            if _has_zarr:
+                row["open_zarr"] = timeit(
+                    lambda d=d_zarr: TensorDict.from_zarr(d), reps * 2
+                )
 
             row["read_dir"] = timeit(
                 lambda d=d_dir: read_all(TensorDict.load_memmap(d)), reps
@@ -213,6 +240,10 @@ def bench(root: Path, num_threads: int = 0):
             row["read_pt"] = timeit(lambda: read_all(load_pt()), reps)
             if _has_safetensors:
                 row["read_sft"] = timeit(lambda: read_all(load_sft()), reps)
+            if _has_zarr:
+                row["read_zarr"] = timeit(
+                    lambda d=d_zarr: read_all(TensorDict.from_zarr(d)), reps
+                )
 
             dst = base / "copy_target"
 
@@ -231,6 +262,15 @@ def bench(root: Path, num_threads: int = 0):
             row["copy_pt"] = timeit(lambda d=d_pt: copy_file(d), reps)
             if _has_safetensors:
                 row["copy_sft"] = timeit(lambda d=d_sft: copy_file(d), reps)
+            if _has_zarr:
+
+                def copy_zarr(d=d_zarr, dst=dst):
+                    target = dst / "z"
+                    if target.exists():
+                        shutil.rmtree(target)
+                    subprocess.run(["cp", "-R", str(d), str(target)], check=True)
+
+                row["copy_zarr"] = timeit(copy_zarr, reps)
 
             results.append(row)
             print(f"done: {lname.split(chr(10))[0]} @ {size // MB}MB", file=sys.stderr)
@@ -335,7 +375,8 @@ def plot(results, out: str):
     )
     fig.suptitle(
         "TensorDict serialization: memmap dir vs consolidated vs zip archive "
-        "vs torch.save vs safetensors\n(lower is better; laptop SSD, warm page cache)",
+        "vs torch.save vs safetensors vs zarr\n"
+        "(lower is better; laptop SSD, warm page cache)",
         fontsize=12,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.9))
