@@ -88,11 +88,14 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         # tensorclass and hence can be seen as a nested tensordict
         # that situation should be clarified
         read_non_tensor = self.is_leaf is _is_leaf_nontensor or not self.leaves_only
+        td = self.tensordict
         if self.include_nested:
-            visitor = _Visitor(lambda key: unravel_key(tuple(key.split("/"))))
-            self.tensordict.file.visit(visitor)
+            visitor = (
+                unravel_key(tuple(key.split("/")))
+                for key in td._backend.walk_keys(td.file)
+            )
         else:
-            visitor = self.tensordict.file.keys()
+            visitor = td._backend.keys(td.file)
         for key in visitor:
             metadata = self.tensordict._get_metadata(key)
             if metadata.get("non_tensor"):
@@ -110,6 +113,261 @@ class _PersistentTDKeysView(_TensorDictKeysView):
     def __contains__(self, key):
         key = unravel_key(key)
         return key in list(self)
+
+
+class _PersistentBackend:
+    """Internal adapter encapsulating the storage dialect of a :class:`PersistentTensorDict`.
+
+    Each backend translates the generic node/group operations used by
+    :class:`PersistentTensorDict` into calls of the underlying storage library
+    (h5py, zarr, ...). All TensorDict semantics (locking, nesting, batch-size
+    handling) live in :class:`PersistentTensorDict`; only I/O specifics live here.
+    """
+
+    name: str
+
+    def __init__(self, locking=None):
+        self.locking = locking
+
+    @staticmethod
+    def available() -> bool:
+        raise NotImplementedError
+
+    def check_available(self) -> None:
+        raise NotImplementedError
+
+    # -- file / group lifecycle
+    def open_file(self, filename, mode):
+        raise NotImplementedError
+
+    def open_new_file(self, filename):
+        raise NotImplementedError
+
+    def close(self, file) -> None:
+        raise NotImplementedError
+
+    # -- node classification
+    def is_array(self, node) -> bool:
+        raise NotImplementedError
+
+    def is_non_tensor(self, node) -> bool:
+        raise NotImplementedError
+
+    def is_non_tensor_meta(self, node) -> bool:
+        raise NotImplementedError
+
+    def node_dtype(self, node):
+        raise NotImplementedError
+
+    # -- reads
+    def read_full(self, node):
+        raise NotImplementedError
+
+    def read_non_tensor(self, node):
+        raise NotImplementedError
+
+    def read_at(self, node, idx, device):
+        raise NotImplementedError
+
+    # -- writes
+    def write_at(self, node, idx, value) -> None:
+        raise NotImplementedError
+
+    def write_masked(self, node, mask, value) -> None:
+        raise NotImplementedError
+
+    def try_create_dataset(self, file, key, value, kwargs) -> bool:
+        raise NotImplementedError
+
+    def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
+        raise NotImplementedError
+
+    def create_group(self, file, key) -> None:
+        raise NotImplementedError
+
+    def encode_non_tensor(self, value):
+        raise NotImplementedError
+
+    # -- structure
+    def keys(self, file):
+        raise NotImplementedError
+
+    def walk_keys(self, file):
+        raise NotImplementedError
+
+    def contains(self, file, key) -> bool:
+        raise NotImplementedError
+
+    def delete(self, file, key) -> None:
+        raise NotImplementedError
+
+    def move(self, file, old_key, new_key) -> None:
+        raise NotImplementedError
+
+    # -- pickling
+    def getstate(self, file) -> dict:
+        raise NotImplementedError
+
+    def setstate(self, state):
+        raise NotImplementedError
+
+    # -- optional tensordict metadata persisted alongside the data
+    def read_attrs_metadata(self, group) -> dict | None:
+        return None
+
+    def write_attrs_metadata(self, group, metadata: dict) -> None:
+        return None
+
+
+class _H5Backend(_PersistentBackend):
+    """h5py storage dialect."""
+
+    name = "h5"
+
+    @staticmethod
+    def available() -> bool:
+        return _has_h5
+
+    def check_available(self) -> None:
+        if not _has_h5:
+            raise ModuleNotFoundError("Could not load h5py.")
+
+    def open_file(self, filename, mode):
+        import h5py
+
+        return h5py.File(filename, mode, locking=self.locking)
+
+    def open_new_file(self, filename):
+        import h5py
+
+        return h5py.File(filename, "w", locking=self.locking)
+
+    def close(self, file) -> None:
+        file.close()
+
+    def is_array(self, node) -> bool:
+        import h5py
+
+        return isinstance(node, h5py.Dataset)
+
+    def is_non_tensor(self, node) -> bool:
+        return _is_non_tensor_h5(node)
+
+    def is_non_tensor_meta(self, node) -> bool:
+        return node.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
+
+    def node_dtype(self, node):
+        return node.dtype
+
+    def read_full(self, node):
+        return node[()]
+
+    def read_non_tensor(self, node):
+        return node[()]
+
+    def read_at(self, node, idx, device):
+        try:
+            return torch.as_tensor(node[idx], device=device)
+        except TypeError as err:
+            if "Boolean indexing array has incompatible shape" in str(err):
+                # Known bug in h5py: cannot broadcast boolean mask on the right as
+                # done in np and torch. Therefore we put a performance warning
+                # and convert to torch tensor first.
+                warnings.warn(
+                    "Indexing an h5py.Dataset object with a boolean mask "
+                    "that needs broadcasting does not work directly. "
+                    "tensordict will cast the entire array in memory and index it using the mask. "
+                    "This is suboptimal and may lead to performance issue."
+                )
+                return torch.as_tensor(np.asarray(node), device=device)[idx]
+            else:
+                raise err
+
+    def write_at(self, node, idx, value) -> None:
+        try:
+            node[idx] = value
+        except TypeError as err:
+            if "Boolean indexing array has incompatible shape" in str(err):
+                # Known bug in h5py: cannot broadcast boolean mask on the right as
+                # done in np and torch. Therefore we put a performance warning
+                # and convert to torch tensor first.
+                warnings.warn(
+                    "Indexing an h5py.Dataset object with a boolean mask "
+                    "that needs broadcasting does not work directly. "
+                    "tensordict will cast the entire array in memory and index it using the mask. "
+                    "This is suboptimal and may lead to performance issue."
+                )
+                idx = tuple(
+                    (
+                        expand_right(torch.as_tensor(_idx), node.shape).numpy()
+                        if _idx.dtype == np.dtype("bool")
+                        else _idx
+                    )
+                    for _idx in idx
+                )
+                node[idx] = torch.as_tensor(value)
+            else:
+                raise err
+
+    def write_masked(self, node, mask, value) -> None:
+        node[mask] = value
+
+    def try_create_dataset(self, file, key, value, kwargs) -> bool:
+        try:
+            file.create_dataset(key, data=value, **kwargs)
+            return True
+        except (ValueError, OSError) as err:
+            if "name already exists" in str(err):
+                return False
+            return True
+
+    def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
+        dest_file.create_dataset(key, data=src_node, **kwargs)
+
+    def create_group(self, file, key) -> None:
+        file.create_group(key)
+
+    def encode_non_tensor(self, value):
+        if isinstance(value, str):
+            return value
+        import h5py
+
+        out = np.array(value)
+        return out.astype(h5py.opaque_dtype(out.dtype))
+
+    def keys(self, file):
+        return file.keys()
+
+    def walk_keys(self, file):
+        visitor = _Visitor()
+        file.visit(visitor)
+        yield from visitor
+
+    def contains(self, file, key) -> bool:
+        return key in file
+
+    def delete(self, file, key) -> None:
+        del file[key]
+
+    def move(self, file, old_key, new_key) -> None:
+        try:
+            file.move(old_key, new_key)
+        except ValueError as err:
+            raise KeyError(f"key {new_key} already present in TensorDict.") from err
+
+    def getstate(self, file) -> dict:
+        return {"filename": file.file.filename, "group_name": file.name}
+
+    def setstate(self, state):
+        import h5py
+
+        file = h5py.File(state["filename"], mode=state["mode"], locking=self.locking)
+        if state["group_name"] != "/":
+            file = file[state["group_name"]]
+        return file
+
+
+_BACKENDS: dict[str, Type[_PersistentBackend]] = {"h5": _H5Backend}
 
 
 class PersistentTensorDict(TensorDictBase):
@@ -166,16 +424,19 @@ class PersistentTensorDict(TensorDictBase):
             batch_size = torch.Size(())
         self._locked_tensordicts = []
         self._lock_id = set()
-        if not _has_h5:
-            raise ModuleNotFoundError("Could not load h5py.")
-        import h5py
+        backend_cls = _BACKENDS.get(backend)
+        if backend_cls is None:
+            raise NotImplementedError(
+                f"Unknown backend {backend!r}. Supported backends are {sorted(_BACKENDS)}."
+            )
+        self.backend = backend
+        self._backend = backend_cls(locking=self.LOCKING)
+        self._backend.check_available()
 
         self.filename = filename
         self.mode = mode
-        if backend != "h5":
-            raise NotImplementedError
         if filename is not None and group is None:
-            self.file = h5py.File(filename, mode, locking=self.LOCKING)
+            self.file = self._backend.open_file(filename, mode)
         elif group is not None:
             self.file = group
         else:
@@ -262,9 +523,7 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
-        import h5py
-
-        file = h5py.File(filename, "w", locking=cls.LOCKING)
+        file = _BACKENDS["h5"](locking=cls.LOCKING).open_new_file(filename)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -285,7 +544,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def close(self):
         """Closes the persistent tensordict."""
-        self.file.close()
+        self._backend.close(self.file)
 
     def _process_key(self, key):
         key = _unravel_key_to_tuple(key)
@@ -295,7 +554,7 @@ class PersistentTensorDict(TensorDictBase):
         for key in self.keys(include_nested=True, leaves_only=True):
             key = self._process_key(key)
             array = self.file[key]
-            if _is_non_tensor_h5(array):
+            if self._backend.is_non_tensor(array):
                 continue
             size = array.shape
             if torch.Size(size[: len(batch_size)]) != batch_size:
@@ -314,23 +573,21 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
     def _process_array(self, key, array):
-        import h5py
-
-        if isinstance(array, (h5py.Dataset,)):
+        if self._backend.is_array(array):
             if self.device is not None:
                 device = self.device
             else:
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
-            if not _is_non_tensor_h5(array):
-                array = array[()]
+            if not self._backend.is_non_tensor(array):
+                array = self._backend.read_full(array)
                 out = torch.as_tensor(array, device=device)
                 if self._pin_mem:
                     out = out.pin_memory()
             else:
                 from tensordict.tensorclass import NonTensorData
 
-                array = array[()]
+                array = self._backend.read_non_tensor(array)
                 out = NonTensorData(
                     data=array, device=device, batch_size=self.batch_size
                 )
@@ -342,6 +599,7 @@ class PersistentTensorDict(TensorDictBase):
                     group=array,
                     batch_size=self.batch_size,
                     device=self.device,
+                    backend=self.backend,
                 )
             return out
 
@@ -358,10 +616,8 @@ class PersistentTensorDict(TensorDictBase):
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        import h5py
-
         array = self._get_array(key, default)
-        if isinstance(array, (h5py.Dataset,)):
+        if self._backend.is_array(array):
             if self.device is not None:
                 device = self.device
             else:
@@ -369,22 +625,7 @@ class PersistentTensorDict(TensorDictBase):
             # indexing must be done before converting to tensor.
             idx = self._process_index(idx, array)
             # `get_at` is there to save us.
-            try:
-                out = torch.as_tensor(array[idx], device=device)
-            except TypeError as err:
-                if "Boolean indexing array has incompatible shape" in str(err):
-                    # Known bug in h5py: cannot broadcast boolean mask on the right as
-                    # done in np and torch. Therefore we put a performance warning
-                    # and convert to torch tensor first.
-                    warnings.warn(
-                        "Indexing an h5py.Dataset object with a boolean mask "
-                        "that needs broadcasting does not work directly. "
-                        "tensordict will cast the entire array in memory and index it using the mask. "
-                        "This is suboptimal and may lead to performance issue."
-                    )
-                    out = torch.as_tensor(np.asarray(array), device=device)[idx]
-                else:
-                    raise err
+            out = self._backend.read_at(array, idx, device)
             if self._pin_mem:
                 return out.pin_memory()
             return out
@@ -395,6 +636,7 @@ class PersistentTensorDict(TensorDictBase):
                     group=array,
                     batch_size=self.batch_size,
                     device=self.device,
+                    backend=self.backend,
                 )
             return out._get_sub_tensordict(idx)
         else:
@@ -405,24 +647,18 @@ class PersistentTensorDict(TensorDictBase):
 
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
-        import h5py
-
         array = self._get_array(key)
-        if (
-            isinstance(array, (h5py.Dataset,))
-            and array.dtype in NUMPY_TO_TORCH_DTYPE_DICT
+        if self._backend.is_array(array) and not self._backend.is_non_tensor_meta(
+            array
         ):
             shape = torch.Size(array.shape)
             return {
-                "dtype": NUMPY_TO_TORCH_DTYPE_DICT[array.dtype],
+                "dtype": NUMPY_TO_TORCH_DTYPE_DICT[self._backend.node_dtype(array)],
                 "shape": shape,
                 "dim": len(shape),
                 "array": True,
             }
-        elif (
-            isinstance(array, (h5py.Dataset,))
-            and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
-        ):
+        elif self._backend.is_array(array):
             return {"non_tensor": True}
         else:
             val = self.get(key)
@@ -494,7 +730,7 @@ class PersistentTensorDict(TensorDictBase):
     @cache  # noqa: B019
     def _valid_keys(self):
         keys = []
-        for key in self.file.keys():
+        for key in self._backend.keys(self.file):
             metadata = self._get_metadata(key)
             if not metadata.get("non_tensor"):
                 keys.append(key)
@@ -581,7 +817,7 @@ class PersistentTensorDict(TensorDictBase):
     @lock_blocked
     def del_(self, key):
         key = self._process_key(key)
-        del self.file[key]
+        self._backend.delete(self.file, key)
         return self
 
     def detach_(self):
@@ -699,7 +935,9 @@ class PersistentTensorDict(TensorDictBase):
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
-            array[expand_right(mask, array.shape).cpu().numpy()] = value
+            self._backend.write_masked(
+                array, expand_right(mask, array.shape).cpu().numpy(), value
+            )
         return self
 
     def make_memmap(
@@ -1018,10 +1256,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> PersistentTensorDict:
         old_key = self._process_key(old_key)
         new_key = self._process_key(new_key)
-        try:
-            self.file.move(old_key, new_key)
-        except ValueError as err:
-            raise KeyError(f"key {new_key} already present in TensorDict.") from err
+        self._backend.move(self.file, old_key, new_key)
         return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
@@ -1046,7 +1281,7 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def _create_nested_str(self, key):
-        self.file.create_group(key)
+        self._backend.create_group(self.file, key)
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
@@ -1130,13 +1365,7 @@ class PersistentTensorDict(TensorDictBase):
         elif isinstance(value, dict):
             out = TensorDict(value, [])
         elif is_non_tensor(value):
-            value = value.data
-            if isinstance(value, str):
-                return value
-            import h5py
-
-            out = np.array(value)
-            out = out.astype(h5py.opaque_dtype(out.dtype))
+            out = self._backend.encode_non_tensor(value.data)
         elif is_tensor_collection(value):
             out = value
         elif isinstance(value, (np.ndarray,)):
@@ -1172,7 +1401,7 @@ class PersistentTensorDict(TensorDictBase):
         if is_tensor_collection(value):
             target_td = self._get_str(first_key, default=None)
             if target_td is None:
-                self.file.create_group(first_key)
+                self._backend.create_group(self.file, first_key)
                 target_td = self._get_str(first_key, default=NO_DEFAULT)
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
@@ -1201,43 +1430,16 @@ class PersistentTensorDict(TensorDictBase):
                 idx = ()
             else:
                 idx = self._process_index(idx, array)
-            try:
-                array[idx] = value
-            except TypeError as err:
-                if "Boolean indexing array has incompatible shape" in str(err):
-                    # Known bug in h5py: cannot broadcast boolean mask on the right as
-                    # done in np and torch. Therefore we put a performance warning
-                    # and convert to torch tensor first.
-                    warnings.warn(
-                        "Indexing an h5py.Dataset object with a boolean mask "
-                        "that needs broadcasting does not work directly. "
-                        "tensordict will cast the entire array in memory and index it using the mask. "
-                        "This is suboptimal and may lead to performance issue."
-                    )
-                    idx = tuple(
-                        (
-                            expand_right(torch.as_tensor(_idx), array.shape).numpy()
-                            if _idx.dtype == np.dtype("bool")
-                            else _idx
-                        )
-                        for _idx in idx
-                    )
-                    array[idx] = torch.as_tensor(value)
-                else:
-                    raise err
-
+            self._backend.write_at(array, idx, value)
         else:
             key = self._process_key(key)
-            try:
-                self.file.create_dataset(key, data=value, **self.kwargs)
-            except (ValueError, OSError) as err:
-                if "name already exists" in str(err):
-                    warnings.warn(
-                        "Replacing an array with another one is inefficient. "
-                        "Consider using different names or populating in-place using `inplace=True`."
-                    )
-                    del self.file[key]
-                    self.file.create_dataset(key, data=value, **self.kwargs)
+            if not self._backend.try_create_dataset(self.file, key, value, self.kwargs):
+                warnings.warn(
+                    "Replacing an array with another one is inefficient. "
+                    "Consider using different names or populating in-place using `inplace=True`."
+                )
+                self._backend.delete(self.file, key)
+                self._backend.try_create_dataset(self.file, key, value, self.kwargs)
             # If we have a nested key, let's make sure we have the corresponding TD registered
             if subkey:
                 self._get_tuple((first_key, *subkey[:-1]), default=NO_DEFAULT)
@@ -1246,7 +1448,7 @@ class PersistentTensorDict(TensorDictBase):
     def _convert_inplace(self, inplace, key):
         key = self._process_key(key)
         if inplace is not False:
-            has_key = key in self.file
+            has_key = self._backend.contains(self.file, key)
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
                     _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
@@ -1329,15 +1531,14 @@ class PersistentTensorDict(TensorDictBase):
                 group=array,
                 batch_size=td.batch_size,
                 device=td.device,
+                backend=self.backend,
             )
             self._nested_tensordicts[key].names = td._td_dim_names
             self._nested_tensordicts[key]._set_metadata(td)
 
     def _clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
-        import h5py
-
         if recurse:
-            # this should clone the h5 to a new location indicated by newfile
+            # this should clone the data to a new location indicated by newfile
             if newfile is None:
                 warnings.warn(
                     "A destination should be provided when cloning a "
@@ -1347,13 +1548,12 @@ class PersistentTensorDict(TensorDictBase):
                 )
                 tmpfile = tempfile.NamedTemporaryFile(delete=False)
                 newfile = tmpfile.name
-                tmpfile.close()  # Close file handle before h5py opens it
-            f_dest = h5py.File(newfile, "w", locking=self.LOCKING)
+                tmpfile.close()  # Close file handle before the backend opens it
+            f_dest = self._backend.open_new_file(newfile)
             f_src = self.file
             for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
-                f_dest.create_dataset(key, data=f_src[key], **self.kwargs)
-                # f_src.copy(f_src[key],  f_dest[key], "DataSet")
+                self._backend.copy_dataset(f_dest, key, f_src[key], self.kwargs)
             # create a non-recursive copy and update the file
             # this way, we can keep the batch-size of every nested tensordict
             clone = self.clone(False)
@@ -1378,7 +1578,7 @@ class PersistentTensorDict(TensorDictBase):
                 filename=filename,
                 group=file,
                 mode=self.mode,
-                backend="h5",
+                backend=self.backend,
                 device=self.device,
                 batch_size=self.batch_size,
             )
@@ -1389,23 +1589,16 @@ class PersistentTensorDict(TensorDictBase):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        filename = state["file"].file.filename
-        group_name = state["file"].name
+        backend_state = self._backend.getstate(state["file"])
         state["file"] = None
-        state["filename"] = filename
-        state["group_name"] = group_name
+        state.update(backend_state)
         state["__lock_parents_weakrefs"] = None
         return state
 
     def __setstate__(self, state):
-        import h5py
-
-        state["file"] = h5py.File(
-            state["filename"], mode=state["mode"], locking=self.LOCKING
-        )
-        if state["group_name"] != "/":
-            state["file"] = state["file"][state["group_name"]]
-        del state["group_name"]
+        backend = state["_backend"]
+        state["file"] = backend.setstate(state)
+        state.pop("group_name", None)
         self.__dict__.update(state)
         if self._is_locked:
             # this can cause avoidable overhead, as we will be locking the leaves
