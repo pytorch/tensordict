@@ -502,7 +502,11 @@ class TestGeneric:
             transposed.view(-1)
         assert strided.stride(-1) == 2
 
-        td = TensorDict({"transposed": transposed, "strided": strided}, batch_size=[])
+        td = TensorDict(
+            {"transposed": transposed, "strided": strided},
+            batch_size=[],
+            device=device,
+        )
         td_c = td.consolidate(num_threads=num_threads)
 
         for key, expected in td.items():
@@ -516,7 +520,8 @@ class TestGeneric:
         base = torch.arange(24, dtype=torch.float32, device=device, requires_grad=True)
         transposed = base.reshape(2, 3, 4).transpose(0, 1)
 
-        actual = TensorDict({"value": transposed}, batch_size=[]).consolidate()["value"]
+        td = TensorDict({"value": transposed}, batch_size=[], device=device)
+        actual = td.consolidate()["value"]
 
         assert torch.equal(actual, transposed)
         assert not actual.requires_grad
