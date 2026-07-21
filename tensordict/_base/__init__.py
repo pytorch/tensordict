@@ -17,6 +17,7 @@ from tensordict._base.factories import (
     from_parquet,
     from_struct_array,
     from_tuple,
+    from_zarr,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "from_parquet",
     "from_struct_array",
     "from_tuple",
+    "from_zarr",
 ]

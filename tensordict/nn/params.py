@@ -793,6 +793,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         **kwargs,
     ): ...
 
+    @_fallback
+    def to_zarr(
+        self,
+        filename,
+        **kwargs,
+    ): ...
+
     def __hash__(self):
         return hash((id(self), id(self.__dict__.get("_param_td"))))
 

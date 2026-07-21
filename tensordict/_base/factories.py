@@ -24,6 +24,7 @@ __all__ = [
     "from_parquet",
     "from_struct_array",
     "from_tuple",
+    "from_zarr",
 ]
 
 
@@ -241,6 +242,29 @@ def from_h5(
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
         device=device,
+        batch_size=batch_size,
+    )
+
+
+def from_zarr(
+    zarr_file,
+    *,
+    mode: str = "r",
+    auto_batch_size: bool = False,
+    batch_dims: int | None = None,
+    batch_size: torch.Size | None = None,
+) -> "TensorDictBase":
+    """Converts a zarr store to a TensorDict.
+
+    .. seealso:: :meth:`TensorDictBase.from_zarr` for more information.
+    """
+    from tensordict import TensorDict
+
+    return TensorDict.from_zarr(
+        zarr_file,
+        mode=mode,
+        auto_batch_size=auto_batch_size,
+        batch_dims=batch_dims,
         batch_size=batch_size,
     )
 

@@ -442,6 +442,7 @@ _FALLBACK_METHOD_FROM_TD = [
     # "from_remote_init" is handled separately (tensorclass type recovery)
     "from_struct_array",
     "from_tuple",
+    "from_zarr",
     "fromkeys",
     "gather",
     "gather_and_stack",
@@ -575,6 +576,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "to_padded_tensor",
     "to_pytree",
     "to_store",
+    "to_zarr",
     "transpose",
     "trunc",
     "trunc_",

@@ -55,6 +55,7 @@ tests = [
     "pytest-benchmark"
 ]
 h5 = ["h5py>=3.8"]
+zarr = ["zarr>=3.0"]
 pandas = ["pandas>=1.5"]
 parquet = ["pyarrow>=10.0"]
 tabular = ["pandas>=1.5", "pyarrow>=10.0"]
