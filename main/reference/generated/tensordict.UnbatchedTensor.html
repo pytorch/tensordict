@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4208+gd6a9104a5.d20260716)
+                  main (0.13.0.dev4210+g1341859c0.d20260721)
                 </div>
               
             
@@ -1251,6 +1251,13 @@ cases, this argument has no effect. Default: <code class="docutils literal notra
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When <code class="xref py py-attr docutils literal notranslate"><span class="pre">non_blocking</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> and the copy is issued on a
+non-default CUDA stream, the caller is responsible for proper
+cross-stream synchronization. See <span class="xref std std-ref">cuda-stream-semantics</span> for
+the required pattern.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -5368,6 +5375,13 @@ already matches the desired conversion.</p>
 </div></blockquote>
 </dd></dl>
 
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When <code class="xref py py-attr docutils literal notranslate"><span class="pre">non_blocking</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> and the conversion is issued on
+a non-default CUDA stream, the caller is responsible for proper
+cross-stream synchronization. See <span class="xref std std-ref">cuda-stream-semantics</span> for
+the required pattern.</p>
+</div>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># Initially dtype=float32, device=cpu</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
