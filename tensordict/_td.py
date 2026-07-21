@@ -3156,8 +3156,29 @@ class TensorDict(TensorDictBase):
                     safe_key = legacy_key
                     memmap_file = legacy_file
 
-            if not memmap_file.exists() or dtype is None or shape is None:
+            if dtype is None or shape is None:
                 # invalid dict means
+                continue
+            shape = torch.Size(shape)
+            if not memmap_file.exists():
+                # torch.from_file does not create a backing file for a tensor
+                # with no elements. Such tensors can be reconstructed from
+                # their metadata; a missing non-empty (or nested) tensor is an
+                # incomplete entry and must not be synthesized.
+                if entry_metadata.get("is_nested", False) or shape.numel():
+                    continue
+                tensor = torch.empty(
+                    shape,
+                    device=device,
+                    dtype=_STR_DTYPE_TO_DTYPE[dtype],
+                )
+                result._set_str(
+                    key,
+                    tensor,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
                 continue
             try:
                 # this was absent in earlier versions of pytorch
@@ -3186,7 +3207,7 @@ class TensorDict(TensorDictBase):
                     tensor = tensor.to(device, non_blocking=True)
             else:
                 tensor = torch.zeros(
-                    torch.Size(shape),
+                    shape,
                     device=device,
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                 )
