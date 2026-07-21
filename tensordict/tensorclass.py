@@ -19,11 +19,13 @@ import pickle
 import shutil
 import sys
 import warnings
+from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
 from typing import (
+    AbstractSet,
     Any,
     Callable,
     get_args,
@@ -772,7 +774,7 @@ def from_dataclass(
         else:
             cls = obj
         clz = _tensorclass(cls, frozen=frozen, shadow=shadow, tensor_only=tensor_only)
-        clz._type_hints = get_type_hints(obj)
+        _set_tensorclass_type_hints(clz, get_type_hints(obj))
         clz._autocast = autocast
         clz._nocast = nocast
         clz._shadow = shadow
@@ -794,6 +796,13 @@ def from_dataclass(
             shadow=shadow,
             tensor_only=tensor_only,
         )
+        try:
+            type_hints = get_type_hints(type(obj))
+        except (NameError, TypeError):
+            # Preserve the existing fallback for unresolved annotations.
+            pass
+        else:
+            _set_tensorclass_type_hints(clz, type_hints)
         clz._autocast = autocast
         clz._nocast = nocast
         clz._shadow = shadow
@@ -1440,10 +1449,15 @@ def _init_wrapper(
                 _td_dict = _td._tensordict
                 _non_td = self._non_tensordict
                 _validate = _td._validate_value
+                _tensordict_fields = type(self)._tensordict_fields
                 for key, value in kwargs.items():
                     if value is None:
                         _non_td[key] = None
                     else:
+                        if _tensordict_fields:
+                            value, _ = _convert_mapping_for_field(
+                                key, value, _tensordict_fields
+                            )
                         _td_dict[key] = _validate(
                             value, check_shape=True, non_blocking=False
                         )
@@ -1550,12 +1564,14 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
 
     globalns = None
 
+    cls._tensordict_fields = frozenset()
     try:
-        cls._type_hints = get_type_hints(
+        type_hints = get_type_hints(
             cls,
             localns=localns,
             # globalns=globals(),
         )
+        _set_tensorclass_type_hints(cls, type_hints)
         if tensor_only:
 
             def is_tensor_or_optional_tensor(type_hint):
@@ -1628,6 +1644,56 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
             "traditional type annotations."
         )
         cls._type_hints = None
+
+
+def _is_tensordict_annotation(type_hint: Any) -> bool:
+    """Return whether an annotation contains a TensorDictBase type."""
+    origin = get_origin(type_hint)
+    if origin in (Union, UnionType):
+        return any(_is_tensordict_annotation(arg) for arg in get_args(type_hint))
+    if origin is not None:
+        type_hint = origin
+    return isinstance(type_hint, type) and issubclass(type_hint, TensorDictBase)
+
+
+def _set_tensorclass_type_hints(
+    cls: type, type_hints: dict[str, Any]
+) -> None:
+    """Store resolved hints and cache fields with TensorDict-like annotations."""
+    cls._tensordict_fields = frozenset(
+        key
+        for key, val in type_hints.items()
+        if key in cls.__expected_keys__ and _is_tensordict_annotation(val)
+    )
+    cls._type_hints = type_hints
+
+
+def _normalize_nested_mapping(
+    mapping: Mapping[NestedKey, Any],
+) -> dict[NestedKey, Any] | TensorDictBase:
+    """Materialize nested mappings while preserving TensorDictBase values."""
+    if isinstance(mapping, TensorDictBase):
+        return mapping
+    return {
+        key: _normalize_nested_mapping(value)
+        if isinstance(value, Mapping)
+        else value
+        for key, value in mapping.items()
+    }
+
+
+def _convert_mapping_for_field(
+    key: str, value: Any, tensordict_fields: AbstractSet[str]
+) -> tuple[Any, bool]:
+    """Normalize a Mapping assigned to a TensorDict-annotated field.
+
+    Returns the normalized value and whether the field/value pair required
+    Mapping handling. Existing TensorDict values are returned unchanged.
+    """
+    is_mapping_field = key in tensordict_fields and isinstance(value, Mapping)
+    if is_mapping_field:
+        value = _normalize_nested_mapping(value)
+    return value, is_mapping_field
 
 
 def _from_tensordict(
@@ -1982,6 +2048,9 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
     if value is None:
         self._non_tensordict[key] = None
         return
+    value, _ = _convert_mapping_for_field(
+        key, value, type(self)._tensordict_fields
+    )
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
     if out is not self:
         raise RuntimeError(
@@ -2612,6 +2681,13 @@ def _set(
 
         def _is_castable(datatype):
             return issubclass(datatype, (int, float, np.ndarray))
+
+        if cls._tensor_only:
+            value, is_mapping_field = _convert_mapping_for_field(
+                key, value, cls._tensordict_fields
+            )
+            if is_mapping_field:
+                return set_tensor(value=value)
 
         if cls._autocast:
             type_hints = cls._type_hints

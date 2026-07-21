@@ -16,6 +16,7 @@ import pickle
 import re
 import sys
 import weakref
+from collections import UserDict
 from dataclasses import field
 from multiprocessing import Pool
 from pathlib import Path
@@ -35,6 +36,7 @@ from tensordict import (
     LazyStackedTensorDict,
     MemoryMappedTensor,
     MetaData,
+    NonTensorData,
     set_capture_non_tensor_stack,
     set_list_to_stack,
     tensorclass,
@@ -3586,6 +3588,100 @@ class TestTensorOnly:
         delattr(x, "c")
         assert not hasattr(x, "c")
 
+    @pytest.mark.parametrize("mapping_type", [dict, UserDict])
+    def test_tensor_only_tensordict_mapping(self, mapping_type):
+        @tensorclass(tensor_only=True)
+        class TensorOnlyMapping:
+            data: TensorDict
+
+        value = mapping_type({"tensor": torch.ones(())})
+        tc = TensorOnlyMapping(data=value)
+
+        assert isinstance(tc.data, TensorDict)
+        assert tc.data["tensor"] == 1
+
+        tc.data = mapping_type({"tensor": torch.zeros(())})
+        assert isinstance(tc.data, TensorDict)
+        assert tc.data["tensor"] == 0
+
+        tc.set("data", mapping_type({"tensor": torch.ones(())}))
+        assert isinstance(tc.data, TensorDict)
+        assert tc.data["tensor"] == 1
+
+    def test_tensor_only_tensordict_nested_mapping(self):
+        class TensorOnlyMapping(TensorClass["tensor_only"]):
+            data: TensorDict
+
+        tc = TensorOnlyMapping(
+            data=UserDict({"nested": UserDict({"tensor": torch.ones(())})})
+        )
+
+        assert isinstance(tc.data["nested"], TensorDict)
+        assert tc.data["nested", "tensor"] == 1
+
+    @pytest.mark.parametrize("set_method", ["constructor", "attribute", "set"])
+    def test_tensor_only_preserves_tensordict(self, set_method):
+        class TensorOnlyMapping(TensorClass["tensor_only"]):
+            data: TensorDict
+
+        value = TensorDict({"tensor": torch.ones(())}).lock_()
+        if set_method == "constructor":
+            tc = TensorOnlyMapping(data=value)
+        else:
+            tc = TensorOnlyMapping(data=TensorDict())
+            if set_method == "attribute":
+                tc.data = value
+            else:
+                tc.set("data", value)
+
+        assert tc.data is value
+        assert tc.data.is_locked
+
+    def test_tensor_only_preserves_nested_tensordict(self):
+        class TensorOnlyMapping(TensorClass["tensor_only"]):
+            data: TensorDict
+
+        value = TensorDict({"tensor": torch.ones(())}).lock_()
+        tc = TensorOnlyMapping(data=UserDict({"nested": value}))
+
+        assert tc.data["nested"] is value
+        assert tc.data["nested"].is_locked
+
+    @pytest.mark.parametrize("from_type", [False, True])
+    def test_tensor_only_mapping_from_dataclass(self, from_type):
+        @dataclasses.dataclass
+        class Data:
+            data: TensorDict
+
+        value = UserDict({"tensor": torch.ones(())})
+        if from_type:
+            TensorOnlyData = from_dataclass(Data, tensor_only=True)
+            tc = TensorOnlyData(data=value)
+        else:
+            tc = from_dataclass(Data(data=value), tensor_only=True)
+
+        assert isinstance(tc.data, TensorDict)
+        assert tc.data["tensor"] == 1
+
+    def test_mapping_with_any_annotation_stays_non_tensor(self):
+        class NonTensorMapping(TensorClass):
+            data: Any
+
+        value = UserDict({"metadata": "value"})
+        tc = NonTensorMapping(data=value)
+
+        assert tc.data is value
+
+    def test_tensor_only_non_tensor_mapping_stays_non_tensor(self):
+        class NonTensorMapping(TensorClass["tensor_only"]):
+            data: NonTensorData
+
+        value = UserDict({"metadata": "value"})
+        tc = NonTensorMapping(data=value)
+
+        assert isinstance(tc.data, NonTensorData)
+        assert tc.data.data is value
+
     def test_tensor_only_autocast_nocast(self):
         @tensorclass(tensor_only=True, autocast=False)
         class TensorOnly:
@@ -3662,6 +3758,14 @@ class TestTensorOnly:
             a: torch.Tensor
             b: TensorDict[str, torch.Tensor]
             c: TensorDict[str, torch.Tensor] | None = None
+
+        tc = TensorOnlyGeneric(
+            a=torch.zeros(()),
+            b=UserDict({"tensor": torch.ones(())}),
+            c=UserDict({"tensor": torch.zeros(())}),
+        )
+        assert isinstance(tc.b, TensorDict)
+        assert isinstance(tc.c, TensorDict)
 
 
 if __name__ == "__main__":
