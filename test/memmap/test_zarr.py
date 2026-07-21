@@ -340,6 +340,25 @@ class TestZarrWriteOps:
         assert (td_back["images"] == td["images"]).all()
         assert td_back["note"] == "some text"
 
+    def test_consolidated_metadata_written(self, tmp_path):
+        td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [3])
+        td.to_zarr(tmp_path / "s.zarr")
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        assert root.metadata.consolidated_metadata is not None
+
+    def test_consolidated_metadata_stays_fresh(self, tmp_path):
+        # structural mutations must not leave stale consolidated metadata behind
+        td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict(
+            filename=str(tmp_path / "s.zarr"), mode="r+", batch_size=[3], backend="zarr"
+        )
+        ztd["new"] = torch.rand(3)
+        ztd.del_("a")
+        reread = TensorDict.from_zarr(tmp_path / "s.zarr")
+        assert "new" in reread.keys()
+        assert "a" not in reread.keys()
+
     def test_default_layout(self, tmp_path):
         td = TensorDict({"a": torch.randn(8, 8)}, batch_size=[8])
         td.to_zarr(tmp_path / "s.zarr")

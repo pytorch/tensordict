@@ -221,6 +221,10 @@ class _PersistentBackend:
     def write_attrs_metadata(self, group, metadata: dict) -> None:
         return None
 
+    def finalize(self, file) -> None:
+        """Hook called when a bulk write to the store is complete."""
+        return None
+
 
 class _H5Backend(_PersistentBackend):
     """h5py storage dialect."""
@@ -397,6 +401,11 @@ class _ZarrBackend(_PersistentBackend):
 
     name = "zarr"
 
+    def __init__(self, locking=None):
+        super().__init__(locking=locking)
+        # whether the store carries consolidated metadata (None = unknown yet)
+        self._store_consolidated = None
+
     @staticmethod
     def available() -> bool:
         return _has_zarr
@@ -424,14 +433,55 @@ class _ZarrBackend(_PersistentBackend):
 
         if isinstance(filename, Path):
             filename = str(filename)
-        return zarr.open_group(filename, mode=self._zarr_mode(mode))
+        mode = self._zarr_mode(mode)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if mode == "r":
+                # read-only: use consolidated metadata when present so that
+                # key listing and metadata reads don't hit the store per node
+                return zarr.open_group(filename, mode=mode)
+            # writable: consolidated metadata would go stale on mutation
+            return zarr.open_group(filename, mode=mode, use_consolidated=False)
 
     def open_new_file(self, filename):
         import zarr
 
         if isinstance(filename, Path):
             filename = str(filename)
-        return zarr.open_group(filename, mode="w")
+        self._store_consolidated = False
+        return zarr.open_group(filename, mode="w", use_consolidated=False)
+
+    def finalize(self, file) -> None:
+        """Consolidates the store metadata once a bulk write is complete."""
+        import zarr
+
+        if not getattr(file.store, "supports_deletes", True):
+            # append-only stores (e.g. ZipStore): rewriting metadata appends
+            # duplicate entries, and their metadata reads are cheap anyway
+            return
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            zarr.consolidate_metadata(file.store)
+        self._store_consolidated = True
+
+    def _after_structural_change(self, file) -> None:
+        # keep on-disk consolidated metadata (if any) in sync with the change
+        if self._store_consolidated is None:
+            import zarr
+
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self._store_consolidated = (
+                        zarr.open_group(
+                            file.store, mode="r"
+                        ).metadata.consolidated_metadata
+                        is not None
+                    )
+            except Exception:
+                self._store_consolidated = False
+        if self._store_consolidated:
+            self.finalize(file)
 
     def close(self, file) -> None:
         store_close = getattr(file.store, "close", None)
@@ -588,6 +638,7 @@ class _ZarrBackend(_PersistentBackend):
             array[...] = value
         if marker is not None:
             array.attrs[_ZARR_NON_TENSOR_ATTR] = marker
+        self._after_structural_change(file)
         return True
 
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
@@ -606,6 +657,7 @@ class _ZarrBackend(_PersistentBackend):
 
     def create_group(self, file, key) -> None:
         file.create_group(key)
+        self._after_structural_change(file)
 
     def encode_non_tensor(self, value):
         try:
@@ -628,12 +680,14 @@ class _ZarrBackend(_PersistentBackend):
 
     def delete(self, file, key) -> None:
         del file[key]
+        self._after_structural_change(file)
 
     def move(self, file, old_key, new_key) -> None:
         if self.contains(file, new_key):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         try:
             file.move(old_key, new_key)
+            self._after_structural_change(file)
             return
         except NotImplementedError:
             pass
@@ -718,6 +772,9 @@ class PersistentTensorDict(TensorDictBase):
             ``"zarr"`` (requires ``zarr>=3.0``). Defaults to ``"h5"``.
         device (torch.device or compatible, optional): device of the tensordict.
             Defaults to ``None`` (ie. default PyTorch device).
+        validate_batch_size (bool, optional): if ``True``, the batch size is
+            checked against the stored array shapes at construction time (this
+            requires iterating over the store metadata). Defaults to ``True``.
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset` (h5
             backend) or :meth:`zarr.Group.create_array` (zarr backend). With the
             zarr backend, arrays are stored as a single chunk without compression
@@ -748,6 +805,7 @@ class PersistentTensorDict(TensorDictBase):
         mode="r",
         backend="h5",
         device=None,
+        validate_batch_size: bool = True,
         **kwargs,
     ):
         if batch_size is None:
@@ -784,7 +842,8 @@ class PersistentTensorDict(TensorDictBase):
         self._pin_mem = False
 
         # this must be kept last
-        self._check_batch_size(self._batch_size)
+        if validate_batch_size:
+            self._check_batch_size(self._batch_size)
 
     @classmethod
     def from_h5(cls, filename, *, mode="r", batch_size: torch.size | None = None):
@@ -931,6 +990,7 @@ class PersistentTensorDict(TensorDictBase):
         if not _has_batch_size:
             _set_max_batch_size(out)
         out._write_attrs_metadata()
+        out._backend.finalize(out.file)
         return out
 
     def _write_attrs_metadata(self):
@@ -944,11 +1004,29 @@ class PersistentTensorDict(TensorDictBase):
             td._write_attrs_metadata()
 
     def _nested_batch_size_from_attrs(self, group):
-        """Batch size for a nested group: persisted metadata if any, else the parent's."""
+        """Batch size persisted in a nested group's metadata, or ``None``."""
         metadata = self._backend.read_attrs_metadata(group)
         if metadata is not None and metadata.get("batch_size") is not None:
             return torch.Size(metadata["batch_size"])
-        return self.batch_size
+        return None
+
+    def _make_nested(self, key, group):
+        """Builds (and caches the backend of) a nested PersistentTensorDict."""
+        nested_batch_size = self._nested_batch_size_from_attrs(group)
+        out = self._nested_tensordicts[key] = PersistentTensorDict(
+            group=group,
+            batch_size=(
+                nested_batch_size if nested_batch_size is not None else self.batch_size
+            ),
+            device=self.device,
+            backend=self.backend,
+            # a persisted batch size was already validated at write time
+            validate_batch_size=nested_batch_size is None,
+        )
+        # share the backend instance so per-store state (e.g. the consolidated
+        # metadata flag of the zarr backend) is tracked once per store
+        out._backend = self._backend
+        return out
 
     def close(self):
         """Closes the persistent tensordict."""
@@ -959,15 +1037,22 @@ class PersistentTensorDict(TensorDictBase):
         return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
-        for key in self.keys(include_nested=True, leaves_only=True):
-            key = self._process_key(key)
-            array = self.file[key]
-            if self._backend.is_non_tensor(array):
+        if not len(batch_size):
+            # an empty batch size cannot mismatch any array
+            return
+        for key, metadata in self._items_metadata(
+            include_nested=True, leaves_only=True
+        ):
+            if not metadata.get("array"):
                 continue
-            size = array.shape
+            size = metadata["shape"]
             if torch.Size(size[: len(batch_size)]) != batch_size:
+                # metadata alone cannot tell opaque-encoded non-tensor payloads
+                # apart from genuine arrays (h5); fetch the node to double check
+                if self._backend.is_non_tensor(self._get_array(key)):
+                    continue
                 raise ValueError(
-                    f"batch size and array size mismatch: array.shape={size}, batch_size={batch_size}."
+                    f"batch size and array size mismatch: array.shape={tuple(size)}, batch_size={batch_size}."
                 )
 
     def _get_array(self, key, default=NO_DEFAULT):
@@ -1003,12 +1088,7 @@ class PersistentTensorDict(TensorDictBase):
         else:
             out = self._nested_tensordicts.get(key)
             if out is None:
-                out = self._nested_tensordicts[key] = PersistentTensorDict(
-                    group=array,
-                    batch_size=self._nested_batch_size_from_attrs(array),
-                    device=self.device,
-                    backend=self.backend,
-                )
+                out = self._make_nested(key, array)
             return out
 
     @cache  # noqa: B019
@@ -1040,12 +1120,7 @@ class PersistentTensorDict(TensorDictBase):
         elif array is not default:
             out = self._nested_tensordicts.get(key)
             if out is None:
-                out = self._nested_tensordicts[key] = PersistentTensorDict(
-                    group=array,
-                    batch_size=self._nested_batch_size_from_attrs(array),
-                    device=self.device,
-                    backend=self.backend,
-                )
+                out = self._make_nested(key, array)
             return out._get_sub_tensordict(idx)
         else:
             return default
@@ -1941,6 +2016,7 @@ class PersistentTensorDict(TensorDictBase):
                 device=td.device,
                 backend=self.backend,
             )
+            self._nested_tensordicts[key]._backend = self._backend
             self._nested_tensordicts[key].names = td._td_dim_names
             self._nested_tensordicts[key]._set_metadata(td)
 
@@ -1978,6 +2054,7 @@ class PersistentTensorDict(TensorDictBase):
             clone._nested_tensordicts = {}
             clone._set_metadata(self)
             clone._write_attrs_metadata()
+            clone._backend.finalize(clone.file)
             return clone
         else:
             # we need to keep the batch-size of nested tds, which we do manually

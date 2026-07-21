@@ -270,8 +270,9 @@ and the nesting rebuilt at load time. zarr
 (:meth:`~tensordict.TensorDictBase.to_zarr` /
 :meth:`~tensordict.TensorDictBase.from_zarr`, see :ref:`storage`) also
 opens lazily but does not memory-map its payload, so bulk reads pay a
-copy; its strengths are elsewhere -- chunking, compression and
-object-store backends.
+copy, and each array is a store round-trip, which shows on
+many-tiny-leaf layouts; its strengths are elsewhere -- chunking,
+compression and object-store backends.
 
 .. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
    :width: 100%

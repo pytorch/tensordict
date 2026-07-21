@@ -170,7 +170,9 @@ for i in range(4):
 # :class:`~tensordict.PersistentTensorDict` interface. Use
 # ``to_zarr``/``from_zarr`` when your data needs to live on object storage,
 # interoperate with xarray/dask, or benefit from per-chunk compression;
-# stick to the memory-mapped format for the fastest local checkpoints.
+# stick to the memory-mapped format for the fastest local checkpoints,
+# especially for tensordicts made of very many tiny leaves, where zarr
+# pays one store round-trip per array.
 #
 # Further reading
 # ---------------
