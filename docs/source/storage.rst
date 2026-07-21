@@ -41,6 +41,11 @@ Quick overview
      - :class:`~tensordict.PersistentTensorDict`
      - On disk
      - Limited
+   * - Zarr
+     - ``"zarr"``
+     - :class:`~tensordict.PersistentTensorDict`
+     - On disk / object store
+     - Yes (chunk-level)
    * - Shared memory
      - ``"shared"``
      - :class:`~tensordict.TensorDict`
@@ -90,6 +95,10 @@ The ``storage`` keyword selects the backend:
    >>> # HDF5 file
    >>> td = TensorDict.from_schema(schema, batch_size=[100_000],
    ...                             storage="h5", filename="/data/replay.h5")
+
+   >>> # Zarr store (requires zarr>=3.0)
+   >>> td = TensorDict.from_schema(schema, batch_size=[100_000],
+   ...                             storage="zarr", filename="/data/replay.zarr")
 
    >>> # Shared memory (single-node multi-process)
    >>> td = TensorDict.from_schema(schema, batch_size=[100_000],
@@ -190,6 +199,65 @@ Or convert an in-memory TensorDict:
 Keyword arguments forwarded by ``from_schema``:
 
 - ``filename`` (required) -- path to the HDF5 file.
+
+
+Zarr (``storage="zarr"``)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Zarr-backed storage is also provided by
+:class:`~tensordict.PersistentTensorDict`, with ``backend="zarr"``.  Each
+tensor becomes a zarr array; nested keys become zarr groups.  Zarr is a
+chunked, cloud-native format: the store can be a local directory, a
+``zarr.storage.ZipStore`` or any other ``zarr.abc.store.Store``
+implementation, and chunked arrays support parallel reads and writes to
+separate chunks.  Requires ``zarr>=3.0`` (``pip install "tensordict[zarr]"``).
+
+.. code-block:: python
+
+   >>> import torch, tempfile
+   >>> from tensordict import TensorDict
+
+   >>> d = tempfile.mkdtemp()
+   >>> td = TensorDict.from_schema(
+   ...     {"obs": ([4], torch.float32), "label": ([], torch.int64)},
+   ...     batch_size=[500],
+   ...     storage="zarr",
+   ...     filename=d + "/replay.zarr",
+   ... )
+   >>> td[0] = TensorDict(obs=torch.randn(4), label=torch.tensor(0), batch_size=[])
+
+Converting an in-memory TensorDict and loading it back:
+
+.. code-block:: python
+
+   >>> td_mem = TensorDict(obs=torch.randn(500, 4), batch_size=[500])
+   >>> td_zarr = td_mem.to_zarr(d + "/data.zarr")
+   >>> td_back = TensorDict.from_zarr(d + "/data.zarr")
+
+:meth:`~tensordict.TensorDictBase.to_zarr` persists the batch size and
+dimension names in the store attributes, so
+:meth:`~tensordict.TensorDictBase.from_zarr` restores them exactly; stores
+written by other tools (xarray, raw zarr) are loaded with automatic
+batch-size inference instead.
+
+By default each tensor is written as a single uncompressed chunk, which is
+the fastest layout for checkpoint-style save/load.  For dataset-style
+workloads, pass ``chunks=`` and/or ``compressors=`` (forwarded to
+:meth:`zarr.Group.create_array`) to enable partial out-of-core reads with
+:meth:`~tensordict.TensorDictBase.get_at` and on-disk compression:
+
+.. code-block:: python
+
+   >>> td_mem.to_zarr(d + "/chunked.zarr", chunks=(1, 4))  # one row per chunk
+   >>> from zarr.codecs import ZstdCodec
+   >>> td_mem.to_zarr(d + "/compressed.zarr", compressors=ZstdCodec())
+
+Keyword arguments forwarded by ``from_schema``:
+
+- ``filename`` (required) -- path to the zarr store, or a
+  ``zarr.abc.store.Store`` instance.
+- any :meth:`zarr.Group.create_array` argument (``chunks``,
+  ``compressors``, ...).
 
 
 Shared memory (``storage="shared"``)
@@ -317,6 +385,9 @@ own mechanism:
    * - HDF5
      - HDF5 string/opaque datasets
      - :class:`~tensordict.NonTensorData` wrapper on read
+   * - Zarr
+     - JSON or pickle payload in a marked ``uint8`` array
+     - :class:`~tensordict.NonTensorData` wrapper on read
    * - Redis
      - JSON string or pickle bytes in Redis ``SET``
      - Transparent via metadata hash
@@ -431,6 +502,11 @@ Choosing a backend
   datasets that exceed RAM).  Works across processes via NFS.
 - **HDF5** -- best when you need a portable, self-describing file format
   inspectable with standard tools.  Good for archival.
+- **Zarr** -- best for cloud/object-store workflows and chunked datasets:
+  the same hierarchy can live on a local directory, in a zip file or on
+  S3-style storage, with optional per-chunk compression and parallel
+  chunk-level access.  Interoperates with the scientific Python stack
+  (xarray, dask).
 - **Shared memory** -- best for single-node multi-process workloads
   (multi-worker dataloading, parallel envs).  Fastest IPC but data does not
   persist.

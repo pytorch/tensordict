@@ -251,21 +251,27 @@ archive to tools that do verify them (``unzip``,
 :func:`~tensordict.unpack_memmap`, ...).
 
 How do the three on-disk representations (memmap directory, consolidated
-file, archive) compare speed-wise, including against ``torch.save`` and
-safetensors? All of these load lazily through ``mmap``, so bulk read
-throughput is essentially identical; the differences are in the per-entry
-overheads. Opening scales with the number of entries and favors the
-single-file formats (one metadata parse instead of one file open per leaf).
-Saving an archive streams the tensor bytes into the file in a single pass
-and is comparable to a directory save, with a per-entry overhead that shows
-for many-small-leaf layouts. Copying the saved artifact is where single
-files shine: a directory pays per-file latency, which dominates for
+file, archive) compare speed-wise, including against ``torch.save``,
+safetensors and zarr? The tensordict formats, ``torch.save`` and
+safetensors all load lazily through ``mmap``, so bulk read throughput is
+essentially identical; the differences are in the per-entry overheads.
+Opening scales with the number of entries and favors the single-file
+formats (one metadata parse instead of one file open per leaf). Saving an
+archive streams the tensor bytes into the file in a single pass and is
+comparable to a directory save, with a per-entry overhead that shows for
+many-small-leaf layouts. Copying the saved artifact is where single files
+shine: a directory pays per-file latency, which dominates for
 many-small-leaf layouts on local disk and grows with round-trip time on
 network filesystems. Note that ``torch.save`` and safetensors are measured
 on their fastest paths (flat tensor dicts, ``torch.load(mmap=True,
 weights_only=True)`` and mmap-backed loading respectively) and do not
 represent tensordict structure natively: keys are flattened at save time
-and the nesting rebuilt at load time.
+and the nesting rebuilt at load time. zarr
+(:meth:`~tensordict.TensorDictBase.to_zarr` /
+:meth:`~tensordict.TensorDictBase.from_zarr`, see :ref:`storage`) also
+opens lazily but does not memory-map its payload, so bulk reads pay a
+copy; its strengths are elsewhere -- chunking, compression and
+object-store backends.
 
 .. figure:: /tutorials/images/sphx_glr_serialization_speed_002.png
    :width: 100%

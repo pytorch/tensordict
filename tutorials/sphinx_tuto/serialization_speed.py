@@ -6,7 +6,7 @@ Benchmarking TensorDict serialization speed
 
 In this example you will learn how the main TensorDict serialization paths
 compare in terms of speed, how ``num_threads`` affects each of them, and
-how the on-disk formats compare with ``torch.save`` and safetensors.
+how the on-disk formats compare with ``torch.save``, safetensors and zarr.
 
 The script runs each measurement 32 times and renders the median with the
 interquartile range as error bars. It is executed during the documentation
@@ -14,7 +14,7 @@ build, so the figures below reflect the machine that built these docs;
 download the script at the bottom of this page (or run
 ``python tutorials/sphinx_tuto/serialization_speed.py`` from a tensordict
 checkout) to measure your own hardware. The only extra dependencies are
-``matplotlib`` and, optionally, ``safetensors``.
+``matplotlib`` and, optionally, ``safetensors`` and ``zarr``.
 
 The first benchmark compares the write paths:
 
@@ -31,8 +31,8 @@ leaves. The ``.tdz`` archive does not appear in this first benchmark: its
 writer is a single sequential pass and takes no ``num_threads`` argument;
 it is covered by the second benchmark, which compares the on-disk formats
 (memmap directory, consolidated file, ``.tdz`` archive, ``torch.save``,
-safetensors) on saving (single- and multithreaded where supported) and
-opening.
+safetensors, zarr) on saving (single- and multithreaded where supported)
+and opening.
 """
 
 from __future__ import annotations
@@ -53,6 +53,12 @@ from matplotlib.patches import Patch
 from tensordict import TensorDict
 
 _has_safetensors = importlib.util.find_spec("safetensors") is not None
+try:
+    import zarr as _zarr
+
+    _has_zarr = int(_zarr.__version__.split(".")[0]) >= 3
+except ImportError:
+    _has_zarr = False
 
 ##############################################################################
 # Benchmark configuration
@@ -225,12 +231,16 @@ plt.show()
 # The second benchmark compares the on-disk formats tensordict can write --
 # the per-leaf memmap directory, the consolidated single file and the
 # ``.tdz`` zip archive -- with ``torch.save`` and, when installed,
-# safetensors. The two external formats are measured on their fastest
-# paths: a flat dict of tensors, written with ``torch.save`` /
-# ``save_file`` and reloaded with ``torch.load(mmap=True,
+# safetensors and zarr. ``torch.save`` and safetensors are measured on
+# their fastest paths: a flat dict of tensors, written with ``torch.save``
+# / ``save_file`` and reloaded with ``torch.load(mmap=True,
 # weights_only=True)`` / the mmap-backed ``load_file``. They do not
 # represent tensordict structure natively, so keys are flattened at save
-# time and the nesting is rebuilt at load time.
+# time and the nesting is rebuilt at load time. zarr goes through
+# :meth:`~tensordict.TensorDictBase.to_zarr` /
+# :meth:`~tensordict.TensorDictBase.from_zarr` with its default layout
+# (one uncompressed chunk per leaf); unlike the other formats it does not
+# memory-map its payload, so *open* is lazy but bulk reads pay a copy.
 #
 # Two operations are timed. *Save* writes a fresh artifact (removed
 # outside the timed region); the tensordict formats that take a
@@ -308,6 +318,19 @@ def make_formats(td, tmpdir):
             TensorDict(load_file(path), batch_size=[]).unflatten_keys(".")
 
         formats["safetensors"] = (save_safetensors, open_safetensors)
+    if _has_zarr:
+
+        def save_zarr(num_threads):
+            if num_threads:
+                return None
+            filename = fresh(".zarr")
+            td.to_zarr(filename)
+            return filename
+
+        def open_zarr(path):
+            TensorDict.from_zarr(path)
+
+        formats["zarr"] = (save_zarr, open_zarr)
     return formats
 
 

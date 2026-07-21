@@ -42,6 +42,7 @@ or ``cat``.
     from_pytree
     from_struct_array
     from_tuple
+    from_zarr
     fromkeys
     is_batchedtensor
     is_leaf_nontensor
