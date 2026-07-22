@@ -55,6 +55,9 @@ tests = [
     "pytest-benchmark"
 ]
 h5 = ["h5py>=3.8"]
+# zarr>=3 requires Python>=3.11: the marker keeps universal resolvers (uv)
+# and Python 3.10 installs working, at the price of the extra being a no-op there
+zarr = ["zarr>=3.0; python_version >= '3.11'"]
 pandas = ["pandas>=1.5"]
 parquet = ["pyarrow>=10.0"]
 tabular = ["pandas>=1.5", "pyarrow>=10.0"]

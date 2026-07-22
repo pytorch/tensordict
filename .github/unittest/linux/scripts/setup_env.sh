@@ -99,6 +99,7 @@ if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     pip install h5py || echo "h5py not available for Python 3.14t, skipping"
     pip install orjson || echo "orjson not available for Python 3.14t, skipping"
     pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
+    pip install "zarr>=3.0" || echo "zarr>=3.0 not available for Python 3.14t, skipping"
 else
     # For regular Python, use conda
     echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
@@ -106,6 +107,8 @@ else
     conda env update --file "${this_dir}/environment.yml" --prune
     conda install anaconda::cmake -y
     conda install -c conda-forge pybind11 -y
+    # zarr>=3 requires Python>=3.11; skip on older interpreters
+    pip install "zarr>=3.0" || echo "zarr>=3.0 not available for Python ${PYTHON_VERSION}, skipping"
 fi
 
 #if [[ $OSTYPE == 'darwin'* ]]; then

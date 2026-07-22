@@ -1,6 +1,7 @@
 matplotlib
 numpy
 safetensors
+zarr>=3.0; python_version >= "3.11"
 sphinx-copybutton
 sphinx-gallery
 sphinx==5.0.0

@@ -78,6 +78,7 @@ Basics
    tutorials/tensordict_memory
    tutorials/streamed_tensordict
    tutorials/serialization_speed
+   tutorials/zarr_storage
 
 tensordict.nn
 -------------

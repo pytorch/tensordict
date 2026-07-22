@@ -79,6 +79,17 @@ sphinx_gallery_conf = {
     "download_all_examples": True,
 }
 
+# The zarr tutorial needs zarr>=3, which requires Python>=3.11; skip it (with a
+# toctree warning) when building the docs on an older interpreter.
+try:
+    import zarr as _zarr
+
+    _has_zarr = int(_zarr.__version__.split(".")[0]) >= 3
+except ImportError:
+    _has_zarr = False
+if not _has_zarr:
+    sphinx_gallery_conf["ignore_pattern"] = r"zarr_storage\.py"
+
 # sphinx_gallery_conf = {
 #     "examples_dirs": "../../gallery/",  # path to your example scripts
 #     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output

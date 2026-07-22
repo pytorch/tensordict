@@ -3095,6 +3095,60 @@ class TensorDictBase(MutableMapping, TensorCollection):
         return result
 
     @classmethod
+    def from_zarr(
+        cls,
+        filename,
+        *,
+        mode: str = "r",
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        batch_size: torch.Size | None = None,
+    ):
+        """Creates a PersistentTensorDict from a zarr store.
+
+        Requires ``zarr>=3.0`` to be installed.
+
+        Args:
+            filename (str, path or zarr store): The path to the zarr store (a
+                directory), or a ``zarr.abc.store.Store`` instance (e.g. a
+                ``zarr.storage.ZipStore``).
+
+        Keyword Arguments:
+            mode (str, optional): Reading mode. Defaults to ``"r"``.
+            auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
+                Defaults to ``False``.
+            batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
+                tensordict should have. Defaults to ``None`` (full batch-size at each level).
+            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``
+                (read from the metadata written by :meth:`~.to_zarr`, or automatically determined
+                for stores written by other tools).
+
+        Returns:
+            A PersistentTensorDict representation of the input zarr store.
+
+        Examples:
+            >>> td = TensorDict.from_zarr("path/to/store.zarr")
+            >>> print(td)
+            PersistentTensorDict(
+                fields={
+                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+        """
+        from tensordict.persistent import PersistentTensorDict
+
+        result = PersistentTensorDict.from_zarr(
+            filename, mode=mode, batch_size=batch_size
+        )
+        if auto_batch_size:
+            if batch_size is not None:
+                raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_zarr"))
+            result.auto_batch_size_(batch_dims=batch_dims)
+        return result
+
+    @classmethod
     def from_schema(
         cls,
         schema: dict[str, tuple[list[int] | torch.Size, torch.dtype]],
@@ -3126,6 +3180,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                   Pass ``prefix=<dir>`` in *kwargs*.
                 - ``"h5"`` -- HDF5 via :class:`PersistentTensorDict`.
                   Pass ``filename=<path>`` in *kwargs*.
+                - ``"zarr"`` -- zarr (requires ``zarr>=3.0``) via
+                  :class:`PersistentTensorDict`. Pass ``filename=<path or store>``
+                  in *kwargs*.
                 - ``"shared"`` -- CPU shared-memory tensors.
                 - ``"redis"`` / ``"dragonfly"`` -- delegates to
                   :meth:`TensorDictStore.from_schema`.
@@ -3198,6 +3255,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 source, filename, batch_size=batch_size, device=device, **kwargs
             )
 
+        if storage == "zarr":
+            from tensordict.persistent import PersistentTensorDict
+
+            source = {
+                key: torch.zeros((), dtype=dt).expand(_full_shape(es))
+                for key, (es, dt) in schema.items()
+            }
+            filename = kwargs.pop("filename")
+            return PersistentTensorDict.from_dict(
+                source,
+                filename,
+                batch_size=batch_size,
+                device=device,
+                backend="zarr",
+                **kwargs,
+            )
+
         if storage == "shared":
             source = {
                 key: torch.zeros(_full_shape(es), dtype=dt, device=device)
@@ -3220,7 +3294,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
 
         raise ValueError(
             f"Unknown storage backend {storage!r}. Expected one of "
-            f"None, 'memmap', 'h5', 'shared', 'redis', 'dragonfly'."
+            f"None, 'memmap', 'h5', 'zarr', 'shared', 'redis', 'dragonfly'."
         )
 
     # Module interaction
@@ -16242,6 +16316,70 @@ class TensorDictBase(MutableMapping, TensorCollection):
             out.names = self.names
         return out
 
+    def to_zarr(
+        self,
+        filename,
+        **kwargs,
+    ) -> Any:
+        """Converts a tensordict to a PersistentTensorDict with the zarr backend.
+
+        Requires ``zarr>=3.0`` to be installed. The batch size (and dimension
+        names) are persisted in the store attributes such that
+        :meth:`~.from_zarr` restores them without inference.
+
+        Args:
+            filename (str, path or zarr store): path to the zarr store (a
+                directory), or a ``zarr.abc.store.Store`` instance (e.g. a
+                ``zarr.storage.ZipStore``).
+            **kwargs: kwargs to be passed to :meth:`zarr.Group.create_array`.
+                By default each tensor is stored as a single uncompressed chunk;
+                pass ``chunks=...`` and/or ``compressors=...`` to override (e.g.
+                for out-of-core row access or on-disk compression). Since leaves
+                have different ranks, ``chunks`` constrains the leading
+                dimensions of each leaf and trailing dimensions are left whole
+                (e.g. ``chunks=(16,)`` chunks every leaf along its first
+                dimension in blocks of 16).
+
+        Returns:
+            A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created store.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({
+            ...     "a": torch.zeros(1000),
+            ...     "b": {"c": torch.zeros(1000, 3)},
+            ... }, [1000])
+            >>> td_zarr = td.to_zarr(tempfile.mkdtemp() + "/store.zarr")
+            >>> print(td_zarr)
+            PersistentTensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: PersistentTensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([1000]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([1000]),
+                device=None,
+                is_shared=False)
+
+        """
+        from tensordict.persistent import PersistentTensorDict
+
+        out = PersistentTensorDict.from_dict(
+            self,
+            filename=filename,
+            backend="zarr",
+            **kwargs,
+        )
+        if self._has_names():
+            out.names = self.names
+            out._write_attrs_metadata()
+        return out
+
     def to_store(
         self,
         *,
@@ -18230,4 +18368,5 @@ from tensordict._base.factories import (  # noqa: F401
     from_parquet,
     from_struct_array,
     from_tuple,
+    from_zarr,
 )
