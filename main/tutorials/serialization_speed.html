@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4210+g1341859c0.d20260721)
+                  main (0.13.0.dev4216+g8f37f8e46.d20260722)
                 </div>
               
             
@@ -365,14 +365,14 @@ to download the full example code.</p>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
 <p>In this example you will learn how the main TensorDict serialization paths
 compare in terms of speed, how <code class="docutils literal notranslate"><span class="pre">num_threads</span></code> affects each of them, and
-how the on-disk formats compare with <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and safetensors.</p>
+how the on-disk formats compare with <code class="docutils literal notranslate"><span class="pre">torch.save</span></code>, safetensors and zarr.</p>
 <p>The script runs each measurement 32 times and renders the median with the
 interquartile range as error bars. It is executed during the documentation
 build, so the figures below reflect the machine that built these docs;
 download the script at the bottom of this page (or run
 <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">tutorials/sphinx_tuto/serialization_speed.py</span></code> from a tensordict
 checkout) to measure your own hardware. The only extra dependencies are
-<code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> and, optionally, <code class="docutils literal notranslate"><span class="pre">safetensors</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> and, optionally, <code class="docutils literal notranslate"><span class="pre">safetensors</span></code> and <code class="docutils literal notranslate"><span class="pre">zarr</span></code>.</p>
 <p>The first benchmark compares the write paths:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>: fuse all leaves into a
@@ -388,8 +388,8 @@ leaves. The <code class="docutils literal notranslate"><span class="pre">.tdz</s
 writer is a single sequential pass and takes no <code class="docutils literal notranslate"><span class="pre">num_threads</span></code> argument;
 it is covered by the second benchmark, which compares the on-disk formats
 (memmap directory, consolidated file, <code class="docutils literal notranslate"><span class="pre">.tdz</span></code> archive, <code class="docutils literal notranslate"><span class="pre">torch.save</span></code>,
-safetensors) on saving (single- and multithreaded where supported) and
-opening.</p>
+safetensors, zarr) on saving (single- and multithreaded where supported)
+and opening.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
@@ -408,6 +408,12 @@ opening.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
 
 <a href="https://docs.python.org/3/library/functions.html#bool" title="builtins.bool" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_has_safetensors</span></a> <span class="o">=</span> <a href="https://docs.python.org/3/library/importlib.html#importlib.util.find_spec" title="importlib.util.find_spec" class="sphx-glr-backref-module-importlib-util sphx-glr-backref-type-py-function"><span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span></a><span class="p">(</span><span class="s2">&quot;safetensors&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">_zarr</span>
+
+    <a href="https://docs.python.org/3/library/functions.html#bool" title="builtins.bool" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_has_zarr</span></a> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">_zarr</span><span class="o">.</span><span class="n">__version__</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&gt;=</span> <span class="mi">3</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <a href="https://docs.python.org/3/library/functions.html#bool" title="builtins.bool" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_has_zarr</span></a> <span class="o">=</span> <span class="kc">False</span>
 </pre></div>
 </div>
 <section id="benchmark-configuration">
@@ -577,12 +583,16 @@ measurements.</p>
 <p>The second benchmark compares the on-disk formats tensordict can write –
 the per-leaf memmap directory, the consolidated single file and the
 <code class="docutils literal notranslate"><span class="pre">.tdz</span></code> zip archive – with <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and, when installed,
-safetensors. The two external formats are measured on their fastest
-paths: a flat dict of tensors, written with <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> /
-<code class="docutils literal notranslate"><span class="pre">save_file</span></code> and reloaded with <code class="docutils literal notranslate"><span class="pre">torch.load(mmap=True,</span>
+safetensors and zarr. <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and safetensors are measured on
+their fastest paths: a flat dict of tensors, written with <code class="docutils literal notranslate"><span class="pre">torch.save</span></code>
+/ <code class="docutils literal notranslate"><span class="pre">save_file</span></code> and reloaded with <code class="docutils literal notranslate"><span class="pre">torch.load(mmap=True,</span>
 <span class="pre">weights_only=True)</span></code> / the mmap-backed <code class="docutils literal notranslate"><span class="pre">load_file</span></code>. They do not
 represent tensordict structure natively, so keys are flattened at save
-time and the nesting is rebuilt at load time.</p>
+time and the nesting is rebuilt at load time. zarr goes through
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDictBase.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> /
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> with its default layout
+(one uncompressed chunk per leaf); unlike the other formats it does not
+memory-map its payload, so <em>open</em> is lazy but bulk reads pay a copy.</p>
 <p>Two operations are timed. <em>Save</em> writes a fresh artifact (removed
 outside the timed region); the tensordict formats that take a
 <code class="docutils literal notranslate"><span class="pre">num_threads</span></code> argument – the memmap directory and the consolidated
@@ -657,6 +667,19 @@ the number of leaves and with round-trip time on network filesystems).</p>
             <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span><span class="n">load_file</span><span class="p">(</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path</span></a><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
 
         <span class="n">formats</span><span class="p">[</span><span class="s2">&quot;safetensors&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">save_safetensors</span><span class="p">,</span> <span class="n">open_safetensors</span><span class="p">)</span>
+    <span class="k">if</span> <a href="https://docs.python.org/3/library/functions.html#bool" title="builtins.bool" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_has_zarr</span></a><span class="p">:</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">save_zarr</span><span class="p">(</span><a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">num_threads</span></a><span class="p">):</span>
+            <span class="k">if</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">num_threads</span></a><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">fresh</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">)</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">filename</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">open_zarr</span><span class="p">(</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path</span></a><span class="p">):</span>
+            <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><a href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath" class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path</span></a><span class="p">)</span>
+
+        <span class="n">formats</span><span class="p">[</span><span class="s2">&quot;zarr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">save_zarr</span><span class="p">,</span> <span class="n">open_zarr</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">formats</span>
 
 
@@ -794,7 +817,7 @@ tracks these operations with <code class="docutils literal notranslate"><span cl
 offline version of the format comparison (bigger payloads, more
 layouts, read timings).</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (8 minutes 24.468 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (8 minutes 23.144 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-serialization-speed-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">serialization_speed.ipynb</span></code></a></p>

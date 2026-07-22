@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+from_zarr
+=========
+
+.. autoclass:: from_zarr
+    :members:
+    :inherited-members:

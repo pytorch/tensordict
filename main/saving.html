@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4210+g1341859c0.d20260721)
+                  main (0.13.0.dev4216+g8f37f8e46.d20260722)
                 </div>
               
             
@@ -594,21 +594,28 @@ checksums, so this is harmless within tensordict, but call
 archive to tools that do verify them (<code class="docutils literal notranslate"><span class="pre">unzip</span></code>,
 <a class="reference internal" href="reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>, …).</p>
 <p>How do the three on-disk representations (memmap directory, consolidated
-file, archive) compare speed-wise, including against <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and
-safetensors? All of these load lazily through <code class="docutils literal notranslate"><span class="pre">mmap</span></code>, so bulk read
-throughput is essentially identical; the differences are in the per-entry
-overheads. Opening scales with the number of entries and favors the
-single-file formats (one metadata parse instead of one file open per leaf).
-Saving an archive streams the tensor bytes into the file in a single pass
-and is comparable to a directory save, with a per-entry overhead that shows
-for many-small-leaf layouts. Copying the saved artifact is where single
-files shine: a directory pays per-file latency, which dominates for
+file, archive) compare speed-wise, including against <code class="docutils literal notranslate"><span class="pre">torch.save</span></code>,
+safetensors and zarr? The tensordict formats, <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and
+safetensors all load lazily through <code class="docutils literal notranslate"><span class="pre">mmap</span></code>, so bulk read throughput is
+essentially identical; the differences are in the per-entry overheads.
+Opening scales with the number of entries and favors the single-file
+formats (one metadata parse instead of one file open per leaf). Saving an
+archive streams the tensor bytes into the file in a single pass and is
+comparable to a directory save, with a per-entry overhead that shows for
+many-small-leaf layouts. Copying the saved artifact is where single files
+shine: a directory pays per-file latency, which dominates for
 many-small-leaf layouts on local disk and grows with round-trip time on
 network filesystems. Note that <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> and safetensors are measured
 on their fastest paths (flat tensor dicts, <code class="docutils literal notranslate"><span class="pre">torch.load(mmap=True,</span>
 <span class="pre">weights_only=True)</span></code> and mmap-backed loading respectively) and do not
 represent tensordict structure natively: keys are flattened at save time
-and the nesting rebuilt at load time.</p>
+and the nesting rebuilt at load time. zarr
+(<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDictBase.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> /
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a>, see <a class="reference internal" href="storage.html#storage"><span class="std std-ref">Storing large heterogeneous data</span></a>) also
+opens lazily but does not memory-map its payload, so bulk reads pay a
+copy, and each array is a store round-trip, which shows on
+many-tiny-leaf layouts; its strengths are elsewhere – chunking,
+compression and object-store backends.</p>
 <figure class="align-default" id="id1">
 <a class="reference external image-reference" href="tutorials/serialization_speed.html"><img alt="Barplots comparing save (single- and multithreaded) and open times of memmap directories, consolidated files, zip archives, torch.save files and safetensors files across two tensordict layouts, with the median time printed above each bar." src="_images/sphx_glr_serialization_speed_002.png" style="width: 100%;" /></a>
 <figcaption>

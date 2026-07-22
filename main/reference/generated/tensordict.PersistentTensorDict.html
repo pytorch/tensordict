@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4210+g1341859c0.d20260721)
+                  main (0.13.0.dev4216+g8f37f8e46.d20260722)
                 </div>
               
             
@@ -363,7 +363,7 @@
 <h1>PersistentTensorDict<a class="headerlink" href="#persistenttensordict" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">PersistentTensorDict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'h5'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">PersistentTensorDict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'h5'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Persistent TensorDict implementation.</p>
 <p><a class="reference internal" href="#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> instances provide an interface with data stored
 on disk such that access to this data is made easy while still taking advantage
@@ -377,13 +377,23 @@ the desired device.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.13)"><em>torch.Size</em></a><em> or </em><em>compatible</em>) – the tensordict batch size.
 Defaults to <code class="docutils literal notranslate"><span class="pre">torch.Size(())</span></code>.</p></li>
-<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – the path to the h5 file. Exclusive with <code class="docutils literal notranslate"><span class="pre">group</span></code>.</p></li>
-<li><p><strong>group</strong> (<em>h5py.Group</em><em>, </em><em>optional</em>) – a file or a group that contains data. Exclusive with <code class="docutils literal notranslate"><span class="pre">filename</span></code>.</p></li>
+<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – the path to the h5 file or zarr store (for the
+zarr backend, a <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance is also accepted).
+Exclusive with <code class="docutils literal notranslate"><span class="pre">group</span></code>.</p></li>
+<li><p><strong>group</strong> (<em>h5py.Group</em><em> or </em><em>zarr.Group</em><em>, </em><em>optional</em>) – a file or a group that
+contains data. Exclusive with <code class="docutils literal notranslate"><span class="pre">filename</span></code>.</p></li>
 <li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Reading mode. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code>.</p></li>
-<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – storage backend. Currently only <code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code> is supported.</p></li>
+<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – storage backend, <code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code> (requires <code class="docutils literal notranslate"><span class="pre">h5py</span></code>) or
+<code class="docutils literal notranslate"><span class="pre">&quot;zarr&quot;</span></code> (requires <code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.0</span></code>). Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em> or </em><em>compatible</em><em>, </em><em>optional</em>) – device of the tensordict.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (ie. default PyTorch device).</p></li>
-<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">h5py.File.create_dataset()</span></code>.</p></li>
+<li><p><strong>validate_batch_size</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.bool" title="tensordict.PersistentTensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size is
+checked against the stored array shapes at construction time (this
+requires iterating over the store metadata). Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">h5py.File.create_dataset()</span></code> (h5
+backend) or <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code> (zarr backend). With the
+zarr backend, arrays are stored as a single chunk without compression
+by default; pass <code class="docutils literal notranslate"><span class="pre">chunks=...</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=...</span></code> to override.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2593,13 +2603,13 @@ resulting TensorDict.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict.from_dict">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.from_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts a dictionary or a TensorDict to a h5 file.</p>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'h5'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.from_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a dictionary or a TensorDict to a h5 file or zarr store.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em> or </em><em>compatible</em>) – data to be stored as h5.</p></li>
-<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>path</em>) – path to the h5 file.</p></li>
+<li><p><strong>input_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em> or </em><em>compatible</em>) – data to be stored.</p></li>
+<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>path</em>) – path to the h5 file or zarr store.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -2612,7 +2622,10 @@ input structure (if present) or determined automatically.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em> or </em><em>compatible</em><em>, </em><em>optional</em>) – the device where to
 expect the tensor once they are returned. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>
 (on cpu by default).</p></li>
-<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">h5py.File.create_dataset()</span></code>.</p></li>
+<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – storage backend, <code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;zarr&quot;</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">h5py.File.create_dataset()</span></code>
+(h5 backend) or <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code> (zarr backend).</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -3159,6 +3172,9 @@ shape.  Defaults to <code class="docutils literal notranslate"><span class="pre"
 Pass <code class="docutils literal notranslate"><span class="pre">prefix=&lt;dir&gt;</span></code> in <em>kwargs</em>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;h5&quot;</span></code> – HDF5 via <a class="reference internal" href="#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>.
 Pass <code class="docutils literal notranslate"><span class="pre">filename=&lt;path&gt;</span></code> in <em>kwargs</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;zarr&quot;</span></code> – zarr (requires <code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.0</span></code>) via
+<a class="reference internal" href="#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>. Pass <code class="docutils literal notranslate"><span class="pre">filename=&lt;path</span> <span class="pre">or</span> <span class="pre">store&gt;</span></code>
+in <em>kwargs</em>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> – CPU shared-memory tensors.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;redis&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;dragonfly&quot;</span></code> – delegates to
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictStore.from_schema()</span></code>.</p></li>
@@ -3281,6 +3297,46 @@ should have. Defaults to <code class="docutils literal notranslate"><span class=
 <span class="go">        0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">        1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">        2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.from_zarr">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.13)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.from_zarr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a PersistentTensorDict from a zarr store.</p>
+<p>The batch size (and dimension names) are read from the
+<code class="docutils literal notranslate"><span class="pre">&quot;__tensordict__&quot;</span></code> attribute written by <a class="reference internal" href="#tensordict.PersistentTensorDict.from_dict" title="tensordict.PersistentTensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a> /
+<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDictBase.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> when present; otherwise the
+batch size of each nested tensordict is determined automatically
+(unless <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> is provided).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>path</em><em> or </em><em>zarr store</em>) – the path to the zarr store
+(a directory), or a <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Reading mode. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code>.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.13)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – The batch size of the TensorDict.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (batch-size read from metadata or
+automatically determined).</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A PersistentTensorDict representation of the input zarr store.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ptd</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><span class="s2">&quot;path/to/store.zarr&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">ptd</span><span class="p">)</span>
+<span class="go">PersistentTensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
@@ -8860,6 +8916,59 @@ Otherwise they will be discarded. Default: <code class="docutils literal notrans
 <dd class="field-even"><p>a new TensorDict object containing the same values.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.to_zarr">
+<span class="sig-name descname"><span class="pre">to_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.to_zarr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a tensordict to a PersistentTensorDict with the zarr backend.</p>
+<p>Requires <code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.0</span></code> to be installed. The batch size (and dimension
+names) are persisted in the store attributes such that
+<a class="reference internal" href="#tensordict.PersistentTensorDict.from_zarr" title="tensordict.PersistentTensorDict.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> restores them without inference.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>path</em><em> or </em><em>zarr store</em>) – path to the zarr store (a
+directory), or a <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance (e.g. a
+<code class="docutils literal notranslate"><span class="pre">zarr.storage.ZipStore</span></code>).</p></li>
+<li><p><strong>**kwargs</strong> – kwargs to be passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code>.
+By default each tensor is stored as a single uncompressed chunk;
+pass <code class="docutils literal notranslate"><span class="pre">chunks=...</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=...</span></code> to override (e.g.
+for out-of-core row access or on-disk compression). Since leaves
+have different ranks, <code class="docutils literal notranslate"><span class="pre">chunks</span></code> constrains the leading
+dimensions of each leaf and trailing dimensions are left whole
+(e.g. <code class="docutils literal notranslate"><span class="pre">chunks=(16,)</span></code> chunks every leaf along its first
+dimension in blocks of 16).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A <a class="reference internal" href="#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> instance linked to the newly created store.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span>
+<span class="gp">... </span><span class="p">},</span> <span class="p">[</span><span class="mi">1000</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zarr</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;/store.zarr&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_zarr</span><span class="p">)</span>
+<span class="go">PersistentTensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        b: PersistentTensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">            batch_size=torch.Size([1000]),</span>
+<span class="go">            device=None,</span>
+<span class="go">            is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([1000]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
