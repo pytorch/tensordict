@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-23T06:58:29.881625+00:00",
+  "generated_at": "2026-07-24T06:58:41.471374+00:00",
   "analysis_period": {
     "start": "2026-05-21",
     "end": "2026-07-22",
@@ -8,7 +8,7 @@
   "summary": {
     "total_tests": 90463,
     "flaky_count": 132,
-    "new_flaky_count": 3,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -27,7 +27,7 @@
         "2026-07-16T14:40:32Z"
       ],
       "first_seen_flaky": "2026-07-16T14:40:32Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous[2-device1]",
@@ -44,7 +44,7 @@
         "2026-07-16T14:40:32Z"
       ],
       "first_seen_flaky": "2026-07-16T14:40:32Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous_requires_grad[device1]",
@@ -61,7 +61,7 @@
         "2026-07-16T14:40:32Z"
       ],
       "first_seen_flaky": "2026-07-16T14:40:32Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test.tensordict.test_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device1]",

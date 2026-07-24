@@ -1,9 +1,9 @@
-# Flaky Test Report - 2026-07-23
+# Flaky Test Report - 2026-07-24
 
 ## Summary
 
 - **Flaky tests**: 132
-- **Newly flaky** (last 7 days): 3
+- **Newly flaky** (last 7 days): 0
 - **Total tests analyzed**: 90463
 - **CI runs analyzed**: 30
 
@@ -13,9 +13,9 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...nsordict.test_generic.TestGeneric::test_consolidate_non_contiguous[0-device1]` **NEW** | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
-| `...nsordict.test_generic.TestGeneric::test_consolidate_non_contiguous[2-device1]` **NEW** | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
-| `...t_generic.TestGeneric::test_consolidate_non_contiguous_requires_grad[device1]` **NEW** | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
+| `...nsordict.test_generic.TestGeneric::test_consolidate_non_contiguous[0-device1]` | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
+| `...nsordict.test_generic.TestGeneric::test_consolidate_non_contiguous[2-device1]` | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
+| `...t_generic.TestGeneric::test_consolidate_non_contiguous_requires_grad[device1]` | 33.3% (2/6) | 2 | 0.27 | 2026-07-16 |
 | `...est_methods.TestTensorDicts::test_squeeze_with_none_legacy[nested_td-device1]` | 10.1% (16/158) | 16 | 0.20 | 2026-07-09 |
 | `...ds.TestTensorDicts::test_squeeze_with_none_legacy[nested_tensorclass-device2]` | 10.1% (16/158) | 16 | 0.20 | 2026-07-09 |
 | `...ods.TestTensorDicts::test_squeeze_with_none_legacy[nested_stacked_td-device3]` | 10.1% (16/158) | 16 | 0.20 | 2026-07-09 |
@@ -45,12 +45,6 @@
 | `...rdict.test_methods.TestTensorDicts::test_squeeze_with_none[memmap_td-device8]` | 10.1% (16/158) | 16 | 0.20 | 2026-07-09 |
 
 
-### Newly Flaky
-
-- `test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous[0-device1]`
-- `test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous[2-device1]`
-- `test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous_requires_grad[device1]`
-
 ---
 
 ## Configuration
@@ -62,4 +56,4 @@
 
 ---
 
-*Generated at 2026-07-23T06:58:29.881625+00:00*
+*Generated at 2026-07-24T06:58:41.471374+00:00*
