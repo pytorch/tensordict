@@ -31,7 +31,6 @@ concurrency:
 
 jobs:
   build-wheel-aarch64:
-    # Publishing is handled by the reusable test-infra workflow.
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:

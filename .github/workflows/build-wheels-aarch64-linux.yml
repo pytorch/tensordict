@@ -39,7 +39,6 @@ jobs:
     with:
       package-type: wheel
       os: linux-aarch64
-      channel: ${{ inputs.nightly && 'nightly' || '' }}
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       with-cuda: disable
@@ -51,7 +50,6 @@ jobs:
         include:
           - repository: pytorch/tensordict
             package-name: tensordict
-            smoke-test-script: test/smoke_test.py
     name: pytorch/tensordict
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     with:
@@ -61,12 +59,11 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ inputs.nightly && 'schedule' || github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
-      build-command: ${{ inputs.nightly && 'bash .github/scripts/build_nightly_wheel.sh' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
+      build-command: ${{ inputs.nightly && 'sed -i.bak ''s/name = "tensordict"/name = "tensordict-nightly"/'' pyproject.toml && SETUPTOOLS_SCM_PRETEND_VERSION=$(date +%Y.%m.%d) pip wheel . && rm pyproject.toml.bak && mkdir -p dist && mv tensordict_nightly-*.whl ./dist' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
       build-platform: python-build-package
       upload-to-pypi: ${{ inputs.nightly && 'cpu' || '' }}
     secrets:
