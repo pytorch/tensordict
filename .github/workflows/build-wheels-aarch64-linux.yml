@@ -12,8 +12,6 @@ on:
         # NOTE: Binary build pipelines should only get triggered on release candidate builds
         # Release candidate tags look like: v1.11.0-rc1
         - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
-  schedule:
-    - cron: '45 13 * * *'
   workflow_call:
     inputs:
       test-infra-ref:
@@ -30,12 +28,6 @@ on:
       PYPI_TOKEN:
         required: false
   workflow_dispatch:
-    inputs:
-      nightly:
-        description: 'Build and publish tensordict-nightly wheels'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   id-token: write
@@ -47,7 +39,7 @@ jobs:
     with:
       package-type: wheel
       os: linux-aarch64
-      channel: ${{ (github.event_name == 'schedule' || inputs.nightly) && 'nightly' || '' }}
+      channel: ${{ inputs.nightly && 'nightly' || '' }}
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       with-cuda: disable
@@ -70,12 +62,12 @@ jobs:
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
       smoke-test-script: ${{ matrix.smoke-test-script }}
-      trigger-event: ${{ (github.event_name == 'schedule' || inputs.nightly) && 'schedule' || github.event_name }}
+      trigger-event: ${{ inputs.nightly && 'schedule' || github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
-      build-command: ${{ (github.event_name == 'schedule' || inputs.nightly) && 'bash .github/scripts/build_nightly_wheel.sh' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
+      build-command: ${{ inputs.nightly && 'bash .github/scripts/build_nightly_wheel.sh' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
       build-platform: python-build-package
-      upload-to-pypi: ${{ (github.event_name == 'schedule' || inputs.nightly) && 'cpu' || '' }}
+      upload-to-pypi: ${{ inputs.nightly && 'cpu' || '' }}
     secrets:
       PYPI_API_TOKEN: ${{ secrets.PYPI_TOKEN }}
