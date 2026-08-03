@@ -19,6 +19,14 @@ on:
         required: false
         type: string
         default: 'main'
+      nightly:
+        description: 'Build and publish tensordict-nightly wheels'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      PYPI_TOKEN:
+        required: false
   workflow_dispatch:
 
 permissions:
@@ -51,10 +59,12 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      smoke-test-script: ${{ matrix.smoke-test-script }}
-      trigger-event: ${{ github.event_name }}
+      trigger-event: ${{ inputs.nightly && 'schedule' || github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
-      build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
+      build-command: ${{ inputs.nightly && 'sed -i.bak ''s/name = "tensordict"/name = "tensordict-nightly"/'' pyproject.toml && SETUPTOOLS_SCM_PRETEND_VERSION=$(date +%Y.%m.%d) pip wheel . && rm pyproject.toml.bak && mkdir -p dist && mv tensordict_nightly-*.whl ./dist' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
       build-platform: python-build-package
+      upload-to-pypi: ${{ inputs.nightly && 'cpu' || '' }}
+    secrets:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_TOKEN }}

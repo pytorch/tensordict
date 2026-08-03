@@ -30,6 +30,17 @@ concurrency:
 
 
 jobs:
+  build-wheel-aarch64:
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    uses: ./.github/workflows/build-wheels-aarch64-linux.yml
+    with:
+      nightly: true
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    permissions:
+      id-token: write
+      contents: read
+
   build-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
