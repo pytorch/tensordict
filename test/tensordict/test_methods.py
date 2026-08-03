@@ -4845,6 +4845,45 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (inputs.grad == 1).all()
 
 
+class TestEmptyTensorMemmapRoundtrip:
+    @pytest.mark.parametrize("archive", [False, True])
+    def test_empty_tensor_leaves(self, tmp_path, archive):
+        td = TensorDict(
+            {
+                "empty": torch.empty(0, dtype=torch.int64),
+                "nested": {
+                    "matrix": torch.empty(0, 3, dtype=torch.float64),
+                    "robust/key": torch.empty(2, 0, dtype=torch.int16),
+                },
+            },
+            batch_size=[],
+        )
+        prefix = tmp_path / "data.tdz" if archive else tmp_path / "data"
+
+        td.memmap(prefix, robust_key=True)
+
+        assert not list(tmp_path.rglob("*.memmap"))
+        loaded = TensorDict.load_memmap(prefix, robust_key=True)
+        assert loaded["empty"].shape == (0,)
+        assert loaded["empty"].dtype is torch.int64
+        assert loaded["nested", "matrix"].shape == (0, 3)
+        assert loaded["nested", "matrix"].dtype is torch.float64
+        assert loaded["nested", "robust/key"].shape == (2, 0)
+        assert loaded["nested", "robust/key"].dtype is torch.int16
+
+    def test_missing_nonempty_leaf_is_not_reconstructed(self, tmp_path):
+        td = TensorDict(
+            {"empty": torch.empty(0), "missing": torch.ones(1)}, batch_size=[]
+        )
+        td.memmap_(tmp_path)
+        (tmp_path / "missing.memmap").unlink()
+
+        loaded = TensorDict.load_memmap(tmp_path)
+
+        assert "empty" in loaded
+        assert "missing" not in loaded
+
+
 class TestSubTensorDictMemmapRoundtrip:
     @pytest.mark.parametrize(
         "idx",

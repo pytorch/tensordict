@@ -2664,6 +2664,26 @@ class TestTensorClass:
 
 
 class TestMemmap:
+    def test_empty_tensor_roundtrip(self, tmp_path):
+        @tensorclass
+        class MyClass:
+            vector: torch.Tensor
+            matrix: torch.Tensor
+
+        data = MyClass(
+            vector=torch.empty(0, dtype=torch.int32),
+            matrix=torch.empty(2, 0, dtype=torch.float64),
+            batch_size=[],
+        )
+        data.memmap_(tmp_path)
+
+        loaded = MyClass.load_memmap(tmp_path)
+
+        assert loaded.vector.shape == (0,)
+        assert loaded.vector.dtype is torch.int32
+        assert loaded.matrix.shape == (2, 0)
+        assert loaded.matrix.dtype is torch.float64
+
     def test_from_memmap(self, tmpdir):
         td = TensorDict(
             {
