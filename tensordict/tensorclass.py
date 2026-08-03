@@ -810,7 +810,14 @@ def from_dataclass(
         clz._tensor_only = tensor_only
     else:
         clz = dest_cls
-    result = clz(**asdict(obj), batch_size=batch_size, device=device)
+    data = asdict(obj)
+    if clz._tensor_only:
+        # ``asdict`` recursively deep-copies values, which would discard the
+        # identity and lock state of TensorDicts. Keep TensorDict-annotated
+        # fields intact and let the tensor-only constructor normalize mappings.
+        for key in clz._tensordict_fields:
+            data[key] = getattr(obj, key)
+    result = clz(**data, batch_size=batch_size, device=device)
     if auto_batch_size:
         if batch_size is not None:
             raise TypeError(
@@ -1656,9 +1663,7 @@ def _is_tensordict_annotation(type_hint: Any) -> bool:
     return isinstance(type_hint, type) and issubclass(type_hint, TensorDictBase)
 
 
-def _set_tensorclass_type_hints(
-    cls: type, type_hints: dict[str, Any]
-) -> None:
+def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
     """Store resolved hints and cache fields with TensorDict-like annotations."""
     cls._tensordict_fields = frozenset(
         key
@@ -1675,9 +1680,7 @@ def _normalize_nested_mapping(
     if isinstance(mapping, TensorDictBase):
         return mapping
     return {
-        key: _normalize_nested_mapping(value)
-        if isinstance(value, Mapping)
-        else value
+        key: _normalize_nested_mapping(value) if isinstance(value, Mapping) else value
         for key, value in mapping.items()
     }
 
@@ -2048,9 +2051,7 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
     if value is None:
         self._non_tensordict[key] = None
         return
-    value, _ = _convert_mapping_for_field(
-        key, value, type(self)._tensordict_fields
-    )
+    value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
     if out is not self:
         raise RuntimeError(

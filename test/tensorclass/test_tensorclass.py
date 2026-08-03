@@ -3663,6 +3663,21 @@ class TestTensorOnly:
         assert isinstance(tc.data, TensorDict)
         assert tc.data["tensor"] == 1
 
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_tensor_only_from_dataclass_preserves_tensordict(self, nested):
+        @dataclasses.dataclass
+        class Data:
+            data: TensorDict
+
+        value = TensorDict({"tensor": torch.ones(())}).lock_()
+        data = UserDict({"nested": value}) if nested else value
+
+        tc = from_dataclass(Data(data=data), tensor_only=True)
+        result = tc.data["nested"] if nested else tc.data
+
+        assert result is value
+        assert result.is_locked
+
     def test_mapping_with_any_annotation_stays_non_tensor(self):
         class NonTensorMapping(TensorClass):
             data: Any
