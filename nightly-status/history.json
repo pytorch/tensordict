@@ -1,28 +1,28 @@
 {
-  "last_updated": "2026-08-04T20:26:17.481231+00:00",
+  "last_updated": "2026-08-04T22:11:45.865396+00:00",
   "stats": {
     "last_7_days": {
       "days": 7,
       "runs_with_data": 7,
       "total_workflow_runs": 42,
-      "total_success": 33,
-      "total_failure": 9,
-      "success_rate": 78.6
+      "total_success": 32,
+      "total_failure": 10,
+      "success_rate": 76.2
     },
     "last_30_days": {
       "days": 30,
       "runs_with_data": 30,
       "total_workflow_runs": 180,
-      "total_success": 135,
-      "total_failure": 44,
-      "success_rate": 75.0
+      "total_success": 134,
+      "total_failure": 45,
+      "success_rate": 74.4
     }
   },
   "history": [
     {
       "date": "2026-08-04",
       "orchestrator_ran": true,
-      "orchestrator_status": "queued",
+      "orchestrator_status": "failure",
       "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/30885988158",
       "orchestrator_run_id": 30885988158,
       "workflows": {
@@ -39,8 +39,8 @@
           "display_name": "MacOS Tests"
         },
         "test-rl-gpu.yml": {
-          "status": "success",
-          "conclusion": "success",
+          "status": "failure",
+          "conclusion": "failure",
           "url": "https://github.com/pytorch/tensordict/actions/runs/30885988158/job/92103940349",
           "display_name": "RL GPU Tests"
         },
@@ -65,11 +65,11 @@
       },
       "summary": {
         "total": 6,
-        "success": 6,
-        "failure": 0,
+        "success": 5,
+        "failure": 1,
         "skipped": 0,
         "other": 0,
-        "success_rate": 100.0
+        "success_rate": 83.3
       }
     },
     {
