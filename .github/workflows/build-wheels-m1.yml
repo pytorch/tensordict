@@ -57,7 +57,7 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/version_script.sh
-      build-command: pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist
+      build-command: pip wheel --no-deps . && mkdir -p dist && mv tensordict*.whl ./dist
       build-platform: python-build-package
       # Workaround for the M1 runners' Homebrew miniconda base env moving to
       # py3.14, where test-infra's `conda install -y conda=25.3.0` no longer

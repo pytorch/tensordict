@@ -63,7 +63,7 @@ jobs:
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
-      build-command: ${{ inputs.nightly && 'sed -i.bak ''s/name = "tensordict"/name = "tensordict-nightly"/'' pyproject.toml && SETUPTOOLS_SCM_PRETEND_VERSION=$(date +%Y.%m.%d) pip wheel . && rm pyproject.toml.bak && mkdir -p dist && mv tensordict_nightly-*.whl ./dist' || 'pip wheel . && mkdir -p dist && mv tensordict*.whl ./dist' }}
+      build-command: ${{ inputs.nightly && 'bash .github/scripts/build-aarch64-nightly-wheel.sh' || 'pip wheel --no-deps . && mkdir -p dist && mv tensordict*.whl ./dist' }}
       build-platform: python-build-package
       upload-to-pypi: ${{ inputs.nightly && 'cpu' || '' }}
     secrets:
