@@ -24,9 +24,6 @@ on:
         required: false
         type: boolean
         default: false
-    secrets:
-      PYPI_TOKEN:
-        required: false
   workflow_dispatch:
 
 permissions:
@@ -59,12 +56,12 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      trigger-event: ${{ inputs.nightly && 'schedule' || github.event_name }}
+      # Not 'schedule' for nightly: that enables test-infra's S3+PyPI upload jobs,
+      # which need an AWS role tensordict cannot assume; nightly_build.yml uploads
+      # to PyPI instead. ('' is falsy and would fall through to github.event_name.)
+      trigger-event: ${{ inputs.nightly && 'skip-upload' || github.event_name }}
       env-var-script: .github/scripts/version_script.sh
       architecture: aarch64
       setup-miniconda: false
       build-command: ${{ inputs.nightly && 'bash .github/scripts/build-aarch64-nightly-wheel.sh' || 'pip wheel --no-deps . && mkdir -p dist && mv tensordict*.whl ./dist' }}
       build-platform: python-build-package
-      upload-to-pypi: ${{ inputs.nightly && 'cpu' || '' }}
-    secrets:
-      PYPI_API_TOKEN: ${{ secrets.PYPI_TOKEN }}

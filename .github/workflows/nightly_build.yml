@@ -35,11 +35,37 @@ jobs:
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       nightly: true
-    secrets:
-      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     permissions:
       id-token: write
       contents: read
+
+  upload-wheel-aarch64:
+    # Don't run on forked repos.
+    # !cancelled(): upload whatever built even if some matrix entries failed.
+    if: ${{ !cancelled() && github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: build-wheel-aarch64
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          # Artifacts uploaded by test-infra, named pytorch_tensordict__<python>_cpu_aarch64
+          pattern: pytorch_tensordict_*_aarch64
+          path: /tmp/wheels
+          merge-multiple: true
+      - name: Push tensordict Binary to PYPI
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # Fail if no wheels were downloaded (e.g. test-infra renamed its artifacts).
+          ls /tmp/wheels/tensordict_nightly-*.whl
+          python3 -mpip install twine
+          python3 -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              /tmp/wheels/tensordict_nightly-*.whl \
+              --verbose
 
   build-wheel-unix:
     # Don't run on forked repos.
