@@ -140,6 +140,28 @@ def test_auto_batch_size(tmpdir):
     tree_map(check, td_dict, td_recon_dict)
 
 
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_kwargs_passthrough_nested(tmpdir):
+    # create_dataset kwargs must reach the leaves of nested tensordicts too
+    # https://github.com/pytorch/tensordict/issues/1758
+    tmpdir = Path(tmpdir)
+    td = TensorDict(
+        {
+            "a": torch.zeros(64, 3),
+            "b": {"c": torch.zeros(64, 5), "d": {"e": torch.zeros(64, 7)}},
+        },
+        batch_size=[64],
+    )
+    td.to_h5(tmpdir / "file.h5", compression="gzip", compression_opts=9)
+    with h5py.File(tmpdir / "file.h5", "r") as f:
+        for key in ("a", "b/c", "b/d/e"):
+            assert f[key].compression == "gzip", key
+            assert f[key].compression_opts == 9, key
+    td_recon = TensorDict.from_h5(tmpdir / "file.h5")
+    for key in (("a",), ("b", "c"), ("b", "d", "e")):
+        assert (td_recon[key] == td[key]).all(), key
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
