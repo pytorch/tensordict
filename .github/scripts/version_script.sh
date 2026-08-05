@@ -65,6 +65,11 @@ else
 
     ${CONDA_RUN} conda install -c conda-forge pybind11 -y
 
+    # Python 3.15 beta packages on Linux split the static library from the interpreter.
+    if [[ "${OSTYPE:-}" == linux* && "${PYTHON_VERSION:-}" == 3.15* ]]; then
+        ${CONDA_RUN} conda install -c conda-forge/label/python_dev -c conda-forge libpython-static -y
+    fi
+
     # Install setuptools_scm which is required for building with --no-isolation
     # This is done here (not in pre-script) to avoid cache issues
     ${CONDA_RUN} pip install setuptools_scm
