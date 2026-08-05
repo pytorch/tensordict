@@ -1022,6 +1022,7 @@ class PersistentTensorDict(TensorDictBase):
             backend=self.backend,
             # a persisted batch size was already validated at write time
             validate_batch_size=nested_batch_size is None,
+            **self.kwargs,
         )
         # share the backend instance so per-store state (e.g. the consolidated
         # metadata flag of the zarr backend) is tracked once per store
@@ -2015,6 +2016,7 @@ class PersistentTensorDict(TensorDictBase):
                 batch_size=td.batch_size,
                 device=td.device,
                 backend=self.backend,
+                **self.kwargs,
             )
             self._nested_tensordicts[key]._backend = self._backend
             self._nested_tensordicts[key].names = td._td_dim_names
@@ -2070,6 +2072,7 @@ class PersistentTensorDict(TensorDictBase):
                 backend=self.backend,
                 device=self.device,
                 batch_size=self.batch_size,
+                **self.kwargs,
             )
             clone._nested_tensordicts = nested_tds
             clone._pin_mem = False

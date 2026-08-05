@@ -321,6 +321,26 @@ class TestZarrWriteOps:
         root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
         assert root["a"].chunks == (16, 64)
 
+    def test_kwargs_passthrough_nested(self, tmp_path):
+        # create-kwargs must reach the leaves of nested tensordicts too
+        # https://github.com/pytorch/tensordict/issues/1758
+        from zarr.codecs import ZstdCodec
+
+        td = TensorDict(
+            {
+                "a": torch.zeros(64, 3),
+                "b": {"c": torch.zeros(64, 3), "d": {"e": torch.zeros(64, 3)}},
+            },
+            batch_size=[64],
+        )
+        td.to_zarr(tmp_path / "s.zarr", chunks=(16,), compressors=ZstdCodec(level=3))
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        for key in ("a", "b/c", "b/d/e"):
+            assert root[key].chunks == (16, 3), key
+            assert root[key].compressors, key
+        td_back = TensorDict.from_zarr(tmp_path / "s.zarr")
+        assert (td_back == td).all()
+
     def test_chunks_heterogeneous_ranks(self, tmp_path):
         # a single chunks spec constrains the leading dims of every leaf,
         # whatever its rank, and leaves non-tensor payloads untouched
