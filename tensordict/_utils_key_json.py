@@ -13,6 +13,7 @@ __all__ = [
     "_encode_key_for_filesystem",
     "_get_robust_key_setting",
     "_get_robust_key_setting_with_warning",
+    "_is_safe_legacy_key",
     "_json_dumps",
     "get_json_backend",
     "json_dumps",
@@ -28,6 +29,14 @@ def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
     if not robust:
         return key
 
+    # These values do not name a child when used as a path component. A bare
+    # "%" cannot be produced by the encoder (literal percent signs become
+    # "%25"), so it is an unambiguous representation for the empty key.
+    if not key:
+        return "%"
+    if key in (".", ".."):
+        return "%2E" * len(key)
+
     unsafe_chars = set('/<>:"|?*\\ \0%')
     unsafe_chars.update(chr(i) for i in range(32))
     unsafe_chars.add(chr(127))
@@ -40,6 +49,17 @@ def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
             encoded_parts.append(char)
 
     return "".join(encoded_parts)
+
+
+def _is_safe_legacy_key(key: str, *, is_collection: bool = False) -> bool:
+    """Return whether a raw legacy key stays beneath its memmap prefix."""
+    if "/" in key or "\\" in key:
+        return False
+    if len(key) >= 2 and key[0].isalpha() and key[1] == ":":
+        # A drive-relative path such as ``C:payload`` escapes a prefix on
+        # Windows even though it has no slash.
+        return False
+    return not is_collection or key not in ("", ".", "..")
 
 
 def _get_robust_key_setting_with_warning(key: str, robust_key) -> bool:
@@ -58,6 +78,8 @@ def _get_robust_key_setting(robust_key) -> bool:
 
 def _decode_key_from_filesystem(encoded_key: str) -> str:
     """Decode a filesystem-safe key back to the original TensorDict key."""
+    if encoded_key == "%":
+        return ""
     decoded_parts = []
     i = 0
     while i < len(encoded_key):

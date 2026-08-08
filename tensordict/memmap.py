@@ -33,6 +33,34 @@ else:
     Self = Any
 
 
+def _prepare_memmap_file(
+    filename: Path | str, *, existsok: bool, reserve: bool = True
+) -> None:
+    """Validate a memmap path and atomically reserve it when needed."""
+    if not reserve:
+        if Path(filename).is_symlink():
+            raise RuntimeError(
+                f"Refusing to write memory-mapped tensor through symlink {filename}."
+            )
+        if not existsok and os.path.lexists(filename):
+            raise RuntimeError(f"The file {filename} already exists.")
+        return
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(os.fspath(filename), flags, 0o666)
+    except FileExistsError:
+        if Path(filename).is_symlink():
+            raise RuntimeError(
+                f"Refusing to write memory-mapped tensor through symlink {filename}."
+            )
+        if not existsok:
+            raise RuntimeError(f"The file {filename} already exists.")
+    except FileNotFoundError as err:
+        raise RuntimeError(f"{err.strerror}: {filename}") from err
+    else:
+        os.close(fd)
+
+
 class MemoryMappedTensor(torch.Tensor):
     """A Memory-mapped Tensor.
 
@@ -46,6 +74,12 @@ class MemoryMappedTensor(torch.Tensor):
         When used within RPC settings, the filepath should be accessible to both nodes.
         If it isn't the behaviour of passing a MemoryMappedTensor from one worker
         to another is undefined.
+
+    .. warning::
+        A caller that supplies ``filename`` must control its parent directory.
+        Existing symbolic links are rejected, but path-based memory mapping
+        cannot prevent another process with directory write access from
+        replacing a path after it has been validated.
 
     MemoryMappedTensor supports multiple construction methods.
 
@@ -245,8 +279,7 @@ class MemoryMappedTensor(torch.Tensor):
             result = cls(result)
         else:
             handler = None
-            if not existsok and os.path.exists(str(filename)):
-                raise RuntimeError(f"The file {filename} already exists.")
+            _prepare_memmap_file(filename, existsok=existsok, reserve=bool(shape_numel))
             result = torch.from_file(
                 str(filename),
                 shared=True,
@@ -457,6 +490,7 @@ class MemoryMappedTensor(torch.Tensor):
                 Defaults to ``False``.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
+        existsok = kwargs.pop("existsok", False)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -464,7 +498,11 @@ class MemoryMappedTensor(torch.Tensor):
         result = torch.ones((), dtype=dtype, device=device)
         if isinstance(shape, torch.Tensor):
             return cls.empty(
-                shape, device=device, dtype=dtype, filename=filename
+                shape,
+                device=device,
+                dtype=dtype,
+                filename=filename,
+                existsok=existsok,
             ).fill_(1)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -475,7 +513,7 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(
             result,
             filename=filename,
-            existsok=kwargs.pop("existsok", False),
+            existsok=existsok,
         )
 
     @classmethod
@@ -504,13 +542,18 @@ class MemoryMappedTensor(torch.Tensor):
                 Defaults to ``False``.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
+        existsok = kwargs.pop("existsok", False)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
                 raise RuntimeError("Only CPU tensors are supported.")
         if isinstance(shape, torch.Tensor):
             return cls.empty(
-                shape, device=device, dtype=dtype, filename=filename
+                shape,
+                device=device,
+                dtype=dtype,
+                filename=filename,
+                existsok=existsok,
             ).fill_(0)
         result = torch.zeros((), dtype=dtype, device=device)
         if shape:
@@ -522,7 +565,7 @@ class MemoryMappedTensor(torch.Tensor):
         result = cls.from_tensor(
             result,
             filename=filename,
-            existsok=kwargs.pop("existsok", False),
+            existsok=existsok,
         )
         return result
 
@@ -560,6 +603,7 @@ class MemoryMappedTensor(torch.Tensor):
         if isinstance(shape, torch.Tensor):
             # nested tensor
             shape_numel = shape.prod(-1).sum()
+            existsok = kwargs.pop("existsok", False)
 
             if filename is None:
                 if dtype.is_floating_point:
@@ -593,6 +637,9 @@ class MemoryMappedTensor(torch.Tensor):
                 result._handler = handler
                 return result
             else:
+                _prepare_memmap_file(
+                    filename, existsok=existsok, reserve=bool(shape_numel)
+                )
                 result = torch.from_file(
                     str(filename),
                     shared=True,

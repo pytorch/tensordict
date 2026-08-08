@@ -192,8 +192,8 @@ utilities.
 
 ```python
 td = TensorDict({"tokens": tokens, "scores": scores}, batch_size=[n])
-td.memmap("/tmp/batch")          # memory-map every leaf
-reloaded = TensorDict.load_memmap("/tmp/batch")
+td.memmap("/path/to/private/batch")  # memory-map every leaf
+reloaded = TensorDict.load_memmap("/path/to/private/batch")
 ```
 
 Memory-mapped TensorDicts are useful for large offline datasets, replay buffers,

@@ -79,12 +79,15 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _convert_list_to_stack,
     _DTYPE_TO_STR_DTYPE,
+    _encode_key_for_filesystem,
     _GENERIC_NESTED_ERR,
+    _get_robust_key_setting_with_warning,
     _get_shared_executor,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_non_tensor,
     _is_number,
+    _is_safe_legacy_key,
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
@@ -7989,7 +7992,22 @@ class TensorDictBase(MutableMapping, TensorCollection):
                         "strings."
                     )
             for part in subpath:
-                prefix = prefix / part
+                effective_robust_key = _get_robust_key_setting_with_warning(
+                    part, robust_key
+                )
+                safe_part = _encode_key_for_filesystem(
+                    part, robust=effective_robust_key
+                )
+                candidate = prefix / safe_part
+                if (
+                    effective_robust_key
+                    and not (candidate / "meta.json").exists()
+                    and _is_safe_legacy_key(part, is_collection=True)
+                ):
+                    legacy_candidate = prefix / part
+                    if (legacy_candidate / "meta.json").exists():
+                        candidate = legacy_candidate
+                prefix = candidate
             if not (prefix / "meta.json").exists():
                 raise ValueError(
                     f"No tensordict found under subpath {'/'.join(subpath)!r} "

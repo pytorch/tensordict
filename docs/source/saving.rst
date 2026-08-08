@@ -47,6 +47,22 @@ However, this approach also has some disadvantages:
   The :class:`~tensordict.NonTensorData` class can be used to represent non-tensor
   data in a regular :class:`~tensordict.TensorDict` instance.
 
+Filesystem considerations
+-------------------------
+
+Keep the save directory (or archive's parent directory) writable only by
+trusted principals. Existing symbolic links are rejected when creating
+individual memory-map files, but a path-based API cannot protect against a
+process that can replace names in the parent directory concurrently. Prefer
+:class:`tempfile.TemporaryDirectory` or another private directory over
+predictable names in a shared ``/tmp`` directory.
+
+Robust key encoding is enabled by default and keeps TensorDict keys within
+their save prefix. ``robust_key=False`` exists only to interoperate with
+legacy layouts; do not use it with untrusted keys or metadata. The high-level
+save methods overwrite existing files by default (``existsok=True``), so pass
+``existsok=False`` when replacement is not intended.
+
 tensordict's memory-mapped API relies on four core methods:
 :meth:`~tensordict.TensorDictBase.memmap_`, :meth:`~tensordict.TensorDictBase.memmap`,
 :meth:`~tensordict.TensorDictBase.memmap_like` and :meth:`~tensordict.TensorDictBase.load_memmap`.
