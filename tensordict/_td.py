@@ -3050,6 +3050,11 @@ class TensorDict(TensorDictBase):
                         key, robust=effective_robust_key
                     )
                     value_prefix = prefix / safe_key
+                    if value_prefix.is_symlink():
+                        raise RuntimeError(
+                            "Refusing to write a memory-mapped TensorDict through "
+                            f"symlink {value_prefix}."
+                        )
                 else:
                     value_prefix = None
                 dest._tensordict[key] = value._memmap_(
@@ -3281,7 +3286,13 @@ class TensorDict(TensorDictBase):
                     safe_key = _encode_key_for_filesystem(
                         key_str, robust=effective_robust_key
                     )
-                    result_tmp.memmap_(prefix=result._memmap_prefix / safe_key)
+                    subtd_prefix = result._memmap_prefix / safe_key
+                    if subtd_prefix.is_symlink():
+                        raise RuntimeError(
+                            "Refusing to write a memory-mapped TensorDict through "
+                            f"symlink {subtd_prefix}."
+                        )
+                    result_tmp.memmap_(prefix=subtd_prefix)
                     metadata = _load_metadata(result._memmap_prefix)
                     _update_metadata(
                         metadata=metadata,

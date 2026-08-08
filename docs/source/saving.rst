@@ -59,9 +59,11 @@ predictable names in a shared ``/tmp`` directory.
 
 Robust key encoding is enabled by default and keeps TensorDict keys within
 their save prefix. ``robust_key=False`` exists only to interoperate with
-legacy layouts; do not use it with untrusted keys or metadata. The high-level
-save methods overwrite existing files by default (``existsok=True``), so pass
-``existsok=False`` when replacement is not intended.
+legacy layouts; do not use it with untrusted keys or metadata. Individual
+memory-map leaf files overwrite existing regular files by default
+(``existsok=True``); pass ``existsok=False`` to reject a colliding leaf path.
+The metadata file is still refreshed when reusing an existing save directory,
+so ``existsok=False`` does not reserve the directory as a whole.
 
 tensordict's memory-mapped API relies on four core methods:
 :meth:`~tensordict.TensorDictBase.memmap_`, :meth:`~tensordict.TensorDictBase.memmap`,

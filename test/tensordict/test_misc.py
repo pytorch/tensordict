@@ -1252,6 +1252,19 @@ class TestMemmap:
         loaded_subtree = TensorDict.load_memmap(prefix, subpath=(key,))
         assert_allclose_td(td[key], loaded_subtree)
 
+    def test_memmap_nested_collection_symlink_is_rejected(self, tmp_path):
+        prefix = tmp_path / "saved"
+        outside = tmp_path / "outside"
+        prefix.mkdir()
+        outside.mkdir()
+        (prefix / "nested").symlink_to(outside, target_is_directory=True)
+        td = TensorDict({"nested": {"x": torch.randn(3)}}, batch_size=[])
+
+        with pytest.raises(RuntimeError, match="TensorDict through symlink"):
+            td.memmap(prefix)
+
+        assert not list(outside.iterdir())
+
     def test_memmap_robust_load_does_not_traverse_legacy_path(self, tmp_path):
         key = "../outside"
         td = TensorDict({key: torch.randn(3)}, batch_size=[])
