@@ -80,7 +80,8 @@ def get_pr_info(repo: str, pr_number: int) -> dict:
         "--repo",
         repo,
         "--json",
-        "headRefName,baseRefName,author,title,url,labels,mergeable,reviewDecision",
+        "headRefName,baseRefName,author,title,url,labels,mergeable,reviewDecision,"
+        "isCrossRepository",
     )
     return json.loads(result.stdout)
 
@@ -111,6 +112,20 @@ def check_admin_permission(repo: str, username: str) -> bool:
 def is_ghstack_pr(head_branch: str) -> bool:
     """Detect whether the PR was created by ghstack."""
     return bool(re.match(r"^gh/[^/]+/\d+/head$", head_branch))
+
+
+def reject_cross_repository_write(ctx: CommandContext, command: str) -> bool:
+    """Reject commands that would push through the base repository remote."""
+    if ctx.pr_info.get("isCrossRepository") is False:
+        return False
+    post_comment(
+        ctx.repo,
+        ctx.pr_number,
+        f"`{command}` cannot safely update a branch from a fork. "
+        "Please perform the update in the fork and push it from an account "
+        "that controls that repository.",
+    )
+    return True
 
 
 def find_ghstack_stack_top(repo: str, head_branch: str) -> int:
@@ -279,6 +294,9 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
         )
         return
 
+    if reject_cross_repository_write(ctx, "rebase"):
+        return
+
     if is_ghstack_pr(head):
         _rebase_ghstack(ctx, args)
     else:
@@ -378,6 +396,9 @@ def cmd_lint(ctx: CommandContext, _args: argparse.Namespace) -> None:
             f"@{ctx.comment_author} you don't have write permission on this repository. "
             "Only collaborators with write access can run lint fixes.",
         )
+        return
+
+    if reject_cross_repository_write(ctx, "lint"):
         return
 
     post_comment(

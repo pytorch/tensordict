@@ -106,17 +106,28 @@ def list_workflow_runs(
     while len(runs) < num_runs:
         endpoint = (
             f"/repos/{repo}/actions/workflows/{workflow_name}/runs"
-            f"?branch={branch}&status=completed&per_page={per_page}&page={page}"
+            f"?branch={branch}&event=push&status=completed"
+            f"&per_page={per_page}&page={page}"
         )
         data = gh_api(endpoint)
         if not data or "workflow_runs" not in data:
             break
-        batch = data["workflow_runs"]
-        if not batch:
+        raw_batch = data["workflow_runs"]
+        if not raw_batch:
             break
+        # The API filters above are the primary boundary. Keep this fail-closed
+        # check as defense in depth before downloading executable-repository
+        # artifacts such as JUnit XML.
+        batch = [
+            run
+            for run in raw_batch
+            if run.get("event") == "push"
+            and run.get("head_branch") == branch
+            and (run.get("head_repository") or {}).get("full_name") == repo
+        ]
         runs.extend(batch)
         page += 1
-        if len(batch) < per_page:
+        if len(raw_batch) < per_page:
             break
 
     return runs[:num_runs]

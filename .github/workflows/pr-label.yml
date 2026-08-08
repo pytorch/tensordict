@@ -91,8 +91,16 @@ jobs:
           **Note:** Matching is case-insensitive. Common variations (singular/plural) are supported.
           COMMENT_EOF
             sed -i 's/^ *//' /tmp/pr_comment.md
-            sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
-            sed -i "s|TITLE_PLACEHOLDER|$current_title|" /tmp/pr_comment.md
+            COMMENT_REASON="$reason" COMMENT_TITLE="$current_title" python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("/tmp/pr_comment.md")
+          comment = path.read_text()
+          comment = comment.replace("REASON_PLACEHOLDER", os.environ["COMMENT_REASON"])
+          comment = comment.replace("TITLE_PLACEHOLDER", os.environ["COMMENT_TITLE"])
+          path.write_text(comment)
+          PY
             gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
           }
 
