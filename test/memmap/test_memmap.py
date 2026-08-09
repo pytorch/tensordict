@@ -122,6 +122,22 @@ def test_existing(tmp_path):
     )
 
 
+def test_existing_symlink_is_rejected(tmp_path):
+    target = tmp_path / "target"
+    target.write_bytes(b"unchanged")
+    link = tmp_path / "file.memmap"
+    link.symlink_to(target)
+
+    with pytest.raises(RuntimeError, match="through symlink"):
+        MemoryMappedTensor.from_tensor(
+            torch.zeros(()),
+            filename=link,
+            existsok=True,
+        )
+
+    assert target.read_bytes() == b"unchanged"
+
+
 @pytest.mark.parametrize("shape", [(), (3, 4)])
 @pytest.mark.parametrize("dtype", [None, torch.float, torch.double, torch.int])
 @pytest.mark.parametrize("device", [None] + get_available_devices())

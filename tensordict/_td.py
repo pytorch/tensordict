@@ -67,12 +67,15 @@ from tensordict.utils import (
     _clone_value,
     _create_segments_from_int,
     _create_segments_from_list,
+    _encode_key_for_filesystem,
     _get_item,
     _get_leaf_tensordict,
+    _get_robust_key_setting_with_warning,
     _get_shape_from_args,
     _getitem_batch_size,
     _index_preserve_data_ptr,
     _infer_size_impl,
+    _is_safe_legacy_key,
     _is_shared,
     _is_unbatched,
     _KEY_ERROR,
@@ -3039,8 +3042,23 @@ class TensorDict(TensorDictBase):
         for key, value in self.items():
             type_value = type(value)
             if _is_tensor_collection(type_value):
+                if prefix is not None:
+                    effective_robust_key = _get_robust_key_setting_with_warning(
+                        key, robust_key
+                    )
+                    safe_key = _encode_key_for_filesystem(
+                        key, robust=effective_robust_key
+                    )
+                    value_prefix = prefix / safe_key
+                    if value_prefix.is_symlink():
+                        raise RuntimeError(
+                            "Refusing to write a memory-mapped TensorDict through "
+                            f"symlink {value_prefix}."
+                        )
+                else:
+                    value_prefix = None
                 dest._tensordict[key] = value._memmap_(
-                    prefix=prefix / key if prefix is not None else None,
+                    prefix=value_prefix,
                     copy_existing=copy_existing,
                     executor=executor,
                     futures=futures,
@@ -3124,22 +3142,17 @@ class TensorDict(TensorDictBase):
         else:
             result = out
 
-        paths = set()
+        paths = []
         for key, entry_metadata in metadata.items():
             if not isinstance(entry_metadata, dict):
                 # there can be other metadata
                 continue
             type_value = entry_metadata.get("type")
             if type_value is not None:
-                paths.add(key)
+                paths.append(key)
                 continue
             dtype = entry_metadata.get("dtype")
             shape = entry_metadata.get("shape")
-            from .utils import (
-                _encode_key_for_filesystem,
-                _get_robust_key_setting_with_warning,
-            )
-
             # Use smart warning for loading that only warns when encoding would differ
             effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
 
@@ -3148,7 +3161,11 @@ class TensorDict(TensorDictBase):
             memmap_file = prefix / f"{safe_key}.memmap"
 
             # If robust encoding is requested but file doesn't exist, try legacy filename
-            if not memmap_file.exists() and effective_robust_key:
+            if (
+                not memmap_file.exists()
+                and effective_robust_key
+                and _is_safe_legacy_key(key)
+            ):
                 legacy_key = _encode_key_for_filesystem(key, robust=False)
                 legacy_file = prefix / f"{legacy_key}.memmap"
                 if legacy_file.exists():
@@ -3218,27 +3235,44 @@ class TensorDict(TensorDictBase):
                 inplace=False,
                 non_blocking=False,
             )
-        # iterate over folders and load them
-        for path in prefix.iterdir():
-            if path.is_dir() and path.parts[-1] in paths:
-                key = path.parts[-1]  # path.parts[len(prefix.parts) :]
-                existing_elt = result._get_str(key, default=None)
-                if existing_elt is not None:
-                    existing_elt.load_memmap_(path)
-                else:
-                    result._set_str(
-                        key,
-                        TensorDict.load_memmap(path, device=device, non_blocking=True),
-                        inplace=False,
-                        validated=False,
-                    )
+        # Load collection directories named by metadata. New saves use robust
+        # encoding; safe single-component legacy names remain readable.
+        for key in paths:
+            effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+            safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+            path = prefix / safe_key
+            if (
+                not path.is_dir()
+                and effective_robust_key
+                and _is_safe_legacy_key(key, is_collection=True)
+            ):
+                legacy_path = prefix / key
+                if legacy_path.is_dir():
+                    path = legacy_path
+            if not path.is_dir():
+                continue
+            existing_elt = result._get_str(key, default=None)
+            if existing_elt is not None:
+                existing_elt.load_memmap_(path, robust_key=robust_key)
+            else:
+                result._set_str(
+                    key,
+                    TensorDict.load_memmap(
+                        path,
+                        device=device,
+                        non_blocking=True,
+                        robust_key=robust_key,
+                    ),
+                    inplace=False,
+                    validated=False,
+                )
         # Archive paths are read-only views inside a zip file: they cannot be
         # used as a target for a subsequent memmap_()/refresh, so only real
         # directories are recorded.
         result._memmap_prefix = prefix if isinstance(prefix, Path) else None
         return result
 
-    def _make_memmap_subtd(self, key):
+    def _make_memmap_subtd(self, key, *, robust_key):
         """Creates a sub-tensordict given a tuple key."""
         result = self
         for key_str in key:
@@ -3246,7 +3280,19 @@ class TensorDict(TensorDictBase):
             if result_tmp is None:
                 result_tmp = result.empty()
                 if result._memmap_prefix is not None:
-                    result_tmp.memmap_(prefix=result._memmap_prefix / key_str)
+                    effective_robust_key = _get_robust_key_setting_with_warning(
+                        key_str, robust_key
+                    )
+                    safe_key = _encode_key_for_filesystem(
+                        key_str, robust=effective_robust_key
+                    )
+                    subtd_prefix = result._memmap_prefix / safe_key
+                    if subtd_prefix.is_symlink():
+                        raise RuntimeError(
+                            "Refusing to write a memory-mapped TensorDict through "
+                            f"symlink {subtd_prefix}."
+                        )
+                    result_tmp.memmap_(prefix=subtd_prefix)
                     metadata = _load_metadata(result._memmap_prefix)
                     _update_metadata(
                         metadata=metadata,
@@ -3276,7 +3322,7 @@ class TensorDict(TensorDictBase):
 
         key = unravel_key(key)
         if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1])
+            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
             last_key = key[-1]
         else:
             last_node = self
@@ -3332,7 +3378,7 @@ class TensorDict(TensorDictBase):
 
         key = unravel_key(key)
         if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1])
+            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
             last_key = key[-1]
         else:
             last_node = self
@@ -3392,7 +3438,7 @@ class TensorDict(TensorDictBase):
 
         key = unravel_key(key)
         if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1])
+            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
             last_key = key[-1]
         else:
             last_node = self

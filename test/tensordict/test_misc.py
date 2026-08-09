@@ -29,6 +29,8 @@ from tensordict.base import TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.tensorclass import NonTensorData
 from tensordict.utils import (
+    _decode_key_from_filesystem,
+    _encode_key_for_filesystem,
     assert_allclose_td,
     is_non_tensor,
     is_tensorclass,
@@ -1235,6 +1237,46 @@ class TestMemmap:
         assert len(files) == 1
         assert files[0] == "a%2Fb%2Fc.memmap"  # Encoded filename
 
+    def test_memmap_robust_key_nested_pathlike(self, tmp_path):
+        key = "../outside"
+        td = TensorDict({key: {"x": torch.randn(3)}}, batch_size=[])
+        prefix = tmp_path / "saved"
+
+        td.memmap(prefix, robust_key=True)
+
+        encoded = _encode_key_for_filesystem(key)
+        assert (prefix / encoded / "meta.json").is_file()
+        assert not (tmp_path / "outside").exists()
+        loaded = TensorDict.load_memmap(prefix)
+        assert_allclose_td(td, loaded)
+        loaded_subtree = TensorDict.load_memmap(prefix, subpath=(key,))
+        assert_allclose_td(td[key], loaded_subtree)
+
+    def test_memmap_nested_collection_symlink_is_rejected(self, tmp_path):
+        prefix = tmp_path / "saved"
+        outside = tmp_path / "outside"
+        prefix.mkdir()
+        outside.mkdir()
+        (prefix / "nested").symlink_to(outside, target_is_directory=True)
+        td = TensorDict({"nested": {"x": torch.randn(3)}}, batch_size=[])
+
+        with pytest.raises(RuntimeError, match="TensorDict through symlink"):
+            td.memmap(prefix)
+
+        assert not list(outside.iterdir())
+
+    def test_memmap_robust_load_does_not_traverse_legacy_path(self, tmp_path):
+        key = "../outside"
+        td = TensorDict({key: torch.randn(3)}, batch_size=[])
+        prefix = tmp_path / "saved"
+        td.memmap(prefix, robust_key=True)
+
+        encoded_file = prefix / f"{_encode_key_for_filesystem(key)}.memmap"
+        encoded_file.replace(tmp_path / "outside.memmap")
+
+        loaded = TensorDict.load_memmap(prefix, robust_key=True)
+        assert key not in loaded
+
     def test_memmap_robust_key_pathlike_legacy_fails(self, tmpdir):
         """Test that path-like keys still fail with robust_key=False."""
         td = TensorDict({"a/b/c": torch.randn(3, 4)})
@@ -1295,11 +1337,6 @@ class TestMemmap:
 
     def test_memmap_robust_key_encoding_bijective(self):
         """Test that key encoding is bijective."""
-        from tensordict.utils import (
-            _decode_key_from_filesystem,
-            _encode_key_for_filesystem,
-        )
-
         test_keys = [
             "a/b/c",
             "path\\with\\backslashes",
@@ -1309,10 +1346,15 @@ class TestMemmap:
             "normal_key",
             "key%with%percent",
             "",
+            ".",
+            "..",
         ]
 
+        encodings = set()
         for key in test_keys:
             encoded = _encode_key_for_filesystem(key, robust=True)
+            assert encoded not in encodings
+            encodings.add(encoded)
             decoded = _decode_key_from_filesystem(encoded)
             assert decoded == key, f"Failed: {key!r} -> {encoded!r} -> {decoded!r}"
 

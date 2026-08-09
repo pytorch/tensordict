@@ -2906,6 +2906,7 @@ from tensordict._utils_key_json import (  # noqa: F401
     _encode_key_for_filesystem,
     _get_robust_key_setting,
     _get_robust_key_setting_with_warning,
+    _is_safe_legacy_key,
 )
 
 
