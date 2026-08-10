@@ -3126,6 +3126,7 @@ class TensorDict(TensorDictBase):
         out=None,
         *,
         robust_key,
+        allow_pickle: bool | None = None,
     ) -> Self:
         if metadata.get("device", "None") == "None":
             metadata["device"] = None
@@ -3253,7 +3254,11 @@ class TensorDict(TensorDictBase):
                 continue
             existing_elt = result._get_str(key, default=None)
             if existing_elt is not None:
-                existing_elt.load_memmap_(path, robust_key=robust_key)
+                existing_elt.load_memmap_(
+                    path,
+                    robust_key=robust_key,
+                    allow_pickle=allow_pickle,
+                )
             else:
                 result._set_str(
                     key,
@@ -3262,6 +3267,7 @@ class TensorDict(TensorDictBase):
                         device=device,
                         non_blocking=True,
                         robust_key=robust_key,
+                        allow_pickle=allow_pickle,
                     ),
                     inplace=False,
                     validated=False,
@@ -4727,6 +4733,7 @@ class _SubTensorDict(TensorDictBase):
         *,
         robust_key,
         out=None,
+        allow_pickle: bool | None = None,
     ):
         index = _str_to_index(metadata["index"])
         if out is not None:
@@ -4740,11 +4747,15 @@ class _SubTensorDict(TensorDictBase):
                 device=device,
                 out=out._source,
                 robust_key=robust_key,
+                allow_pickle=allow_pickle,
             )
             return out
         return _SubTensorDict(
             TensorDict.load_memmap(
-                prefix / "_source", device=device, robust_key=robust_key
+                prefix / "_source",
+                device=device,
+                robust_key=robust_key,
+                allow_pickle=allow_pickle,
             ),
             index,
         )

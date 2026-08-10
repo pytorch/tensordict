@@ -7649,7 +7649,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             # dispatch on the class recorded in the archive metadata rather
             # than type(self): some views (e.g. sub-tensordicts) are saved as
             # a different class than the one they are created from.
-            return TensorDictBase.load_memmap(prefix)
+            # This archive was created by this process from the in-memory
+            # object, so reloading its arbitrary non-tensor fields is trusted.
+            return TensorDictBase.load_memmap(prefix, allow_pickle=True)
         if compression is not None:
             raise ValueError(
                 "compression is only supported when writing a memmap archive "
@@ -7785,7 +7787,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 existsok=existsok,
                 robust_key=robust_key,
             )
-            return TensorDictBase.load_memmap(prefix, mode="r+")
+            # This archive was created by this process from the in-memory
+            # object, so reloading its arbitrary non-tensor fields is trusted.
+            return TensorDictBase.load_memmap(prefix, mode="r+", allow_pickle=True)
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
@@ -7857,6 +7861,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         subpath: NestedKey | None = None,
         mode: str = "r",
         num_threads: int = 0,
+        allow_pickle: bool | None = None,
     ) -> Self:
         """Loads a memory-mapped tensordict from disk.
 
@@ -7911,6 +7916,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 inflated in parallel, which scales nearly linearly). Without
                 compression, loading is a metadata-only operation and this
                 argument has no effect. Defaults to ``0`` (sequential).
+            allow_pickle (bool, optional): whether pickled non-tensor fields
+                may be loaded. Pickle can execute arbitrary code, so pass
+                ``True`` only for data from a trusted source and ``False``
+                for untrusted data. During the 0.13 compatibility window,
+                omitting this option loads pickle with a ``FutureWarning``;
+                the default will change to ``False`` in 0.14. Saves without
+                a pickle sidecar do not require this option.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7967,6 +7979,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         """
         if mode not in ("r", "r+"):
             raise ValueError(f"mode must be 'r' or 'r+', got {mode!r}.")
+        if allow_pickle is not None and not isinstance(allow_pickle, bool):
+            raise TypeError("allow_pickle must be a bool or None.")
         if not isinstance(prefix, _ArchivePath):
             # nested (recursive) calls pass _ArchivePath instances directly
             prefix = Path(prefix)
@@ -8035,9 +8049,17 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 )
         else:
             other_cls = cls
-        out = other_cls._load_memmap(
-            prefix, metadata, device=device, out=out, robust_key=robust_key
-        )
+        load_kwargs = {
+            "device": device,
+            "out": out,
+            "robust_key": robust_key,
+        }
+        # Avoid changing the default call contract of third-party registered
+        # tensor collection loaders. They only see the new private keyword
+        # when the caller explicitly selects a pickle policy.
+        if allow_pickle is not None:
+            load_kwargs["allow_pickle"] = allow_pickle
+        out = other_cls._load_memmap(prefix, metadata, **load_kwargs)
         if (
             not non_blocking
             and device is not None
@@ -8050,6 +8072,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
         self,
         prefix: str | Path,
         robust_key: bool | None = True,
+        *,
+        allow_pickle: bool | None = None,
     ):
         """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
 
@@ -8058,23 +8082,34 @@ class TensorDictBase(MutableMapping, TensorCollection):
         is_memmap = self.is_memmap()
         with self.unlock_() if is_memmap else contextlib.nullcontext():
             self.load_memmap(
-                prefix=prefix, device=self.device, out=self, robust_key=robust_key
+                prefix=prefix,
+                device=self.device,
+                out=self,
+                robust_key=robust_key,
+                allow_pickle=allow_pickle,
             )
         if is_memmap:
             self.memmap_()
         return self
 
-    def memmap_refresh_(self):
+    def memmap_refresh_(self, *, allow_pickle: bool | None = None):
         """Refreshes the content of the memory-mapped tensordict if it has a :attr:`~tensordict.TensorDict.saved_path`.
 
         This method will raise an exception if no path is associated with it.
+
+        Args:
+            allow_pickle (bool, optional): whether pickled non-tensor fields
+                may be loaded. See :meth:`~.load_memmap`.
 
         """
         if not self.is_memmap() or self._memmap_prefix is None:
             raise RuntimeError(
                 "Cannot refresh a TensorDict that is not memory mapped or has no path associated."
             )
-        return self.load_memmap_(prefix=self.saved_path)
+        return self.load_memmap_(
+            prefix=self.saved_path,
+            allow_pickle=allow_pickle,
+        )
 
     @classmethod
     @abc.abstractmethod
@@ -8086,6 +8121,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         *,
         robust_key,
         out=None,
+        allow_pickle: bool | None = None,
     ):
         raise NotImplementedError
 

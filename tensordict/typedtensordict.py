@@ -787,13 +787,23 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     # _load_memmap classmethod
     # ------------------------------------------------------------------
     @classmethod
-    def _load_memmap(cls, prefix, metadata, device=None, out=None, *, robust_key):
+    def _load_memmap(
+        cls,
+        prefix,
+        metadata,
+        device=None,
+        out=None,
+        *,
+        robust_key,
+        allow_pickle: bool | None = None,
+    ):
         td = TensorDict._load_memmap(
             prefix,
             metadata,
             device=device,
             out=out,
             robust_key=robust_key,
+            allow_pickle=allow_pickle,
         )
         return cls._wrap_td(td)
 

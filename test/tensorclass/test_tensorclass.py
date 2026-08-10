@@ -2730,8 +2730,21 @@ class TestMemmap:
         assert (data2 == data).all()
         data.apply_(lambda x: x + 1)
         assert (data2 == data).all()
-        data3 = MyOtherClass.load_memmap(tmpdir)
+        data3 = MyOtherClass.load_memmap(tmpdir, allow_pickle=True)
         assert isinstance(data3, MyClass)
+
+    def test_memmap_overwrite_removes_stale_pickle(self, tmp_path):
+        @tensorclass
+        class MyClass:
+            value: Any
+
+        MyClass(value=1 + 2j, batch_size=[]).memmap(tmp_path)
+        pickle_path = tmp_path / "_tensordict" / "value" / "other.pickle"
+        assert pickle_path.exists()
+
+        MyClass(value="json", batch_size=[]).memmap(tmp_path)
+        assert not pickle_path.exists()
+        assert MyClass.load_memmap(tmp_path, allow_pickle=False).value == "json"
 
     def test_memmap_(self):
         @tensorclass

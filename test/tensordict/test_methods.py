@@ -2422,7 +2422,11 @@ class TestTensorDicts(TestTensorDictsBase):
                 return
             td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
         td.memmap(prefix=tmpdir, copy_existing=True)
-        loaded = TensorDict.load_memmap(tmpdir)
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        with pytest.warns(FutureWarning, match="0.14"):
+            TensorDict.load_memmap(tmpdir)
+        loaded = TensorDict.load_memmap(tmpdir, allow_pickle=True)
         assert is_non_tensor(loaded.get(("non", "json", "serializable")))
 
         def check(x, val):
@@ -5334,8 +5338,13 @@ class TestMemmapArchive:
             *(NonTensorData(value, batch_size=[]) for value in values), stack_dim=0
         )
         td = TensorDict({"values": stack}, batch_size=[2])
-        loaded = td.save(tmp_path / "non_tensor.tdz")
+        archive = tmp_path / "non_tensor.tdz"
+        loaded = td.save(archive)
         assert loaded.to_dict()["values"] == values
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            TensorDict.load_memmap(archive, allow_pickle=False)
+        trusted = TensorDict.load_memmap(archive, allow_pickle=True)
+        assert trusted.to_dict()["values"] == values
 
     def test_archive_existsok(self, tmp_path):
         td = self._nested_td()
