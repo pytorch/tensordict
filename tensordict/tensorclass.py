@@ -4992,7 +4992,8 @@ class NonTensorStack(LazyStackedTensorDict):
                     "stack_dim": self.stack_dim,
                     "device": device,
                 }
-                if _is_json_serializable(data):
+                json_serializable = _is_json_serializable(data)
+                if json_serializable:
                     jsondict["data"] = data
                 else:
                     jsondict["data"] = "pickle.pkl"
@@ -5007,6 +5008,8 @@ class NonTensorStack(LazyStackedTensorDict):
                         f.write(json_str.encode("utf-8"))
                     else:
                         f.write(json_str)
+                if json_serializable:
+                    (prefix / "pickle.pkl").unlink(missing_ok=True)
 
             if executor is None:
                 save_metadata()

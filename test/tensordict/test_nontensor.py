@@ -694,6 +694,29 @@ class TestNonTensorData:
         assert data_memmap.is_memmap()
         assert data_memmap._is_memmap
 
+    def test_memmap_stack_overwrite_removes_stale_pickle(self, tmp_path):
+        pickled = torch.stack(
+            [
+                NonTensorData(data=1 + 2j, batch_size=[]),
+                NonTensorData(data=3 + 4j, batch_size=[]),
+            ]
+        )
+        pickled.memmap(tmp_path)
+        pickle_path = tmp_path / "pickle.pkl"
+        assert pickle_path.exists()
+
+        json_data = torch.stack(
+            [
+                NonTensorData(data="a", batch_size=[]),
+                NonTensorData(data="b", batch_size=[]),
+            ]
+        )
+        json_data.memmap(tmp_path)
+
+        assert not pickle_path.exists()
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
+        assert loaded.tolist() == ["a", "b"]
+
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
         td = TensorDict(
