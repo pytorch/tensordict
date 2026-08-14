@@ -568,7 +568,7 @@ class TensorCollection:
         swap_dest: Incomplete | None = None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = None,
+        preserve_module_state: bool | None = True,
         memo: Incomplete | None = None,
     ): ...
     @property
@@ -1000,7 +1000,7 @@ class TensorCollection:
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = None,
+        fast: bool | None = True,
     ) -> Self: ...
     def is_empty(self) -> bool: ...
     def setdefault(

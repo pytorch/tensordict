@@ -536,7 +536,7 @@ class TensorDict(TensorDictBase):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = None,
+        preserve_module_state: bool | None = True,
         is_dynamo: bool | None = None,
     ):
         if is_dynamo is None:
@@ -5151,11 +5151,12 @@ class _TensorDictKeysView:
 _TO_MODULE_PRESERVE_MODULE_STATE_WARNING = (
     "TensorDict.to_module() is replacing an existing nn.Parameter in the "
     "destination module with a tensor leaf that is not an nn.Parameter. This "
-    "historical behavior can remove the key from module.state_dict(). In "
-    "tensordict v0.14, to_module() will preserve existing module parameter "
-    "and buffer registrations by default. Pass preserve_module_state=False "
-    "to keep the current replacement behavior, or preserve_module_state=True "
-    "to opt in to the v0.14 behavior now."
+    "historical behavior can remove the key from module.state_dict(). Starting "
+    "with TensorDict 0.14, to_module() preserves existing module parameter and "
+    "buffer registrations by default. Passing preserve_module_state=None is "
+    "deprecated; pass False to request the historical replacement behavior or "
+    "True to preserve registrations explicitly. Support for None will be "
+    "removed in TensorDict 0.15."
 )
 
 

@@ -816,7 +816,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         *,
         inplace=None,
         return_swap=True,
-        preserve_module_state: bool | None = None,
+        preserve_module_state: bool | None = True,
         **kwargs,
     ):
         return self._source._to_module(

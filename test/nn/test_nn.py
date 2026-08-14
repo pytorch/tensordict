@@ -4353,17 +4353,23 @@ class TestToModule:
     def _x(self):
         return (torch.randn(2, 2, 8),)
 
-    def test_plain_tensor_to_module_warns_for_future_default(self, as_module):
+    def test_plain_tensor_to_module_preserves_module_state_by_default(self, as_module):
         module = nn.Linear(4, 2)
+        module.weight.requires_grad_(False)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        state_dict_keys = set(module.state_dict())
 
-        with pytest.warns(FutureWarning, match="preserve_module_state=True"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
             params.to_module(module)
 
-        assert "weight" not in module.state_dict()
-        assert "bias" not in module.state_dict()
-        assert not isinstance(module.weight, nn.Parameter)
-        assert not isinstance(module.bias, nn.Parameter)
+        assert set(module.state_dict()) == state_dict_keys
+        assert isinstance(module.weight, nn.Parameter)
+        assert isinstance(module.bias, nn.Parameter)
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+        torch.testing.assert_close(module.weight, params["weight"])
+        torch.testing.assert_close(module.bias, params["bias"])
 
     def test_plain_tensor_to_module_can_preserve_module_state(self, as_module):
         module = nn.Linear(4, 2)
