@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4231+g32a837fcf.d20260808)
+                  main (0.13.0.dev4236+g2a7c3d4a9.d20260814)
                 </div>
               
             
@@ -377,10 +377,8 @@ advantages:</p>
 <li><p>The saved data can be partially loaded. If a large model is saved on disk but
 only parts of its weights need to be loaded onto a module created in a separate
 script, only these weights will be loaded in memory.</p></li>
-<li><p>Saving data is safe: using the pickle library for serializing big data structures
-can be unsafe as unpickling can execute any arbitrary code. TensorDict’s loading
-API only reads pre-selected fields from saved json files and memory buffers
-saved on disk.</p></li>
+<li><p>Tensor and JSON-compatible data have a pickle-free loading path that only
+reads structured metadata and memory buffers.</p></li>
 <li><p>Saving is fast: because the data is written in several independent files,
 we can amortize the IO overhead by launching several concurrent threads that
 each access a dedicated file on their own.</p></li>
@@ -392,10 +390,46 @@ of the data content.</p></li>
 <li><p>Not every data type can be saved. <a class="reference internal" href="reference/generated/tensordict.tensorclass.html#tensordict.tensorclass" title="tensordict.tensorclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorclass</span></code></a> allows to save
 any non-tensor data: if these data can be represented in a json file, a json
 format will be used. Otherwise, non-tensor data will be saved independently
-with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a> as a fallback.
+with Python pickle as a fallback. Pass <code class="docutils literal notranslate"><span class="pre">allow_pickle=True</span></code> when loading
+that fallback from a trusted source.
 The <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> class can be used to represent non-tensor
 data in a regular <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> instance.</p></li>
 </ul>
+</section>
+<section id="pickled-non-tensor-data">
+<h2>Pickled non-tensor data<a class="headerlink" href="#pickled-non-tensor-data" title="Permalink to this heading">¶</a></h2>
+<p>In TensorDict 0.13, omitting <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> preserves compatibility by
+loading pickled non-tensor fields with a <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FutureWarning" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. The default
+will become <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.14. Applications handling less-trusted artifacts
+can enforce that boundary now:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">untrusted</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  
+</pre></div>
+</div>
+<p>If a trusted save contains arbitrary Python objects that could not be
+represented as JSON, acknowledge that trust explicitly:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">trusted</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  
+</pre></div>
+</div>
+<p>Never enable <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> for an artifact from an untrusted source:
+pickle payloads can execute arbitrary code. Saves without a pickle sidecar do
+not need this option. The same policy can be passed to <code class="docutils literal notranslate"><span class="pre">load_memmap_</span></code> and
+<code class="docutils literal notranslate"><span class="pre">memmap_refresh_</span></code>.</p>
+</section>
+<section id="filesystem-considerations">
+<h2>Filesystem considerations<a class="headerlink" href="#filesystem-considerations" title="Permalink to this heading">¶</a></h2>
+<p>Keep the save directory (or archive’s parent directory) writable only by
+trusted principals. Existing symbolic links are rejected when creating
+individual memory-map files, but a path-based API cannot protect against a
+process that can replace names in the parent directory concurrently. Prefer
+<a class="reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.TemporaryDirectory" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tempfile.TemporaryDirectory</span></code></a> or another private directory over
+predictable names in a shared <code class="docutils literal notranslate"><span class="pre">/tmp</span></code> directory.</p>
+<p>Robust key encoding is enabled by default and keeps TensorDict keys within
+their save prefix. <code class="docutils literal notranslate"><span class="pre">robust_key=False</span></code> exists only to interoperate with
+legacy layouts; do not use it with untrusted keys or metadata. Individual
+memory-map leaf files overwrite existing regular files by default
+(<code class="docutils literal notranslate"><span class="pre">existsok=True</span></code>); pass <code class="docutils literal notranslate"><span class="pre">existsok=False</span></code> to reject a colliding leaf path.
+The metadata file is still refreshed when reusing an existing save directory,
+so <code class="docutils literal notranslate"><span class="pre">existsok=False</span></code> does not reserve the directory as a whole.</p>
 <p>tensordict’s memory-mapped API relies on four core methods:
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>,
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p>
@@ -815,7 +849,9 @@ mimics the TensorDict’s one.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Saving TensorDict and tensorclass objects</a><ul>
-<li><a class="reference internal" href="#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a><ul>
+<li><a class="reference internal" href="#saving-memory-mapped-tensordicts">Saving memory-mapped TensorDicts</a></li>
+<li><a class="reference internal" href="#pickled-non-tensor-data">Pickled non-tensor data</a></li>
+<li><a class="reference internal" href="#filesystem-considerations">Filesystem considerations</a><ul>
 <li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
 </ul>
 </li>

@@ -403,8 +403,8 @@ For **memmap**, non-tensor data is serialised via tensorclass's
    ...     label=NonTensorData(data="cat", batch_size=[4]),
    ...     batch_size=[4],
    ... )
-   >>> td_mm = td.memmap_("/tmp/example")
-   >>> loaded = TensorDict.load_memmap("/tmp/example")  # doctest: +SKIP
+   >>> td_mm = td.memmap_("/path/to/private/example")  # doctest: +SKIP
+   >>> loaded = TensorDict.load_memmap("/path/to/private/example")  # doctest: +SKIP
    >>> loaded["label"].data  # doctest: +SKIP
    'cat'
 

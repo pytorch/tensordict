@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4231+g32a837fcf.d20260808)
+                  main (0.13.0.dev4236+g2a7c3d4a9.d20260814)
                 </div>
               
             
@@ -753,8 +753,8 @@ own mechanism:</p>
 <span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mm</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/tmp/example&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/tmp/example&quot;</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mm</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/path/to/private/example&quot;</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/path/to/private/example&quot;</span><span class="p">)</span>  
 <span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>  
 <span class="go">&#39;cat&#39;</span>
 </pre></div>

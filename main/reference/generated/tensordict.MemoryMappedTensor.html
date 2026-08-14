@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4231+g32a837fcf.d20260808)
+                  main (0.13.0.dev4236+g2a7c3d4a9.d20260814)
                 </div>
               
             
@@ -374,6 +374,13 @@ any copy.</p>
 <p>When used within RPC settings, the filepath should be accessible to both nodes.
 If it isn’t the behaviour of passing a MemoryMappedTensor from one worker
 to another is undefined.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>A caller that supplies <code class="docutils literal notranslate"><span class="pre">filename</span></code> must control its parent directory.
+Existing symbolic links are rejected, but path-based memory mapping
+cannot prevent another process with directory write access from
+replacing a path after it has been validated.</p>
 </div>
 <p>MemoryMappedTensor supports multiple construction methods.</p>
 <p class="rubric">Examples</p>
