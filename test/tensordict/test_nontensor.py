@@ -77,6 +77,20 @@ HAS_NESTED_TENSOR = (
     getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
 )
 
+_PICKLE_LOAD_EXECUTED = False
+
+
+def _record_pickle_load():
+    global _PICKLE_LOAD_EXECUTED
+    _PICKLE_LOAD_EXECUTED = True
+    return "loaded"
+
+
+class _PickleLoadMarker:
+    def __reduce__(self):
+        return _record_pickle_load, ()
+
+
 # Capture all warnings
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -508,7 +522,7 @@ class TestNonTensorData:
             assert td.get("val")._tensordict._is_memmap
 
             # check that the json has been updated
-            td_load = TensorDict.load_memmap(tmpdir)
+            td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
             assert td["val"] == td_load["val"]
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
@@ -548,7 +562,7 @@ class TestNonTensorData:
             assert td.get("val")._tensordict._is_memmap
 
             # check that the json has been updated
-            td_load = TensorDict.load_memmap(tmpdir)
+            td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
             assert td["val"] == td_load["val"]
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
@@ -605,7 +619,7 @@ class TestNonTensorData:
             assert td.get("val")._tensordict._is_memmap
 
             # check that the json has been updated
-            td_load = TensorDict.load_memmap(tmpdir)
+            td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
             assert td["val"] == td_load["val"]
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
@@ -632,7 +646,7 @@ class TestNonTensorData:
             assert td.get("val")._tensordict._is_memmap
 
             # check that the json has been updated
-            td_load = TensorDict.load_memmap(tmpdir)
+            td_load = TensorDict.load_memmap(tmpdir, allow_pickle=True)
             assert td["val"] == td_load["val"]
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
@@ -669,13 +683,75 @@ class TestNonTensorData:
                     f.read()
                     == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
                 )
-        data_recon = TensorDict.load_memmap(tmpdir)
+        if not json_serializable:
+            with pytest.raises(RuntimeError, match="allow_pickle=True"):
+                TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        data_recon = TensorDict.load_memmap(tmpdir, allow_pickle=not json_serializable)
         assert data_recon.batch_size == data.batch_size
         assert data_recon.device == data.device
         assert data_recon.tolist() == data.tolist()
         assert data_memmap[0].is_memmap()
         assert data_memmap.is_memmap()
         assert data_memmap._is_memmap
+
+    def test_memmap_stack_overwrite_removes_stale_pickle(self, tmp_path):
+        pickled = torch.stack(
+            [
+                NonTensorData(data=1 + 2j, batch_size=[]),
+                NonTensorData(data=3 + 4j, batch_size=[]),
+            ]
+        )
+        pickled.memmap(tmp_path)
+        pickle_path = tmp_path / "pickle.pkl"
+        assert pickle_path.exists()
+
+        json_data = torch.stack(
+            [
+                NonTensorData(data="a", batch_size=[]),
+                NonTensorData(data="b", batch_size=[]),
+            ]
+        )
+        json_data.memmap(tmp_path)
+
+        assert not pickle_path.exists()
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
+        assert loaded.tolist() == ["a", "b"]
+
+    @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
+    def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
+        td = TensorDict(
+            {"value": NonTensorData(data=1 + 2j, batch_size=[])},
+            batch_size=[],
+        )
+        td.memmap(tmp_path)
+
+        with pytest.raises(TypeError, match="allow_pickle must be a bool or None"):
+            TensorDict.load_memmap(tmp_path, allow_pickle=allow_pickle)
+
+    def test_memmap_pickle_rejected_before_execution(self, tmp_path):
+        global _PICKLE_LOAD_EXECUTED
+
+        td = TensorDict(
+            {
+                "tensor": torch.zeros(1),
+                "value": NonTensorData(data=_PickleLoadMarker(), batch_size=[]),
+            },
+            batch_size=[],
+        )
+        td.memmap_(tmp_path)
+        _PICKLE_LOAD_EXECUTED = False
+
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            TensorDict.load_memmap(tmp_path, allow_pickle=False)
+        assert not _PICKLE_LOAD_EXECUTED
+
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            td.memmap_refresh_(allow_pickle=False)
+        assert not _PICKLE_LOAD_EXECUTED
+
+        td = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert _PICKLE_LOAD_EXECUTED
+        assert td["value"] == "loaded"
 
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):

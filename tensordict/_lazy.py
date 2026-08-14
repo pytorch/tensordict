@@ -3099,6 +3099,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         out=None,
         robust_key: bool = True,
+        allow_pickle: bool | None = None,
         **kwargs,
     ) -> LazyStackedTensorDict:
         tensordicts = []
@@ -3115,6 +3116,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     non_blocking=True,
                     out=out[i] if out is not None else None,
                     robust_key=robust_key,
+                    allow_pickle=allow_pickle,
                 )
             )
             i += 1

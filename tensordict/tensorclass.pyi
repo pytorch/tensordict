@@ -958,11 +958,16 @@ class TensorClass:
         *,
         out: TensorCollection | None = None,
         robust_key: bool | None = True,
+        allow_pickle: bool | None = None,
     ) -> Self: ...
     def load_memmap_(
-        self, prefix: str | Path, robust_key: bool | None = True
+        self,
+        prefix: str | Path,
+        robust_key: bool | None = True,
+        *,
+        allow_pickle: bool | None = None,
     ) -> Self: ...
-    def memmap_refresh_(self) -> Self: ...
+    def memmap_refresh_(self, *, allow_pickle: bool | None = None) -> Self: ...
     def entry_class(self, key: NestedKey) -> type: ...
     def set(
         self,

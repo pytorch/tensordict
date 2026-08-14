@@ -28,10 +28,8 @@ advantages:
 - The saved data can be partially loaded. If a large model is saved on disk but
   only parts of its weights need to be loaded onto a module created in a separate
   script, only these weights will be loaded in memory.
-- Saving data is safe: using the pickle library for serializing big data structures
-  can be unsafe as unpickling can execute any arbitrary code. TensorDict's loading
-  API only reads pre-selected fields from saved json files and memory buffers
-  saved on disk.
+- Tensor and JSON-compatible data have a pickle-free loading path that only
+  reads structured metadata and memory buffers.
 - Saving is fast: because the data is written in several independent files,
   we can amortize the IO overhead by launching several concurrent threads that
   each access a dedicated file on their own.
@@ -43,9 +41,30 @@ However, this approach also has some disadvantages:
 - Not every data type can be saved. :obj:`~tensordict.tensorclass` allows to save
   any non-tensor data: if these data can be represented in a json file, a json
   format will be used. Otherwise, non-tensor data will be saved independently
-  with :func:`~torch.save` as a fallback.
+  with Python pickle as a fallback. Pass ``allow_pickle=True`` when loading
+  that fallback from a trusted source.
   The :class:`~tensordict.NonTensorData` class can be used to represent non-tensor
   data in a regular :class:`~tensordict.TensorDict` instance.
+
+Pickled non-tensor data
+-----------------------
+
+In TensorDict 0.13, omitting ``allow_pickle`` preserves compatibility by
+loading pickled non-tensor fields with a :class:`FutureWarning`. The default
+will become ``False`` in 0.14. Applications handling less-trusted artifacts
+can enforce that boundary now:
+
+  >>> untrusted = TensorDict.load_memmap(path, allow_pickle=False)  # doctest: +SKIP
+
+If a trusted save contains arbitrary Python objects that could not be
+represented as JSON, acknowledge that trust explicitly:
+
+  >>> trusted = TensorDict.load_memmap(path, allow_pickle=True)  # doctest: +SKIP
+
+Never enable ``allow_pickle`` for an artifact from an untrusted source:
+pickle payloads can execute arbitrary code. Saves without a pickle sidecar do
+not need this option. The same policy can be passed to ``load_memmap_`` and
+``memmap_refresh_``.
 
 Filesystem considerations
 -------------------------

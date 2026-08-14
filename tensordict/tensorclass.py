@@ -1757,6 +1757,8 @@ def _memmap_(
                 if to_pickle:
                     with open(prefix / "other.pickle", "wb") as pickle_file:
                         pickle.dump(to_pickle, pickle_file)
+                else:
+                    (prefix / "other.pickle").unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -1806,17 +1808,54 @@ def _share_memory_(self):
     return self
 
 
-def _load_memmap(cls, prefix: Path, metadata: dict, *, robust_key, **kwargs):
+def _load_pickle_file(path, *, allow_pickle: bool | None):
+    if allow_pickle is False:
+        raise RuntimeError(
+            "Refusing to load pickled non-tensor data from a memory-mapped "
+            "TensorDict. Pickle can execute arbitrary code. Pass "
+            "allow_pickle=True only when the saved data is trusted."
+        )
+    if allow_pickle is None:
+        warnings.warn(
+            "TensorDict.load_memmap is loading a pickled non-tensor field. "
+            "This is only safe for trusted data. Starting with TensorDict "
+            "0.14, the default will change to allow_pickle=False. Pass "
+            "allow_pickle=True to acknowledge trusted data or "
+            "allow_pickle=False to reject pickle now.",
+            FutureWarning,
+            stacklevel=5,
+        )
+    with path.open("rb") as pickle_file:
+        return pickle.load(pickle_file)
+
+
+def _load_memmap(
+    cls,
+    prefix: Path,
+    metadata: dict,
+    *,
+    robust_key,
+    allow_pickle: bool | None = None,
+    **kwargs,
+):
     non_tensordict = dict(metadata)
     del non_tensordict["_type"]
     # Path methods (rather than os.path) so that archive paths can be
     # traversed through the same code path as regular directories.
     if (prefix / "other.pickle").exists():
-        with (prefix / "other.pickle").open("rb") as pickle_file:
-            non_tensordict.update(pickle.load(pickle_file))
+        non_tensordict.update(
+            _load_pickle_file(
+                prefix / "other.pickle",
+                allow_pickle=allow_pickle,
+            )
+        )
     if (prefix / "_tensordict").exists():
         td = TensorDict.load_memmap(
-            prefix / "_tensordict", **kwargs, non_blocking=False, robust_key=robust_key
+            prefix / "_tensordict",
+            **kwargs,
+            non_blocking=False,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
         )
     else:
         if not issubclass(cls, NonTensorDataBase):
@@ -4953,7 +4992,8 @@ class NonTensorStack(LazyStackedTensorDict):
                     "stack_dim": self.stack_dim,
                     "device": device,
                 }
-                if _is_json_serializable(data):
+                json_serializable = _is_json_serializable(data)
+                if json_serializable:
                     jsondict["data"] = data
                 else:
                     jsondict["data"] = "pickle.pkl"
@@ -4968,6 +5008,8 @@ class NonTensorStack(LazyStackedTensorDict):
                         f.write(json_str.encode("utf-8"))
                     else:
                         f.write(json_str)
+                if json_serializable:
+                    (prefix / "pickle.pkl").unlink(missing_ok=True)
 
             if executor is None:
                 save_metadata()
@@ -5004,19 +5046,37 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, *, out=None, robust_key, **kwargs
+        cls,
+        prefix: str,
+        metadata: dict,
+        *,
+        out=None,
+        robust_key,
+        allow_pickle: bool | None = None,
+        **kwargs,
     ) -> LazyStackedTensorDict:
         data = metadata.get("data")
         if data is not None:
             if isinstance(data, str):
-                with (prefix / data).open("rb") as file:
-                    data = pickle.load(file)
+                if data != "pickle.pkl":
+                    raise RuntimeError(
+                        "Invalid pickled NonTensorStack filename in memmap "
+                        f"metadata: {data!r}."
+                    )
+                data = _load_pickle_file(
+                    prefix / "pickle.pkl",
+                    allow_pickle=allow_pickle,
+                )
             device = metadata["device"]
             if device is not None:
                 device = torch.device(device)
             return cls._from_list(data, device=device)
         return super()._load_memmap(
-            prefix=prefix, metadata=metadata, robust_key=robust_key, **kwargs
+            prefix=prefix,
+            metadata=metadata,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            **kwargs,
         )
 
     @classmethod
