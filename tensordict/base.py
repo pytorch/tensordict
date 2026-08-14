@@ -3531,7 +3531,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         swap_dest=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = None,
+        preserve_module_state: bool | None = True,
         memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
@@ -3562,10 +3562,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 and buffers remain registered buffers. If ``False``, tensor
                 leaves are written with the historical replacement semantics,
                 which may deregister an existing parameter when the source leaf
-                is not an :class:`~torch.nn.Parameter`. If ``None`` (the
-                v0.13 default), the historical behavior is kept but a
-                ``FutureWarning`` is emitted when a write would deregister a
-                parameter. The default will become ``True`` in v0.14.
+                is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
+                Pass ``False`` to retain the historical replacement behavior.
 
         Examples:
             >>> from torch import nn
@@ -3623,7 +3621,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         memo=None,
         use_state_dict: bool = False,
         non_blocking: bool = False,
-        preserve_module_state: bool | None = None,
+        preserve_module_state: bool | None = True,
     ):
         raise NotImplementedError
 
@@ -7919,9 +7917,9 @@ class TensorDictBase(MutableMapping, TensorCollection):
             allow_pickle (bool, optional): whether pickled non-tensor fields
                 may be loaded. Pickle can execute arbitrary code, so pass
                 ``True`` only for data from a trusted source and ``False``
-                for untrusted data. During the 0.13 compatibility window,
+                for untrusted data. During the 0.14 compatibility window,
                 omitting this option loads pickle with a ``FutureWarning``;
-                the default will change to ``False`` in 0.14. Saves without
+                the default will change to ``False`` in 0.15. Saves without
                 a pickle sidecar do not require this option.
 
         Examples:
@@ -9268,7 +9266,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         idx: IndexType,
         non_blocking: bool = False,
         *,
-        fast: bool | None = None,
+        fast: bool | None = True,
     ) -> Self:
         """Copies values from ``tensordict`` into ``self`` at the specified index.
 
@@ -9291,21 +9289,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 If ``True``, only the optimized tensor-only path is used and a
                 ``RuntimeError`` is raised when the fast path is not available.
                 If ``False``, this method delegates directly to ``update_at_``.
-                If ``None``, the current default, ``copy_at_`` warns and falls
-                back to ``update_at_`` when the fast path is unavailable. The
-                default will become ``True`` in v0.14.
+                If ``None``, the deprecated compatibility behavior warns and
+                falls back to ``update_at_`` when the fast path is unavailable.
+                Defaults to ``True``.
 
         Returns:
             self
         """
         if fast is None:
             warnings.warn(
-                "copy_at_(..., fast=None) currently falls back to update_at_ "
-                "when the optimized tensor-only copy path is unavailable. "
-                "This default will change to fast=True in v0.14, making "
-                "copy_at_ fast-only by default. Pass fast=False to keep the "
-                "current fallback behavior, or fast=True to require the fast "
-                "path.",
+                "copy_at_(..., fast=None) is deprecated and falls back to "
+                "update_at_ when the optimized tensor-only copy path is "
+                "unavailable. Starting with TensorDict 0.14, copy_at_ defaults "
+                "to fast=True. Pass fast=False to request the general update "
+                "semantics explicitly; support for fast=None will be removed "
+                "in TensorDict 0.15.",
                 FutureWarning,
                 stacklevel=2,
             )

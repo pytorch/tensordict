@@ -1819,7 +1819,7 @@ def _load_pickle_file(path, *, allow_pickle: bool | None):
         warnings.warn(
             "TensorDict.load_memmap is loading a pickled non-tensor field. "
             "This is only safe for trusted data. Starting with TensorDict "
-            "0.14, the default will change to allow_pickle=False. Pass "
+            "0.15, the default will change to allow_pickle=False. Pass "
             "allow_pickle=True to acknowledge trusted data or "
             "allow_pickle=False to reject pickle now.",
             FutureWarning,

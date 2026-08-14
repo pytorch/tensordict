@@ -2424,7 +2424,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td.memmap(prefix=tmpdir, copy_existing=True)
         with pytest.raises(RuntimeError, match="allow_pickle=True"):
             TensorDict.load_memmap(tmpdir, allow_pickle=False)
-        with pytest.warns(FutureWarning, match="0.14"):
+        with pytest.warns(FutureWarning, match="0.15"):
             TensorDict.load_memmap(tmpdir)
         loaded = TensorDict.load_memmap(tmpdir, allow_pickle=True)
         assert is_non_tensor(loaded.get(("non", "json", "serializable")))
@@ -4542,14 +4542,14 @@ class TestTensorDicts(TestTensorDictsBase):
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
 
-        with pytest.warns(FutureWarning, match="fast=True in v0.14"):
+        with pytest.raises(RuntimeError, match="fast=True"):
             td.copy_at_(newdata, slice(1, None, 2))
-        assert td.get("val").tolist() == [0, 1] * 5
+        assert td.get("val").tolist() == [0] * 10
 
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
-        with pytest.raises(RuntimeError, match="fast=True"):
-            td.copy_at_(newdata, slice(1, None, 2), fast=True)
-        assert td.get("val").tolist() == [0] * 10
+        with pytest.warns(FutureWarning, match="fast=None.*deprecated"):
+            td.copy_at_(newdata, slice(1, None, 2), fast=None)
+        assert td.get("val").tolist() == [0, 1] * 5
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
