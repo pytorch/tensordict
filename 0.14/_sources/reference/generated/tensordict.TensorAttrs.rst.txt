@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorAttrs
+===========
+
+.. autoclass:: TensorAttrs
+    :members:
+    :inherited-members:

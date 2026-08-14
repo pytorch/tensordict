@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+refresh_archive_checksums
+=========================
+
+.. autoclass:: refresh_archive_checksums
+    :members:
+    :inherited-members:
