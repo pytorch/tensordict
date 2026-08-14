@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.13.0.dev4236+g2a7c3d4a9.d20260814)
+                  main (0.14.0.dev4243+gc0c4859a2.d20260814)
                 </div>
               
             
@@ -398,9 +398,9 @@ data in a regular <a class="reference internal" href="reference/generated/tensor
 </section>
 <section id="pickled-non-tensor-data">
 <h2>Pickled non-tensor data<a class="headerlink" href="#pickled-non-tensor-data" title="Permalink to this heading">¶</a></h2>
-<p>In TensorDict 0.13, omitting <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> preserves compatibility by
+<p>In TensorDict 0.14, omitting <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code> preserves compatibility by
 loading pickled non-tensor fields with a <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FutureWarning" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. The default
-will become <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.14. Applications handling less-trusted artifacts
+will become <code class="docutils literal notranslate"><span class="pre">False</span></code> in 0.15. Applications handling less-trusted artifacts
 can enforce that boundary now:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">untrusted</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  
 </pre></div>
