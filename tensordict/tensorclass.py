@@ -762,19 +762,30 @@ def from_dataclass(
     """
     from dataclasses import asdict, make_dataclass
 
+    def _field_specs(source, type_hints):
+        return [
+            (
+                field.name,
+                type_hints.get(field.name, field.type),
+                copy(field),
+            )
+            for field in source.__dataclass_fields__.values()
+        ]
+
     if isinstance(obj, type):
         if is_tensorclass(obj):
             return obj
+        type_hints = get_type_hints(obj)
         if not inplace:
             cls = make_dataclass(
                 obj.__name__ + "_tc",
-                fields=obj.__dataclass_fields__,
+                fields=_field_specs(obj, type_hints),
                 bases=obj.__bases__,
             )
         else:
             cls = obj
         clz = _tensorclass(cls, frozen=frozen, shadow=shadow, tensor_only=tensor_only)
-        _set_tensorclass_type_hints(clz, get_type_hints(obj))
+        _set_tensorclass_type_hints(clz, type_hints)
         clz._autocast = autocast
         clz._nocast = nocast
         clz._shadow = shadow
@@ -790,18 +801,21 @@ def from_dataclass(
             raise TypeError(
                 "tensor_only and autocast or nocast are exclusive features."
             )
-        clz = _tensorclass(
-            make_dataclass(name, fields=obj.__dataclass_fields__),
-            frozen=frozen,
-            shadow=shadow,
-            tensor_only=tensor_only,
-        )
         try:
             type_hints = get_type_hints(type(obj))
         except (NameError, TypeError):
             # Preserve the existing fallback for unresolved annotations.
-            pass
-        else:
+            type_hints = None
+        clz = _tensorclass(
+            make_dataclass(
+                name,
+                fields=_field_specs(type(obj), type_hints or {}),
+            ),
+            frozen=frozen,
+            shadow=shadow,
+            tensor_only=tensor_only,
+        )
+        if type_hints is not None:
             _set_tensorclass_type_hints(clz, type_hints)
         clz._autocast = autocast
         clz._nocast = nocast
