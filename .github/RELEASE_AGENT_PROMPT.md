@@ -222,16 +222,41 @@ To manually trigger with specific options:
 
 ---
 
-## Step 9: Create Draft GitHub Release
+## Step 9: Always Create or Update the Draft GitHub Release
 
-If not using the automated workflow, create manually:
+This step is mandatory for every release, including a dry-run. The release
+workflow deliberately skips GitHub release creation when `dry_run` is enabled,
+so the agent must create the GitHub draft independently instead of assuming the
+workflow will do it.
+
+Put the approved release notes directly in the GitHub draft release. Do not
+create or commit `RELEASE_NOTES.md` (or another repository file) to carry the
+notes. Pass them through standard input instead:
 
 ```bash
-gh release create {version_tag} \
-  --draft \
-  --title "TensorDict {version_tag}" \
-  --notes-file RELEASE_NOTES.md
+version_tag="{version_tag}"
+release_branch="release/{version_without_v}"
+
+if gh release view "$version_tag" >/dev/null 2>&1; then
+  printf '%s\n' "$release_notes" | gh release edit "$version_tag" \
+    --draft \
+    --target "$release_branch" \
+    --title "TensorDict $version_tag" \
+    --notes-file -
+else
+  printf '%s\n' "$release_notes" | gh release create "$version_tag" \
+    --draft \
+    --target "$release_branch" \
+    --title "TensorDict $version_tag" \
+    --notes-file -
+fi
 ```
+
+Use the exact notes approved in Step 2 for `release_notes`. Afterward, verify
+that the release exists on GitHub, remains unpublished, has `draft: true`, and
+targets the release branch. An `untagged-...` URL is expected when the draft is
+created before its tag exists. Do not publish the release; leave that action for
+the manual post-release step below.
 
 ---
 
@@ -242,7 +267,9 @@ Watch the release workflow for:
 1. **Sanity checks** - Verify all version files match
 2. **Wheel builds** - All platforms should succeed
 3. **Docs update** - Stable symlink updated
-4. **Release creation** - Draft created with wheels
+4. **Release creation** - In a real run, wheels are attached to the existing
+   draft; in a dry-run, confirm the agent-created draft still exists even though
+   no wheels are attached
 
 ---
 
