@@ -39,6 +39,7 @@ _META_FIELDS = frozenset(
         "__expected_keys__",
         "__required_keys__",
         "__optional_keys__",
+        "__field_defaults__",
         "_shadow",
         "_frozen",
         "_autocast",
@@ -113,20 +114,31 @@ def _resolve_own_hints(cls: type) -> dict[str, Any]:
     return resolved
 
 
-def _collect_fields(cls: type) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+def _collect_fields(
+    cls: type,
+) -> tuple[frozenset[str], frozenset[str], frozenset[str], dict[str, Any]]:
     """Collect field annotations from the class, separating required and optional.
 
     Walks the MRO but only collects annotations from TypedTensorDict
     subclasses (skipping TensorDictBase whose annotations use syntax
     that may not resolve at runtime).
 
-    Returns (expected, required, optional) as frozensets of field names.
+    Returns (expected, required, optional, defaults). The first three values
+    are frozensets of field names and defaults maps optional fields to their
+    class-level default.
     """
     merged: dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
     for base in reversed(cls.__mro__):
         if base is TypedTensorDict or not issubclass(base, TypedTensorDict):
             continue
-        merged.update(_resolve_own_hints(base))
+        own_hints = _resolve_own_hints(base)
+        merged.update(own_hints)
+        defaults.update(base.__dict__.get("__field_defaults__", {}))
+        for field_name in own_hints:
+            default = base.__dict__.get(field_name, NO_DEFAULT)
+            if default is not NO_DEFAULT and not isinstance(default, property):
+                defaults[field_name] = default
 
     expected: set[str] = set()
     required: set[str] = set()
@@ -140,12 +152,13 @@ def _collect_fields(cls: type) -> tuple[frozenset[str], frozenset[str], frozense
         if _is_classvar(field_type):
             continue
         expected.add(field_name)
-        if _is_not_required(field_type):
+        if _is_not_required(field_type) or field_name in defaults:
             optional.add(field_name)
         else:
             required.add(field_name)
 
-    return frozenset(expected), frozenset(required), frozenset(optional)
+    defaults = {key: value for key, value in defaults.items() if key in expected}
+    return frozenset(expected), frozenset(required), frozenset(optional), defaults
 
 
 def _make_init(cls: type) -> Callable:
@@ -168,7 +181,7 @@ def _make_init(cls: type) -> Callable:
         non_blocking: bool | None = None,
         lock: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ):
         if _source is not None:
             self._source = TensorDict(
                 source=_source,
@@ -208,11 +221,20 @@ def _make_init(cls: type) -> Callable:
     return __init__
 
 
-def _install_shadow_property(cls: type, field_name: str) -> None:
-    """Install a property on *cls* that routes attribute access to the TensorDict entry."""
+def _install_field_property(
+    cls: type, field_name: str, default: Any = NO_DEFAULT
+) -> None:
+    """Install a property that routes attribute access to the TensorDict entry."""
 
-    def _getter(self, _key=field_name):
-        return self._get_str(_key, NO_DEFAULT)
+    def _getter(self, _key=field_name, _default=default):
+        try:
+            return self._get_str(_key, NO_DEFAULT)
+        except KeyError:
+            if _default is not NO_DEFAULT:
+                return _default
+            raise AttributeError(
+                f"'{type(self).__name__}' has field '{_key}' declared but not set"
+            ) from None
 
     def _setter(self, value, _key=field_name):
         self[_key] = value
@@ -274,7 +296,7 @@ def _make_delegate_tuple_wrap(method_name: str) -> Callable:
     return method
 
 
-@dataclass_transform()
+@dataclass_transform(kw_only_default=True)
 class _TypedTensorDictMeta(type(TensorDictBase)):
     def __new__(
         mcs,
@@ -307,6 +329,7 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
             cls.__expected_keys__ = frozenset()
             cls.__required_keys__ = frozenset()
             cls.__optional_keys__ = frozenset()
+            cls.__field_defaults__ = {}
             return cls
 
         # Intermediate option classes (created by __getitem__) have no
@@ -315,9 +338,10 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
             cls.__expected_keys__ = frozenset()
             cls.__required_keys__ = frozenset()
             cls.__optional_keys__ = frozenset()
+            cls.__field_defaults__ = {}
             return cls
 
-        expected, required, optional = _collect_fields(cls)
+        expected, required, optional, defaults = _collect_fields(cls)
 
         if not cls._shadow:
             td_dir = _get_td_dir()
@@ -331,13 +355,12 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         cls.__expected_keys__ = expected
         cls.__required_keys__ = required
         cls.__optional_keys__ = optional
+        cls.__field_defaults__ = defaults
 
-        # Generate properties for fields that clash with TensorDictBase
-        # attributes so they override the parent's version.
-        td_dir = _get_td_dir()
+        # Properties avoid the generic __getattr__ path for declared fields.
+        # They also override TensorDictBase attributes when shadowing is enabled.
         for attr in expected:
-            if attr in td_dir:
-                _install_shadow_property(cls, attr)
+            _install_field_property(cls, attr, defaults.get(attr, NO_DEFAULT))
 
         if "__init__" not in namespace:
             cls.__init__ = _make_init(cls)
@@ -385,7 +408,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     - Typed attribute access (``state.eta``)
     - Typed construction (``PredictorState(eta=..., X=..., beta=..., batch_size=...)``)
     - Inheritance (``class ObservedState(PredictorState): ...``)
-    - ``NotRequired`` fields for optional pipeline branches
+    - Default-valued fields for optional pipeline branches
     - Full TensorDict interop (``.to()``, ``.clone()``, slicing, ``**state`` spreading)
     - Backend composition via ``from_tensordict`` (H5, Redis, lazy stacks, …)
 

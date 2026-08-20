@@ -8,7 +8,7 @@ import sys
 import pytest
 import torch
 from packaging import version
-from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
+from tensordict import LazyStackedTensorDict, tensorclass, TensorDict, TypedTensorDict
 from torch.utils._pytree import tree_map
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -427,10 +427,39 @@ class BigTC20:
     f19: torch.Tensor
 
 
+class BigTTD20(TypedTensorDict):
+    f0: torch.Tensor
+    f1: torch.Tensor
+    f2: torch.Tensor
+    f3: torch.Tensor
+    f4: torch.Tensor
+    f5: torch.Tensor
+    f6: torch.Tensor
+    f7: torch.Tensor
+    f8: torch.Tensor
+    f9: torch.Tensor
+    f10: torch.Tensor
+    f11: torch.Tensor
+    f12: torch.Tensor
+    f13: torch.Tensor
+    f14: torch.Tensor
+    f15: torch.Tensor
+    f16: torch.Tensor
+    f17: torch.Tensor
+    f18: torch.Tensor
+    f19: torch.Tensor
+
+
 def _get_big_tc20():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = {f"f{i}": torch.randn(4, device=device) for i in range(20)}
     return BigTC20(**kwargs, batch_size=[4], device=device)
+
+
+def _get_big_ttd20():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    kwargs = {f"f{i}": torch.randn(4, device=device) for i in range(20)}
+    return BigTTD20(**kwargs, batch_size=[4], device=device)
 
 
 def tc_getattr_sum(tc):
@@ -452,6 +481,20 @@ def test_compile_tc_getattr_20(mode, benchmark):
     func(tc)
     func(tc)
     benchmark(func, tc)
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
+)
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+def test_compile_ttd_getattr_20(mode, benchmark):
+    func = tc_getattr_sum
+    if mode == "compile":
+        func = torch.compile(func, fullgraph=True, mode="reduce-overhead")
+    ttd = _get_big_ttd20()
+    func(ttd)
+    func(ttd)
+    benchmark(func, ttd)
 
 
 # ── Shallow clone benchmarks ────────────────────────────────────────────

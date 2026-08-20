@@ -22,6 +22,7 @@ dependencies:
     - ninja
     - numpy<2.0.0
     - mosaicml-streaming
+    - mypy
     - pandas
     - pyarrow
     - redis
