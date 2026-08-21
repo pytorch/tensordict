@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -395,12 +395,12 @@ in the module’s method being decorated. Defaults to <code class="docutils lite
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_skip_existing</span><span class="p">():</span>
 <span class="gp">... </span>    <span class="k">if</span> <span class="n">skip_existing</span><span class="p">():</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;True&quot;</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"True"</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">else</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;False&quot;</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"False"</span><span class="p">)</span>
 <span class="gp">...</span>
 <span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;calling from outside:&quot;</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">"calling from outside:"</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">())</span>
 <span class="go">calling from outside: False</span>
 </pre></div>
 </div>
@@ -410,14 +410,14 @@ in the module’s method being decorated. Defaults to <code class="docutils lite
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;out&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
 <span class="gp">... </span>    <span class="nd">@set_skip_existing</span><span class="p">()</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;hello&quot;</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"hello"</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"out"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># does not print anything</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># does not print anything</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
@@ -441,17 +441,17 @@ wants ot let the context manager take care of skipping things from the outside:<
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;out&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
 <span class="gp">... </span>    <span class="nd">@set_skip_existing</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;hello&quot;</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;out&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"hello"</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"out"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># prints &quot;hello&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># prints "hello"</span>
 <span class="go">hello</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_skip_existing</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># no print</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># no print</span>
 </pre></div>
 </div>
 <div class="admonition note">
@@ -460,15 +460,15 @@ wants ot let the context manager take care of skipping things from the outside:<
 mistakenly ignoring subgraphs, <code class="docutils literal notranslate"><span class="pre">&#64;set_skip_existing(True)</span></code> will be
 deactivated whenever the output keys are also the input keys:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;out&quot;</span><span class="p">]</span>
-<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;out&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
 <span class="gp">... </span>    <span class="nd">@set_skip_existing</span><span class="p">()</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;calling the method!&quot;</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"calling the method!"</span><span class="p">)</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># does not print anything</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># does not print anything</span>
 <span class="go">calling the method!</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>

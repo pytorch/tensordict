@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -511,7 +511,7 @@ assignment or <code class="docutils literal notranslate"><span class="pre">updat
 <p><strong>HDF5 (PersistentTensorDict)</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">"data.h5"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_h5</span> <span class="o">=</span> <span class="n">MyTC</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">h5</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_h5</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># reads from HDF5</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -520,7 +520,7 @@ assignment or <code class="docutils literal notranslate"><span class="pre">updat
 <p><strong>Redis (TensorDictStore)</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">"localhost"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_redis</span> <span class="o">=</span> <span class="n">MyTC</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_redis</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># fetched from Redis</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -537,12 +537,12 @@ assignment or <code class="docutils literal notranslate"><span class="pre">updat
 </pre></div>
 </div>
 <p><strong>Memory-mapped TensorDict</strong>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/tmp/my_memmap&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_memmap"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span> <span class="o">=</span> <span class="n">MyTC</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td_mmap</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([4, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># memmap TDs are locked -- use in-place operations:</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tc_mmap</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
 <p><strong>TypedTensorDict as backend</strong> – both TensorClass and TypedTensorDict
@@ -682,14 +682,14 @@ internally):</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># reads from td</span>
 <span class="go">torch.Size([4, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># writes to td</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="go">True</span>
 </pre></div>
 </div>
 <p><strong>HDF5 (PersistentTensorDict)</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">"data.h5"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">h5</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># reads from HDF5</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -698,7 +698,7 @@ internally):</p>
 <p><strong>Redis (TensorDictStore)</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">"localhost"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># fetched from Redis</span>
 <span class="go">torch.Size([4, 3])</span>
@@ -715,12 +715,12 @@ internally):</p>
 </pre></div>
 </div>
 <p><strong>Memory-mapped TensorDict</strong>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/tmp/my_memmap&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mmap</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/tmp/my_memmap"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td_mmap</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([4, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># memmap TDs are locked -- use in-place operations:</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
 </section>
@@ -765,11 +765,11 @@ tensor data passes through Python):</p>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pre-allocate 100k entries directly on Redis -- no RAM used</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"reward"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Wrap with typed access</span>
@@ -785,7 +785,7 @@ tensor data passes through Python):</p>
 </div>
 <p>If the store is initially empty (no keys registered yet), use <code class="docutils literal notranslate"><span class="pre">check=False</span></code>
 to skip the key-presence validation and fill keys on the fly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span> <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span> <span class="o">=</span> <span class="n">Replay</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># First indexed write auto-creates each key via SETRANGE</span>

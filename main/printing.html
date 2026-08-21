@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -576,7 +576,7 @@ passed as <code class="docutils literal notranslate"><span class="pre">key</span
 <p><a class="reference internal" href="reference/generated/tensordict.get_printoptions.html#tensordict.get_printoptions" title="tensordict.get_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_printoptions()</span></code></a> returns a dict with the current values:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_printoptions</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">get_printoptions</span><span class="p">()</span>
-<span class="go">{&#39;show_batch_size&#39;: True, &#39;show_device&#39;: True, ...}</span>
+<span class="go">{'show_batch_size': True, 'show_device': True, ...}</span>
 </pre></div>
 </div>
 </section>
@@ -590,17 +590,17 @@ example, pasted from a log file or a colleague’s terminal.
 correct structure, batch size, device and dtypes, but all tensor values are
 replaced by zeros (since the repr does not contain actual data):</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_tensor_dict_string</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;TensorDict(</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="s2">"""TensorDict(</span>
 <span class="gp">... </span><span class="s2">    fields={</span>
 <span class="gp">... </span><span class="s2">        image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="gp">... </span><span class="s2">        label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
 <span class="gp">... </span><span class="s2">    batch_size=torch.Size([32]),</span>
 <span class="gp">... </span><span class="s2">    device=cpu,</span>
-<span class="gp">... </span><span class="s2">    is_shared=False)&quot;&quot;&quot;</span>
+<span class="gp">... </span><span class="s2">    is_shared=False)"""</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">parse_tensor_dict_string</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">torch.Size([32])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"image"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([32, 3, 64, 64])</span>
 </pre></div>
 </div>

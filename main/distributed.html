@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -397,7 +397,7 @@ the same memory-mapped files on a shared filesystem.</p>
 <a class="reference external" href="https://pytorch.org/docs/stable/distributed.html">PyTorch distributed documentation</a>
 for details.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
-<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">)</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">"nccl"</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -408,10 +408,10 @@ for details.</p>
 <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>, which packs every leaf tensor
 into a single contiguous storage buffer.  This turns an arbitrarily nested
 TensorDict into <strong>one</strong> message on the wire:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="n">td_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="c1"># td_c._consolidated[&quot;storage&quot;]  – a single flat uint8 tensor</span>
-<span class="c1"># td_c._consolidated[&quot;metadata&quot;] – a dict describing how to reconstruct the tree</span>
+<span class="c1"># td_c._consolidated["storage"]  – a single flat uint8 tensor</span>
+<span class="c1"># td_c._consolidated["metadata"] – a dict describing how to reconstruct the tree</span>
 </pre></div>
 </div>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">metadata=True</span></code> so that the receiving side can reconstruct the full
@@ -468,7 +468,7 @@ advance, <code class="docutils literal notranslate"><span class="pre">init_remot
 the receiver can reconstruct the full object from scratch:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># rank 0  – sender</span>
 <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">84</span><span class="p">),</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">84</span><span class="p">),</span> <span class="s2">"reward"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
     <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="n">td</span><span class="o">.</span><span class="n">init_remote</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
@@ -527,7 +527,7 @@ across all ranks in-place:</p>
 
 <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="n">td</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
-<span class="c1"># td[&quot;a&quot;] is now the sum across all ranks</span>
+<span class="c1"># td["a"] is now the sum across all ranks</span>
 </pre></div>
 </div>
 <p>Supports <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code> to return a list of futures.</p>
@@ -720,7 +720,7 @@ automatically falls back to the handshake phase.</p>
 
     <span class="c1"># first receive: handshake — allocates buffer, builds TensorDict</span>
     <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">()</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># TensorDict with the sender&#39;s keys/shapes/dtypes</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># TensorDict with the sender's keys/shapes/dtypes</span>
 
     <span class="c1"># steady-state: zero-alloc receive into the same buffer</span>
     <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
@@ -731,10 +731,10 @@ automatically falls back to the handshake phase.</p>
 
 <span class="c1"># --- node B (sender) ---</span>
 <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">sender</span><span class="p">():</span>
-    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">&quot;10.0.1.1&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDictPipe</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">"10.0.1.1"</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">13337</span><span class="p">)</span>
 
     <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">dataloader</span><span class="p">:</span>
-        <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">]},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">B</span><span class="p">])</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"obs"</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">"label"</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">]},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">B</span><span class="p">])</span>
         <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 
     <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
@@ -770,7 +770,7 @@ CUDA tensors, the consolidated buffer lives on GPU and is transferred
 directly over RDMA (GPUDirect) without touching host memory.  The
 receiver automatically allocates its buffer on the same device:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sender — data on GPU</span>
-<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1024</span><span class="p">])</span>
+<span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1024</span><span class="p">])</span>
 <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>  <span class="c1"># sends from GPU memory</span>
 
 <span class="c1"># receiver — automatically receives into GPU memory</span>
@@ -779,7 +779,7 @@ receiver automatically allocates its buffer on the same device:</p>
 </pre></div>
 </div>
 <p>You can override the receiver’s device by passing <code class="docutils literal notranslate"><span class="pre">device=</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>  <span class="c1"># force receive onto CPU</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cpu"</span><span class="p">)</span>  <span class="c1"># force receive onto CPU</span>
 </pre></div>
 </div>
 </section>
@@ -972,16 +972,16 @@ tensors over the network.</p>
 
 <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
     <span class="p">{</span>
-        <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-        <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+        <span class="s2">"images"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+        <span class="s2">"labels"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">50000</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
     <span class="p">},</span>
     <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">50000</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+<span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/shared/nfs/dataset"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Any process that can read <code class="docutils literal notranslate"><span class="pre">/shared/nfs/dataset</span></code> can load this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/shared/nfs/dataset&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">"/shared/nfs/dataset"</span><span class="p">)</span>
 <span class="n">batch</span> <span class="o">=</span> <span class="n">td</span><span class="p">[:</span><span class="mi">64</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>  <span class="c1"># only reads the first 64 entries</span>
 </pre></div>
 </div>

@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -383,8 +383,8 @@
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">logits</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">Net</span><span class="p">(),</span>
-<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;probabilities&quot;</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"input"</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"logits"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">)],</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">graph</span><span class="p">)</span>
@@ -397,7 +397,7 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
 
 <span class="go">def forward(self, tensordict):</span>
-<span class="go">    getitem = tensordict[&#39;input&#39;];  tensordict = None</span>
+<span class="go">    getitem = tensordict['input'];  tensordict = None</span>
 <span class="go">    linear = self.linear(getitem);  getitem = None</span>
 <span class="go">    sigmoid = torch.sigmoid(linear)</span>
 <span class="go">    return (linear, sigmoid)</span>
@@ -405,15 +405,15 @@
 </div>
 </div>
 <p>We can check that a forward pass with each module results in the same outputs.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">100</span><span class="p">)},</span> <span class="p">[</span><span class="mi">32</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"input"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">100</span><span class="p">)},</span> <span class="p">[</span><span class="mi">32</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module_out</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module_out</span> <span class="o">=</span> <span class="n">graph_module</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span>
-<span class="gp">... </span>    <span class="n">module_out</span><span class="p">[</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">graph_module_out</span><span class="p">[</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">module_out</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"logits"</span><span class="p">]</span> <span class="o">==</span> <span class="n">graph_module_out</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"logits"</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span>
-<span class="gp">... </span>    <span class="n">module_out</span><span class="p">[</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;probabilities&quot;</span><span class="p">]</span>
-<span class="gp">... </span>    <span class="o">==</span> <span class="n">graph_module_out</span><span class="p">[</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="s2">&quot;probabilities&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">module_out</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="o">==</span> <span class="n">graph_module_out</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -443,23 +443,23 @@
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">mask</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">Net</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">)],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">)]</span>
+<span class="gp">... </span>    <span class="n">Net</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"input"</span><span class="p">,</span> <span class="s2">"x"</span><span class="p">)],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"x"</span><span class="p">)]</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">masker</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">Masker</span><span class="p">(),</span>
-<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">)],</span>
-<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;output&quot;</span><span class="p">,</span> <span class="s2">&quot;probabilities&quot;</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"x"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"input"</span><span class="p">,</span> <span class="s2">"mask"</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"output"</span><span class="p">,</span> <span class="s2">"probabilities"</span><span class="p">)],</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">masker</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">graph_module</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">graph_module</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
 
 <span class="go">def forward(self, tensordict):</span>
-<span class="go">    getitem = tensordict[(&#39;input&#39;, &#39;x&#39;)]</span>
-<span class="go">    _0_fc1 = getattr(self, &quot;0&quot;).module.fc1(getitem);  getitem = None</span>
+<span class="go">    getitem = tensordict[('input', 'x')]</span>
+<span class="go">    _0_fc1 = getattr(self, "0").module.fc1(getitem);  getitem = None</span>
 <span class="go">    relu = torch.relu(_0_fc1);  _0_fc1 = None</span>
-<span class="go">    _0_fc2 = getattr(self, &quot;0&quot;).module.fc2(relu);  relu = None</span>
-<span class="go">    getitem_1 = tensordict[(&#39;input&#39;, &#39;mask&#39;)];  tensordict = None</span>
+<span class="go">    _0_fc2 = getattr(self, "0").module.fc2(relu);  relu = None</span>
+<span class="go">    getitem_1 = tensordict[('input', 'mask')];  tensordict = None</span>
 <span class="go">    mul = _0_fc2 * getitem_1;  getitem_1 = None</span>
 <span class="go">    softmax = torch.softmax(mul, dim = 1);  mul = None</span>
 <span class="go">    return (_0_fc2, softmax)</span>
@@ -470,8 +470,8 @@
 <div class="literal-block-wrapper docutils container" id="id3">
 <div class="code-block-caption"><span class="caption-text">Visualising the graph</span><a class="headerlink" href="#id3" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.fx.passes.graph_drawer</span><span class="w"> </span><span class="kn">import</span> <span class="n">FxGraphDrawer</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">g</span> <span class="o">=</span> <span class="n">FxGraphDrawer</span><span class="p">(</span><span class="n">graph_module</span><span class="p">,</span> <span class="s2">&quot;sequential&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;graph.svg&quot;</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">g</span> <span class="o">=</span> <span class="n">FxGraphDrawer</span><span class="p">(</span><span class="n">graph_module</span><span class="p">,</span> <span class="s2">"sequential"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">"graph.svg"</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">get_dot_graph</span><span class="p">()</span><span class="o">.</span><span class="n">create_svg</span><span class="p">())</span>
 </pre></div>
 </div>

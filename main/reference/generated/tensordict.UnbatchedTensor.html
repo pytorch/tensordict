@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -372,14 +372,14 @@ through standard PyTorch tensor dispatch.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
 <span class="go">True</span>
 </pre></div>
 </div>
 <p>Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
 TensorDict returns a usable tensor directly:</p>
 <p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">val</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">val</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">UnbatchedTensor</span><span class="p">)</span>
@@ -1577,7 +1577,7 @@ Otherwise, it will raise TypeError.</p>
 <span class="gp">... </span><span class="p">)</span>  <span class="c1"># It can be mapped to contiguous format</span>
 <span class="go">(0, 1, 2, 3)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">try</span><span class="p">:</span>
-<span class="gp">... </span>    <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">dim_order</span><span class="p">(</span><span class="n">ambiguity_check</span><span class="o">=</span><span class="s2">&quot;ILLEGAL&quot;</span><span class="p">)</span> <span class="c1"># type: ignore[arg-type]</span>
+<span class="gp">... </span>    <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">dim_order</span><span class="p">(</span><span class="n">ambiguity_check</span><span class="o">=</span><span class="s2">"ILLEGAL"</span><span class="p">)</span> <span class="c1"># type: ignore[arg-type]</span>
 <span class="gp">... </span><span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
 <span class="go">The ambiguity_check argument must be a bool or a list of memory formats.</span>
@@ -2061,7 +2061,7 @@ hence draws samples in <span class="math notranslate nohighlight">\(\{0, 1, \ldo
 <dd><p>For CUDA tensors, this function returns the device ordinal of the GPU on which the tensor resides.
 For CPU tensors, this function returns <cite>-1</cite>.</p>
 <p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda:0'</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span>
 <span class="go">0</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span>
@@ -2085,8 +2085,9 @@ The attribute will then contain the gradients computed and future calls to
 <dd><p>The allowed dtype of :attr:<code class="docutils literal notranslate"><span class="pre">grad</span></code> for this tensor.</p>
 <p>:attr:<code class="docutils literal notranslate"><span class="pre">grad_dtype</span></code> can be set to a specific dtype or <code class="docutils literal notranslate"><span class="pre">None</span></code>. By default,
 <code class="docutils literal notranslate"><span class="pre">t.grad_dtype</span> <span class="pre">==</span> <span class="pre">t.dtype</span></code>. When not None, the autograd engine casts
-incoming gradients to this dtype. This attribute is only accessible and
-settable for leaf tensors.</p>
+incoming gradients to this dtype. This attribute is readable for both leaf and
+non-leaf tensors, but can only be set for leaf tensors. For a non-leaf tensor,
+it reports the gradient dtype declared by the Function that produced the tensor.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Use with caution. Diverging the dtypes of a tensor and its gradient may
@@ -2308,7 +2309,7 @@ match <code class="xref py py-attr docutils literal notranslate"><span class="pr
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
-<li><p><strong>index</strong> (<em>Tensor</em>) – indices of <code class="docutils literal notranslate"><span class="pre">source</span></code> to select from,
+<li><p><strong>index</strong> (<em>Tensor</em>) – indices of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> to add to,
 should have dtype either <cite>torch.int64</cite> or <cite>torch.int32</cite></p></li>
 <li><p><strong>source</strong> (<em>Tensor</em>) – the tensor containing values to add</p></li>
 </ul>
@@ -2493,14 +2494,14 @@ included in the reduction</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">],</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">index_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;prod&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">index_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">'prod'</span><span class="p">)</span>
 <span class="go">tensor([[20., 44., 72.],</span>
 <span class="go">        [ 2.,  2.,  2.],</span>
 <span class="go">        [14., 16., 18.],</span>
 <span class="go">        [ 2.,  2.,  2.],</span>
 <span class="go">        [ 8., 10., 12.]])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">index_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;prod&#39;</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="o">.</span><span class="n">index_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">'prod'</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="go">tensor([[10., 22., 36.],</span>
 <span class="go">        [ 2.,  2.,  2.],</span>
 <span class="go">        [ 7.,  8.,  9.],</span>
@@ -2680,7 +2681,7 @@ To get <a class="reference internal" href="#tensordict.UnbatchedTensor.grad" tit
 <span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">is_leaf</span>
 <span class="go">True</span>
 <span class="go"># e requires gradients and has no operations creating it</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">f</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">f</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">f</span><span class="o">.</span><span class="n">is_leaf</span>
 <span class="go">True</span>
 <span class="go"># f requires grad, has no operation creating it</span>
@@ -4293,7 +4294,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">True</span
 </dd>
 </dl>
 <p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Let&#39;s say we want to preprocess some saved weights and use</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Let's say we want to preprocess some saved weights and use</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># the result as new weights.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">saved_weights</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">loaded_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">saved_weights</span><span class="p">)</span>
@@ -4556,11 +4557,11 @@ returns <code class="docutils literal notranslate"><span class="pre">self</span>
 <span class="go">        [0, 0, 0, 0, 0]])</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="mf">2.</span><span class="p">)</span><span class="o">.</span><span class="n">scatter_</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">]]),</span>
-<span class="gp">... </span>           <span class="mf">1.23</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s1">&#39;multiply&#39;</span><span class="p">)</span>
+<span class="gp">... </span>           <span class="mf">1.23</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s1">'multiply'</span><span class="p">)</span>
 <span class="go">tensor([[2.0000, 2.0000, 2.4600, 2.0000],</span>
 <span class="go">        [2.0000, 2.0000, 2.0000, 2.4600]])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="mf">2.</span><span class="p">)</span><span class="o">.</span><span class="n">scatter_</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">]]),</span>
-<span class="gp">... </span>           <span class="mf">1.23</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s1">&#39;add&#39;</span><span class="p">)</span>
+<span class="gp">... </span>           <span class="mf">1.23</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s1">'add'</span><span class="p">)</span>
 <span class="go">tensor([[2.0000, 2.0000, 3.2300, 2.0000],</span>
 <span class="go">        [2.0000, 2.0000, 2.0000, 3.2300]])</span>
 </pre></div>
@@ -4719,14 +4720,14 @@ included in the reduction</p></li>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">src</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">2.</span><span class="p">,</span> <span class="mf">3.</span><span class="p">,</span> <span class="mf">4.</span><span class="p">,</span> <span class="mf">5.</span><span class="p">,</span> <span class="mf">6.</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">2.</span><span class="p">,</span> <span class="mf">3.</span><span class="p">,</span> <span class="mf">4.</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">"sum"</span><span class="p">)</span>
 <span class="go">tensor([5., 14., 8., 4.])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">"sum"</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="go">tensor([4., 12., 5., 4.])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">input2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">5.</span><span class="p">,</span> <span class="mf">4.</span><span class="p">,</span> <span class="mf">3.</span><span class="p">,</span> <span class="mf">2.</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">input2</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amax&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input2</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">"amax"</span><span class="p">)</span>
 <span class="go">tensor([5., 6., 5., 2.])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">input2</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amax&quot;</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input2</span><span class="o">.</span><span class="n">scatter_reduce</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">"amax"</span><span class="p">,</span> <span class="n">include_self</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="go">tensor([3., 6., 5., 2.])</span>
 </pre></div>
 </div>
@@ -5388,19 +5389,19 @@ the required pattern.</p>
 <span class="go">tensor([[-0.5044,  0.0005],</span>
 <span class="go">        [ 0.3310, -0.0584]], dtype=torch.float64)</span>
 
-<span class="gp">&gt;&gt;&gt; </span><span class="n">cuda0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cuda0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">'cuda:0'</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cuda0</span><span class="p">)</span>
 <span class="go">tensor([[-0.5044,  0.0005],</span>
-<span class="go">        [ 0.3310, -0.0584]], device=&#39;cuda:0&#39;)</span>
+<span class="go">        [ 0.3310, -0.0584]], device='cuda:0')</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cuda0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
 <span class="go">tensor([[-0.5044,  0.0005],</span>
-<span class="go">        [ 0.3310, -0.0584]], dtype=torch.float64, device=&#39;cuda:0&#39;)</span>
+<span class="go">        [ 0.3310, -0.0584]], dtype=torch.float64, device='cuda:0')</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">other</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">cuda0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">tensor([[-0.5044,  0.0005],</span>
-<span class="go">        [ 0.3310, -0.0584]], dtype=torch.float64, device=&#39;cuda:0&#39;)</span>
+<span class="go">        [ 0.3310, -0.0584]], dtype=torch.float64, device='cuda:0')</span>
 </pre></div>
 </div>
 </dd></dl>

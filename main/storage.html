@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -455,13 +455,13 @@ selects which backend is used.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
-<span class="gp">... </span>    <span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">"reward"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
 <span class="gp">... </span><span class="p">}</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;obs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([100000, 84, 84, 3])</span>
 </pre></div>
 </div>
@@ -470,23 +470,23 @@ selects which backend is used.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">storage</span></code> keyword selects the backend:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Memory-mapped tensors on disk</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/replay&quot;</span><span class="p">)</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">"memmap"</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">"/data/replay"</span><span class="p">)</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># HDF5 file</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;h5&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;/data/replay.h5&quot;</span><span class="p">)</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">"h5"</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">"/data/replay.h5"</span><span class="p">)</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Zarr store (requires zarr&gt;=3.0)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;zarr&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;/data/replay.zarr&quot;</span><span class="p">)</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">"zarr"</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s2">"/data/replay.zarr"</span><span class="p">)</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Shared memory (single-node multi-process)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">)</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">"shared"</span><span class="p">)</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Redis server (multi-node)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;redis&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+<span class="gp">... </span>                            <span class="n">storage</span><span class="o">=</span><span class="s2">"redis"</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Extra keyword arguments are forwarded to the backend constructor.  See each
@@ -509,15 +509,15 @@ files.</p>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">d</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">"reward"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1_000</span><span class="p">],</span>
-<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">"memmap"</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">prefix</span><span class="o">=</span><span class="n">d</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">... </span>    <span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">()</span>
 <span class="gp">... </span>    <span class="c1"># Fill iteratively -- each write goes directly to disk</span>
 <span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"reward"</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>Keyword arguments:</p>
@@ -543,11 +543,11 @@ like <code class="docutils literal notranslate"><span class="pre">h5py</span></c
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span><span class="o">,</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.h5&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s2">".h5"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)},</span>
+<span class="gp">... </span>        <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">"label"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)},</span>
 <span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">],</span>
-<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;h5&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">storage</span><span class="o">=</span><span class="s2">"h5"</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">filename</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
@@ -555,12 +555,12 @@ like <code class="docutils literal notranslate"><span class="pre">h5py</span></c
 </div>
 <p>You can also load an existing file:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="s2">"data.h5"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Or convert an in-memory TensorDict:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td_mem</span><span class="p">,</span> <span class="s2">&quot;data.h5&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td_mem</span><span class="p">,</span> <span class="s2">"data.h5"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Keyword arguments forwarded by <code class="docutils literal notranslate"><span class="pre">from_schema</span></code>:</p>
@@ -582,18 +582,18 @@ separate chunks.  Requires <code class="docutils literal notranslate"><span clas
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">d</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="s2">"label"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;zarr&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">filename</span><span class="o">=</span><span class="n">d</span> <span class="o">+</span> <span class="s2">&quot;/replay.zarr&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">"zarr"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">filename</span><span class="o">=</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/replay.zarr"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
 </pre></div>
 </div>
 <p>Converting an in-memory TensorDict and loading it back:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zarr</span> <span class="o">=</span> <span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">&quot;/data.zarr&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_back</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">&quot;/data.zarr&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zarr</span> <span class="o">=</span> <span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/data.zarr"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_back</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/data.zarr"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDictBase.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> persists the batch size and
@@ -606,9 +606,9 @@ the fastest layout for checkpoint-style save/load.  For dataset-style
 workloads, pass <code class="docutils literal notranslate"><span class="pre">chunks=</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=</span></code> (forwarded to
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code>) to enable partial out-of-core reads with
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.get_at" title="tensordict.TensorDictBase.get_at"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_at()</span></code></a> and on-disk compression:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">&quot;/chunked.zarr&quot;</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>  <span class="c1"># one row per chunk</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/chunked.zarr"</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>  <span class="c1"># one row per chunk</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">&quot;/compressed.zarr&quot;</span><span class="p">,</span> <span class="n">compressors</span><span class="o">=</span><span class="n">ZstdCodec</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="s2">"/compressed.zarr"</span><span class="p">,</span> <span class="n">compressors</span><span class="o">=</span><span class="n">ZstdCodec</span><span class="p">())</span>
 </pre></div>
 </div>
 <p>Keyword arguments forwarded by <code class="docutils literal notranslate"><span class="pre">from_schema</span></code>:</p>
@@ -628,9 +628,9 @@ machine.  This is the fastest option for single-node multi-process setups
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1000</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">"shared"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span>
 </pre></div>
@@ -655,12 +655,12 @@ through Python:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">84</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"reward"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;redis&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">"redis"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
 </div>
@@ -674,7 +674,7 @@ through Python:</p>
 </ul>
 <p>You can also connect to an existing store from another process:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_store</span><span class="p">(</span><span class="n">td_id</span><span class="o">=</span><span class="s2">&quot;&lt;id&gt;&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="o">.</span><span class="n">from_store</span><span class="p">(</span><span class="n">td_id</span><span class="o">=</span><span class="s2">"&lt;id&gt;"</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -688,15 +688,15 @@ full dataset in process memory.  All backends support the same pattern via
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="p">{</span>
-<span class="gp">... </span>    <span class="s2">&quot;image&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">"image"</span><span class="p">:</span> <span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="s2">"label"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
 <span class="gp">... </span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1_000_000</span><span class="p">],</span> <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/buffer&quot;</span>
+<span class="gp">... </span>    <span class="n">schema</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1_000_000</span><span class="p">],</span> <span class="n">storage</span><span class="o">=</span><span class="s2">"memmap"</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">"/data/buffer"</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data_stream</span><span class="p">):</span>  
 <span class="gp">... </span>    <span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">image</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]</span>
+<span class="gp">... </span>        <span class="n">image</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">"image"</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">"label"</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[]</span>
 <span class="gp">... </span>    <span class="p">)</span>
 </pre></div>
 </div>
@@ -706,7 +706,7 @@ regardless of dataset size.</p>
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datum</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span>
 <span class="gp">... </span>                   <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">datum</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">)</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="s2">&quot;/data/buffer&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">datum</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">)</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="s2">"/data/buffer"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -750,26 +750,26 @@ own mechanism:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">NonTensorData</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"cat"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mm</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">&quot;/path/to/private/example&quot;</span><span class="p">)</span>  
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;/path/to/private/example&quot;</span><span class="p">)</span>  
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>  
-<span class="go">&#39;cat&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_mm</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="s2">"/path/to/private/example"</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">"/path/to/private/example"</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>  
+<span class="go">'cat'</span>
 </pre></div>
 </div>
 <p>For <strong>HDF5</strong>, non-tensor values are stored as HDF5 string or opaque datasets:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s2">&quot;data.h5&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s2">"data.h5"</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"w"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_h5</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"cat"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
 </pre></div>
 </div>
 <p>For <strong>Redis</strong>, non-tensor data is transparently serialised as JSON (falling
 back to pickle for non-JSON-serialisable objects):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictStore</span>  
 <span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
-<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;cat&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">store</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"cat"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
 </pre></div>
 </div>
 </section>
@@ -791,12 +791,12 @@ this gives you typed, pre-allocated, backend-agnostic data stores.</p>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pre-allocate with any backend, then wrap</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"reward"</span><span class="p">:</span> <span class="p">([],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10_000</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;memmap&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/data/replay&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">"memmap"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">prefix</span><span class="o">=</span><span class="s2">"/data/replay"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span> <span class="o">=</span> <span class="n">Replay</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">replay</span><span class="o">.</span><span class="n">obs</span><span class="o">.</span><span class="n">shape</span>
@@ -822,12 +822,12 @@ this gives you typed, pre-allocated, backend-agnostic data stores.</p>
 <span class="gp">... </span>    <span class="n">reward</span><span class="p">:</span> <span class="nb">float</span>  <span class="c1"># non-tensor field</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_schema</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"obs"</span><span class="p">:</span> <span class="p">([</span><span class="mi">4</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+<span class="gp">... </span>     <span class="s2">"action"</span><span class="p">:</span> <span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)},</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10_000</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="s2">"shared"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tc</span> <span class="o">=</span> <span class="n">Transition</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">non_tensordict</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">})</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tc</span> <span class="o">=</span> <span class="n">Transition</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">non_tensordict</span><span class="o">=</span><span class="p">{</span><span class="s2">"reward"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">})</span>  
 </pre></div>
 </div>
 <p>Unlike <a class="reference internal" href="reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a>

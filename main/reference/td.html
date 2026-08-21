@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4245+g54a510733.d20260814)
+                  main (0.14.0.dev4254+gabb3c47e4.d20260821)
                 </div>
               
             
@@ -482,7 +482,7 @@ where an action has to be done and then undone. This include temporarily
 locking/unlocking a tensordict</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>  <span class="c1"># data.set will result in an exception</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;key&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"key"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">is_locked</span><span class="p">()</span>
 </pre></div>
 </div>

@@ -124,7 +124,7 @@ Let us run this model and see what the output looks like:
 
  .. code-block:: none
 
-    (tensor([[0.0000, 0.0000, 0.0000, 0.3193]], grad_fn=<ReluBackward0>), tensor([[ 0.0375, -0.4934, -0.3721, -0.0836]], grad_fn=<AddmmBackward0>), tensor([[ 0.0375, -0.4934]], grad_fn=<SplitBackward0>), tensor([[0.7828, 0.9483]], grad_fn=<ClampMinBackward0>))
+    (tensor([[0.0000, 0.1616, 0.0000, 0.3507]], grad_fn=<ReluBackward0>), tensor([[ 0.2508,  0.0776, -0.4176, -0.3708]], grad_fn=<AddmmBackward0>), tensor([[0.2508, 0.0776]], grad_fn=<SplitBackward0>), tensor([[0.7585, 0.7835]], grad_fn=<ClampMinBackward0>))
 
 
 
@@ -248,8 +248,8 @@ This module can be run exactly like our original module (with a lower overhead):
 
  .. code-block:: none
 
-    Time for TDModule:  530.00 micro-seconds
-    Time for exported module:  359.06 micro-seconds
+    Time for TDModule:  509.26 micro-seconds
+    Time for exported module:  354.53 micro-seconds
 
 
 
@@ -432,7 +432,7 @@ When an `x` input is provided, we expect our model to output a single tensor cor
 
  .. code-block:: none
 
-    tensor([[ 0.0375, -0.4934]], grad_fn=<SplitBackward0>)
+    tensor([[0.2508, 0.0776]], grad_fn=<SplitBackward0>)
 
 
 
@@ -514,7 +514,7 @@ Next steps and further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.621 seconds)
+   **Total running time of the script:** (0 minutes 0.622 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
