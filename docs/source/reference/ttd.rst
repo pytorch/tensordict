@@ -6,7 +6,7 @@ TypedTensorDict
 :class:`~tensordict.TypedTensorDict` is a :class:`~tensordict.TensorDictBase` subclass
 with typed field declarations and backend composition.  It brings ``TypedDict``-style
 class definitions to ``TensorDict``: you declare fields as class annotations and get
-typed construction, typed attribute access, inheritance, ``NotRequired`` fields,
+typed construction, typed attribute access, inheritance, optional fields,
 ``**state`` spreading, and the ability to wrap any ``TensorDictBase`` backend
 (H5, Redis, lazy stacks, etc.) via ``from_tensordict``.
 
@@ -89,7 +89,7 @@ in the underlying model:
    * - ``state["key"]``
      - Works natively (``TensorDictBase.__getitem__``)
      - Raises ``ValueError`` -- use ``state.key`` or ``state.get("key")``
-   * - ``NotRequired`` fields
+   * - Optional fields
      - Supported
      - Not supported
    * - Non-tensor fields
@@ -121,8 +121,6 @@ inheriting all parent fields:
 
 .. code-block:: python
 
-  >>> from typing import NotRequired
-  >>>
   >>> class PredictorState(TypedTensorDict):
   ...     eta: Tensor
   ...     X: Tensor
@@ -131,7 +129,7 @@ inheriting all parent fields:
   >>> class ObservedState(PredictorState):
   ...     y: Tensor
   ...     mu: Tensor
-  ...     noise: NotRequired[Tensor]
+  ...     noise: Tensor | None = None
   >>>
   >>> class SurvivalState(ObservedState):
   ...     event_time: Tensor
@@ -147,19 +145,17 @@ Inheritance works as standard Python: ``isinstance(obs, PredictorState)``
 returns ``True`` for an ``ObservedState`` instance, and a function typed as
 ``f(state: PredictorState)`` accepts any subclass.
 
-NotRequired fields
-------------------
+Optional fields
+---------------
 
-Mark fields as optional with :data:`~typing.NotRequired`:
+For portable static typing, mark fields as optional with a ``None`` default:
 
 .. code-block:: python
 
-  >>> from typing import NotRequired
-  >>>
   >>> class ObservedState(PredictorState):
   ...     y: Tensor
   ...     mu: Tensor
-  ...     noise: NotRequired[Tensor]
+  ...     noise: Tensor | None = None
 
   >>> obs = ObservedState(
   ...     eta=torch.randn(5, 3), X=torch.randn(5, 4), beta=torch.randn(5, 1),
@@ -169,9 +165,10 @@ Mark fields as optional with :data:`~typing.NotRequired`:
   >>> "noise" in obs
   False
 
-If a ``NotRequired`` field is not provided, it is simply absent from the
-underlying ``TensorDict``. Accessing it via attribute raises
-``AttributeError``.
+If the field is not provided, it is absent from the underlying ``TensorDict``
+and attribute access returns the declared default. ``NotRequired[Tensor]``
+remains supported for compatibility, but mypy only accepts ``NotRequired``
+inside a ``TypedDict`` definition; a default is therefore the portable form.
 
 Spreading (``**state``)
 -----------------------
@@ -287,6 +284,12 @@ This includes ``.memmap()``, ``.apply()``, ``torch.cat``, ``torch.stack``,
 ``.unbind()``, ``.select()``, ``.exclude()``, ``.update()``, and all other
 ``TensorDictBase`` methods.
 
+Schema declarations describe the fields available on a valid typed instance;
+they do not change the mutation semantics of ``TensorDictBase``. Operations
+such as ``pop``, in-place ``select``, or ``rename_key_`` can invalidate that
+assumption. Prefer ``TypedTensorDict["frozen"]`` when the declared key set must
+remain invariant.
+
 Type checking
 -------------
 
@@ -301,6 +304,18 @@ This means type checkers (pyright, mypy) understand:
 String-key access (``state["eta"]``) works at runtime but does not get type
 narrowing without a dedicated type checker plugin. For typed access, prefer
 dot notation (``state.eta``).
+
+Performance
+-----------
+
+Schema collection and property generation happen once, when a
+``TypedTensorDict`` subclass is defined. Regular ``TensorDict`` construction
+and access do not execute any typed-schema code. Typed instances add a thin
+property dispatch for attribute access and validate required keys only at
+construction or when ``from_tensordict(check=True)`` is called. Eager
+construction and access benchmarks live in
+``benchmarks/tensorclass/test_tensorclass_speed.py``; full-graph attribute
+access is covered in ``benchmarks/compile/compile_td_test.py``.
 
 .. autosummary::
     :toctree: generated/
