@@ -793,8 +793,17 @@ class TensorDictModuleBase(nn.Module):
         # This is necessary to make compiled vmap over TDModule happy
         return self.__class__.__name__
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}()"
+    def __repr__(self) -> str:
+        entries = [f"{name}={module}" for name, module in self.named_children()]
+        # a wrapped callable that is not an nn.Module (a plain function, a lambda, ...)
+        # is stored as a regular attribute, hence missing from the children
+        module = self.__dict__.get("module")
+        if module is not None:
+            entries.insert(0, f"module={module}")
+        entries.append(f"in_keys={self.in_keys}")
+        entries.append(f"out_keys={self.out_keys}")
+        fields = indent(",\n".join(entries), 4 * " ")
+        return f"{type(self).__name__}(\n{fields})"
 
 
 class TensorDictModule(TensorDictModuleBase):
@@ -1224,17 +1233,6 @@ class TensorDictModule(TensorDictModuleBase):
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
-
-    def __repr__(self) -> str:
-        fields = indent(
-            f"module={self.module},\n"
-            f"device={self.device},\n"
-            f"in_keys={self.in_keys},\n"
-            f"out_keys={self.out_keys}",
-            4 * " ",
-        )
-
-        return f"{type(self).__name__}(\n{fields})"
 
     def __getattr__(self, name: str) -> Any:
         if not is_compiling():

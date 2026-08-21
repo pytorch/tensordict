@@ -360,6 +360,40 @@ class TestTDModule:
 
         assert td["b"] == 4
 
+    def test_repr(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a"]
+            out_keys = ["b"]
+
+            def __init__(self):
+                super().__init__()
+                self.net = nn.Linear(3, 4)
+
+            def forward(self, tensordict):
+                tensordict.set("b", self.net(tensordict.get("a")))
+                return tensordict
+
+        string = repr(MyModule())
+        assert "MyModule(" in string
+        assert "net=Linear(in_features=3, out_features=4" in string
+        assert "device=" not in string
+        assert "in_keys=['a']" in string
+        assert "out_keys=['b']" in string
+
+        # an nn.Module payload is a child: listed once, and not through __dict__
+        mod = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["b"])
+        assert "module" not in mod.__dict__
+        string = repr(mod)
+        assert string.count("module=") == 1
+        assert "module=Linear(in_features=3, out_features=4" in string
+
+        # a callable that is not an nn.Module is not a child: it comes from __dict__
+        mod = TensorDictModule(lambda x: x + 1, in_keys=["a"], out_keys=["b"])
+        assert dict(mod.named_children()) == {}
+        string = repr(mod)
+        assert string.count("module=") == 1
+        assert "module=<function" in string
+
     def test_mutable_sequence(self):
         in_keys = self.MyMutableSequence(["a", "b", "c"])
         out_keys = self.MyMutableSequence(["d", "e", "f"])
