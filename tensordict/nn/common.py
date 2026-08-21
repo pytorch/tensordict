@@ -793,12 +793,6 @@ class TensorDictModuleBase(nn.Module):
         # This is necessary to make compiled vmap over TDModule happy
         return self.__class__.__name__
 
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        return torch.device("cpu")
-
     def __repr__(self) -> str:
         entries = [f"{name}={module}" for name, module in self.named_children()]
         # a wrapped callable that is not an nn.Module (a plain function, a lambda, ...)
@@ -806,7 +800,6 @@ class TensorDictModuleBase(nn.Module):
         module = self.__dict__.get("module")
         if module is not None:
             entries.insert(0, f"module={module}")
-        entries.append(f"device={self.device}")
         entries.append(f"in_keys={self.in_keys}")
         entries.append(f"out_keys={self.out_keys}")
         fields = indent(",\n".join(entries), 4 * " ")
@@ -1234,6 +1227,12 @@ class TensorDictModule(TensorDictModuleBase):
             raise err from RuntimeError(
                 f"TensorDictModule failed with operation\n{module}\n{in_keys}\n{out_keys}."
             )
+
+    @property
+    def device(self) -> torch.device:
+        for p in self.parameters():
+            return p.device
+        return torch.device("cpu")
 
     def __getattr__(self, name: str) -> Any:
         if not is_compiling():

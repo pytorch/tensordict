@@ -376,7 +376,7 @@ class TestTDModule:
         string = repr(MyModule())
         assert "MyModule(" in string
         assert "net=Linear(in_features=3, out_features=4" in string
-        assert "device=" in string
+        assert "device=" not in string
         assert "in_keys=['a']" in string
         assert "out_keys=['b']" in string
 
