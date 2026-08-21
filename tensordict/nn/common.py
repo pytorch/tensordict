@@ -1230,6 +1230,19 @@ class TensorDictModule(TensorDictModuleBase):
 
     @property
     def device(self) -> torch.device:
+        """A deprecated approximation of the module device.
+
+        .. deprecated:: 0.15
+            This property will be removed in TensorDict 0.17 because modules may
+            contain parameters and buffers on multiple devices.
+        """
+        warnings.warn(
+            "TensorDictModule.device is deprecated and will be removed in "
+            "TensorDict 0.17. Modules may contain parameters and buffers on "
+            "multiple devices; inspect the relevant module state explicitly instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         for p in self.parameters():
             return p.device
         return torch.device("cpu")

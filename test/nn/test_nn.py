@@ -394,6 +394,11 @@ class TestTDModule:
         assert string.count("module=") == 1
         assert "module=<function" in string
 
+    def test_device_deprecation(self):
+        mod = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["b"])
+        with pytest.warns(DeprecationWarning, match=r"removed in TensorDict 0\.17"):
+            assert mod.device == torch.device("cpu")
+
     def test_mutable_sequence(self):
         in_keys = self.MyMutableSequence(["a", "b", "c"])
         out_keys = self.MyMutableSequence(["d", "e", "f"])
