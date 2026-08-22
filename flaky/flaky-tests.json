@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-21T06:15:30.856745+00:00",
+  "generated_at": "2026-08-22T06:11:45.926205+00:00",
   "analysis_period": {
-    "start": "2026-06-18",
-    "end": "2026-08-16",
+    "start": "2026-06-30",
+    "end": "2026-08-21",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 45652,
+    "total_tests": 45654,
     "flaky_count": 132,
     "new_flaky_count": 0,
     "resolved_count": 0
@@ -41,7 +41,7 @@
       "passed": 198,
       "failed": 16,
       "error": 0,
-      "avg_duration_s": 0.005,
+      "avg_duration_s": 0.006,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -321,7 +321,7 @@
       "passed": 198,
       "failed": 16,
       "error": 0,
-      "avg_duration_s": 0.005,
+      "avg_duration_s": 0.006,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -821,7 +821,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 1.081,
+      "avg_duration_s": 1.088,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -841,7 +841,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.544,
+      "avg_duration_s": 0.545,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -861,7 +861,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.26,
+      "avg_duration_s": 0.262,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -881,7 +881,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.259,
+      "avg_duration_s": 0.253,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -901,7 +901,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.277,
+      "avg_duration_s": 0.278,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -981,7 +981,7 @@
       "passed": 177,
       "failed": 14,
       "error": 0,
-      "avg_duration_s": 0.161,
+      "avg_duration_s": 0.162,
       "recent_failures": [
         "2026-07-09T14:05:10Z",
         "2026-07-09T14:05:10Z",
@@ -1001,7 +1001,7 @@
       "passed": 52,
       "failed": 4,
       "error": 0,
-      "avg_duration_s": 0.303,
+      "avg_duration_s": 0.272,
       "recent_failures": [
         "2026-07-09T09:09:35Z",
         "2026-07-09T09:09:35Z",
@@ -1020,7 +1020,7 @@
       "passed": 52,
       "failed": 4,
       "error": 0,
-      "avg_duration_s": 0.257,
+      "avg_duration_s": 0.258,
       "recent_failures": [
         "2026-07-09T09:09:35Z",
         "2026-07-09T09:09:35Z",
@@ -1058,7 +1058,7 @@
       "passed": 52,
       "failed": 4,
       "error": 0,
-      "avg_duration_s": 0.246,
+      "avg_duration_s": 0.247,
       "recent_failures": [
         "2026-07-09T09:09:35Z",
         "2026-07-09T09:09:35Z",
@@ -2514,11 +2514,11 @@
     },
     {
       "nodeid": "test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous[0-device1]",
-      "executions": 24,
+      "executions": 28,
       "failures": 2,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.0667,
-      "passed": 22,
+      "failure_rate": 0.0714,
+      "flaky_score": 0.0571,
+      "passed": 26,
       "failed": 2,
       "error": 0,
       "avg_duration_s": 0.008,
@@ -2531,11 +2531,11 @@
     },
     {
       "nodeid": "test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous[2-device1]",
-      "executions": 24,
+      "executions": 28,
       "failures": 2,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.0667,
-      "passed": 22,
+      "failure_rate": 0.0714,
+      "flaky_score": 0.0571,
+      "passed": 26,
       "failed": 2,
       "error": 0,
       "avg_duration_s": 0.005,
@@ -2548,11 +2548,11 @@
     },
     {
       "nodeid": "test.tensordict.test_generic.TestGeneric::test_consolidate_non_contiguous_requires_grad[device1]",
-      "executions": 24,
+      "executions": 28,
       "failures": 2,
-      "failure_rate": 0.0833,
-      "flaky_score": 0.0667,
-      "passed": 22,
+      "failure_rate": 0.0714,
+      "flaky_score": 0.0571,
+      "passed": 26,
       "failed": 2,
       "error": 0,
       "avg_duration_s": 0.005,
