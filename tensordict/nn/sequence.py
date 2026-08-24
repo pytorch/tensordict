@@ -275,7 +275,7 @@ class TensorDictSequential(TensorDictModule):
             selected_out_keys = unravel_key_list(selected_out_keys)
             if not all(key in self.out_keys for key in selected_out_keys):
                 raise ValueError("All keys in selected_out_keys must be in out_keys.")
-            self.out_keys = selected_out_keys
+            self._out_keys_apparent = selected_out_keys
         else:
             self._select_before_return = False
 
@@ -337,7 +337,7 @@ class TensorDictSequential(TensorDictModule):
         selected_out_keys = unravel_key_list(selected_out_keys)
         if not all(key in self.out_keys for key in selected_out_keys):
             raise ValueError("All keys in selected_out_keys must be in out_keys.")
-        self.out_keys = selected_out_keys
+        self._out_keys_apparent = selected_out_keys
         return self
 
     def select_subsequence(

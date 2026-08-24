@@ -391,7 +391,7 @@ class _OutKeysSelect:
         self.module = module
         if not all(key in module.out_keys for key in self.out_keys):
             raise RuntimeError("Some keys are not part of the module out_keys.")
-        module.out_keys = self.out_keys
+        module._out_keys_apparent = self.out_keys
 
     def __call__(  # noqa: F811
         self,
@@ -409,7 +409,7 @@ class _OutKeysSelect:
         if not tensordict_in and kwargs.get("tensordict") is not None:
             tensordict_in = kwargs.pop("tensordict")
         is_dispatched = self._detect_dispatch(tensordict_in, kwargs, in_keys)
-        out_keys = self.out_keys
+        out_keys = module.out_keys
         # if dispatch filtered the out keys as they should we're happy
         if is_dispatched:
             if (not isinstance(tensordict_out, tuple) and len(out_keys) == 1) or (
@@ -563,11 +563,7 @@ class TensorDictModuleBase(nn.Module):
 
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
-        # the first time out_keys are set, they are marked as ground truth
-        value = unravel_key_list(list(value))
-        if not hasattr(self, "_out_keys"):
-            self._out_keys = value
-        self._out_keys_apparent = value
+        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
 
     def select_out_keys(self, *out_keys) -> TensorDictModuleBase:  # noqa: F811
         """Selects the keys that will be found in the output tensordict.

@@ -408,6 +408,29 @@ class TestTDModule:
         assert "e" in td
         assert "f" in td
 
+    def test_out_keys_setter(self):
+        net = nn.Linear(3, 4)
+        td_module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+
+        def split_output(module, args, output):
+            return output, output.mean(dim=1)
+
+        net.register_forward_hook(split_output)
+        td_module.out_keys = ["out1", "out2"]
+
+        x = torch.randn(3, 3)
+        td_out = td_module(TensorDict({"in": x}, [3]))
+        assert td_module.out_keys == td_module.out_keys_source == ["out1", "out2"]
+        assert "out" not in td_out
+        torch.testing.assert_close(td_out["out2"], td_out["out1"].mean(dim=1))
+
+        out1, out2 = td_module(x)
+        torch.testing.assert_close(out2, out1.mean(dim=1))
+
+        td_module.select_out_keys("out1")
+        td_module.out_keys = ["out1", "out2"]
+        assert "out2" in td_module(TensorDict({"in": x}, [3]))
+
     def test_auto_unravel(self):
         tdm = TensorDictModule(
             lambda x: x,
@@ -1271,6 +1294,7 @@ class TestTDSequence:
         )
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert seq.out_keys == ["key2"]
+        assert seq.out_keys_source == ["foo1", "key1", "key2"]
 
     def test_key_exclusion_constructor_exec(self):
         module1 = TensorDictModule(
@@ -2022,6 +2046,7 @@ class TestSelectOutKeys:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
             assert mod.out_keys == unravel_key_list(out_d_key)
+            assert mod.out_keys_source == ["c", "d", "e"]
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert "c" not in td.keys()
             assert all(key in td.keys() for key in ["a", "b", "d"])
@@ -2148,6 +2173,7 @@ class TestSelectOutKeys:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
             assert mod.out_keys == unravel_key_list(out_d_key)
+            assert mod.out_keys_source == ["c", "d", "e"]
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert "c" not in td.keys()
             assert all(key in td.keys() for key in ["a", "b", "d"])
