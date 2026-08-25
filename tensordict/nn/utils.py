@@ -12,7 +12,8 @@ from enum import Enum
 from typing import Any, Callable
 
 import torch
-from tensordict.utils import _ContextManager, strtobool
+from tensordict._nestedkey import NestedKey
+from tensordict.utils import _ContextManager, strtobool, unravel_key_list
 from torch import nn
 
 from torch.utils._contextlib import _DecoratorContextManager
@@ -159,17 +160,21 @@ class set_skip_existing(_DecoratorContextManager):
     will check the global value and execute the code accordingly.
 
     When used as a method decorator, it will check the tensordict input keys
-    and if the ``skip_existing()`` call returns ``True``, it will skip the method
-    if all the output keys are already present.
+    and skip the method if the current mode applies to all output keys and they
+    are already present.
     This not not expected to be used as a decorator for methods that do not
     respect the following signature: ``def fun(self, tensordict, *args, **kwargs)``.
 
     Args:
-        mode (bool, optional):
+        mode (bool, list of NestedKey, optional):
             If ``True``, it indicates that existing entries in the graph
             won't be overwritten, unless they are only partially present. :func:`~.skip_existing`
             will return ``True``.
             If ``False``, no check will be performed.
+            If a list of keys, only modules whose output keys are all in the
+            list can be skipped. The keys follow TensorDict's nested-key
+            conventions. If any output key is not in the list, the module runs
+            and recomputes all of its outputs.
             If ``None``, the value of :func:`~.skip_existing` will not be
             changed. This is intended to be used exclusively for decorating
             methods and allow their behaviour to depend on the same class
@@ -269,9 +274,12 @@ class set_skip_existing(_DecoratorContextManager):
     """
 
     def __init__(
-        self, mode: bool | None = True, in_key_attr="in_keys", out_key_attr="out_keys"
+        self,
+        mode: bool | list[NestedKey] | None = True,
+        in_key_attr="in_keys",
+        out_key_attr="out_keys",
     ):
-        self.mode = mode
+        self.mode = unravel_key_list(mode) if isinstance(mode, list) else mode
         self.in_key_attr = in_key_attr
         self.out_key_attr = out_key_attr
         self._called = False
@@ -303,8 +311,10 @@ class set_skip_existing(_DecoratorContextManager):
             in_keys = getattr(_self, self.in_key_attr)
             out_keys = getattr(_self, self.out_key_attr)
             # we use skip_existing to allow users to override the mode internally
+            skip_mode = skip_existing()
             if (
-                skip_existing()
+                skip_mode
+                and (skip_mode is True or all(key in skip_mode for key in out_keys))
                 and all(key in tensordict.keys(True) for key in out_keys)
                 and not any(key in out_keys for key in in_keys)
             ):
@@ -359,8 +369,10 @@ class _set_skip_existing_None(set_skip_existing):
             in_keys = getattr(_self, self.in_key_attr)
             out_keys = getattr(_self, self.out_key_attr)
             # we use skip_existing to allow users to override the mode internally
+            skip_mode = skip_existing()
             if (
-                skip_existing()
+                skip_mode
+                and (skip_mode is True or all(key in skip_mode for key in out_keys))
                 and all(key in tensordict.keys(True) for key in out_keys)
                 and not any(key in out_keys for key in in_keys)
             ):
@@ -386,8 +398,8 @@ class _set_skip_existing_None(set_skip_existing):
         return out
 
 
-def skip_existing():
-    """Returns whether or not existing entries in a tensordict should be re-computed by a module."""
+def skip_existing() -> bool | list[NestedKey]:
+    """Returns which existing entries should not be re-computed by a module."""
     return _skip_existing.get_mode()
 
 

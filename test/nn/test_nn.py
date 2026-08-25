@@ -1939,6 +1939,12 @@ class TestSkipExisting:
         with set_skip_existing(True):
             td = module(TensorDict({"out": torch.zeros(())}, []))  # no print
         assert (td["out"] == 0).all()
+        with set_skip_existing(["other"]):
+            td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        with set_skip_existing(["out"]):
+            td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 0).all()
         td = module(TensorDict({"out": torch.zeros(())}, []))
         assert (td["out"] == 1).all()
 
@@ -2006,6 +2012,32 @@ class TestSkipExisting:
         with set_skip_existing(False):
             module(td)
         assert (td["out"] == 1).all()
+
+    def test_selected_keys(self):
+        value_module = TensorDictModule(
+            lambda value: value + 1, in_keys=["input"], out_keys=["value"]
+        )
+        memory_module = TensorDictModule(
+            lambda memory: memory + 1,
+            in_keys=["memory"],
+            out_keys=[("next", "memory")],
+        )
+        module = TensorDictSequential(value_module, memory_module)
+        td = TensorDict(
+            {
+                "input": torch.zeros(()),
+                "value": torch.full((), 10),
+                "memory": torch.zeros(()),
+                "next": {"memory": torch.full((), 10)},
+            },
+            [],
+        )
+
+        with set_skip_existing(["value"]):
+            module(td)
+
+        assert td["value"].item() == 10
+        assert td["next", "memory"].item() == 1
 
 
 @pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
