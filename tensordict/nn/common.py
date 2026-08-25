@@ -387,11 +387,21 @@ class _OutKeysSelect:
     def _init(self, module):
         if self._initialized:
             return
-        self._initialized = True
-        self.module = module
         if not all(key in module.out_keys for key in self.out_keys):
             raise RuntimeError("Some keys are not part of the module out_keys.")
+        had_out_keys_apparent = "_out_keys_apparent" in module.__dict__
+        out_keys_apparent = module.__dict__.get("_out_keys_apparent")
         module._out_keys_apparent = self.out_keys
+        if module.out_keys != self.out_keys:
+            if had_out_keys_apparent:
+                module._out_keys_apparent = out_keys_apparent
+            else:
+                del module._out_keys_apparent
+            raise RuntimeError(
+                f"{type(module).__name__} does not support select_out_keys."
+            )
+        self._initialized = True
+        self.module = module
 
     def __call__(  # noqa: F811
         self,
@@ -672,10 +682,9 @@ class TensorDictModuleBase(nn.Module):
                 ):
                     err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
                 raise ValueError(err_msg)
-        self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
-        for hook in self._forward_hooks.values():
-            if isinstance(hook, _OutKeysSelect):
-                hook._init(self)
+        hook = _OutKeysSelect(out_keys)
+        hook._init(self)
+        self.register_forward_hook(hook, with_kwargs=True)
         return self
 
     def reset_out_keys(self):
@@ -1319,6 +1328,19 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
+
+    @property
+    def out_keys(self):
+        return self.__dict__.get("_out_keys_apparent", self.td_module.out_keys)
+
+    @property
+    def out_keys_source(self):
+        return self.td_module.out_keys_source
+
+    @out_keys.setter
+    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+        self.td_module.out_keys = value
+        self._out_keys_apparent = self.td_module.out_keys
 
     def __getattr__(self, name: str) -> Any:
         if not is_compiling():

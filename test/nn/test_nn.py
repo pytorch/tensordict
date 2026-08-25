@@ -408,9 +408,12 @@ class TestTDModule:
         assert "e" in td
         assert "f" in td
 
-    def test_out_keys_setter(self):
+    @pytest.mark.parametrize("wrap", [False, True])
+    def test_out_keys_setter(self, wrap):
         net = nn.Linear(3, 4)
         td_module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        if wrap:
+            td_module = TensorDictModuleWrapper(td_module)
 
         def split_output(module, args, output):
             return output, output.mean(dim=1)
@@ -430,6 +433,19 @@ class TestTDModule:
         td_module.select_out_keys("out1")
         td_module.out_keys = ["out1", "out2"]
         assert "out2" in td_module(TensorDict({"in": x}, [3]))
+
+    def test_select_out_keys_unsupported_property(self):
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            return_log_prob=True,
+        )
+
+        with pytest.raises(RuntimeError, match="does not support select_out_keys"):
+            module.select_out_keys("sample")
+        td = module(TensorDict({"loc": torch.zeros(()), "scale": torch.ones(())}, []))
+        assert set(module.out_keys).issubset(td.keys())
 
     def test_auto_unravel(self):
         tdm = TensorDictModule(
@@ -1295,6 +1311,20 @@ class TestTDSequence:
         assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
         assert seq.out_keys == ["key2"]
         assert seq.out_keys_source == ["foo1", "key1", "key2"]
+
+    def test_out_keys_setter(self):
+        module = TensorDictModule(
+            lambda x: (x, x + 1), in_keys=["in"], out_keys=["out1", "out2"]
+        )
+        seq = TensorDictSequential(module)
+        module.out_keys = ["new_out1", "new_out2"]
+        seq.out_keys = module.out_keys
+
+        seq.select_out_keys("new_out2").reset_out_keys()
+
+        assert seq.out_keys == seq.out_keys_source == ["new_out1", "new_out2"]
+        out1, out2 = seq(torch.zeros(()))
+        torch.testing.assert_close(out2, out1 + 1)
 
     def test_key_exclusion_constructor_exec(self):
         module1 = TensorDictModule(

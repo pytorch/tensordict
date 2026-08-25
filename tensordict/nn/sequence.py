@@ -191,6 +191,15 @@ class TensorDictSequential(TensorDictModule):
     module: nn.ModuleList
     _select_before_return = False
 
+    @property
+    def out_keys(self):
+        return self._out_keys_apparent
+
+    @out_keys.setter
+    def out_keys(self, value: List[NestedKey]):
+        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
+        self._complete_out_keys = list(self._out_keys)
+
     @overload
     def __init__(
         self,
