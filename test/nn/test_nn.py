@@ -434,7 +434,25 @@ class TestTDModule:
         td_module.out_keys = ["out1", "out2"]
         assert "out2" in td_module(TensorDict({"in": x}, [3]))
 
-    def test_select_out_keys_unsupported_property(self):
+    def test_select_out_keys_property(self):
+        class PropertyModule(TensorDictModuleBase):
+            @property
+            def out_keys(self):
+                return self.keys
+
+            @out_keys.setter
+            def out_keys(self, value):
+                self.keys = value
+
+        module = PropertyModule()
+        module.out_keys = ["a", "b"]
+        module.select_out_keys("a").select_out_keys("a").reset_out_keys()
+        assert module.out_keys == ["a", "b"]
+        module.select_out_keys("a")
+        module.out_keys = ["a", "c"]
+        module.reset_out_keys()
+        assert module.out_keys == ["a", "c"]
+
         module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"],
             out_keys=["sample"],

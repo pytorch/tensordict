@@ -389,6 +389,7 @@ class _OutKeysSelect:
             return
         if not all(key in module.out_keys for key in self.out_keys):
             raise RuntimeError("Some keys are not part of the module out_keys.")
+        self.source = list(module.out_keys)
         had_out_keys_apparent = "_out_keys_apparent" in module.__dict__
         out_keys_apparent = module.__dict__.get("_out_keys_apparent")
         module._out_keys_apparent = self.out_keys
@@ -397,6 +398,12 @@ class _OutKeysSelect:
                 module._out_keys_apparent = out_keys_apparent
             else:
                 del module._out_keys_apparent
+            out_keys_property = type(module).out_keys
+            if out_keys_property.fset is not None:
+                module.out_keys = self.out_keys
+        if module.out_keys != self.out_keys:
+            if out_keys_property.fset is not None:
+                module.out_keys = self.source
             raise RuntimeError(
                 f"{type(module).__name__} does not support select_out_keys."
             )
@@ -474,11 +481,10 @@ class _OutKeysSelect:
         return True
 
     def remove(self):
-        # reset ground truth
         if self.module is None:
             return
-        if self.module._out_keys is not None:
-            self.module.out_keys = self.module._out_keys
+        if self.module.out_keys == self.out_keys:
+            self.module.out_keys = self.source
 
     def __del__(self):
         self.remove()
@@ -720,7 +726,7 @@ class TensorDictModuleBase(nn.Module):
                 device=None,
                 is_shared=False)
         """
-        for i, hook in list(self._forward_hooks.items()):
+        for i, hook in reversed(list(self._forward_hooks.items())):
             if isinstance(hook, _OutKeysSelect):
                 hook.remove()
                 del self._forward_hooks[i]
