@@ -387,11 +387,28 @@ class _OutKeysSelect:
     def _init(self, module):
         if self._initialized:
             return
-        self._initialized = True
-        self.module = module
         if not all(key in module.out_keys for key in self.out_keys):
             raise RuntimeError("Some keys are not part of the module out_keys.")
-        module.out_keys = self.out_keys
+        self.source = list(module.out_keys)
+        had_out_keys_apparent = "_out_keys_apparent" in module.__dict__
+        out_keys_apparent = module.__dict__.get("_out_keys_apparent")
+        module._out_keys_apparent = self.out_keys
+        if module.out_keys != self.out_keys:
+            if had_out_keys_apparent:
+                module._out_keys_apparent = out_keys_apparent
+            else:
+                del module._out_keys_apparent
+            out_keys_property = type(module).out_keys
+            if out_keys_property.fset is not None:
+                module.out_keys = self.out_keys
+        if module.out_keys != self.out_keys:
+            if out_keys_property.fset is not None:
+                module.out_keys = self.source
+            raise RuntimeError(
+                f"{type(module).__name__} does not support select_out_keys."
+            )
+        self._initialized = True
+        self.module = module
 
     def __call__(  # noqa: F811
         self,
@@ -409,7 +426,7 @@ class _OutKeysSelect:
         if not tensordict_in and kwargs.get("tensordict") is not None:
             tensordict_in = kwargs.pop("tensordict")
         is_dispatched = self._detect_dispatch(tensordict_in, kwargs, in_keys)
-        out_keys = self.out_keys
+        out_keys = module.out_keys
         # if dispatch filtered the out keys as they should we're happy
         if is_dispatched:
             if (not isinstance(tensordict_out, tuple) and len(out_keys) == 1) or (
@@ -464,11 +481,10 @@ class _OutKeysSelect:
         return True
 
     def remove(self):
-        # reset ground truth
         if self.module is None:
             return
-        if self.module._out_keys is not None:
-            self.module.out_keys = self.module._out_keys
+        if self.module.out_keys == self.out_keys:
+            self.module.out_keys = self.source
 
     def __del__(self):
         self.remove()
@@ -563,11 +579,7 @@ class TensorDictModuleBase(nn.Module):
 
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
-        # the first time out_keys are set, they are marked as ground truth
-        value = unravel_key_list(list(value))
-        if not hasattr(self, "_out_keys"):
-            self._out_keys = value
-        self._out_keys_apparent = value
+        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
 
     def select_out_keys(self, *out_keys) -> TensorDictModuleBase:  # noqa: F811
         """Selects the keys that will be found in the output tensordict.
@@ -676,10 +688,9 @@ class TensorDictModuleBase(nn.Module):
                 ):
                     err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
                 raise ValueError(err_msg)
-        self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
-        for hook in self._forward_hooks.values():
-            if isinstance(hook, _OutKeysSelect):
-                hook._init(self)
+        hook = _OutKeysSelect(out_keys)
+        hook._init(self)
+        self.register_forward_hook(hook, with_kwargs=True)
         return self
 
     def reset_out_keys(self):
@@ -715,7 +726,7 @@ class TensorDictModuleBase(nn.Module):
                 device=None,
                 is_shared=False)
         """
-        for i, hook in list(self._forward_hooks.items()):
+        for i, hook in reversed(list(self._forward_hooks.items())):
             if isinstance(hook, _OutKeysSelect):
                 hook.remove()
                 del self._forward_hooks[i]
@@ -1323,6 +1334,19 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
+
+    @property
+    def out_keys(self):
+        return self.__dict__.get("_out_keys_apparent", self.td_module.out_keys)
+
+    @property
+    def out_keys_source(self):
+        return self.td_module.out_keys_source
+
+    @out_keys.setter
+    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+        self.td_module.out_keys = value
+        self._out_keys_apparent = self.td_module.out_keys
 
     def __getattr__(self, name: str) -> Any:
         if not is_compiling():
