@@ -191,6 +191,15 @@ class TensorDictSequential(TensorDictModule):
     module: nn.ModuleList
     _select_before_return = False
 
+    @property
+    def out_keys(self):
+        return self._out_keys_apparent
+
+    @out_keys.setter
+    def out_keys(self, value: List[NestedKey]):
+        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
+        self._complete_out_keys = list(self._out_keys)
+
     @overload
     def __init__(
         self,
@@ -275,7 +284,7 @@ class TensorDictSequential(TensorDictModule):
             selected_out_keys = unravel_key_list(selected_out_keys)
             if not all(key in self.out_keys for key in selected_out_keys):
                 raise ValueError("All keys in selected_out_keys must be in out_keys.")
-            self.out_keys = selected_out_keys
+            self._out_keys_apparent = selected_out_keys
         else:
             self._select_before_return = False
 
@@ -337,7 +346,7 @@ class TensorDictSequential(TensorDictModule):
         selected_out_keys = unravel_key_list(selected_out_keys)
         if not all(key in self.out_keys for key in selected_out_keys):
             raise ValueError("All keys in selected_out_keys must be in out_keys.")
-        self.out_keys = selected_out_keys
+        self._out_keys_apparent = selected_out_keys
         return self
 
     def select_subsequence(
