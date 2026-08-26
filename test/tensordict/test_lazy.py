@@ -275,6 +275,13 @@ class TestLazyStackedTensorDict:
         test_td = LazyStackedTensorDict(*batches)
         assert_allclose_td(td, test_td)
 
+    def test_batched_indexing_ragged_lazy_stack(self):
+        tensordict = lazy_stack([TensorDict(x=torch.zeros(i)) for i in range(5)])
+        indices = [3, 0, 4]
+        batch = tensordict.__getitems__(indices)
+        assert isinstance(batch, LazyStackedTensorDict)
+        assert [len(td["x"]) for td in batch] == indices
+
     def test_all_keys(self):
         td = TensorDict({"a": torch.zeros(1)}, [])
         td2 = TensorDict({"a": torch.zeros(2)}, [])

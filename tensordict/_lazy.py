@@ -2696,6 +2696,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     result.lock_()
                 return result
 
+    __getitems__ = __getitem__
+
     def __eq__(self, other):
         return self._dispatch_comparison(other, "__eq__", "__eq__", default=False)
 
