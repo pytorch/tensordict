@@ -1384,26 +1384,15 @@ class TestTensorClass:
         assert isinstance(data2, MyData)
         assert data2.z == data.z
 
-    def test_pickle_frozen(self):
+    def test_pickle_copy_frozen(self):
         data = MyDataFrozen(
             X=torch.ones(3, 4, 5), z="test_tensorclass", batch_size=[3, 4]
         )
-        data2 = pickle.loads(pickle.dumps(data))
-        assert isinstance(data2, MyDataFrozen)
-        assert (data2.X == data.X).all()
-        assert data2.z == data.z
-        assert data2.batch_size == data.batch_size
-
-    def test_copy_frozen(self):
-        # copy.copy restores through __setstate__, like pickle does
-        data = MyDataFrozen(
-            X=torch.ones(3, 4, 5), z="test_tensorclass", batch_size=[3, 4]
-        )
-        data2 = copy.copy(data)
-        assert isinstance(data2, MyDataFrozen)
-        assert (data2.X == data.X).all()
-        assert data2.z == data.z
-        assert data2.batch_size == data.batch_size
+        for data2 in (pickle.loads(pickle.dumps(data)), copy.copy(data)):
+            assert isinstance(data2, MyDataFrozen)
+            assert (data2.X == data.X).all()
+            assert data2.z == data.z
+            assert data2.batch_size == data.batch_size
 
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
