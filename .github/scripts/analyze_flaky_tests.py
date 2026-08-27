@@ -10,8 +10,8 @@ This script:
 1. Fetches workflow run data via the GitHub API
 2. Downloads JUnit XML test-result artifacts from each run
 3. Parses per-test pass/fail outcomes from the XML
-4. Aggregates statistics across runs
-5. Identifies flaky tests based on intermittent failure patterns
+4. Aggregates statistics by test and CI environment
+5. Identifies flaky tests from fail/pass evidence on the same revision
 6. Generates JSON and Markdown reports
 
 Requires that CI jobs produce JUnit XML (via ``pytest --junitxml``)
@@ -25,7 +25,6 @@ import os
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -33,11 +32,9 @@ from pathlib import Path
 # Configuration
 # =============================================================================
 
-FLAKY_THRESHOLD_MIN = 0.05  # 5%
-FLAKY_THRESHOLD_MAX = 0.80  # 80%
-MIN_FAILURES_FOR_FLAKY = 2
-MIN_EXECUTIONS = 3
 NEW_FLAKY_DAYS = 7
+ACTIVE_FLAKY_DAYS = 14
+FAILURE_OUTCOMES = {"failed", "error"}
 
 
 # =============================================================================
@@ -197,11 +194,6 @@ def collect_test_data(
         with tempfile.TemporaryDirectory() as tmpdir:
             ok = gh_run_download(repo, run_id, "test-results-*", tmpdir)
             if not ok:
-                run_metadata[run_id] = {
-                    "date": run_date,
-                    "sha": commit_sha,
-                    "conclusion": run["conclusion"],
-                }
                 continue
 
             xml_files = list(Path(tmpdir).rglob("*.xml"))
@@ -212,15 +204,17 @@ def collect_test_data(
                     t["_run_id"] = run_id
                     t["_run_date"] = run_date
                     t["_commit_sha"] = commit_sha
+                    t["_workflow"] = workflow_name
                     t["_artifact"] = artifact_dir
                     t["_xml_file"] = xml_file.name
                 all_tests.extend(tests)
 
-        run_metadata[run_id] = {
-            "date": run_date,
-            "sha": commit_sha,
-            "conclusion": run["conclusion"],
-        }
+        if xml_files:
+            run_metadata[run_id] = {
+                "date": run_date,
+                "sha": commit_sha,
+                "conclusion": run["conclusion"],
+            }
 
     print(f"  Collected {len(all_tests)} test records from {len(run_metadata)} runs")
     return all_tests, run_metadata
@@ -231,20 +225,9 @@ def collect_test_data(
 # =============================================================================
 
 
-def aggregate_test_stats(tests: list[dict]) -> dict[str, dict]:
-    """Aggregate statistics per test nodeid across all runs."""
-    stats_map: dict[str, dict] = defaultdict(
-        lambda: {
-            "executions": 0,
-            "passed": 0,
-            "failed": 0,
-            "error": 0,
-            "skipped": 0,
-            "total_duration": 0.0,
-            "failure_dates": [],
-            "run_ids": set(),
-        }
-    )
+def aggregate_test_stats(tests: list[dict]) -> dict[tuple[str, str], dict]:
+    """Aggregate attempts without mixing CI matrix environments."""
+    stats_map: dict[tuple[str, str], dict] = {}
 
     for t in tests:
         nodeid = t["nodeid"]
@@ -252,10 +235,32 @@ def aggregate_test_stats(tests: list[dict]) -> dict[str, dict]:
         if outcome == "skipped":
             continue
 
-        stats = stats_map[nodeid]
+        environment = f"{t['_workflow']} / {t['_artifact']}"
+        stats = stats_map.setdefault(
+            (nodeid, environment),
+            {
+                "nodeid": nodeid,
+                "environment": environment,
+                "executions": 0,
+                "passed": 0,
+                "failed": 0,
+                "error": 0,
+                "total_duration": 0.0,
+                "failure_dates": [],
+                "attempts": [],
+            },
+        )
         stats["executions"] += 1
-        stats["run_ids"].add(t["_run_id"])
         stats["total_duration"] += t.get("duration", 0.0)
+        stats["attempts"].append(
+            {
+                "outcome": outcome,
+                "run_id": t["_run_id"],
+                "date": t["_run_date"],
+                "sha": t["_commit_sha"],
+                "xml_file": t["_xml_file"],
+            }
+        )
 
         if outcome == "passed":
             stats["passed"] += 1
@@ -268,88 +273,112 @@ def aggregate_test_stats(tests: list[dict]) -> dict[str, dict]:
             if t.get("_run_date"):
                 stats["failure_dates"].append(t["_run_date"])
 
-    for _nodeid, s in stats_map.items():
-        s["run_ids"] = list(s["run_ids"])
-
-    return dict(stats_map)
+    return stats_map
 
 
-def calculate_flaky_score(stats: dict) -> float:
-    if stats["executions"] < MIN_EXECUTIONS:
-        return 0.0
-
-    total_failures = stats["failed"] + stats["error"]
-    failure_rate = total_failures / stats["executions"]
-
-    if failure_rate >= FLAKY_THRESHOLD_MAX or failure_rate <= FLAKY_THRESHOLD_MIN:
-        return 0.0
-
-    if failure_rate <= 0.5:
-        base_score = failure_rate * 2
-    else:
-        base_score = (1 - failure_rate) * 2
-
-    confidence = min(1.0, total_failures / 5)
-    return min(1.0, base_score * confidence)
+def parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
-def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
-    flaky: list[dict] = []
+def identify_flaky_tests(
+    test_stats: dict[tuple[str, str], dict], now: datetime | None = None
+) -> list[dict]:
+    """Return tests with recent fail/pass evidence on one revision and environment."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    active_cutoff = now - timedelta(days=ACTIVE_FLAKY_DAYS)
+    flaky_by_nodeid: dict[str, dict] = {}
 
-    for nodeid, stats in test_stats.items():
-        if stats["executions"] < MIN_EXECUTIONS:
+    for stats in test_stats.values():
+        revisions: dict[str, dict] = {}
+        for attempt in stats["attempts"]:
+            revision = revisions.setdefault(
+                attempt["sha"],
+                {"attempts": [], "outcomes": set()},
+            )
+            revision["attempts"].append(attempt)
+            revision["outcomes"].add(attempt["outcome"])
+
+        confirmed_revisions = []
+        for sha, revision in revisions.items():
+            outcomes = revision["outcomes"]
+            if "passed" not in outcomes or not outcomes.intersection(FAILURE_OUTCOMES):
+                continue
+            failure_attempts = [
+                attempt
+                for attempt in revision["attempts"]
+                if attempt["outcome"] in FAILURE_OUTCOMES
+            ]
+            parsed_failure_dates = [
+                parsed
+                for attempt in failure_attempts
+                if (parsed := parse_datetime(attempt["date"])) is not None
+            ]
+            if not parsed_failure_dates or max(parsed_failure_dates) < active_cutoff:
+                continue
+            confirmed_revisions.append(
+                {
+                    "sha": sha,
+                    "date": max(parsed_failure_dates).isoformat(),
+                    "environment": stats["environment"],
+                    "run_ids": sorted(
+                        {attempt["run_id"] for attempt in revision["attempts"]}
+                    ),
+                }
+            )
+
+        if not confirmed_revisions:
             continue
 
-        total_failures = stats["failed"] + stats["error"]
-        if total_failures < MIN_FAILURES_FOR_FLAKY:
-            continue
-
-        failure_rate = total_failures / stats["executions"]
-        if failure_rate <= FLAKY_THRESHOLD_MIN or failure_rate >= FLAKY_THRESHOLD_MAX:
-            continue
-
-        flaky_score = calculate_flaky_score(stats)
-        if flaky_score <= 0:
-            continue
-
-        first_failure = None
-        is_new = False
-        if stats["failure_dates"]:
-            first_failure = sorted(stats["failure_dates"])[0]
-            try:
-                first_dt = datetime.fromisoformat(first_failure.replace("Z", "+00:00"))
-                cutoff = datetime.now(timezone.utc) - timedelta(days=NEW_FLAKY_DAYS)
-                is_new = first_dt > cutoff
-            except ValueError:
-                pass
-
-        avg_duration = (
-            stats["total_duration"] / stats["executions"] if stats["executions"] else 0
-        )
-
-        flaky.append(
+        nodeid = stats["nodeid"]
+        flaky = flaky_by_nodeid.setdefault(
+            nodeid,
             {
                 "nodeid": nodeid,
-                "executions": stats["executions"],
-                "failures": total_failures,
-                "failure_rate": round(failure_rate, 4),
-                "flaky_score": round(flaky_score, 4),
-                "passed": stats["passed"],
-                "failed": stats["failed"],
-                "error": stats["error"],
-                "avg_duration_s": round(avg_duration, 3),
-                "recent_failures": (
-                    sorted(stats["failure_dates"])[-5:]
-                    if stats["failure_dates"]
-                    else []
-                ),
-                "first_seen_flaky": first_failure,
-                "is_new": is_new,
-            }
+                "family": nodeid.split("[", 1)[0],
+                "executions": 0,
+                "passed": 0,
+                "failed": 0,
+                "error": 0,
+                "total_duration": 0.0,
+                "recent_failures": [],
+                "environments": [],
+                "confirmed_revisions": [],
+            },
         )
+        flaky["executions"] += stats["executions"]
+        flaky["passed"] += stats["passed"]
+        flaky["failed"] += stats["failed"]
+        flaky["error"] += stats["error"]
+        flaky["total_duration"] += stats["total_duration"]
+        flaky["recent_failures"].extend(stats["failure_dates"])
+        flaky["environments"].append(stats["environment"])
+        flaky["confirmed_revisions"].extend(confirmed_revisions)
 
-    flaky.sort(key=lambda x: x["flaky_score"], reverse=True)
-    return flaky
+    flaky_tests = []
+    for flaky in flaky_by_nodeid.values():
+        flaky["failures"] = flaky["failed"] + flaky["error"]
+        flaky["failure_rate"] = round(flaky["failures"] / flaky["executions"], 4)
+        flaky["avg_duration_s"] = round(
+            flaky.pop("total_duration") / flaky["executions"], 3
+        )
+        flaky["recent_failures"] = sorted(flaky["recent_failures"])[-5:]
+        flaky["environments"] = sorted(set(flaky["environments"]))
+        flaky["confirmed_revisions"].sort(key=lambda revision: revision["date"])
+        flaky["first_seen_flaky"] = flaky["confirmed_revisions"][0]["date"]
+        flaky["last_failed"] = flaky["confirmed_revisions"][-1]["date"]
+        flaky_tests.append(flaky)
+
+    flaky_tests.sort(
+        key=lambda test: (-len(test["confirmed_revisions"]), test["nodeid"])
+    )
+    return flaky_tests
 
 
 # =============================================================================
@@ -359,11 +388,15 @@ def identify_flaky_tests(test_stats: dict[str, dict]) -> list[dict]:
 
 def generate_json_report(
     flaky_tests: list[dict],
-    test_stats: dict[str, dict],
+    test_stats: dict[tuple[str, str], dict],
     run_metadata: dict,
     output_path: Path,
+    repo: str,
+    previous_report: dict | None = None,
+    now: datetime | None = None,
 ) -> dict:
-    now = datetime.now(timezone.utc)
+    if now is None:
+        now = datetime.now(timezone.utc)
 
     if run_metadata:
         dates = [v["date"] for v in run_metadata.values()]
@@ -372,27 +405,47 @@ def generate_json_report(
     else:
         start_date = end_date = now.strftime("%Y-%m-%d")
 
-    new_flaky_count = sum(1 for t in flaky_tests if t.get("is_new"))
+    current_families = {test["family"] for test in flaky_tests}
+    if previous_report is not None:
+        previous_families = {
+            test.get("family", test["nodeid"].split("[", 1)[0])
+            for test in previous_report.get("flaky_tests", [])
+        }
+        new_families = current_families - previous_families
+        resolved_families = previous_families - current_families
+    else:
+        new_cutoff = now - timedelta(days=NEW_FLAKY_DAYS)
+        new_families = {
+            test["family"]
+            for test in flaky_tests
+            if (first_seen := parse_datetime(test["first_seen_flaky"])) is not None
+            and first_seen > new_cutoff
+        }
+        resolved_families = set()
+
+    for test in flaky_tests:
+        test["is_new"] = test["family"] in new_families
 
     report = {
         "generated_at": now.isoformat(),
+        "repository": repo,
         "analysis_period": {
             "start": start_date,
             "end": end_date,
             "runs_analyzed": len(run_metadata),
         },
         "summary": {
-            "total_tests": len(test_stats),
-            "flaky_count": len(flaky_tests),
-            "new_flaky_count": new_flaky_count,
-            "resolved_count": 0,
+            "total_tests": len({nodeid for nodeid, _environment in test_stats}),
+            "flaky_count": len(current_families),
+            "flaky_case_count": len(flaky_tests),
+            "new_flaky_count": len(new_families),
+            "resolved_count": len(resolved_families),
         },
         "flaky_tests": flaky_tests,
+        "resolved_test_families": sorted(resolved_families),
         "thresholds": {
-            "min_failure_rate": FLAKY_THRESHOLD_MIN,
-            "max_failure_rate": FLAKY_THRESHOLD_MAX,
-            "min_failures": MIN_FAILURES_FOR_FLAKY,
-            "min_executions": MIN_EXECUTIONS,
+            "active_failure_days": ACTIVE_FLAKY_DAYS,
+            "evidence": "fail_and_pass_on_same_revision_and_environment",
         },
     }
 
@@ -412,8 +465,10 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
         "",
         "## Summary",
         "",
-        f"- **Flaky tests**: {summary['flaky_count']}",
-        f"- **Newly flaky** (last 7 days): {summary['new_flaky_count']}",
+        f"- **Confirmed flaky test families**: {summary['flaky_count']}",
+        f"- **Affected parameterized cases**: {summary['flaky_case_count']}",
+        f"- **Newly confirmed**: {summary['new_flaky_count']}",
+        f"- **Resolved since previous report**: {summary['resolved_count']}",
         f"- **Total tests analyzed**: {summary['total_tests']}",
         f"- **CI runs analyzed**: {report['analysis_period']['runs_analyzed']}",
         "",
@@ -426,8 +481,8 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             [
                 "## Flaky Tests",
                 "",
-                "| Test | Failure Rate | Failures | Flaky Score | Last Failed |",
-                "|------|--------------|----------|-------------|-------------|",
+                "| Test | Environments | Confirmed revisions | Failures | Last failed |",
+                "|------|--------------|---------------------|----------|-------------|",
             ]
         )
 
@@ -436,19 +491,25 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             if len(nodeid) > 80:
                 nodeid = "..." + nodeid[-77:]
 
-            rate_str = (
-                f"{test['failure_rate'] * 100:.1f}%"
-                f" ({test['failures']}/{test['executions']})"
-            )
-            score_str = f"{test['flaky_score']:.2f}"
-            last_failed = (
-                test["recent_failures"][-1][:10] if test["recent_failures"] else "N/A"
-            )
+            environments = "<br>".join(test["environments"])
+            revisions = []
+            for revision in test["confirmed_revisions"][-3:]:
+                sha = revision["sha"][:7]
+                if revision["run_ids"]:
+                    run_id = revision["run_ids"][-1]
+                    revisions.append(
+                        f"[`{sha}`](https://github.com/"
+                        f"{report['repository']}/actions/runs/{run_id})"
+                    )
+                else:
+                    revisions.append(f"`{sha}`")
+            revision_str = ", ".join(revisions)
             new_marker = " **NEW**" if test.get("is_new") else ""
 
             lines.append(
-                f"| `{nodeid}`{new_marker} | {rate_str} | "
-                f"{test['failures']} | {score_str} | {last_failed} |"
+                f"| `{nodeid}`{new_marker} | {environments} | {revision_str} | "
+                f"{test['failures']}/{test['executions']} | "
+                f"{test['last_failed'][:10]} |"
             )
 
         lines.extend(["", ""])
@@ -464,10 +525,17 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             [
                 "## No Flaky Tests Detected!",
                 "",
-                "All tests are passing consistently across recent CI runs.",
+                "No test has recent fail/pass evidence on the same commit and CI environment.",
                 "",
             ]
         )
+
+    resolved_tests = report.get("resolved_test_families", [])
+    if resolved_tests:
+        lines.extend(["## Resolved Since Previous Report", ""])
+        for test in resolved_tests[:30]:
+            lines.append(f"- `{test}`")
+        lines.append("")
 
     lines.extend(
         [
@@ -475,10 +543,8 @@ def generate_markdown_report(report: dict, output_path: Path) -> None:
             "",
             "## Configuration",
             "",
-            f"- Minimum failure rate: {report['thresholds']['min_failure_rate'] * 100:.0f}%",
-            f"- Maximum failure rate: {report['thresholds']['max_failure_rate'] * 100:.0f}%",
-            f"- Minimum failures required: {report['thresholds']['min_failures']}",
-            f"- Minimum executions required: {report['thresholds']['min_executions']}",
+            "- Required evidence: fail and pass on the same commit and CI environment",
+            f"- Active failure window: {report['thresholds']['active_failure_days']} days",
             "",
             "---",
             "",
@@ -536,6 +602,10 @@ def main():
         default="flaky-reports",
         help="Output directory",
     )
+    parser.add_argument(
+        "--previous-report",
+        help="Previous JSON report used to calculate new and resolved tests",
+    )
     args = parser.parse_args()
 
     repo = get_repo()
@@ -543,6 +613,15 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     workflows = [w.strip() for w in args.workflows.split(",") if w.strip()]
+    previous_report = None
+    if args.previous_report:
+        previous_report_path = Path(args.previous_report)
+        if previous_report_path.exists():
+            try:
+                with open(previous_report_path, encoding="utf-8") as f:
+                    previous_report = json.load(f)
+            except (json.JSONDecodeError, OSError) as exc:
+                print(f"Warning: could not read previous report: {exc}")
 
     print(f"Analyzing flaky tests for {repo}")
     print(f"  Workflows: {', '.join(workflows)}")
@@ -562,27 +641,33 @@ def main():
         all_run_metadata.update(run_metadata)
 
     if not all_tests:
-        print(
-            "\nNo test-level data collected (artifacts may not exist yet)."
-            "\nGenerating empty report."
+        raise RuntimeError(
+            "No test-level data collected; refusing to replace the existing report"
         )
-        test_stats: dict[str, dict] = {}
-        flaky_tests: list[dict] = []
-    else:
-        print("\n" + "=" * 60)
-        print("Aggregating per-test statistics...")
-        print("=" * 60)
-        test_stats = aggregate_test_stats(all_tests)
-        print(f"  Analyzed {len(test_stats)} unique tests")
 
-        print("  Identifying flaky tests...")
-        flaky_tests = identify_flaky_tests(test_stats)
-        print(f"  Found {len(flaky_tests)} flaky tests")
+    print("\n" + "=" * 60)
+    print("Aggregating per-test statistics...")
+    print("=" * 60)
+    test_stats = aggregate_test_stats(all_tests)
+    print(f"  Analyzed {len(test_stats)} test/environment combinations")
+
+    print("  Identifying flaky tests...")
+    flaky_tests = identify_flaky_tests(test_stats)
+    flaky_families = {test["family"] for test in flaky_tests}
+    print(
+        f"  Found {len(flaky_families)} flaky test families "
+        f"across {len(flaky_tests)} parameterized cases"
+    )
 
     print("\nGenerating reports...")
 
     json_report = generate_json_report(
-        flaky_tests, test_stats, all_run_metadata, output_dir / "flaky-tests.json"
+        flaky_tests,
+        test_stats,
+        all_run_metadata,
+        output_dir / "flaky-tests.json",
+        repo,
+        previous_report,
     )
 
     json_report["workflows_analyzed"] = workflows
@@ -590,7 +675,9 @@ def main():
         json.dump(json_report, f, indent=2)
 
     generate_markdown_report(json_report, output_dir / "flaky-tests.md")
-    generate_badge_json(len(flaky_tests), output_dir / "badge.json")
+    generate_badge_json(
+        json_report["summary"]["flaky_count"], output_dir / "badge.json"
+    )
 
     print(f"\nReports written to {output_dir}/")
     print("  - flaky-tests.json")
@@ -599,7 +686,7 @@ def main():
 
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write(f"flaky_count={len(flaky_tests)}\n")
+            f.write(f"flaky_count={json_report['summary']['flaky_count']}\n")
             f.write(f"new_flaky_count={json_report['summary']['new_flaky_count']}\n")
             f.write(f"resolved_count={json_report['summary']['resolved_count']}\n")
 
