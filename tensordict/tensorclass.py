@@ -1963,8 +1963,14 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     Args:
         state (dict): State parameter to set the object
     """
-    self._tensordict = state.get("tensordict")
-    self._non_tensordict = state.get("non_tensordict")
+    if type(self)._frozen:
+        # Bypass the dataclass guard while preserving custom __setattr__ behavior
+        # for non-frozen tensorclasses.
+        object.__setattr__(self, "_tensordict", state.get("tensordict"))
+        object.__setattr__(self, "_non_tensordict", state.get("non_tensordict"))
+    else:
+        self._tensordict = state.get("tensordict")
+        self._non_tensordict = state.get("non_tensordict")
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
