@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import ast
 import contextlib
+import copy
 import dataclasses
 import importlib.util
 import inspect
@@ -251,6 +252,12 @@ except Exception:
 class TCStrings:
     a: str
     b: str
+
+
+@tensorclass(frozen=True)
+class MyDataFrozen:
+    X: torch.Tensor
+    z: str
 
 
 class TestTensorClass:
@@ -1376,6 +1383,16 @@ class TestTensorClass:
         )
         assert isinstance(data2, MyData)
         assert data2.z == data.z
+
+    def test_pickle_copy_frozen(self):
+        data = MyDataFrozen(
+            X=torch.ones(3, 4, 5), z="test_tensorclass", batch_size=[3, 4]
+        )
+        for data2 in (pickle.loads(pickle.dumps(data)), copy.copy(data)):
+            assert isinstance(data2, MyDataFrozen)
+            assert (data2.X == data.X).all()
+            assert data2.z == data.z
+            assert data2.batch_size == data.batch_size
 
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
