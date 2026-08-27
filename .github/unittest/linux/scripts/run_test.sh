@@ -66,7 +66,20 @@ JUNIT_DIR="${RUNNER_ARTIFACT_DIR:-.}"
 mkdir -p "$JUNIT_DIR"
 
 coverage run -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
-coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120 --junitxml="$JUNIT_DIR/junit-tests.xml"
+test_status=0
+coverage run -m pytest --runslow --instafail -v --durations 20 --timeout 120 --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
+
+if [ "$test_status" -ne 0 ]; then
+    # Record same-commit evidence without hiding the original CI failure.
+    python -m pytest --runslow --last-failed --last-failed-no-failures none \
+        --instafail -v --durations 20 --timeout 120 \
+        --junitxml="$JUNIT_DIR/junit-tests-rerun.xml" || true
+    if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
+        cp "$JUNIT_DIR"/junit-*.xml "$RUNNER_TEST_RESULTS_DIR/" 2>/dev/null || true
+    fi
+    exit "$test_status"
+fi
+
 coverage run -m pytest ./benchmarks --instafail -v --durations 20 --junitxml="$JUNIT_DIR/junit-benchmarks.xml"
 coverage xml -i
 
