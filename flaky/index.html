@@ -227,11 +227,15 @@
     <div class="summary-cards">
       <div class="card">
         <div class="card-value" id="flaky-count">-</div>
-        <div class="card-label">Flaky Tests</div>
+        <div class="card-label">Confirmed Flaky Families</div>
+      </div>
+      <div class="card">
+        <div class="card-value" id="flaky-case-count">-</div>
+        <div class="card-label">Affected Cases</div>
       </div>
       <div class="card">
         <div class="card-value info" id="new-flaky-count">-</div>
-        <div class="card-label">Newly Flaky (7 days)</div>
+        <div class="card-label">Newly Confirmed</div>
       </div>
       <div class="card">
         <div class="card-value success" id="resolved-count">-</div>
@@ -266,8 +270,8 @@
         <a href="flaky-tests.md">Markdown Report</a>
       </p>
       <p>
-        Flaky tests are identified by parsing per-test JUnit XML results from recent CI runs.
-        A test is considered flaky if it fails intermittently (5-80% failure rate) with at least 2 failures.
+        A test is confirmed flaky when it both fails and passes on the same commit and CI environment.
+        Evidence older than 14 days is excluded.
       </p>
     </footer>
   </div>
@@ -285,6 +289,7 @@
         flakyCountEl.textContent = flakyCount;
         flakyCountEl.className = 'card-value ' + (flakyCount === 0 ? 'success' : flakyCount <= 5 ? 'warning' : 'danger');
 
+        document.getElementById('flaky-case-count').textContent = report.summary.flaky_case_count || 0;
         document.getElementById('new-flaky-count').textContent = report.summary.new_flaky_count || 0;
         document.getElementById('resolved-count').textContent = report.summary.resolved_count || 0;
         document.getElementById('runs-analyzed').textContent = report.analysis_period.runs_analyzed;
@@ -319,24 +324,24 @@
       }
 
       const rows = flakyTests.map(test => {
-        const failureRate = (test.failure_rate * 100).toFixed(1);
-        const badgeClass = test.flaky_score >= 0.7 ? 'badge-high' : test.flaky_score >= 0.4 ? 'badge-medium' : 'badge-low';
-        const lastFailed = test.recent_failures && test.recent_failures.length > 0
-          ? test.recent_failures[test.recent_failures.length - 1].split('T')[0]
-          : 'N/A';
+        const environments = (test.environments || []).map(escapeHtml).join('<br>');
+        const revisions = (test.confirmed_revisions || []).map(revision =>
+          '<code>' + escapeHtml(revision.sha.slice(0, 7)) + '</code>'
+        ).join(', ');
+        const lastFailed = test.last_failed ? test.last_failed.split('T')[0] : 'N/A';
 
         return '<tr>' +
           '<td class="test-name">' + escapeHtml(test.nodeid || test.name || '') + '</td>' +
-          '<td>' + failureRate + '% (' + test.failures + '/' + test.executions + ')' +
-          '<div class="progress-bar"><div class="progress-fill ' + badgeClass + '" style="width:' + failureRate + '%"></div></div></td>' +
-          '<td>' + test.flaky_score.toFixed(2) + '</td>' +
+          '<td>' + environments + '</td>' +
+          '<td>' + revisions + '</td>' +
+          '<td>' + test.failures + '/' + test.executions + '</td>' +
           '<td>' + lastFailed + '</td>' +
           '<td>' + (test.is_new ? '<span class="badge badge-new">NEW</span>' : '') + '</td>' +
           '</tr>';
       }).join('');
 
       container.innerHTML =
-        '<table><thead><tr><th>Test</th><th>Failure Rate</th><th>Flaky Score</th><th>Last Failed</th><th>Status</th></tr></thead>' +
+        '<table><thead><tr><th>Test</th><th>Environments</th><th>Confirmed Revisions</th><th>Failed Attempts</th><th>Last Failed</th><th>Status</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>';
     }
 
@@ -348,7 +353,7 @@
         data: {
           labels: history.map(h => h.date),
           datasets: [{
-            label: 'Flaky Tests',
+            label: 'Confirmed Flaky Test Families',
             data: history.map(h => h.flaky_count),
             borderColor: '#58a6ff',
             backgroundColor: 'rgba(88, 166, 255, 0.1)',
