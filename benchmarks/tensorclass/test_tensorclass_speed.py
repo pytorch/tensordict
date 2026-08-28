@@ -9,7 +9,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict import tensorclass, TensorClass
+from tensordict import tensorclass, TensorClass, TensorDict, TypedTensorDict
 
 
 @tensorclass
@@ -26,6 +26,11 @@ class MyDataTensorOnly(TensorClass["tensor_only"]):
     c: torch.Tensor | None
 
 
+class MyTypedTensorDict(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor
+
+
 def test_tc_init(benchmark):
     z = torch.zeros(())
     o = torch.ones(())
@@ -36,6 +41,26 @@ def test_tc_init_tensor_only(benchmark):
     z = torch.zeros(())
     o = torch.ones(())
     benchmark(lambda: MyDataTensorOnly(a=z, b=o, c=None))
+
+
+def test_ttd_init(benchmark):
+    z = torch.zeros(())
+    o = torch.ones(())
+
+    def make_ttd():
+        return MyTypedTensorDict(a=z, b=o, batch_size=[])
+
+    benchmark(make_ttd)
+
+
+def test_td_init_reference(benchmark):
+    z = torch.zeros(())
+    o = torch.ones(())
+
+    def make_td():
+        return TensorDict({"a": z, "b": o}, batch_size=[])
+
+    benchmark(make_td)
 
 
 def test_tc_init_nested(benchmark):
@@ -81,6 +106,24 @@ def test_tc_first_layer_tensor_only(benchmark):
 
     def get():
         return d.a
+
+    benchmark(get)
+
+
+def test_ttd_first_layer_tensor(benchmark):
+    d = MyTypedTensorDict(a=torch.zeros(()), b=torch.ones(()), batch_size=[])
+
+    def get():
+        return d.a
+
+    benchmark(get)
+
+
+def test_td_first_layer_tensor_reference(benchmark):
+    d = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, batch_size=[])
+
+    def get():
+        return d["a"]
 
     benchmark(get)
 

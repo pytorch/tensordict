@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 try:
     from typing import NotRequired
 except ImportError:
@@ -17,6 +20,8 @@ import torch
 from tensordict import lazy_stack, TensorDict, TypedTensorDict
 from tensordict.base import TensorDictBase
 from torch import Tensor
+
+_has_mypy = importlib.util.find_spec("mypy") is not None
 
 # ---------------------------------------------------------------------------
 # Fixture classes
@@ -33,6 +38,10 @@ class ObservedState(PredictorState):
     y: Tensor
     mu: Tensor
     noise: NotRequired[Tensor]
+
+
+class PortableOptionalState(PredictorState):
+    noise: Tensor | None = None
 
 
 class SurvivalState(ObservedState):
@@ -119,6 +128,112 @@ class TestConstruction:
             batch_size=[N, T],
         )
         assert state.batch_size == torch.Size([N, T])
+
+    def test_default_field_is_optional(self):
+        state = PortableOptionalState(
+            eta=torch.randn(3),
+            X=torch.randn(3),
+            beta=torch.randn(3),
+            batch_size=[3],
+        )
+        assert state.noise is None
+        assert "noise" not in state
+        assert PortableOptionalState.__optional_keys__ == frozenset({"noise"})
+
+    def test_default_field_can_be_set(self):
+        noise = torch.randn(3)
+        state = PortableOptionalState(
+            eta=torch.randn(3),
+            X=torch.randn(3),
+            beta=torch.randn(3),
+            noise=noise,
+            batch_size=[3],
+        )
+        assert state.noise is noise
+
+    @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+    def test_static_field_contract(self, tmp_path):
+        from mypy import api
+
+        stubs = tmp_path / "stubs"
+        package = stubs / "tensordict"
+        package.mkdir(parents=True)
+        package.joinpath("__init__.pyi").write_text(
+            "from .typedtensordict import TypedTensorDict as TypedTensorDict\n"
+        )
+        package.joinpath("_td.pyi").write_text(
+            """from typing import Any
+
+class TensorDict:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+"""
+        )
+        package.joinpath("utils.pyi").write_text(
+            """from typing import Any, TypeAlias
+
+DeviceType: TypeAlias = Any
+"""
+        )
+        typed_stub = Path(__file__).parents[2] / "tensordict" / "typedtensordict.pyi"
+        package.joinpath("typedtensordict.pyi").write_text(typed_stub.read_text())
+
+        config = tmp_path / "mypy.ini"
+        config.write_text(
+            f"""[mypy]
+python_version = 3.10
+show_error_codes = True
+mypy_path = {stubs}
+ignore_missing_imports = True
+"""
+        )
+
+        valid = tmp_path / "valid.py"
+        valid.write_text(
+            """from typing_extensions import assert_type
+from tensordict import TypedTensorDict
+
+class State(TypedTensorDict):
+    observation: int
+    reward: int
+    optional: int | None = None
+
+class ChildState(State):
+    done: int
+
+def consume(state: State) -> int:
+    return state.observation + state.reward
+
+state = State(observation=1, reward=2, batch_size=[], device="cpu")
+child = ChildState(observation=1, reward=2, done=0)
+assert_type(state.observation, int)
+assert_type(state.optional, int | None)
+assert_type(consume(child), int)
+"""
+        )
+        stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+        assert status == 0, stdout + stderr
+
+        invalid = tmp_path / "invalid.py"
+        invalid.write_text(
+            """from tensordict import TypedTensorDict
+
+class State(TypedTensorDict):
+    observation: int
+    reward: int
+
+State(observation=1)
+State(observation="bad", reward=2)
+State(observation=1, reward=2, extra=3)
+state = State(observation=1, reward=2)
+state.missing
+"""
+        )
+        stdout, stderr, status = api.run(["--config-file", str(config), str(invalid)])
+        assert status == 1, stdout + stderr
+        assert 'Missing named argument "reward"' in stdout
+        assert 'incompatible type "str"' in stdout
+        assert 'Unexpected keyword argument "extra"' in stdout
+        assert 'has no attribute "missing"' in stdout
 
 
 # ---------------------------------------------------------------------------

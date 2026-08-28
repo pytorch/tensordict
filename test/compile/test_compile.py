@@ -555,6 +555,11 @@ class _TTDState(TypedTensorDict):
     b: torch.Tensor
 
 
+class _TTDOptionalState(TypedTensorDict):
+    a: torch.Tensor
+    b: torch.Tensor | None = None
+
+
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
 )
@@ -588,6 +593,16 @@ class TestTTD:
         a = torch.randn(3)
         b = torch.randn(3)
         torch.testing.assert_close(fn(a, b), fn_c(a, b))
+
+    def test_optional_default(self, mode):
+        def add_optional(td):
+            if td.b is None:
+                return td.a
+            return td.a + td.b
+
+        add_optional_c = torch.compile(add_optional, fullgraph=True, mode=mode)
+        data = _TTDOptionalState(a=torch.ones(3), batch_size=[3])
+        torch.testing.assert_close(add_optional(data), add_optional_c(data))
 
     def test_td_output(self, mode):
         def add_one(td):
