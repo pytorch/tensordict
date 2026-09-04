@@ -415,7 +415,7 @@ To create a lazy stack, one can just call <a class="reference internal" href="..
 <p>The resulting data is just a representation of the two tensordicts as if they had been stacked together along
 dimension 0. <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> supports most common operations of the
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> class, here are some examples:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">data_select</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;stream0&quot;</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">data_select</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"stream0"</span><span class="p">)</span>
 <span class="n">data_plus_1</span> <span class="o">=</span> <span class="n">data</span> <span class="o">+</span> <span class="mi">1</span>
 <span class="n">data_apply</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 </pre></div>
@@ -497,7 +497,7 @@ Here is an implementation of this <code class="docutils literal notranslate"><sp
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">StreamedTensorDict</span><span class="p">(</span><a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">LazyStackedTensorDict</span></a><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A lazy stack class that can be built from a dictionary of streams.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""A lazy stack class that can be built from a dictionary of streams."""</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">from_streams</span><span class="p">(</span>
@@ -543,13 +543,13 @@ each:</p>
 
     <span class="c1"># Running this should take about 10 seconds</span>
     <span class="k">return</span> <span class="k">await</span> <span class="n">StreamedTensorDict</span><span class="o">.</span><span class="n">from_streams</span><span class="p">(</span>
-        <span class="p">{</span><span class="s2">&quot;bucket0&quot;</span><span class="p">:</span> <span class="n">stream0</span><span class="p">,</span> <span class="s2">&quot;bucket1&quot;</span><span class="p">:</span> <span class="n">stream1</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">10</span>
+        <span class="p">{</span><span class="s2">"bucket0"</span><span class="p">:</span> <span class="n">stream0</span><span class="p">,</span> <span class="s2">"bucket1"</span><span class="p">:</span> <span class="n">stream1</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">10</span>
     <span class="p">)</span>
 
 
 <span class="n">td</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/asyncio-runner.html#asyncio.run" title="asyncio.run" class="sphx-glr-backref-module-asyncio sphx-glr-backref-type-py-function"><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span></a><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;TensorDict from stream&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"TensorDict from stream"</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDict from stream TensorDict(
@@ -565,9 +565,9 @@ each:</p>
 <dt>Let’s represent the data from both streams - should be equal to torch.arange() for batch_size * timeout * Hz</dt><dd><p>&lt;=&gt; 1 * 10 secs * 3 or 7</p>
 </dd>
 </dl>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;bucket0 (7Hz, around 70 values)&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;bucket0&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;bucket1 (3Hz, around 30 values)&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;bucket1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;shapes of bucket0 (7Hz, around 70 values)&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;bucket0&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">_nested_tensor_size</span><span class="p">())</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">"bucket0 (7Hz, around 70 values)"</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"bucket0"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"bucket1 (3Hz, around 30 values)"</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"bucket1"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"shapes of bucket0 (7Hz, around 70 values)"</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"bucket0"</span><span class="p">]</span><span class="o">.</span><span class="n">_nested_tensor_size</span><span class="p">())</span>
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>bucket0 (7Hz, around 70 values) tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
@@ -599,7 +599,7 @@ simplify complex data processing tasks, such as bucketizing data streams with di
 By leveraging the power of TensorDict and asyncio, you can build scalable and efficient data processing pipelines
 that can handle even the most demanding real-world applications.</p>
 <p>Thanks for following along with this tutorial! We hope you’ve found it helpful and informative.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 11.026 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 11.024 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-streamed-tensordict-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">streamed_tensordict.ipynb</span></code></a></p>

@@ -405,11 +405,11 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x+1&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x+1&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;w*(x+1)+b&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x+1"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x+1"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"w*(x+1)+b"</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># with tensordict input</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="p">[])))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="p">[])))</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        w*(x+1)+b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -418,7 +418,7 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="go">    batch_size=torch.Size([]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># with tensor input: returns all the output keys in the order of the modules, ie &quot;x+1&quot; and &quot;w*(x+1)+b&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 <span class="go">(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=&lt;AddBackward0&gt;))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
@@ -438,25 +438,25 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NormalParamExtractor</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.functional_modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_functional</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Normal</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"input"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">net1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module1</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">net1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module1</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">net1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"input"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"params"</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">normal_params</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
-<span class="gp">... </span>     <span class="n">NormalParamExtractor</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]</span>
+<span class="gp">... </span>     <span class="n">NormalParamExtractor</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"params"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"loc"</span><span class="p">,</span> <span class="s2">"scale"</span><span class="p">]</span>
 <span class="gp">... </span> <span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_module1</span> <span class="o">=</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">module1</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">normal_params</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">ProbabilisticTensorDictModule</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
-<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"loc"</span><span class="p">,</span> <span class="s2">"scale"</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"hidden"</span><span class="p">],</span>
 <span class="gp">... </span>        <span class="n">distribution_class</span><span class="o">=</span><span class="n">Normal</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_module2</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
-<span class="gp">... </span>   <span class="n">module</span><span class="o">=</span><span class="n">module2</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;hidden&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">]</span>
+<span class="gp">... </span>   <span class="n">module</span><span class="o">=</span><span class="n">module2</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"hidden"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"output"</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">td_module1</span><span class="p">,</span> <span class="n">td_module2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">td_module</span><span class="p">)</span>
@@ -516,9 +516,9 @@ can be used after instantiation, or <cite>selected_out_keys</cite> may be passed
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;d&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"d"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -563,8 +563,8 @@ out_keys that should be found in the output tensordict.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -575,8 +575,8 @@ out_keys that should be found in the output tensordict.</p>
 <span class="go">    batch_size=torch.Size([]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;d&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"d"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -599,7 +599,7 @@ with an updated list of out_keys). It can be reverted using the
 <a class="reference internal" href="tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase.reset_out_keys" title="tensordict.nn.TensorDictModuleBase.reset_out_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDictModuleBase.reset_out_keys()</span></code></a> method.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="o">.</span><span class="n">reset_out_keys</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mod</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())},</span> <span class="p">[]))</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -615,10 +615,10 @@ with an updated list of out_keys). It can be reverted using the
 .. rubric:: Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictSequential</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;z&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -628,8 +628,8 @@ with an updated list of out_keys). It can be reverted using the
 <span class="go">    batch_size=torch.Size([]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;z&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">"z"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -673,98 +673,98 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictSequential</span> <span class="k">as</span> <span class="n">Seq</span><span class="p">,</span> <span class="n">TensorDictModule</span> <span class="k">as</span> <span class="n">Mod</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">idn</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"d"</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"e"</span><span class="p">]),</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules whose output depend on &quot;a&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules whose output depend on "a"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>
 <span class="go">TensorDictSequential(</span>
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;a&#39;],</span>
-<span class="go">          out_keys=[&#39;b&#39;])</span>
+<span class="go">          in_keys=['a'],</span>
+<span class="go">          out_keys=['b'])</span>
 <span class="go">      (1): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;b&#39;],</span>
-<span class="go">          out_keys=[&#39;c&#39;])</span>
+<span class="go">          in_keys=['b'],</span>
+<span class="go">          out_keys=['c'])</span>
 <span class="go">      (2): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;c&#39;],</span>
-<span class="go">          out_keys=[&#39;d&#39;])</span>
+<span class="go">          in_keys=['c'],</span>
+<span class="go">          out_keys=['d'])</span>
 <span class="go">      (3): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;a&#39;],</span>
-<span class="go">          out_keys=[&#39;e&#39;])</span>
+<span class="go">          in_keys=['a'],</span>
+<span class="go">          out_keys=['e'])</span>
 <span class="go">    ),</span>
 <span class="go">    device=cpu,</span>
-<span class="go">    in_keys=[&#39;a&#39;],</span>
-<span class="go">    out_keys=[&#39;b&#39;, &#39;c&#39;, &#39;d&#39;, &#39;e&#39;])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules whose output depend on &quot;c&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">])</span>
+<span class="go">    in_keys=['a'],</span>
+<span class="go">    out_keys=['b', 'c', 'd', 'e'])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules whose output depend on "c"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">])</span>
 <span class="go">TensorDictSequential(</span>
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;c&#39;],</span>
-<span class="go">          out_keys=[&#39;d&#39;])</span>
+<span class="go">          in_keys=['c'],</span>
+<span class="go">          out_keys=['d'])</span>
 <span class="go">    ),</span>
 <span class="go">    device=cpu,</span>
-<span class="go">    in_keys=[&#39;c&#39;],</span>
-<span class="go">    out_keys=[&#39;d&#39;])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of &quot;c&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">])</span>
+<span class="go">    in_keys=['c'],</span>
+<span class="go">    out_keys=['d'])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of "c"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">])</span>
 <span class="go">TensorDictSequential(</span>
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;a&#39;],</span>
-<span class="go">          out_keys=[&#39;b&#39;])</span>
+<span class="go">          in_keys=['a'],</span>
+<span class="go">          out_keys=['b'])</span>
 <span class="go">      (1): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;b&#39;],</span>
-<span class="go">          out_keys=[&#39;c&#39;])</span>
+<span class="go">          in_keys=['b'],</span>
+<span class="go">          out_keys=['c'])</span>
 <span class="go">    ),</span>
 <span class="go">    device=cpu,</span>
-<span class="go">    in_keys=[&#39;a&#39;],</span>
-<span class="go">    out_keys=[&#39;b&#39;, &#39;c&#39;])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of &quot;e&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">])</span>
+<span class="go">    in_keys=['a'],</span>
+<span class="go">    out_keys=['b', 'c'])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select all modules that affect the value of "e"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"e"</span><span class="p">])</span>
 <span class="go">TensorDictSequential(</span>
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictModule(</span>
 <span class="go">          module=&lt;function &lt;lambda&gt; at 0x126ed1ca0&gt;,</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;a&#39;],</span>
-<span class="go">          out_keys=[&#39;e&#39;])</span>
+<span class="go">          in_keys=['a'],</span>
+<span class="go">          out_keys=['e'])</span>
 <span class="go">    ),</span>
 <span class="go">    device=cpu,</span>
-<span class="go">    in_keys=[&#39;a&#39;],</span>
-<span class="go">    out_keys=[&#39;e&#39;])</span>
+<span class="go">    in_keys=['a'],</span>
+<span class="go">    out_keys=['e'])</span>
 </pre></div>
 </div>
 <p>This method propagates to nested sequential:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">Seq</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"c"</span><span class="p">]),</span>
 <span class="gp">... </span>    <span class="p">),</span>
 <span class="gp">... </span>    <span class="n">Seq</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]),</span>
-<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"d"</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="n">Mod</span><span class="p">(</span><span class="n">idn</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"d"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"e"</span><span class="p">]),</span>
 <span class="gp">... </span>    <span class="p">),</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select submodules whose output will be affected by a change in &quot;b&quot; or &quot;d&quot; AND which output is &quot;e&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># select submodules whose output will be affected by a change in "b" or "d" AND which output is "e"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">select_subsequence</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"e"</span><span class="p">])</span>
 <span class="go">TensorDictSequential(</span>
 <span class="go">    module=ModuleList(</span>
 <span class="go">      (0): TensorDictSequential(</span>
@@ -772,21 +772,21 @@ If none is provided, the module’s <code class="docutils literal notranslate"><
 <span class="go">            (0): TensorDictModule(</span>
 <span class="go">                module=&lt;function &lt;lambda&gt; at 0x129efae50&gt;,</span>
 <span class="go">                device=cpu,</span>
-<span class="go">                in_keys=[&#39;b&#39;],</span>
-<span class="go">                out_keys=[&#39;d&#39;])</span>
+<span class="go">                in_keys=['b'],</span>
+<span class="go">                out_keys=['d'])</span>
 <span class="go">            (1): TensorDictModule(</span>
 <span class="go">                module=&lt;function &lt;lambda&gt; at 0x129efae50&gt;,</span>
 <span class="go">                device=cpu,</span>
-<span class="go">                in_keys=[&#39;d&#39;],</span>
-<span class="go">                out_keys=[&#39;e&#39;])</span>
+<span class="go">                in_keys=['d'],</span>
+<span class="go">                out_keys=['e'])</span>
 <span class="go">          ),</span>
 <span class="go">          device=cpu,</span>
-<span class="go">          in_keys=[&#39;b&#39;],</span>
-<span class="go">          out_keys=[&#39;d&#39;, &#39;e&#39;])</span>
+<span class="go">          in_keys=['b'],</span>
+<span class="go">          out_keys=['d', 'e'])</span>
 <span class="go">    ),</span>
 <span class="go">    device=cpu,</span>
-<span class="go">    in_keys=[&#39;b&#39;],</span>
-<span class="go">    out_keys=[&#39;d&#39;, &#39;e&#39;])</span>
+<span class="go">    in_keys=['b'],</span>
+<span class="go">    out_keys=['d', 'e'])</span>
 </pre></div>
 </div>
 <p>The <cite>inplace</cite> argument allows for a fine-grained control over the output type, allowing for instance to write
@@ -805,14 +805,14 @@ the result of the computational graph in the input object without tracking the i
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">x</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
-<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)],</span>
+<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"input"</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"0"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">)],</span>
 <span class="gp">... </span>        <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
 <span class="gp">... </span>        <span class="p">),</span>
 <span class="gp">... </span>    <span class="n">Mod</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="k">lambda</span> <span class="n">y0</span><span class="p">,</span> <span class="n">y1</span><span class="p">:</span> <span class="n">y0</span> <span class="o">*</span> <span class="n">y1</span><span class="p">,</span>
-<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;intermediate&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)],</span>
-<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"0"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"intermediate"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">)],</span>
+<span class="gp">... </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"output"</span><span class="p">],</span>
 <span class="gp">... </span>        <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
 <span class="gp">... </span>        <span class="p">),</span>
 <span class="gp">... </span>    <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="p">)</span>

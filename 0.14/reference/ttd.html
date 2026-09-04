@@ -382,7 +382,7 @@ typed construction, typed attribute access, inheritance, <code class="docutils l
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">eta</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([5, 3])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="p">[</span><span class="s2">"X"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([5, 4])</span>
 </pre></div>
 </div>
@@ -500,9 +500,9 @@ inheriting all parent fields:</p>
 <span class="gp">... </span>    <span class="n">observed_time</span><span class="p">:</span> <span class="n">Tensor</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ObservedState</span><span class="o">.</span><span class="n">__required_keys__</span>
-<span class="go">frozenset({&#39;eta&#39;, &#39;X&#39;, &#39;beta&#39;, &#39;y&#39;, &#39;mu&#39;})</span>
+<span class="go">frozenset({'eta', 'X', 'beta', 'y', 'mu'})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ObservedState</span><span class="o">.</span><span class="n">__optional_keys__</span>
-<span class="go">frozenset({&#39;noise&#39;})</span>
+<span class="go">frozenset({'noise'})</span>
 </pre></div>
 </div>
 <p>Inheritance works as standard Python: <code class="docutils literal notranslate"><span class="pre">isinstance(obs,</span> <span class="pre">PredictorState)</span></code>
@@ -524,7 +524,7 @@ returns <code class="docutils literal notranslate"><span class="pre">True</span>
 <span class="gp">... </span>    <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">mu</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s2">&quot;noise&quot;</span> <span class="ow">in</span> <span class="n">obs</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s2">"noise"</span> <span class="ow">in</span> <span class="n">obs</span>
 <span class="go">False</span>
 </pre></div>
 </div>
@@ -546,7 +546,7 @@ unpacks it into keyword arguments. This makes state transitions concise:</p>
 <span class="gp">... </span>    <span class="n">mu</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">set</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;eta&quot;</span><span class="p">,</span> <span class="s2">&quot;X&quot;</span><span class="p">,</span> <span class="s2">&quot;beta&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;mu&quot;</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">set</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"eta"</span><span class="p">,</span> <span class="s2">"X"</span><span class="p">,</span> <span class="s2">"beta"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">,</span> <span class="s2">"mu"</span><span class="p">}</span>
 <span class="go">True</span>
 </pre></div>
 </div>
@@ -556,13 +556,13 @@ no transition function needs updating.</p>
 <section id="class-options">
 <h2>Class options<a class="headerlink" href="#class-options" title="Permalink to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">TypedTensorDict</span></code> supports the same bracket-syntax options as <code class="docutils literal notranslate"><span class="pre">TensorClass</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyModel</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">&quot;shadow&quot;</span><span class="p">]):</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span>      <span class="c1"># &quot;data&quot; shadows TensorDict.data -- allowed</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyModel</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">"shadow"</span><span class="p">]):</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span>      <span class="c1"># "data" shadows TensorDict.data -- allowed</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Immutable</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Immutable</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">"frozen"</span><span class="p">]):</span>
     <span class="n">x</span><span class="p">:</span> <span class="n">Tensor</span>         <span class="c1"># locked after construction</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Combined</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">&quot;shadow&quot;</span><span class="p">,</span> <span class="s2">&quot;frozen&quot;</span><span class="p">]):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Combined</span><span class="p">(</span><span class="n">TypedTensorDict</span><span class="p">[</span><span class="s2">"shadow"</span><span class="p">,</span> <span class="s2">"frozen"</span><span class="p">]):</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span>
 </pre></div>
 </div>
@@ -593,7 +593,7 @@ through the typed wrapper go directly to the underlying storage:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">eta</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([5, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">eta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># writes to td</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;eta&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"eta"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="go">True</span>
 </pre></div>
 </div>
@@ -604,7 +604,7 @@ details and examples.</p>
 <p>Pass <code class="docutils literal notranslate"><span class="pre">check=False</span></code> to wrap an empty or partially-filled backend (e.g. a
 pre-allocated <code class="docutils literal notranslate"><span class="pre">TensorDictStore</span></code>).  Missing fields will raise at access
 time rather than at wrap time:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;redis-node&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">store</span> <span class="o">=</span> <span class="n">TensorDictStore</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">100_000</span><span class="p">],</span> <span class="n">host</span><span class="o">=</span><span class="s2">"redis-node"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">PredictorState</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -618,9 +618,9 @@ compatibility guide for the full workflow.</p>
 <span class="gp">... </span>    <span class="n">eta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">X</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">beta</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">device</span>
-<span class="go">device(type=&#39;cpu&#39;)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">clone</span><span class="p">()[</span><span class="s2">&quot;eta&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cpu"</span><span class="p">)</span><span class="o">.</span><span class="n">device</span>
+<span class="go">device(type='cpu')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="o">.</span><span class="n">clone</span><span class="p">()[</span><span class="s2">"eta"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([5, 3])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">torch.Size([3])</span>
