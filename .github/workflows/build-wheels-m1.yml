@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: 'main'
+      python-versions:
+        description: 'JSON-encoded list of Python versions to build; empty builds all supported versions'
+        required: false
+        type: string
+        default: '[]'
   workflow_dispatch:
 
 permissions:
@@ -33,6 +38,7 @@ jobs:
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      python-versions: ${{ inputs.python-versions || '[]' }}
   build:
     needs: generate-matrix
     strategy:
