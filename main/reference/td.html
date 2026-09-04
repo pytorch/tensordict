@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4270+g977779822.d20260827)
+                  main (0.14.0.dev4272+gb9d5841ed.d20260904)
                 </div>
               
             
@@ -670,9 +670,9 @@ and return another one (for instance via <a class="reference internal" href="gen
 </section>
 <section id="backpropagation-with-tensordict-backward">
 <h3>Backpropagation with <code class="docutils literal notranslate"><span class="pre">TensorDict.backward</span></code><a class="headerlink" href="#backpropagation-with-tensordict-backward" title="Permalink to this heading">¶</a></h3>
-<p><a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.backward" title="tensordict.TensorDictBase.backward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">backward()</span></code></a> mirrors <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.backward.html#torch.Tensor.backward" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.backward()</span></code></a>
+<p><a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.backward" title="tensordict.TensorDictBase.backward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">backward()</span></code></a> mirrors <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.backward.html#torch.Tensor.backward" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.backward()</span></code></a>
 for tensordicts: it recursively collects the differentiable leaves and
-backpropagates through all of them in a single <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.backward.html#torch.autograd.backward" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.backward()</span></code></a>
+backpropagates through all of them in a single <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.backward.html#torch.autograd.backward" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.backward()</span></code></a>
 call. When every leaf is scalar, no gradient is needed — this is the typical
 case of a tensordict of losses:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loss_td</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>  <span class="c1"># equivalent to loss_td.sum(reduce=True).backward()</span>

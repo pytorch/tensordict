@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4270+g977779822.d20260827)
+                  main (0.14.0.dev4272+gb9d5841ed.d20260904)
                 </div>
               
             
@@ -357,14 +357,14 @@
               
   <section id="saving-tensordict-and-tensorclass-objects">
 <span id="saving"></span><h1>Saving TensorDict and tensorclass objects<a class="headerlink" href="#saving-tensordict-and-tensorclass-objects" title="Permalink to this heading">¶</a></h1>
-<p>While we can just save a tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, this
+<p>While we can just save a tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, this
 will create a single file with the whole content of the data structure.
 One can easily imagine situations where this is sub-optimal!</p>
 <p>TensorDict serialization API mainly relies on <a class="reference internal" href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>
 which is used to write tensors independently on disk with a data structure
 that mimics the TensorDict’s one.</p>
 <p>TensorDict’s serialization speed can be an order of magnitude <strong>faster</strong> than
-PyTorch’s one with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
+PyTorch’s one with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>’s pickle reliance. This document explains
 how to create and interact with data stored on disk using TensorDict.</p>
 <section id="saving-memory-mapped-tensordicts">
 <h2>Saving memory-mapped TensorDicts<a class="headerlink" href="#saving-memory-mapped-tensordicts" title="Permalink to this heading">¶</a></h2>
@@ -705,7 +705,7 @@ tensordict checkout) — it only needs <code class="docutils literal notranslate
 <h2>state_dict / load_state_dict<a class="headerlink" href="#state-dict-load-state-dict" title="Permalink to this heading">¶</a></h2>
 <p>TensorDict and tensorclass support <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> and
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a>, following the same conventions as
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>.</p>
 <p>By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a <strong>flat</strong> <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedDict</span></code></a> with
 dot-separated keys, just like <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>

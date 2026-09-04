@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4270+g977779822.d20260827)
+                  main (0.14.0.dev4272+gb9d5841ed.d20260904)
                 </div>
               
             
@@ -368,7 +368,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>module</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Any</em><em>]</em>) – a callable, typically a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>,
+<li><p><strong>module</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Any</em><em>]</em>) – a callable, typically a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>,
 used to map the input to the output parameter space. Its forward method
 can return a single tensor, a tuple of tensors or even a dictionary.
 In the latter case, the output keys of the <a class="reference internal" href="#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>
@@ -579,7 +579,7 @@ module’s method, this has the advantage that the module attributes (params, bu
 </dl>
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.nn.TensorDictModule.device">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a></em><a class="headerlink" href="#tensordict.nn.TensorDictModule.device" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><span class="pre">device</span></a></em><a class="headerlink" href="#tensordict.nn.TensorDictModule.device" title="Permalink to this definition">¶</a></dt>
 <dd><p>A deprecated approximation of the module device.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>This property will be removed in TensorDict 0.17 because modules may
