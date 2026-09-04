@@ -141,7 +141,7 @@ uv_pip_install "hoptorch>=0.1.4"
 
 printf "* Installing torchrl\n"
 git clone https://github.com/pytorch/rl
-git -C rl checkout --detach "${TORCHRL_REF}"
+git -C rl checkout --detach "${TORCHRL_REF:-565e826ef7589006fbde5c4c45c0ec5e2329538b}"
 cd rl
 uv_pip_install --no-build-isolation --no-deps -e .
 
