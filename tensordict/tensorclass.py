@@ -5329,6 +5329,24 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return self
 
+    def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:
+        result = super().__getitem__(index)
+        if not isinstance(result, NonTensorStack):
+            return result
+        indices = index if isinstance(index, tuple) else (index,)
+        if all(
+            idx is None or idx is Ellipsis or isinstance(idx, (int, slice))
+            for idx in indices
+        ):
+            # basic indexing shares the entries, like a view
+            return result
+        # Advanced indexing (tensors, masks, lists) copies, as it does for
+        # tensors. The lazy stack would otherwise hand out the source entries
+        # themselves, so a repeated index yields aliased entries and a later
+        # in-place assignment on the result rewrites the source and every
+        # alias at once.
+        return result.clone(recurse=False)
+
     def __setitem__(self, index: IndexType, value: Any):
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):

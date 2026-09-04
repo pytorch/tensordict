@@ -1043,6 +1043,51 @@ class TestNonTensorData:
         assert empty.batch_size == torch.Size([0])
         assert empty.tolist() == []
 
+    def test_nontensorstack_advanced_index_copies(self):
+        stack = NonTensorStack("walk", "jump", "stand")
+        # advanced indexing returns independent entries, as it does for
+        # tensors: neither the source nor the repeated entries alias each other
+        gathered = stack[torch.tensor([1, 0, 0, 1, 1])]
+        assert gathered.tolist() == ["jump", "walk", "walk", "jump", "jump"]
+        gathered[torch.tensor([True, False, False, False, True])] = NonTensorStack(
+            "walk", "stand"
+        )
+        assert gathered.tolist() == ["walk", "walk", "walk", "jump", "stand"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+        masked = stack[torch.tensor([True, False, True])]
+        masked[0] = "hop"
+        assert masked.tolist() == ["hop", "stand"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+        listed = stack[[2, 2]]
+        listed[1] = "hop"
+        assert listed.tolist() == ["stand", "hop"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+        # basic indexing keeps view semantics
+        view = stack[1:]
+        view[0] = "hop"
+        assert stack.tolist() == ["walk", "hop", "stand"]
+
+    def test_tensorclass_nontensor_field_gather_then_assign(self):
+        @tensorclass
+        class Task:
+            weight: torch.Tensor
+            instruction: str
+
+        library = torch.stack(
+            [
+                Task(torch.tensor([0.0]), "walk", batch_size=[]),
+                Task(torch.tensor([1.0]), "jump", batch_size=[]),
+                Task(torch.tensor([2.0]), "stand", batch_size=[]),
+            ]
+        )
+        per_env = library[torch.tensor([1, 0, 0, 1, 1])]
+        per_env[torch.tensor([True, False, False, False, True])] = library[
+            torch.tensor([0, 2])
+        ]
+        assert per_env.weight.squeeze(-1).tolist() == [0.0, 0.0, 0.0, 1.0, 2.0]
+        assert list(per_env.instruction) == ["walk", "walk", "walk", "jump", "stand"]
+        assert list(library.instruction) == ["walk", "jump", "stand"]
+
 
 class TestMetaData:
     def test_typed_metadata(self):
