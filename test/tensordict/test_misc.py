@@ -806,6 +806,9 @@ class TestJacobians:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
+            warnings.filterwarnings(
+                "ignore", message=r"`torch\.jit\.script`.*", category=FutureWarning
+            )
             J = jacfwd(f)(td)
         assert J.batch_size == td.batch_size
         a_flat = td["a"].flatten()
@@ -829,6 +832,9 @@ class TestJacobians:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
+            warnings.filterwarnings(
+                "ignore", message=r"`torch\.jit\.script`.*", category=FutureWarning
+            )
             H = hessian(f)(td)
         assert H.batch_size == td.batch_size
         a_shape = td["a"].shape
