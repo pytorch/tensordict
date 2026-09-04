@@ -136,11 +136,14 @@ uv_pip_install --no-build-isolation --no-deps -e .
 # smoke test
 python -c "import tensordict"
 
+printf "* Installing hoptorch\n"
+uv_pip_install "hoptorch>=0.1.4"
+
 printf "* Installing torchrl\n"
 git clone https://github.com/pytorch/rl
+git -C rl checkout --detach "${TORCHRL_REF}"
 cd rl
 uv_pip_install --no-build-isolation --no-deps -e .
-cd ..
 
 # smoke test
 python -c "import torchrl"
@@ -150,9 +153,9 @@ python -c "import torchrl"
 
 python -m torch.utils.collect_env
 
-MUJOCO_GL=egl python -m pytest rl/test --instafail -v --durations 20 \
-  --ignore rl/test/test_distributed.py \
-  --ignore rl/test/llm \
+MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
+  --ignore test/test_distributed.py \
+  --ignore test/llm \
   --timeout=120
 
 # ==================================================================================== #

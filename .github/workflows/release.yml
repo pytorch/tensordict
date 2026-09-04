@@ -247,6 +247,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
 
   build-windows:
     name: Build Windows Wheels
@@ -256,6 +257,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
 
   build-macos:
     name: Build macOS Wheels
@@ -265,6 +267,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
 
   build-aarch64:
     name: Build Aarch64 Linux Wheels
@@ -274,6 +277,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      python-versions: ${{ inputs.tag == 'v0.14.1' && '["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]' || '[]' }}
 
   # =============================================================================
   # COLLECT WHEELS

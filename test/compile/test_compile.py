@@ -903,10 +903,11 @@ class TestTTDDynamoCompatibility:
         assert result == 3.0
 
     @pytest.mark.xfail(
+        TORCH_VERSION < version.parse("2.14.0"),
         strict=True,
         reason=(
             "TensorDict subclass arithmetic hits _has_mps graph break "
-            "without explicit pytree registration."
+            "without explicit pytree registration before torch 2.14."
         ),
     )
     def test_td_subclass_arithmetic_without_registration(self):
