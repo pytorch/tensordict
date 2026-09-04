@@ -418,7 +418,7 @@ though we also give results of our experiments running the same code on ImageNet
  .. code-block:: none
 
     Using device: cpu
-      0%|          | 0/244 [00:00<?, ?it/s]     26%|██▌       | 64/244 [00:00<00:00, 199.76it/s]ImageNetData(
+      0%|          | 0/244 [00:00<?, ?it/s]     26%|██▌       | 64/244 [00:00<00:00, 214.71it/s]ImageNetData(
         images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
         targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
         batch_size=torch.Size([244]),
@@ -466,8 +466,8 @@ though we also give results of our experiments running the same code on ImageNet
         batch_size=torch.Size([52]),
         device=None,
         is_shared=False)
-    100%|██████████| 244/244 [00:00<00:00, 597.64it/s]
-      0%|          | 0/153 [00:00<?, ?it/s]     42%|████▏     | 64/153 [00:00<00:00, 172.77it/s]ImageNetData(
+    100%|██████████| 244/244 [00:00<00:00, 645.64it/s]
+      0%|          | 0/153 [00:00<?, ?it/s]     42%|████▏     | 64/153 [00:00<00:00, 175.90it/s]ImageNetData(
         images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
         targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
         batch_size=torch.Size([153]),
@@ -503,11 +503,11 @@ though we also give results of our experiments running the same code on ImageNet
         batch_size=torch.Size([25]),
         device=None,
         is_shared=False)
-    100%|██████████| 153/153 [00:00<00:00, 310.06it/s]
-    One iteration over dataloader done! Rate: 969.7894 fps, time:  0.2269s
-    One iteration over tensorclass dataloader done! Rate: 1492.9971 fps, time:  0.1474s
-    One iteration over val data done! Rate: 513.3894 fps, time:  0.2513s
-    One iteration over tensorclass val data done! Rate: 18188.2888 fps, time:  0.0071s
+    100%|██████████| 153/153 [00:00<00:00, 313.79it/s]
+    One iteration over dataloader done! Rate: 883.7522 fps, time:  0.2489s
+    One iteration over tensorclass dataloader done! Rate: 1368.0884 fps, time:  0.1608s
+    One iteration over val data done! Rate: 514.6180 fps, time:  0.2507s
+    One iteration over tensorclass val data done! Rate: 14681.3159 fps, time:  0.0088s
 
 
 
@@ -515,7 +515,7 @@ though we also give results of our experiments running the same code on ImageNet
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.918 seconds)
+   **Total running time of the script:** (0 minutes 1.820 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_imagenet.py:
