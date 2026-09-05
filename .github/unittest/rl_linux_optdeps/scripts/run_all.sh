@@ -153,9 +153,13 @@ python -c "import torchrl"
 
 python -m torch.utils.collect_env
 
+# TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
+# reverse-dependency job focused on TensorDict interoperability.
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
+  --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
+  --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
   --timeout=120
 
 # ==================================================================================== #
