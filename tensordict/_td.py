@@ -3616,6 +3616,8 @@ class TensorDict(TensorDictBase):
         if not recurse and is_compiling():
             result = TensorDict(batch_size=self.batch_size, device=self.device)
             schema = self._locked_schema
+            _src = self._tensordict
+            _dst = result._tensordict
             if self._is_locked and schema is not None:
                 # Locked-fast-path: walk the cached immutable key tuple
                 # instead of ``result._tensordict.update(self._tensordict)``
@@ -3625,12 +3627,11 @@ class TensorDict(TensorDictBase):
                 # guards on the immutable schema tuple, which Dynamo can
                 # potentially share across TDs that lock to the same
                 # key set.
-                _src = self._tensordict
-                _dst = result._tensordict
-                for key in schema.keys:
-                    _dst[key] = _src[key]
+                keys = schema.keys
             else:
-                result._tensordict.update(self._tensordict)
+                keys = _src
+            for key in keys:
+                _dst[key] = _clone_value(_src[key], recurse=False)
             return result
 
         result = self._new_unsafe(
