@@ -294,10 +294,12 @@ class TestTD:
         data_c_c = clone_c(data)
         assert_close(data_c, data_c_c)
         assert clone_c(data) is not data
+        data_c_c.rename_key_(("a", "b"), ("a", "renamed"))
+        assert ("a", "b") in data.keys(include_nested=True)
         if recurse:
-            assert clone_c(data)["a", "b"] is not data["a", "b"]
+            assert clone_c(data)["a", "c"] is not data["a", "c"]
         else:
-            assert clone_c(data)["a", "b"] is data["a", "b"]
+            assert clone_c(data)["a", "c"] is data["a", "c"]
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_flatten_keys(self, recurse, mode):
