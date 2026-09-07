@@ -1,24 +1,21 @@
-# Flaky Test Report - 2026-09-06
+# Flaky Test Report - 2026-09-07
 
 ## Summary
 
-- **Confirmed flaky test families**: 1
-- **Affected parameterized cases**: 1
-- **Newly confirmed**: 1
-- **Resolved since previous report**: 0
+- **Confirmed flaky test families**: 0
+- **Affected parameterized cases**: 0
+- **Newly confirmed**: 0
+- **Resolved since previous report**: 1
 - **Total tests analyzed**: 45666
 - **CI runs analyzed**: 29
 
 ---
 
-## Flaky Tests
+## No Flaky Tests Detected!
 
-| Test | Environments | Confirmed revisions | Failures | Last failed |
-|------|--------------|---------------------|----------|-------------|
-| `test.tensordict.test_mp.TestMap::test_map_seed_single` **NEW** | test-linux.yml / test-results-cpu-3.11 | [`0ded728`](https://github.com/pytorch/tensordict/actions/runs/33958973896) | 3/27 | 2026-09-05 |
+No test has recent fail/pass evidence on the same commit and CI environment.
 
-
-### Newly Flaky
+## Resolved Since Previous Report
 
 - `test.tensordict.test_mp.TestMap::test_map_seed_single`
 
@@ -31,4 +28,4 @@
 
 ---
 
-*Generated at 2026-09-06T06:24:21.446630+00:00*
+*Generated at 2026-09-07T06:33:56.473790+00:00*
