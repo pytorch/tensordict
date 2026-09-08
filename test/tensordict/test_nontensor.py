@@ -217,6 +217,56 @@ class TestNonTensorData:
             ("nested", "bool")
         )
 
+    @pytest.mark.parametrize("capture", [False, True])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize("stacked", [(False, False), (False, True), (True, False)])
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_cat_preserves_non_tensor_values(self, capture, dim, stacked, with_out):
+        items = [
+            (
+                NonTensorStack.from_list([[value, value + 1], [value + 2, value + 3]])
+                if as_stack
+                else NonTensorData(value, batch_size=[2, 2])
+            )
+            for value, as_stack in zip((0, 4), stacked)
+        ]
+        expected = torch.cat([torch.tensor(item.tolist()) for item in items], dim)
+        out = NonTensorStack.from_list(torch.full_like(expected, -1).tolist())
+        with set_capture_non_tensor_stack(capture):
+            result = torch.cat(items, dim=dim, out=out if with_out else None)
+        if with_out:
+            assert result is out
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+
+    @pytest.mark.parametrize("capture", [False, True])
+    def test_cat_non_tensor_data_out(self, capture):
+        items = [NonTensorData("value", batch_size=[2])] * 2
+        out = NonTensorData("old", batch_size=[4])
+        with set_capture_non_tensor_stack(capture):
+            assert torch.cat(items, out=out) is out
+        assert out.tolist() == ["value"] * 4
+
+    @pytest.mark.parametrize("capture", [False, True])
+    def test_cat_pads_nested_non_tensor_values(self, capture):
+        with set_capture_non_tensor_stack(capture):
+            batch = lazy_stack(
+                [
+                    TensorDict(
+                        observation=torch.tensor([float(index)]),
+                        metadata=TensorDict(index=NonTensorData(index)),
+                    )
+                    for index in range(2)
+                ]
+            ).contiguous()
+            result = torch.cat([batch, batch[-1:].expand(2)])
+        assert result.batch_size == (4,)
+        assert result.get(("metadata", "index")).tolist() == [0, 1, 1, 1]
+        torch.testing.assert_close(
+            result["observation"], torch.tensor([[0.0], [1.0], [1.0], [1.0]])
+        )
+        assert batch.get(("metadata", "index")).tolist() == [0, 1]
+
     def test_expand(self):
         d = NonTensorData(0, batch_size=(3,))
         d_expand = d.expand((2, 3))
