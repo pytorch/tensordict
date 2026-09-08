@@ -4203,6 +4203,10 @@ class NonTensorDataBase(TensorClass):
     ) -> Callable:
         # A modified version of __torch_function__ to account for the different behaviour
         # of stack, which should return lazy stacks of data of data does not match.
+        if func is torch.cat and all(
+            issubclass(t, (NonTensorData, NonTensorStack)) for t in types
+        ):
+            return NonTensorData._cat_non_tensor(*args, **(kwargs or {}))
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls)) for t in types
         ):
@@ -4633,6 +4637,44 @@ class NonTensorData(NonTensorDataBase):
     _from_dict = classmethod(_from_dict)
     _from_tensordict = classmethod(_from_tensordict)
     __repr__ = NonTensorDataBase.__repr__
+
+    @classmethod
+    def _cat_non_tensor(cls, tensors, dim=0, out=None):
+        # Concatenate the values, not the empty TensorDicts that carry their
+        # batch sizes. Converting to those TensorDicts loses every value but
+        # the first and cannot dispatch mixed NonTensorData/NonTensorStack inputs.
+        batch_size = tensors[0].batch_size
+        if not -len(batch_size) <= dim < len(batch_size):
+            raise RuntimeError(
+                f"dim must index a batch dimension, got dim={dim} and "
+                f"batch_size={batch_size}"
+            )
+        dim %= len(batch_size)
+        other_dims = batch_size[:dim] + batch_size[dim + 1 :]
+        values = []
+        for tensor in tensors:
+            shape = tensor.batch_size
+            if (
+                len(shape) != len(batch_size)
+                or shape[:dim] + shape[dim + 1 :] != other_dims
+            ):
+                raise RuntimeError(
+                    "Non-tensor batch sizes must match outside the concatenation "
+                    f"dimension, got {batch_size} and {shape}."
+                )
+            values.extend(tensor.unbind(dim))
+        result = (
+            cls._stack_non_tensor(values, dim=dim) if values else tensors[0].clone()
+        )
+        if out is not None:
+            if out.batch_size != result.batch_size:
+                raise RuntimeError("out.batch_size and cat batch size must match.")
+            if isinstance(out, NonTensorData) and isinstance(result, NonTensorStack):
+                with set_capture_non_tensor_stack(True):
+                    result = cls._stack_non_tensor(values, dim=dim)
+            out.update_(result)
+            return out
+        return result
 
     def expand(self, *args, **kwargs) -> T:
         # tensordict_dims = self.batch_dims
