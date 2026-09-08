@@ -2507,11 +2507,14 @@ class TensorDict(TensorDictBase):
         self._td_dim_names = list(value)
 
     def _rename_subtds(self, names):
+        """Propagates names to nested tensordicts.
+
+        A child may have more batch dims than self. Only the first
+        self.batch_dims are shared, so names beyond that are the child's own
+        and are left alone. ``names=None`` clears the shared dims.
+        """
         if names is None:
-            for item in self._tensordict.values():
-                if _is_tensor_collection(type(item)):
-                    item._erase_names()
-            return
+            names = [None] * self.batch_dims
         for item in self._tensordict.values():
             if isinstance(item, TensorDict):
                 # For TensorDict items, we can directly set _td_dim_names
@@ -2521,6 +2524,8 @@ class TensorDict(TensorDictBase):
                     td_names = list(names) + [None] * (item.batch_dims - len(names))
                 else:
                     td_names = list(names) + list(item_names)[len(names) :]
+                if all(name is None for name in td_names):
+                    td_names = None
                 item._td_dim_names = td_names
                 # Recursively rename nested tensor collections
                 item._rename_subtds(td_names)
