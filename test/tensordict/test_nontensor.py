@@ -240,12 +240,17 @@ class TestNonTensorData:
         assert result.tolist() == expected.tolist()
 
     @pytest.mark.parametrize("capture", [False, True])
-    def test_cat_non_tensor_data_out(self, capture):
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_cat_uniform_non_tensor_data(self, capture, with_out):
         items = [NonTensorData("value", batch_size=[2])] * 2
         out = NonTensorData("old", batch_size=[4])
         with set_capture_non_tensor_stack(capture):
-            assert torch.cat(items, out=out) is out
-        assert out.tolist() == ["value"] * 4
+            result = torch.cat(items, out=out if with_out else None)
+        if with_out:
+            assert result is out
+        assert isinstance(result, NonTensorData)
+        assert result.data == "value"
+        assert result.tolist() == ["value"] * 4
 
     @pytest.mark.parametrize("capture", [False, True])
     def test_cat_pads_nested_non_tensor_values(self, capture):

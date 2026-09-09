@@ -4663,9 +4663,15 @@ class NonTensorData(NonTensorDataBase):
                     f"dimension, got {batch_size} and {shape}."
                 )
             values.extend(tensor.unbind(dim))
-        result = (
-            cls._stack_non_tensor(values, dim=dim) if values else tensors[0].clone()
-        )
+        if values and all(isinstance(tensor, cls) for tensor in tensors):
+            # Concatenating uniform data preserves scalar metadata, including
+            # callable payloads, independently of the stacking capture setting.
+            with set_capture_non_tensor_stack(True):
+                result = cls._stack_non_tensor(values, dim=dim)
+        else:
+            result = (
+                cls._stack_non_tensor(values, dim=dim) if values else tensors[0].clone()
+            )
         if out is not None:
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")
