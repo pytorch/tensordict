@@ -230,12 +230,10 @@ class CudaGraphModule:
                     # Copy into the leaves the captured kernels read. The module may
                     # have rebound entries of ``self._tensordict`` to its outputs
                     # during capture (an output written under an input key), so
-                    # ``self._tensordict`` is not a safe update target.
-                    self._graph_inputs.update_(  # type: ignore[attr-defined]
-                        tensordict,
-                        non_blocking=True,
-                        keys_to_update=self._graph_input_keys,
-                    )
+                    # ``self._tensordict`` is not a safe update target. Only the
+                    # capture-time input keys live in ``self._graph_inputs``, so
+                    # ``update_`` copies exactly those and ignores extra keys.
+                    self._graph_inputs.update_(tensordict, non_blocking=True)  # type: ignore[attr-defined]
                     torch.cuda.synchronize(self.device)
                     self.graph.replay()
                     if self._out_matches_in:
@@ -286,9 +284,6 @@ class CudaGraphModule:
                         # them, kept apart from ``self._tensordict`` whose entries
                         # the module may rebind while it runs under capture.
                         self._graph_inputs = self._tensordict.copy()
-                        self._graph_input_keys = list(
-                            self._graph_inputs.keys(True, True)
-                        )
                         if tensordict_out is not None:
                             td_out_save = tensordict_out.copy()
                             kwargs["tensordict_out"] = tensordict_out

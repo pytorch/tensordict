@@ -1813,7 +1813,7 @@ class TestCudaGraphs:
         with pytest.raises(AssertionError):
             torch.testing.assert_close(y0, y1 + 1)
 
-    def test_cudagraphs_module_rewriting_its_input_key(self):
+    def test_cudagraphs_module_rewriting_its_input_key(self, compiled):
         """A module that writes an output under one of its input keys.
 
         The set() rebinds that entry of the captured input during capture, so
@@ -1827,7 +1827,7 @@ class TestCudaGraphs:
                 return h.sum(-1, keepdim=True), h
 
         module = TensorDictModule(Recurrent(), in_keys=["x", "h"], out_keys=["y", "h"])
-        graphed = self._make_cudagraph(module, False, warmup=2)
+        graphed = self._make_cudagraph(module, compiled, warmup=2)
 
         def make(h):
             return TensorDict({"x": torch.ones(4, 3), "h": torch.full((4, 3), h)}, [4])
