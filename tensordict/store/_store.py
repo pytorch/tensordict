@@ -1305,7 +1305,7 @@ class TensorDictStore(TensorDictBase):
             names = [None] * self.ndim
         for item in self._nested_tensordicts.values():
             if is_tensor_collection(item):
-                td_names = list(names) + [None] * (item.ndim - self.ndim)
+                td_names = list(names) + list(item.names)[self.ndim :]
                 item.rename_(*td_names)
 
     # ---- Key access / mutation ----
