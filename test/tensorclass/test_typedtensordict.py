@@ -158,6 +158,13 @@ class TestConstruction:
         stubs = tmp_path / "stubs"
         package = stubs / "tensordict"
         package.mkdir(parents=True)
+        torch_package = stubs / "torch"
+        torch_package.mkdir()
+        torch_package.joinpath("__init__.pyi").write_text(
+            """class Size: ...
+class dtype: ...
+"""
+        )
         package.joinpath("__init__.pyi").write_text(
             "from .typedtensordict import TypedTensorDict as TypedTensorDict\n"
         )
