@@ -4651,7 +4651,7 @@ class NonTensorData(NonTensorDataBase):
             )
         dim %= len(batch_size)
         other_dims = batch_size[:dim] + batch_size[dim + 1 :]
-        values = []
+        uniform = isinstance(tensors[0], NonTensorData)
         for tensor in tensors:
             shape = tensor.batch_size
             if (
@@ -4662,10 +4662,22 @@ class NonTensorData(NonTensorDataBase):
                     "Non-tensor batch sizes must match outside the concatenation "
                     f"dimension, got {batch_size} and {shape}."
                 )
-            values.extend(tensor.unbind(dim))
-        result = (
-            cls._stack_non_tensor(values, dim=dim) if values else tensors[0].clone()
-        )
+            uniform = (
+                uniform
+                and isinstance(tensor, NonTensorData)
+                and _check_equal(tensor.data, tensors[0].data)
+            )
+        if uniform:
+            result_batch_size = list(batch_size)
+            result_batch_size[dim] = sum(tensor.batch_size[dim] for tensor in tensors)
+            result = tensors[0].empty(
+                batch_size=result_batch_size, names=tensors[0]._maybe_names()
+            )
+        else:
+            values = [value for tensor in tensors for value in tensor.unbind(dim)]
+            result = (
+                cls._stack_non_tensor(values, dim=dim) if values else tensors[0].clone()
+            )
         if out is not None:
             if out.batch_size != result.batch_size:
                 raise RuntimeError("out.batch_size and cat batch size must match.")

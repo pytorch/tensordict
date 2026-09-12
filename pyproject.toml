@@ -52,7 +52,8 @@ tests = [
     "pyyaml",
     "pytest-instafail",
     "pytest-rerunfailures",
-    "pytest-benchmark"
+    "pytest-benchmark",
+    "mypy>=1.0.0"
 ]
 h5 = ["h5py>=3.8"]
 # zarr>=3 requires Python>=3.11: the marker keeps universal resolvers (uv)
