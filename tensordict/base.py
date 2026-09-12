@@ -7256,6 +7256,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
         def assign_val(key, val):
             if isinstance(key, str):
                 key = (key,)
+            if not inplace and _is_non_tensor(type(val)):
+                # Locking the result must not lock wrappers owned by the source.
+                # Keep the payload shared, as with a shallow TensorDict clone.
+                val = val.clone(recurse=False)
             return flat_dict.get(key, val)
 
         if filename is None:
