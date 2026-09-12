@@ -661,15 +661,19 @@ class TestTTD:
         d1 = _TTDState(a=torch.arange(3), b=torch.arange(3), batch_size=[3])
         assert (cat_tds(d0, d1) == cat_tds_c(d0, d1)).all()
 
-    def test_reshape(self, mode):
+    @pytest.mark.parametrize("mutate", [False, True])
+    def test_reshape(self, mode, mutate):
         def reshape(td):
+            if mutate:
+                td["a"] = td["a"] + 1
             return td.reshape(2, 2)
 
         reshape_c = torch.compile(reshape, fullgraph=True, mode=mode)
         data = _TTDState(a=torch.arange(4), b=torch.arange(4), batch_size=[4])
-        data_reshape = reshape(data)
-        _ = reshape_c(data)
-        data_reshape_c = reshape_c(data)
+        data_reshape = reshape(data.clone())
+        _ = reshape_c(data.clone())
+        data_reshape_c = reshape_c(data.clone())
+        assert isinstance(data_reshape_c, _TTDState)
         assert (data_reshape == data_reshape_c).all()
 
     def test_view(self, mode):

@@ -534,8 +534,8 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         )
 
     def __setattr__(self, name: str, value: Any) -> None:
-        expected = type(self).__dict__.get("__expected_keys__", None)
-        if expected is not None and name in expected:
+        expected = type(self).__expected_keys__
+        if name in expected:
             self[name] = value
             return
         object.__setattr__(self, name, value)
