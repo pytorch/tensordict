@@ -18,7 +18,7 @@ import tempfile
 import pytest
 import torch
 from tensordict import lazy_stack, TensorDict, TypedTensorDict
-from tensordict.base import TensorDictBase
+from tensordict.base import _default_is_leaf, TensorDictBase
 from torch import Tensor
 
 _has_mypy = importlib.util.find_spec("mypy") is not None
@@ -311,6 +311,21 @@ class TestFieldAccess:
             batch_size=[3],
         )
         assert set(state.keys()) == {"eta", "X", "beta"}
+
+    @pytest.mark.parametrize("backend", ["dense", "lazy", "memmap"])
+    def test_nested_keys_with_leaf_predicate(self, backend, tmp_path):
+        source = TensorDict(
+            {"eta": torch.ones(3), "X": torch.zeros(3), "beta": torch.ones(3)}, [3]
+        )
+        if backend == "lazy":
+            source = lazy_stack([source, source], 0)
+        elif backend == "memmap":
+            source = source.memmap(tmp_path)
+        state = PredictorState.from_tensordict(source)
+        outer = TensorDict({"state": state}, source.batch_size)
+        keys = set(outer.keys(True, True, is_leaf=_default_is_leaf))
+        assert keys == {("state", "eta"), ("state", "X"), ("state", "beta")}
+        assert all(torch.equal(outer.get(key), source.get(key[-1])) for key in keys)
 
 
 # ---------------------------------------------------------------------------
