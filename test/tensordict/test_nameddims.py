@@ -491,6 +491,16 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = None
         assert not td["sub"]._has_names()
 
+    def test__TensorDict__names_setter__rejects_nested_trailing_name_clash(self):
+        # the trailing name now survives, so a parent name equal to it would
+        # leave the child with duplicate names
+        sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "batch"])
+        td = TensorDict({"agents": sub}, [2])
+        with pytest.raises(ValueError, match="non-unique"):
+            td.names = ["batch"]
+        td.names = ["time"]
+        assert td["agents"].names == ["time", "batch"]
+
     def test_split(self):
         td = TensorDict(
             {}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True

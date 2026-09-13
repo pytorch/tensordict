@@ -2524,6 +2524,13 @@ class TensorDict(TensorDictBase):
                     td_names = list(names) + [None] * (item.batch_dims - len(names))
                 else:
                     td_names = list(names) + list(item_names)[len(names) :]
+                    # the shared prefix must not reuse a name the child owns,
+                    # mirroring the uniqueness check of _set_names
+                    named = [name for name in td_names if name is not None]
+                    if len(set(named)) != len(named):
+                        raise ValueError(
+                            f"Some dimension names are non-unique: {td_names}."
+                        )
                 if all(name is None for name in td_names):
                     td_names = None
                 item._td_dim_names = td_names
