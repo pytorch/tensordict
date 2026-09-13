@@ -222,6 +222,16 @@ def _gather(
             )
         )
         coords[dim] = index
+        if 0 < stack.stack_dim < len(coords):
+            # Advanced indexing of a lazy stack expects the stack dim first, so
+            # bring it to the front and reorder the coordinates accordingly. The
+            # indexed dims all lead and are replaced by the index shape, so this
+            # permutation does not change the result layout.
+            dims = [stack.stack_dim] + [
+                d for d in range(len(coords)) if d != stack.stack_dim
+            ]
+            coords = [coords[d] for d in dims]
+            stack = stack.permute(dims + list(range(len(coords), stack.ndim)))
         return stack[tuple(coords)]
 
     def _process_gather_value(value):
@@ -263,13 +273,20 @@ def _gather(
                 non_blocking=False,
             )
         elif _is_non_tensor_stack(value):
-            out._set_str(
-                key,
-                _gather_non_tensor_stack(value),
-                validated=True,
-                inplace=False,
-                non_blocking=False,
-            )
+            gathered = _gather_non_tensor_stack(value)
+            dest = out._get_str(key, default=None)
+            if _is_non_tensor_stack(dest) and dest.batch_size == gathered.batch_size:
+                # write into the destination stack, as tensors are written into
+                # the destination storage
+                dest.update_(gathered)
+            else:
+                out._set_str(
+                    key,
+                    gathered,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
         else:
             _gather_tensor(value, out, key)
     return out
