@@ -122,6 +122,21 @@ class MyTTD(TypedTensorDict):
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def redis_server():
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis
+
+    with redis.Redis(
+        host="localhost", port=6379, socket_connect_timeout=2, socket_timeout=2
+    ) as client:
+        try:
+            client.ping()
+        except (redis.ConnectionError, redis.TimeoutError, OSError):
+            pytest.skip("redis server not reachable on localhost:6379")
+
+
 def _make_base_td(device=None):
     return TensorDict(
         a=torch.randn(BATCH, FEAT_A),
@@ -208,6 +223,8 @@ class TestTensorClassCompat:
 
     @pytest.fixture(params=ALL_BACKENDS)
     def backend_td(self, request, tmp_path):
+        if request.param == "redis":
+            request.getfixturevalue("redis_server")
         return request.param, _get_backend(request.param, tmp_path)
 
     def test_construction(self, backend_td):
@@ -320,7 +337,7 @@ class TestTypedTensorDictCompat:
         assert isinstance(ttd, MyTTD)
         assert ttd.a.shape == (BATCH, FEAT_A)
 
-    @pytest.mark.skipif(not _has_redis, reason="redis not available")
+    @pytest.mark.usefixtures("redis_server")
     def test_from_redis_data(self):
         store = _make_redis()
         materialized = store.to_tensordict()
@@ -419,7 +436,7 @@ class TestTypedTensorDictCompat:
         mmap = ttd.memmap_(prefix=str(tmp_path / "ttd_mmap"))
         assert mmap.a.shape == (BATCH, FEAT_A)
 
-    @pytest.mark.skipif(not _has_redis, reason="redis not available")
+    @pytest.mark.usefixtures("redis_server")
     def test_to_redis_and_back(self):
         ttd = _make_typed_td()
         store = TensorDictStore.from_tensordict(ttd)
@@ -494,6 +511,8 @@ class TestTypedTensorDictWrapping:
 
     @pytest.fixture(params=TTD_WRAP_ALL_BACKENDS)
     def backend_td(self, request, tmp_path):
+        if request.param == "redis":
+            request.getfixturevalue("redis_server")
         return request.param, _get_backend(request.param, tmp_path)
 
     def test_construction(self, backend_td):
@@ -593,7 +612,7 @@ class TestTypedTensorDictWrapping:
 # ===================================================================
 
 
-@pytest.mark.skipif(not _has_redis, reason="redis not available")
+@pytest.mark.usefixtures("redis_server")
 class TestTensorDictStoreFromSchema:
     """Test TensorDictStore.from_schema() pre-allocation."""
 
@@ -656,7 +675,7 @@ class TestTensorDictStoreFromSchema:
             store._run_sync(store._client.flushdb())
 
 
-@pytest.mark.skipif(not _has_redis, reason="redis not available")
+@pytest.mark.usefixtures("redis_server")
 class TestTypedTDPreallocationWorkflow:
     """End-to-end test of the pre-allocation + iterative fill pattern."""
 
