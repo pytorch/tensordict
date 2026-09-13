@@ -478,16 +478,24 @@ class TestNonTensorData:
             LazyStackedTensorDict,
         )
 
-    def test_stack_consolidate(self):
+    @pytest.mark.parametrize("key", ["a", ("nested", "a")])
+    def test_stack_consolidate(self, key):
         td = torch.stack(
             [
-                TensorDict(a="a string", b="b string"),
-                TensorDict(a="another string", b="bnother string"),
+                TensorDict({key: "a string", "b": "b string"}),
+                TensorDict({key: "another string", "b": "bnother string"}),
             ]
         )
         tdc = td.consolidate()
         assert (tdc == td).all()
-        assert tdc["a"] == ["a string", "another string"]
+        assert tdc[key] == ["a string", "another string"]
+        replacement = torch.stack(
+            [TensorDict({key: "reset", "b": "reset"}) for _ in range(2)]
+        )
+        td.where(torch.tensor([True, False]), replacement, out=td)
+        assert td[key] == ["a string", "reset"]
+        assert tdc[key] == ["a string", "another string"]
+        assert tdc.is_locked and tdc.is_consolidated()
 
     def test_assign_non_tensor(self):
         data = TensorDict({}, [1, 10])
