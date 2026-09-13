@@ -219,6 +219,64 @@ class TestNonTensorData:
 
     @pytest.mark.parametrize("capture", [False, True])
     @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_gather_preserves_non_tensor_values(self, capture, dim, lazy, with_out):
+        values = [[0, 1, 2], [3, 4, 5]]
+        if dim == 0:
+            index = torch.tensor([[1, 0, 1], [0, 0, 1]])
+        else:
+            index = torch.tensor([[2, 0, 1], [1, 1, 0]])
+        expected = torch.gather(torch.tensor(values), dim, index)
+        with set_capture_non_tensor_stack(capture):
+            if lazy:
+                td = lazy_stack(
+                    [
+                        TensorDict(
+                            query=NonTensorStack.from_list(row),
+                            x=torch.tensor(row),
+                            batch_size=[3],
+                        )
+                        for row in values
+                    ]
+                )
+            else:
+                td = TensorDict(
+                    query=NonTensorStack.from_list(values),
+                    x=torch.tensor(values),
+                    batch_size=[2, 3],
+                )
+            out = None
+            if with_out:
+                out = TensorDict(
+                    query=NonTensorStack.from_list(
+                        torch.full_like(expected, -1).tolist()
+                    ),
+                    x=torch.full_like(expected, -1),
+                    batch_size=expected.shape,
+                )
+            result = td.gather(dim, index, out=out)
+        if with_out:
+            assert result is out
+        assert isinstance(result.get("query"), NonTensorStack)
+        assert result.get("query").tolist() == expected.tolist()
+        assert (result.get("x") == expected).all()
+
+    @pytest.mark.parametrize("with_out", [False, True])
+    def test_gather_non_tensor_stack_copies(self, with_out):
+        stack = NonTensorStack("walk", "jump", "stand")
+        out = NonTensorStack("", "", "") if with_out else None
+        gathered = torch.gather(stack, 0, torch.tensor([1, 0, 0]), out=out)
+        if with_out:
+            assert gathered is out
+        assert gathered.tolist() == ["jump", "walk", "walk"]
+        # the gathered entries are copies, as with advanced indexing
+        gathered[1] = "hop"
+        assert gathered.tolist() == ["jump", "hop", "walk"]
+        assert stack.tolist() == ["walk", "jump", "stand"]
+
+    @pytest.mark.parametrize("capture", [False, True])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
     @pytest.mark.parametrize("stacked", [(False, False), (False, True), (True, False)])
     @pytest.mark.parametrize("with_out", [False, True])
     def test_cat_preserves_non_tensor_values(self, capture, dim, stacked, with_out):
