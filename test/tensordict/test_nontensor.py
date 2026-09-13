@@ -206,7 +206,10 @@ class TestNonTensorData:
         c_nested = ls_nested.contiguous(canonical=canonical)
         assert c_nested["sub", "q"] == ["s0", "s1"]
 
-    @pytest.mark.parametrize("container", ["stack", "dense", "lazy"])
+    @pytest.mark.parametrize(
+        "container",
+        ["stack", "stack_dim1", "dense", "dense_dim1", "lazy", "lazy_dim1"],
+    )
     @pytest.mark.parametrize(
         "op",
         [
@@ -232,9 +235,21 @@ class TestNonTensorData:
     )
     def test_shape_ops_preserve_non_tensor_values(self, op, container):
         values = [[0, 1, 2], [3, 4, 5]]
+        # stacking the columns along dim=1 yields the same values but a stack
+        # whose stack_dim is not the first dimension
+        columns = [list(col) for col in zip(*values)]
         expected = op(torch.tensor(values))
         if container == "stack":
             result = op(NonTensorStack.from_list(values))
+            assert isinstance(result, NonTensorStack)
+            assert result.tolist() == expected.tolist()
+            return
+        if container == "stack_dim1":
+            stack = torch.stack(
+                [NonTensorStack.from_list(col) for col in columns], dim=1
+            )
+            assert stack.stack_dim == 1
+            result = op(stack)
             assert isinstance(result, NonTensorStack)
             assert result.tolist() == expected.tolist()
             return
@@ -249,6 +264,20 @@ class TestNonTensorData:
                     for row in values
                 ]
             )
+        elif container in ("dense_dim1", "lazy_dim1"):
+            stack_fn = lazy_stack if container == "lazy_dim1" else torch.stack
+            td = stack_fn(
+                [
+                    TensorDict(
+                        query=NonTensorStack.from_list(col),
+                        x=torch.tensor(col),
+                        batch_size=[2],
+                    )
+                    for col in columns
+                ],
+                dim=1,
+            )
+            assert td.get("query").stack_dim == 1
         else:
             td = TensorDict(
                 query=NonTensorStack.from_list(values),
@@ -281,6 +310,26 @@ class TestNonTensorData:
         assert td.roll(1, 0, inplace=True) is td
         assert td.get("query").tolist() == ["c", "a", "b"]
         assert td.get("x").tolist() == [2, 0, 1]
+        # the same when the stack dim of the entries is not the first one
+        td = torch.stack(
+            [
+                TensorDict(
+                    query=NonTensorStack("a", "b"),
+                    x=torch.tensor([0, 1]),
+                    batch_size=[2],
+                ),
+                TensorDict(
+                    query=NonTensorStack("c", "d"),
+                    x=torch.tensor([2, 3]),
+                    batch_size=[2],
+                ),
+            ],
+            dim=1,
+        )
+        assert td.get("query").stack_dim == 1
+        assert td.roll(1, 0, inplace=True) is td
+        assert td.get("query").tolist() == [["b", "d"], ["a", "c"]]
+        assert td.get("x").tolist() == [[1, 3], [0, 2]]
 
         grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         assert grid.reshape(2, 3) is grid
