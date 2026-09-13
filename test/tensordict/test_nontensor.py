@@ -1396,6 +1396,15 @@ class TestUnbatchedTensor:
         assert td.unflatten_keys(separator="_")["c", "d"] is td["c_d"]
         assert td.unflatten_keys(separator="_").flatten_keys()["c.d"] is td["c_d"]
 
+    def test_unbatched_view_base(self):
+        view = UnbatchedTensor(torch.arange(6.0)).clone().reshape(2, 3)
+        base = view._base
+        assert base is not None
+        assert view._base is base
+        assert base._base is None
+        base.zero_()
+        assert not view.any()
+
     def test_unbatched_getitem_returns_unbatched(self):
         data = torch.randn(7, 11)
         td = TensorDict(

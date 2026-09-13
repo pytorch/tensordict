@@ -2301,8 +2301,8 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
-    def test_unbatched_clone_preserves_semantics(self):
-        """Cloning an UnbatchedTensor must produce independent data."""
+    def test_unbatched_vmap_clone_preserves_semantics(self):
+        """Compiled vmap preserves unbatched metadata and clones the payload."""
 
         def fn(td):
             cloned = td.clone()
@@ -2315,10 +2315,13 @@ class TestGuardCount:
             },
             batch_size=[4],
         )
-        fn_c = torch.compile(fn, fullgraph=True)
+        fn_c = torch.compile(torch.vmap(fn), fullgraph=True)
         result = fn_c(td)
         ut_orig = td.get("unbatched")
         ut_clone = result.get("unbatched")
+        torch.testing.assert_close(result["a"], td["a"])
+        torch.testing.assert_close(ut_clone, ut_orig)
+        assert ut_clone.batch_size == td.batch_size
         assert (
             ut_clone.data_ptr() != ut_orig.data_ptr()
         ), "clone() must produce independent data"
