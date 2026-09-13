@@ -5067,6 +5067,11 @@ class _TensorDictKeysView:
             tensordict = tensordict._tensordict
         if isinstance(tensordict, TensorDict):
             return tensordict._tensordict.items()
+        # Imported lazily: TypedTensorDict delegates its storage to this module.
+        from tensordict.typedtensordict import TypedTensorDict
+
+        if isinstance(tensordict, TypedTensorDict):
+            return self._items(tensordict._source)
         from tensordict.nn import TensorDictParams
 
         if isinstance(tensordict, TensorDictParams):
