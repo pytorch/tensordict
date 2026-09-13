@@ -5114,6 +5114,83 @@ class NonTensorStack(LazyStackedTensorDict):
         # TensorDict, silently dropping the data.
         return self
 
+    # flip, roll, rot90, tile, narrow and broadcast_to are inherited from
+    # TensorDictBase, which builds the result from the tensor leaves, and
+    # reshape falls back to the same code when the new shape is not a flatten
+    # or unflatten of the stack. A stack of non-tensor entries has no tensor
+    # leaves, so the result used to be an empty TensorDict. The overrides below
+    # move the entries instead: they run the operation on a tensor holding the
+    # flat position of each entry, then pick the entries at the resulting
+    # positions.
+    def _positions(self) -> torch.Tensor:
+        return torch.arange(self.batch_size.numel()).reshape(self.batch_size)
+
+    def _select_positions(self, positions: torch.Tensor) -> NonTensorStack:
+        index = []
+        for size in reversed(self.batch_size):
+            index.append(positions % size)
+            positions = torch.div(positions, size, rounding_mode="floor")
+        index = tuple(reversed(index))
+        stack = self
+        if self.stack_dim != 0:
+            # Advanced indexing of a lazy stack expects the stack dim first, so
+            # bring it to the front and reorder the index accordingly. The
+            # result shape only depends on the index tensors, not on this
+            # permutation.
+            dims = [self.stack_dim] + [
+                d for d in range(self.ndim) if d != self.stack_dim
+            ]
+            stack = self.permute(dims)
+            index = tuple(index[d] for d in dims)
+        # advanced indexing copies the selected entries
+        return stack[index]
+
+    def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
+        return self._select_positions(self._positions().flip(dims))
+
+    def roll(
+        self,
+        shifts: int | tuple[int, ...],
+        dims: int | tuple[int, ...] | None = None,
+        *,
+        inplace: bool = False,
+    ) -> NonTensorStack:
+        result = self._select_positions(self._positions().roll(shifts, dims))
+        if inplace:
+            return self.update_(result)
+        return result
+
+    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)) -> NonTensorStack:
+        return self._select_positions(self._positions().rot90(k, dims))
+
+    def tile(self, dims: tuple[int, ...]) -> NonTensorStack:
+        return self._select_positions(self._positions().tile(dims))
+
+    def narrow(self, dim: int, start: int, length: int) -> NonTensorStack:
+        # Let torch check the arguments, then select a slice, which shares the
+        # entries the same way narrowing a tensor returns a view.
+        self._positions().narrow(dim, start, length)
+        dim = dim % self.ndim
+        if start < 0:
+            start += self.batch_size[dim]
+        return self[(slice(None),) * dim + (slice(start, start + length),)]
+
+    def broadcast_to(self, shape: tuple[int, ...]) -> NonTensorStack:
+        return self.expand(shape)
+
+    def reshape(self, *args, **kwargs) -> NonTensorStack:
+        if kwargs.get("inplace", False):
+            return super().reshape(*args, **kwargs)
+        kwargs.pop("inplace", None)
+        positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
+        if positions.shape == self.batch_size:
+            return self
+        try:
+            # regrouping the stack shares the entries, like a view
+            return self._view(positions.shape)
+        except RuntimeError:
+            return self._select_positions(positions)
+
     def _memmap_(
         self,
         *,
