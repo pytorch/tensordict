@@ -3159,6 +3159,41 @@ class TestEnsembleModule:
 
 
 class TestTensorDictParams:
+    @pytest.mark.parametrize("filter_empty", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("nested_params", [False, True])
+    def test_capture_module_leaf_contracts(self, filter_empty, lock, nested_params):
+        leaf = torch.ones(3, requires_grad=True)
+        child = nn.Module()
+        child.register_parameter("p", nn.Parameter(torch.ones(3)))
+        child.register_buffer("b", torch.zeros(3))
+        child.register_buffer("grad", leaf * 2)
+        child.register_buffer("absent", None)
+        module = nn.Module()
+        module.left = module.right = child
+        module.empty = nn.Identity()
+        if nested_params:
+            module.params = TensorDictParams(p=nn.Parameter(torch.ones(3))).lock_()
+        captured = TensorDict.from_module(
+            module, as_module=True, filter_empty=filter_empty, lock=lock
+        )
+        assert captured["left", "p"] is captured["right", "p"] is child.p
+        if nested_params:
+            assert captured["params"] is module.params
+            assert module.params.is_locked is lock
+        assert captured["left", "b"].data_ptr() == child.b.data_ptr()
+        assert isinstance(captured["left", "b"], Buffer)
+        assert captured["left", "grad"].grad_fn is child.grad.grad_fn
+        captured["left", "grad"].sum().backward()
+        torch.testing.assert_close(leaf.grad, torch.full_like(leaf, 2))
+        assert ("empty" in captured.keys()) is (not filter_empty)
+        assert "absent" not in captured["left"].keys()
+        assert captured.is_locked is lock
+        if not lock:
+            captured["new_buffer"] = torch.ones(3)
+            assert isinstance(captured["new_buffer"], Buffer)
+            assert not isinstance(captured["new_buffer"], nn.Parameter)
+
     def _get_params(self):
         module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
         params = TensorDict.from_module(module)
@@ -4516,10 +4551,13 @@ class TestToModule:
         torch.testing.assert_close(module.weight, params["weight"])
         torch.testing.assert_close(module.bias, params["bias"])
 
-    def test_plain_tensor_to_module_can_preserve_module_state(self, as_module):
+    @pytest.mark.parametrize("parameter_source", [False, True])
+    def test_to_module_can_preserve_module_state(self, as_module, parameter_source):
         module = nn.Linear(4, 2)
         module.weight.requires_grad_(False)
         params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        if parameter_source:
+            params["weight"] = nn.Parameter(params["weight"], requires_grad=True)
         state_dict_keys = set(module.state_dict())
 
         with warnings.catch_warnings():
@@ -4584,10 +4622,15 @@ class TestToModule:
         assert isinstance(module.weight, nn.Parameter)
         assert isinstance(module.bias, nn.Parameter)
 
-    def test_preserve_module_state_keeps_buffers(self, as_module):
+    @pytest.mark.parametrize("tagged_tensor", [False, True])
+    def test_preserve_module_state_keeps_buffers(self, as_module, tagged_tensor):
         module = nn.Module()
         module.register_buffer("buffer", torch.ones(3))
-        params = TensorDict({"buffer": nn.Parameter(torch.zeros(3))}, [])
+        value = nn.Parameter(torch.zeros(3))
+        if tagged_tensor:
+            value = torch.zeros(3)
+            value._is_param = True
+        params = TensorDict({"buffer": value}, [])
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
@@ -4598,6 +4641,39 @@ class TestToModule:
         assert "buffer" not in dict(module.named_parameters())
         assert not isinstance(module.buffer, nn.Parameter)
         torch.testing.assert_close(module.buffer, torch.zeros(3))
+
+    @pytest.mark.parametrize("with_hook", [False, True])
+    def test_partial_swap_registration_order(self, with_hook, as_module):
+        module = nn.Module()
+        module.a = nn.Parameter(torch.zeros(3))
+        module.b = nn.Parameter(torch.zeros(3))
+        module.register_buffer("c", torch.zeros(3))
+        module.register_buffer("d", torch.zeros(3))
+        original, original_buffer = module.a, module.c
+        replacement = nn.Parameter(torch.ones(3))
+        params = TensorDict(a=replacement, c=torch.ones(3))
+        if as_module:
+            params = TensorDictParams(params, no_convert=True)
+        seen = []
+
+        def hook(module, name, value):
+            seen.append(value)
+
+        handle = (
+            torch.nn.modules.module.register_module_parameter_registration_hook(hook)
+            if with_hook
+            else contextlib.nullcontext()
+        )
+        with handle:
+            with params.to_module(module):
+                assert module.a is replacement
+                assert list(module._parameters) == ["b", "a"]
+                assert list(module._buffers) == ["d", "c"]
+                module.a.sum().backward()
+        assert module.a is original and module.c is original_buffer
+        torch.testing.assert_close(replacement.grad, torch.ones(3))
+        if with_hook:
+            assert len(seen) == 2 and seen[0] is replacement and seen[1] is original
 
     @pytest.mark.parametrize(
         "module_name,input_name",

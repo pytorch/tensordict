@@ -423,7 +423,9 @@ class TensorDict(TensorDictBase):
         self._device = device
         self._tensordict = _tensordict = _StringOnlyDict()
         self._batch_size = batch_size
-        if source:  # faster than calling items
+        if not nested and type(source) is dict:
+            _tensordict.update(source)
+        elif source:  # faster than calling items
             for key, value in source.items():
                 if nested and isinstance(value, dict):
                     value = cls._new_unsafe(
@@ -473,11 +475,25 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         prefix="",
         filter_empty: bool = True,
+        _memo=None,
     ):
-        from tensordict.nn import TensorDictParams
+        if isinstance(module, TensorDictBase):
+            from tensordict.nn import TensorDictParams
 
-        if isinstance(module, TensorDictParams):
-            return module
+            if isinstance(module, TensorDictParams):
+                if _memo is not None:
+                    _memo["has_params"] = True
+                return module
+        if (
+            as_module
+            and cls is TensorDict
+            and not use_state_dict
+            and not is_compiling()
+        ):
+            from tensordict.nn.params import _maybe_make_param_or_buffer
+
+            _memo = {"convert_buffers": _maybe_make_param_or_buffer}
+        convert_buffers = _memo["convert_buffers"] if _memo is not None else None
         destination = {}
         if use_state_dict:
             keep_vars = False
@@ -496,6 +512,8 @@ class TensorDict(TensorDictBase):
             for name, buffer in module._buffers.items():
                 if buffer is None:
                     continue
+                if convert_buffers is not None:
+                    buffer = convert_buffers(buffer)
                 destination[name] = buffer
 
         if use_state_dict:
@@ -505,18 +523,33 @@ class TensorDict(TensorDictBase):
                     destination = hook_result
         if not filter_empty or destination:
             destination_set = True
-            destination = cls._new_unsafe(destination, batch_size=torch.Size(()))
+            if cls is TensorDict and not use_state_dict:
+                destination = cls._new_unsafe(
+                    destination, batch_size=torch.Size(()), nested=False
+                )
+            else:
+                destination = cls._new_unsafe(destination, batch_size=torch.Size(()))
         else:
             destination_set = False
         for name, submodule in module._modules.items():
             if submodule is not None:
-                subtd = cls._from_module(
-                    module=submodule,
-                    as_module=False,
-                    use_state_dict=use_state_dict,
-                    prefix=prefix + name + ".",
-                    filter_empty=filter_empty,
-                )
+                if cls is TensorDict:
+                    subtd = cls._from_module(
+                        module=submodule,
+                        as_module=False,
+                        use_state_dict=use_state_dict,
+                        prefix=prefix + name + ".",
+                        filter_empty=filter_empty,
+                        _memo=_memo,
+                    )
+                else:
+                    subtd = cls._from_module(
+                        module=submodule,
+                        as_module=False,
+                        use_state_dict=use_state_dict,
+                        prefix=prefix + name + ".",
+                        filter_empty=filter_empty,
+                    )
                 if subtd is not None:
                     if not destination_set:
                         destination = cls._new_unsafe(batch_size=torch.Size(()))
@@ -530,6 +563,14 @@ class TensorDict(TensorDictBase):
         if as_module:
             from tensordict.nn.params import TensorDictParams
 
+            if _memo is not None and not _memo.get("has_params", False):
+                # The capture traversal already converted buffers. Avoid the
+                # wrapper constructor's second conversion/unlock traversal.
+                # Existing TensorDictParams children still need that traversal
+                # to preserve its recursive unlock behavior.
+                result = TensorDictParams(destination, no_convert="skip")
+                result.no_convert = True
+                return result
             return TensorDictParams(destination, no_convert=True)
         return destination
 
@@ -5336,6 +5377,33 @@ def _set_tensor_dict(  # noqa: F811
     memo,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
+    if (
+        not inplace
+        and not hooks
+        and type(_parameters) is dict
+        and type(_buffers) is dict
+    ):
+        if type(tensor) is nn.Parameter:
+            out = _parameters.get(name, NO_DEFAULT)
+            if (type(out) is nn.Parameter or out is None) and (
+                not preserve_module_state
+                or out is None
+                or tensor.requires_grad == out.requires_grad
+            ):
+                # Pop before setting to retain the registration order of the
+                # general path, including when updating only part of a module.
+                del _parameters[name]
+                _parameters[name] = tensor
+                return out
+        elif (
+            type(tensor) is Tensor
+            and not getattr(tensor, "_is_param", False)
+            and name not in _parameters
+            and name in _buffers
+        ):
+            out = _buffers.pop(name)
+            _buffers[name] = tensor
+            return out
     was_buffer = False
     out = _parameters.pop(name, NO_DEFAULT)  # type: ignore[assignment]
     was_parameter = out is not NO_DEFAULT
