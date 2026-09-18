@@ -4882,6 +4882,67 @@ class TestGeneric:
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
 
+    @pytest.mark.parametrize("method", ["set", "update", "update_td", "update_kwargs"])
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("device", [None, "cpu", "meta"])
+    def test_eager_tensor_mutation(self, method, nested, device):
+        value = torch.ones(2, 3, device=device, requires_grad=True)
+        source = {"x": value, "y": value + 1}
+        child = TensorDict({"keep": torch.zeros(2)}, [2], device=device)
+        td = TensorDict({"child": child}, [2], device=device) if nested else child
+        td.rename_("batch")
+        keep = child["keep"]
+        payload = {"child": source} if nested else source
+        if method == "set":
+            for key, tensor in source.items():
+                td.set(("child", key) if nested else key, tensor)
+        elif method == "update_kwargs":
+            td.update(**payload)
+        elif method == "update_td":
+            td.update(TensorDict(payload, [2], device=device))
+        else:
+            td.update(payload)
+        assert child["x"] is value and child["y"] is source["y"]
+        assert child["keep"] is keep and child.names == ["batch"]
+        if nested:
+            assert td["child"] is child
+        source["x"] = torch.zeros_like(value)
+        assert child["x"] is value
+        if device != "meta":
+            child["x"].sum().backward()
+            torch.testing.assert_close(value.grad, torch.ones_like(value))
+
+    def test_eager_update_fallbacks(self):
+        value = torch.ones(2, 3)
+        td = TensorDict({"x": torch.zeros_like(value)}, [2], device="cpu")
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            td.update({"x": value, "bad": torch.ones(3)})
+        assert td["x"] is value and "bad" not in td.keys()
+        # TensorDict inputs must still reject incompatible batch metadata.
+        with pytest.raises(RuntimeError, match="update_batch_size"):
+            td.update(TensorDict({"x": torch.ones(3)}, [3]))
+        td.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            td.update({"x": value})
+        td.unlock_()
+        param = nn.Parameter(value.clone())
+        td.update({"x": param, ("nested", "y"): value})
+        assert td["x"] is param and td["nested", "y"] is value
+        dest = TensorDict({}, [2], device="meta")
+        dest.update({"x": value})
+        assert dest["x"].device.type == "meta"
+
+    def test_eager_mutation_custom_validation(self):
+        class ValidatedTD(TensorDict):
+            def _validate_value_generic(self, value, **kwargs):
+                return super()._validate_value_generic(value, **kwargs) + 1
+
+        td = ValidatedTD({}, [2], device="cpu")
+        value = torch.zeros(2)
+        td.set("x", value)
+        td.update({"y": value})
+        assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
     def test_zero_grad_module(self):
         x = torch.randn(3, 3)
         linear = nn.Linear(3, 4)
