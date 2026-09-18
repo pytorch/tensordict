@@ -622,6 +622,7 @@ class TensorDict(TensorDictBase):
                         key,
                         value,
                         inplace,
+                        return_swap=return_swap,
                         preserve_module_state=preserve_module_state,
                         memo=memo,
                     )
@@ -5232,6 +5233,7 @@ def _set_tensor_dict(  # noqa: F811
     tensor: torch.Tensor,
     inplace: bool,
     *,
+    return_swap: bool,
     preserve_module_state: bool | None,
     memo,
 ) -> None:
@@ -5247,7 +5249,7 @@ def _set_tensor_dict(  # noqa: F811
         out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out
-        out_tmp = out.clone()
+        out_tmp = out.clone() if return_swap else out
         out.data.copy_(tensor.data)
         tensor = out
         out = out_tmp
