@@ -9600,13 +9600,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     f"Some keys were not found: {set(sorting_keys).symmetric_difference(keys)}."
                 )
             return sorting_keys, new_vals
+        source = dict(zip(keys, vals))
         if isinstance(default, str) and default == "intersection":
-            new_keys = [
-                key for key in sorting_keys if key in set(keys)
-            ]  # intersection does not keep the sorting
+            new_keys = [key for key in sorting_keys if key in source]
         else:
             new_keys = list(set(sorting_keys).union(keys))
-        source = dict(zip(keys, vals))
         vals = [source.get(key, default) for key in new_keys]
         return new_keys, vals
 
@@ -15456,7 +15454,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         - HDF5 objects through :meth:`~.from_h5`.
 
         """
-        if is_tensor_collection(obj):
+        if type(obj) is Tensor or is_tensor_collection(obj):
             # Conversions from non-tensor data must be done manually
             # if is_non_tensor(obj):
             #     from tensordict.tensorclass import LazyStackedTensorDict
