@@ -1298,6 +1298,7 @@ class TestGeneric:
         if _has_h5py:
             pytree = pytree + ({"h5py": TestTensorDictsBase.td_h5(device="cpu").file},)
         td = TensorDict.from_any(pytree)
+        assert td["1", "tensor"] is pytree[1]["tensor"]
         expected = {
             "0",
             ("1", "td", "one"),
@@ -4649,9 +4650,12 @@ class TestGeneric:
             td_source = {"b": torch.ones(())}
             td_dest.update_(td_source, keys_to_update="b")
 
-        td_dest = TensorDict(a=0, b=1)
-        td_source = TensorDict(a=0)
+        td_dest = TensorDict(a=0, b=1, c=2)
+        a, b = td_dest["a"], td_dest["b"]
+        td_source = TensorDict(b=3, a=4)
         td_dest.update_(td_source)
+        assert td_dest["a"] is a and td_dest["b"] is b
+        assert a == 4 and b == 3 and td_dest["c"] == 2
 
     def test_update_kwargs(self):
         # update: kwargs create new keys
