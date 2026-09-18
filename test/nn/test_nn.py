@@ -4547,9 +4547,11 @@ class TestToModule:
         assert not isinstance(module.weight, nn.Parameter)
         assert not isinstance(module.bias, nn.Parameter)
 
-    def test_plain_tensor_to_module_inplace_preserves_module_state(self, as_module):
+    @pytest.mark.parametrize("return_swap", [False, True])
+    def test_to_module_inplace_preserves_state(self, as_module, return_swap):
         module = nn.Linear(4, 2)
-        params = TensorDict.from_module(module, as_module=as_module).data.detach()
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.data.clone()
         params.zero_()
         state_dict_keys = set(module.state_dict())
         weight = module.weight
@@ -4557,7 +4559,7 @@ class TestToModule:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            params.to_module(module, inplace=True)
+            params.to_module(module, inplace=True, return_swap=return_swap)
 
         assert set(module.state_dict()) == state_dict_keys
         assert module.weight is weight
