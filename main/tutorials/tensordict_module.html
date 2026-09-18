@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4313+gec899b121.d20260913)
+                  main (0.14.0.dev4327+gd7d62313b.d20260918)
                 </div>
               
             
@@ -545,19 +545,19 @@ executed, as they need to read and write from a tensordict. However, we can grea
 
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Compiled versions"</span><span class="p">)</span>
 <span class="n">block_notd_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_notd</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"reduce-overhead"</span><span class="p">)</span>
-<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/builtins/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
     <span class="n">block_notd_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="sa">f</span><span class="s2">"Compiled regular: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">'block_notd_c(x=x)'</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us"</span>
 <span class="p">)</span>
 <span class="n">block_tdm_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_tdm</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"reduce-overhead"</span><span class="p">)</span>
-<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/builtins/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
     <span class="n">block_tdm_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="sa">f</span><span class="s2">"Compiled TDM: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">'block_tdm_c(x=x)'</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us"</span>
 <span class="p">)</span>
 <span class="n">block_tds_c</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="torch.compile" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">compile</span></a><span class="p">(</span><span class="n">block_tds</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"reduce-overhead"</span><span class="p">)</span>
-<span class="k">for</span> <a href="https://docs.python.org/3/library/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
+<span class="k">for</span> <a href="https://docs.python.org/3/builtins/functions.html#int" title="builtins.int" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">_</span></a> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># warmup</span>
     <span class="n">block_tds_c</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="sa">f</span><span class="s2">"Compiled sequential: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/benchmark_utils.html#torch.utils.benchmark.Timer" title="torch.utils.benchmark.utils.timer.Timer" class="sphx-glr-backref-module-torch-utils-benchmark-utils-timer sphx-glr-backref-type-py-class"><span class="n">Timer</span></a><span class="p">(</span><span class="s1">'block_tds_c(x=x)'</span><span class="p">,</span><span class="w"> </span><span class="nb">globals</span><span class="o">=</span><span class="nb">globals</span><span class="p">())</span><span class="o">.</span><span class="n">adaptive_autorange</span><span class="p">()</span><span class="o">.</span><span class="n">median</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1_000_000</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> us"</span>
@@ -565,13 +565,13 @@ executed, as they need to read and write from a tensordict. However, we can grea
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Without compile
-Regular:  211.9231 us
-TDM:  275.9997 us
-Sequential:  490.6255 us
+Regular:  206.4554 us
+TDM:  269.1773 us
+Sequential:  481.3397 us
 Compiled versions
-Compiled regular:  268.9540 us
-Compiled TDM:  289.8350 us
-Compiled sequential:  299.6955 us
+Compiled regular:  269.0650 us
+Compiled TDM:  286.9250 us
+Compiled sequential:  297.8200 us
 </pre></div>
 </div>
 <p>As one can see, the onverhead introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> has been completely resolved.</p>
@@ -671,7 +671,7 @@ them without recurring to <a class="reference internal" href="../reference/gener
 introduced by <a class="reference internal" href="../reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code></a> can be completely removed, leaving users with a neat,
 tensordict-free version of their module.</p>
 <p>In the next tutorial, we will be seeing how <code class="docutils literal notranslate"><span class="pre">torch.export</span></code> can be used to isolate a module and export it.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.522 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 15.570 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-module-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_module.ipynb</span></code></a></p>

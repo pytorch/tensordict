@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4313+gec899b121.d20260913)
+                  main (0.14.0.dev4327+gd7d62313b.d20260918)
                 </div>
               
             
@@ -858,14 +858,14 @@ See <a class="reference external" href="https://github.com/pytorch/pytorch/pull/
 <li><p><strong>gradient</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – The gradient of the function
 being differentiated w.r.t. <code class="docutils literal notranslate"><span class="pre">self</span></code>.
 This argument can be omitted if <code class="docutils literal notranslate"><span class="pre">self</span></code> is a scalar. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>retain_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the graph used to compute the grads will be freed;
+<li><p><strong>retain_graph</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the graph used to compute the grads will be freed;
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, it will be retained. The default is <code class="docutils literal notranslate"><span class="pre">None</span></code>, in which case the value is inferred from <code class="docutils literal notranslate"><span class="pre">create_graph</span></code>
 (i.e., the graph is retained only when higher-order derivative tracking is requested). Note that in nearly all cases
 setting this option to True is not needed and often can be worked around in a much more efficient way.</p></li>
-<li><p><strong>create_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, graph of the derivative will
+<li><p><strong>create_graph</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, graph of the derivative will
 be constructed, allowing to compute higher order derivative
 products. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which
+<li><p><strong>inputs</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>Tensor</em><em>]</em><em>, </em><em>optional</em>) – Inputs w.r.t. which
 the gradient will be accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be
 ignored. If not provided, the gradient is accumulated into all the leaf
 Tensors that were used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>. A dict of tensors
@@ -1207,7 +1207,7 @@ to avoid downcasting and potentially losing information.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.const_data_ptr">
-<span class="sig-name descname"><span class="pre">const_data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.const_data_ptr" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">const_data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.const_data_ptr" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the address of the first element of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
 <p>Unlike <a class="reference internal" href="#tensordict.UnbatchedTensor.data_ptr" title="tensordict.UnbatchedTensor.data_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>, this is guaranteed to be a read-only access
 that will not trigger copy-on-write materialization. For regular
@@ -1245,7 +1245,7 @@ different device.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>src</strong> (<em>Tensor</em>) – the source tensor to copy from</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and this copy is between CPU and GPU,
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and this copy is between CPU and GPU,
 the copy may occur asynchronously with respect to the host. For other
 cases, this argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
 </ul>
@@ -1362,7 +1362,7 @@ then no copy is performed and the original object is returned.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a>, optional) – The destination GPU device.
 Defaults to the current CUDA device.</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
 the copy will be asynchronous with respect to the host.
 Otherwise, the argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of
@@ -1410,7 +1410,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.data_ptr">
-<span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the address of the first element of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1435,7 +1435,7 @@ to the data pointer.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.dense_dim">
-<span class="sig-name descname"><span class="pre">dense_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dense_dim" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">dense_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dense_dim" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return the number of dense dimensions in a <a class="reference external" href="https://docs.pytorch.org/docs/stable/sparse.html#sparse-docs" title="(in PyTorch v2.14)"><span class="xref std std-ref">sparse tensor</span></a> <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1536,13 +1536,13 @@ have forward mode AD gradients.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.dim">
-<span class="sig-name descname"><span class="pre">dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dim" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dim" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the number of dimensions of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.dim_order">
-<span class="sig-name descname"><span class="pre">dim_order</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ambiguity_check</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dim_order" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">dim_order</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ambiguity_check</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.dim_order" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the uniquely determined tuple of int describing the dim order or
 physical layout of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <p>The dim order represents how dimensions are laid out in memory of dense tensors,
@@ -1555,7 +1555,7 @@ If <cite>ambiguity_check</cite> is False, it will return one of legal dim order(
 Otherwise, it will raise TypeError.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ambiguity_check</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><em>torch.memory_format</em></a><em>]</em>) – The check method for ambiguity of dim order.</p>
+<dd class="field-odd"><p><strong>ambiguity_check</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><em>torch.memory_format</em></a><em>]</em>) – The check method for ambiguity of dim order.</p>
 </dd>
 </dl>
 <p>Examples:</p>
@@ -1645,7 +1645,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.element_size">
-<span class="sig-name descname"><span class="pre">element_size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.element_size" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">element_size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.element_size" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the size in bytes of an individual element.</p>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([])</span><span class="o">.</span><span class="n">element_size</span><span class="p">()</span>
@@ -1670,7 +1670,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.equal">
-<span class="sig-name descname"><span class="pre">equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.equal" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.equal" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.equal.html#torch.equal" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.equal()</span></code></a></p>
 </dd></dl>
 
@@ -1757,7 +1757,7 @@ materialize the expanded values. For example, changing dtype after
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>*size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired expanded size</p>
+<dd class="field-odd"><p><strong>*size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired expanded size</p>
 </dd>
 </dl>
 <div class="admonition warning">
@@ -1841,7 +1841,7 @@ This function modifies the input tensor in-place, and returns the input tensor.<
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>fill_value</strong> (<em>Scalar</em>) – the fill value</p></li>
-<li><p><strong>wrap</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – the diagonal ‘wrapped’ after N columns for tall matrices. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>wrap</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – the diagonal ‘wrapped’ after N columns for tall matrices. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
 </ul>
 </dd>
 </dl>
@@ -2308,7 +2308,7 @@ match <code class="xref py py-attr docutils literal notranslate"><span class="pr
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
 <li><p><strong>index</strong> (<em>Tensor</em>) – indices of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> to add to,
 should have dtype either <cite>torch.int64</cite> or <cite>torch.int32</cite></p></li>
 <li><p><strong>source</strong> (<em>Tensor</em>) – the tensor containing values to add</p></li>
@@ -2363,7 +2363,7 @@ is nondeterministic since it depends on which copy occurs last.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – indices of <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensor</span></code> to select from</p></li>
 <li><p><strong>tensor</strong> (<em>Tensor</em>) – the tensor containing values to copy</p></li>
 </ul>
@@ -2397,9 +2397,9 @@ selecting the indices in the order given in <a class="reference internal" href="
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – indices of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor to fill in</p></li>
-<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – the value to fill with</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – the value to fill with</p></li>
 </ul>
 </dd>
 </dl>
@@ -2435,7 +2435,7 @@ contain duplicate elements.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>indices</strong> (<em>tuple of LongTensor</em>) – tensors used to index into <cite>self</cite>.</p></li>
 <li><p><strong>values</strong> (<em>Tensor</em>) – tensor of same dtype as <cite>self</cite>.</p></li>
-<li><p><strong>accumulate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – whether to accumulate into self</p></li>
+<li><p><strong>accumulate</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – whether to accumulate into self</p></li>
 </ul>
 </dd>
 </dl>
@@ -2477,11 +2477,11 @@ output is given as:</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension along which to index</p></li>
 <li><p><strong>index</strong> (<em>Tensor</em>) – indices of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> to accumulate into,
 should have dtype either <cite>torch.int64</cite> or <cite>torch.int32</cite></p></li>
 <li><p><strong>source</strong> (<em>FloatTensor</em>) – the tensor containing values to accumulate</p></li>
-<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – the reduction operation to apply
+<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – the reduction operation to apply
 (<code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;prod&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;amax&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;amin&quot;</span></code>)</p></li>
 </ul>
 </dd>
@@ -2576,7 +2576,7 @@ then no copy is performed and the original object is returned.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a>, optional) – The destination IPU device.
 Defaults to the current IPU device.</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
 the copy will be asynchronous with respect to the host.
 Otherwise, the argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of
@@ -2588,7 +2588,7 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_coalesced">
-<span class="sig-name descname"><span class="pre">is_coalesced</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_coalesced" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_coalesced</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_coalesced" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/sparse.html#sparse-coo-docs" title="(in PyTorch v2.14)"><span class="xref std std-ref">sparse COO tensor</span></a> that is coalesced, <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -2599,19 +2599,19 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_complex">
-<span class="sig-name descname"><span class="pre">is_complex</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_complex" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_complex</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_complex" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the data type of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a complex data type.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_conj">
-<span class="sig-name descname"><span class="pre">is_conj</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_conj" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_conj</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_conj" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the conjugate bit of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is set to true.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_contiguous">
-<span class="sig-name descname"><span class="pre">is_contiguous</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">memory_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">torch.contiguous_format</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_contiguous" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_contiguous</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">memory_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">torch.contiguous_format</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_contiguous" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor is contiguous in memory in the order specified
 by memory format.</p>
 <dl class="field-list simple">
@@ -2636,13 +2636,13 @@ order. Default: <code class="docutils literal notranslate"><span class="pre">tor
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_floating_point">
-<span class="sig-name descname"><span class="pre">is_floating_point</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_floating_point" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_floating_point</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_floating_point" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the data type of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a floating point data type.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_inference">
-<span class="sig-name descname"><span class="pre">is_inference</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_inference" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_inference</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_inference" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.is_inference.html#torch.is_inference" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.is_inference()</span></code></a></p>
 </dd></dl>
 
@@ -2704,7 +2704,7 @@ are like normal tensors, but they carry no data.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_neg">
-<span class="sig-name descname"><span class="pre">is_neg</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_neg" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_neg</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_neg" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the negative bit of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is set to true.</p>
 </dd></dl>
 
@@ -2723,7 +2723,7 @@ By default, the device pinned memory on will be the current <a class="reference 
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_set_to">
-<span class="sig-name descname"><span class="pre">is_set_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_set_to" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_set_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_set_to" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if both tensors are pointing to the exact same memory (same
 storage, offset, size and stride).</p>
 </dd></dl>
@@ -2737,7 +2737,7 @@ storage, offset, size and stride).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.is_signed">
-<span class="sig-name descname"><span class="pre">is_signed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_signed" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">is_signed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.is_signed" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns True if the data type of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a signed data type.</p>
 </dd></dl>
 
@@ -2809,7 +2809,7 @@ storage, offset, size and stride).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.istft">
-<span class="sig-name descname"><span class="pre">istft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">hop_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">win_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">onesided</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_complex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.istft" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">istft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">hop_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">win_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">onesided</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_complex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.istft" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.istft.html#torch.istft" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.istft()</span></code></a></p>
 </dd></dl>
 
@@ -3158,7 +3158,7 @@ tensor.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>mask</strong> (<em>BoolTensor</em>) – the boolean mask</p></li>
-<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – the value to fill in with</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – the value to fill in with</p></li>
 </ul>
 </dd>
 </dl>
@@ -3319,7 +3319,7 @@ if <code class="docutils literal notranslate"><span class="pre">assign</span></c
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>other</strong> (<em>Tensor</em>) – value in state dict with key corresponding to <code class="docutils literal notranslate"><span class="pre">self</span></code></p></li>
-<li><p><strong>assign</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – the assign argument passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">nn.Module.load_state_dict()</span></code></p></li>
+<li><p><strong>assign</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – the assign argument passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">nn.Module.load_state_dict()</span></code></p></li>
 </ul>
 </dd>
 </dl>
@@ -3354,7 +3354,7 @@ then no copy is performed and the original object is returned.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a>, optional) – The destination MTIA device.
 Defaults to the current MTIA device.</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
 the copy will be asynchronous with respect to the host.
 Otherwise, the argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of
@@ -3476,7 +3476,7 @@ Defined to be <code class="xref py py-meth docutils literal notranslate"><span c
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.ndimension">
-<span class="sig-name descname"><span class="pre">ndimension</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.ndimension" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">ndimension</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.ndimension" title="Permalink to this definition">¶</a></dt>
 <dd><p>Alias for <code class="xref py py-meth docutils literal notranslate"><span class="pre">dim()</span></code></p>
 </dd></dl>
 
@@ -3518,7 +3518,7 @@ Defined to be <code class="xref py py-meth docutils literal notranslate"><span c
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.nelement">
-<span class="sig-name descname"><span class="pre">nelement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.nelement" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">nelement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.nelement" title="Permalink to this definition">¶</a></dt>
 <dd><p>Alias for <code class="xref py py-meth docutils literal notranslate"><span class="pre">numel()</span></code></p>
 </dd></dl>
 
@@ -3530,7 +3530,7 @@ By default, the returned Tensor has the same <a class="reference external" href=
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> as this tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
+<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
 shape of the output tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -3565,7 +3565,7 @@ uninitialized data. By default, the returned Tensor has the same
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> as this tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
+<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
 shape of the output tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -3635,7 +3635,7 @@ By default, the returned Tensor has the same <a class="reference external" href=
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> as this tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
+<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
 shape of the output tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -3720,7 +3720,7 @@ By default, the returned Tensor has the same <a class="reference external" href=
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> as this tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
+<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a list, tuple, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> of integers defining the
 shape of the output tensor.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -3773,7 +3773,7 @@ the pinned memory. Works only for CPU tensors. Default: <code class="docutils li
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.norm">
-<span class="sig-name descname"><span class="pre">norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'fro'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.norm" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'fro'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.norm" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.linalg.norm.html#torch.linalg.norm" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.linalg.norm()</span></code></a></p>
 </dd></dl>
 
@@ -3798,7 +3798,7 @@ parameterized by <a class="reference internal" href="#tensordict.UnbatchedTensor
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.numel">
-<span class="sig-name descname"><span class="pre">numel</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.numel" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">numel</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.numel" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.numel.html#torch.numel" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.numel()</span></code></a></p>
 </dd></dl>
 
@@ -3819,7 +3819,7 @@ the tensor won’t share its storage with the returned ndarray.
 Setting <code class="xref py py-attr docutils literal notranslate"><span class="pre">force</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code> can be a useful shorthand.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>force</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the ndarray may be a copy of the tensor
+<dd class="field-odd"><p><strong>force</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the ndarray may be a copy of the tensor
 instead of always sharing memory, defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
@@ -3849,7 +3849,7 @@ instead of always sharing memory, defaults to <code class="docutils literal notr
 <dd><p>Returns a view of the tensor with its dimensions permuted.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em><em>, </em><em>tuple of int</em><em> or </em><em>list of int</em>) – the desired ordering of dimensions.</p>
+<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em><em>, </em><em>tuple of int</em><em> or </em><em>list of int</em>) – the desired ordering of dimensions.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -3934,7 +3934,7 @@ contain duplicate elements.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>LongTensor</em>) – the indices into self</p></li>
 <li><p><strong>source</strong> (<em>Tensor</em>) – the tensor containing values to copy from</p></li>
-<li><p><strong>accumulate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – whether to accumulate into self. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>accumulate</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – whether to accumulate into self. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
 </ul>
 </dd>
 </dl>
@@ -3950,7 +3950,7 @@ contain duplicate elements.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.q_per_channel_axis">
-<span class="sig-name descname"><span class="pre">q_per_channel_axis</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_per_channel_axis" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">q_per_channel_axis</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_per_channel_axis" title="Permalink to this definition">¶</a></dt>
 <dd><p>Given a Tensor quantized by linear (affine) per-channel quantization,
 returns the index of dimension on which per-channel quantization is applied.</p>
 </dd></dl>
@@ -3975,14 +3975,14 @@ the tensor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.q_scale">
-<span class="sig-name descname"><span class="pre">q_scale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_scale" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">q_scale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_scale" title="Permalink to this definition">¶</a></dt>
 <dd><p>Given a Tensor quantized by linear(affine) quantization,
 returns the scale of the underlying quantizer().</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.q_zero_point">
-<span class="sig-name descname"><span class="pre">q_zero_point</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_zero_point" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">q_zero_point</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.q_zero_point" title="Permalink to this definition">¶</a></dt>
 <dd><p>Given a Tensor quantized by linear(affine) quantization,
 returns the zero_point of the underlying quantizer().</p>
 </dd></dl>
@@ -4244,7 +4244,7 @@ For the operator similar to <cite>numpy.repeat</cite>, see <a class="reference e
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>repeat</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em><em>, </em><em>tuple of int</em><em> or </em><em>list of int</em>) – The number of times to repeat this tensor along each dimension</p>
+<dd class="field-odd"><p><strong>repeat</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em><em>, </em><em>tuple of int</em><em> or </em><em>list of int</em>) – The number of times to repeat this tensor along each dimension</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -4289,7 +4289,7 @@ initialization), <code class="docutils literal notranslate"><span class="pre">te
 begin to record operations on <code class="docutils literal notranslate"><span class="pre">tensor</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>requires_grad</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If autograd should record operations on this tensor.
+<dd class="field-odd"><p><strong>requires_grad</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If autograd should record operations on this tensor.
 Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 </dl>
@@ -4322,7 +4322,7 @@ possible to return a view.</p>
 <p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.reshape.html#torch.reshape" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.reshape()</span></code></a></p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<em>tuple of ints</em><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired shape</p>
+<dd class="field-odd"><p><strong>shape</strong> (<em>tuple of ints</em><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired shape</p>
 </dd>
 </dl>
 </dd></dl>
@@ -4372,7 +4372,7 @@ value.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>sizes</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired size</p></li>
+<li><p><strong>sizes</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired size</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of
 Tensor. Default: <code class="docutils literal notranslate"><span class="pre">torch.contiguous_format</span></code>. Note that memory format of
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is going to be unaffected if <code class="docutils literal notranslate"><span class="pre">self.size()</span></code> matches <code class="docutils literal notranslate"><span class="pre">sizes</span></code>.</p></li>
@@ -4416,7 +4416,7 @@ Tensor. Default: <code class="docutils literal notranslate"><span class="pre">to
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.retain_grad">
-<span class="sig-name descname"><span class="pre">retain_grad</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.retain_grad" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">retain_grad</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.retain_grad" title="Permalink to this definition">¶</a></dt>
 <dd><p>Enables this Tensor to have their <a class="reference internal" href="#tensordict.UnbatchedTensor.grad" title="tensordict.UnbatchedTensor.grad"><code class="xref py py-attr docutils literal notranslate"><span class="pre">grad</span></code></a> populated during
 <a class="reference internal" href="#tensordict.UnbatchedTensor.backward" title="tensordict.UnbatchedTensor.backward"><code class="xref py py-func docutils literal notranslate"><span class="pre">backward()</span></code></a>. This is a no-op for leaf tensors.</p>
 </dd></dl>
@@ -4528,7 +4528,7 @@ instead for more reduction options.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – the indices of elements to scatter, can be either empty
 or of the same dimensionality as <code class="docutils literal notranslate"><span class="pre">src</span></code>. When empty, the operation
 returns <code class="docutils literal notranslate"><span class="pre">self</span></code> unchanged.</p></li>
@@ -4536,7 +4536,7 @@ returns <code class="docutils literal notranslate"><span class="pre">self</span>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – reduction operation to apply, can be either
+<dd class="field-even"><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – reduction operation to apply, can be either
 <code class="docutils literal notranslate"><span class="pre">'add'</span></code> or <code class="docutils literal notranslate"><span class="pre">'multiply'</span></code>.</p>
 </dd>
 </dl>
@@ -4577,7 +4577,7 @@ with the <code class="xref py py-attr docutils literal notranslate"><span class=
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – the indices of elements to scatter, can be either empty
 or of the same dimensionality as <code class="docutils literal notranslate"><span class="pre">src</span></code>. When empty, the operation
 returns <code class="docutils literal notranslate"><span class="pre">self</span></code> unchanged.</p></li>
@@ -4585,7 +4585,7 @@ returns <code class="docutils literal notranslate"><span class="pre">self</span>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – reduction operation to apply, can be either
+<dd class="field-even"><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – reduction operation to apply, can be either
 <code class="docutils literal notranslate"><span class="pre">'add'</span></code> or <code class="docutils literal notranslate"><span class="pre">'multiply'</span></code>.</p>
 </dd>
 </dl>
@@ -4638,7 +4638,7 @@ without further error checking.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – the indices of elements to scatter and add, can be
 either empty or of the same dimensionality as <code class="docutils literal notranslate"><span class="pre">src</span></code>. When empty, the
 operation returns <code class="docutils literal notranslate"><span class="pre">self</span></code> unchanged.</p></li>
@@ -4706,12 +4706,12 @@ output is given as:</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the axis along which to index</p></li>
 <li><p><strong>index</strong> (<em>LongTensor</em>) – the indices of elements to scatter and reduce.</p></li>
 <li><p><strong>src</strong> (<em>Tensor</em>) – the source elements to scatter and reduce</p></li>
-<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – the reduction operation to apply for non-unique indices
+<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – the reduction operation to apply for non-unique indices
 (<code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;prod&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;amax&quot;</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;amin&quot;</span></code>)</p></li>
-<li><p><strong>include_self</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – whether elements from the <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor are
+<li><p><strong>include_self</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – whether elements from the <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor are
 included in the reduction</p></li>
 </ul>
 </dd>
@@ -4758,9 +4758,9 @@ storage, offset, size, and stride.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>source</strong> (<em>Tensor</em><em> or </em><em>Storage</em>) – the tensor or storage to use</p></li>
-<li><p><strong>storage_offset</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the offset in the storage</p></li>
+<li><p><strong>storage_offset</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the offset in the storage</p></li>
 <li><p><strong>size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – the desired size. Defaults to the size of the source.</p></li>
-<li><p><strong>stride</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>, </em><em>optional</em>) – the desired stride. Defaults to C-contiguous strides.</p></li>
+<li><p><strong>stride</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>, </em><em>optional</em>) – the desired stride. Defaults to C-contiguous strides.</p></li>
 </ul>
 </dd>
 </dl>
@@ -4884,11 +4884,11 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.size">
 <span class="sig-name descname"><span class="pre">size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Size</span> <span class="pre">or</span> <span class="pre">int</span></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.size" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the size of the <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor. If <code class="docutils literal notranslate"><span class="pre">dim</span></code> is not specified,
-the returned value is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a>, a subclass of <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>.
+the returned value is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a>, a subclass of <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>.
 If <code class="docutils literal notranslate"><span class="pre">dim</span></code> is specified, returns an int holding the size of that dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – The dimension for which to retrieve the size.</p>
+<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – The dimension for which to retrieve the size.</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -4933,7 +4933,7 @@ If <code class="docutils literal notranslate"><span class="pre">dim</span></code
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.sparse_dim">
-<span class="sig-name descname"><span class="pre">sparse_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.sparse_dim" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">sparse_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.sparse_dim" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return the number of sparse dimensions in a <a class="reference external" href="https://docs.pytorch.org/docs/stable/sparse.html#sparse-docs" title="(in PyTorch v2.14)"><span class="xref std std-ref">sparse tensor</span></a> <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -5021,8 +5021,8 @@ equal the number of dense dimensions in <code class="xref py py-attr docutils li
 <li><p><strong>size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a>) – the desired size. If <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is non-empty
 sparse tensor, the desired size cannot be smaller than the
 original size.</p></li>
-<li><p><strong>sparse_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of sparse dimensions</p></li>
-<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of dense dimensions</p></li>
+<li><p><strong>sparse_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of sparse dimensions</p></li>
+<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of dense dimensions</p></li>
 </ul>
 </dd>
 </dl>
@@ -5037,8 +5037,8 @@ size and the number of sparse and dense dimensions.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a>) – the desired size.</p></li>
-<li><p><strong>sparse_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of sparse dimensions</p></li>
-<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of dense dimensions</p></li>
+<li><p><strong>sparse_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of sparse dimensions</p></li>
+<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the number of dense dimensions</p></li>
 </ul>
 </dd>
 </dl>
@@ -5100,7 +5100,7 @@ size and the number of sparse and dense dimensions.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.stft">
-<span class="sig-name descname"><span class="pre">stft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">hop_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">win_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'reflect'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">onesided</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_complex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">align_to_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.stft" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">stft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">hop_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">win_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'reflect'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">onesided</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_complex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">align_to_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.stft" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stft.html#torch.stft" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stft()</span></code></a></p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -5123,7 +5123,7 @@ the previous signature may cause error or return incorrect result.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.storage_offset">
-<span class="sig-name descname"><span class="pre">storage_offset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.storage_offset" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">storage_offset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.storage_offset" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor’s offset in the underlying storage in terms of
 number of storage elements (not bytes).</p>
 <p>Example:</p>
@@ -5138,7 +5138,7 @@ number of storage elements (not bytes).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.storage_type">
-<span class="sig-name descname"><span class="pre">storage_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.14)"><span class="pre">type</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.storage_type" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">storage_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.14)"><span class="pre">type</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.storage_type" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the type of the underlying storage.</p>
 </dd></dl>
 
@@ -5152,7 +5152,7 @@ argument is passed in. Otherwise, an integer value is returned as the stride in
 the particular dimension <a class="reference internal" href="#tensordict.UnbatchedTensor.dim" title="tensordict.UnbatchedTensor.dim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dim</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the desired dimension in which stride is required</p>
+<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the desired dimension in which stride is required</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -5204,7 +5204,7 @@ the particular dimension <a class="reference internal" href="#tensordict.Unbatch
 <a class="reference internal" href="#tensordict.UnbatchedTensor.size" title="tensordict.UnbatchedTensor.size"><code class="xref py py-attr docutils literal notranslate"><span class="pre">size</span></code></a> must be broadcastable to <code class="docutils literal notranslate"><span class="pre">this</span></code> tensor size.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a sequence of integers defining the shape of the output tensor.</p>
+<dd class="field-odd"><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – a sequence of integers defining the shape of the output tensor.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -5453,7 +5453,7 @@ the required pattern.</p>
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/sparse.html#sparse-coo-docs" title="(in PyTorch v2.14)"><span class="xref std std-ref">coordinate format</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>sparseDims</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the number of sparse dimensions to include in the new sparse tensor</p>
+<dd class="field-odd"><p><strong>sparseDims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – the number of sparse dimensions to include in the new sparse tensor</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -5503,7 +5503,7 @@ of the resulting BSR or BSC tensor. For other layouts,
 specifying the block size that is not <code class="docutils literal notranslate"><span class="pre">None</span></code> will result in a
 RuntimeError exception.  A block size must be a tuple of length
 two such that its items evenly divide the two sparse dimensions.</p></li>
-<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
+<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
 resulting CSR, CSC, BSR or BSC tensor.  This argument should be
 used only if <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a strided tensor, and must be a
 value between 0 and dimension of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor minus two.</p></li>
@@ -5553,7 +5553,7 @@ dense_dim</cite> batch dimension.</p>
 of the resulting BSC tensor. A block size must be a tuple of
 length two such that its items evenly divide the two sparse
 dimensions.</p></li>
-<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
+<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
 resulting BSC tensor.  This argument should be used only if
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a strided tensor, and must be a value between 0
 and dimension of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor minus two.</p></li>
@@ -5605,7 +5605,7 @@ dense_dim</cite> batch dimension.</p>
 of the resulting BSR tensor. A block size must be a tuple of
 length two such that its items evenly divide the two sparse
 dimensions.</p></li>
-<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
+<li><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
 resulting BSR tensor.  This argument should be used only if
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a strided tensor, and must be a value between 0
 and dimension of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor minus two.</p></li>
@@ -5665,7 +5665,7 @@ and a hybrid CSC tensor will be created, with <cite>dense_dim</cite> dense
 dimensions and <cite>self.dim() - 2 - dense_dim</cite> batch dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
+<dd class="field-odd"><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
 resulting CSC tensor.  This argument should be used only if
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a strided tensor, and must be a value between 0
 and dimension of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor minus two.</p>
@@ -5702,7 +5702,7 @@ hybrid CSR tensor will be created, with <cite>dense_dim</cite> dense dimensions
 and <cite>self.dim() - 2 - dense_dim</cite> batch dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
+<dd class="field-odd"><p><strong>dense_dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Number of dense dimensions of the
 resulting CSR tensor.  This argument should be used only if
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> is a strided tensor, and must be a value between 0
 and dimension of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor minus two.</p>
@@ -5836,7 +5836,7 @@ original object is returned.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dtype</strong> (<em>dtype</em><em> or </em><em>string</em>) – The desired type</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, and the source is in pinned memory
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, and the source is in pinned memory
 and destination is on the GPU or vice versa, the copy is performed
 asynchronously with respect to the host. Otherwise, the argument
 has no effect.</p></li>
@@ -5885,9 +5885,9 @@ dimension <code class="xref py py-attr docutils literal notranslate"><span class
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dimension</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension in which unfolding happens</p></li>
-<li><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the size of each slice that is unfolded</p></li>
-<li><p><strong>step</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the step between each slice</p></li>
+<li><p><strong>dimension</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – dimension in which unfolding happens</p></li>
+<li><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the size of each slice that is unfolded</p></li>
+<li><p><strong>step</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – the step between each slice</p></li>
 </ul>
 </dd>
 </dl>
@@ -6011,7 +6011,7 @@ returns a view if the shapes are compatible, and copies (equivalent to calling
 <a class="reference internal" href="#tensordict.UnbatchedTensor.contiguous" title="tensordict.UnbatchedTensor.contiguous"><code class="xref py py-meth docutils literal notranslate"><span class="pre">contiguous()</span></code></a>) otherwise.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired size</p>
+<dd class="field-odd"><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>...</em>) – the desired size</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -6181,7 +6181,7 @@ then no copy is performed and the original object is returned.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a>, optional) – The destination XPU device.
 Defaults to the current XPU device.</p></li>
-<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the source is in pinned memory,
 the copy will be asynchronous with respect to the host.
 Otherwise, the argument has no effect. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.memory_format</span></code></a>, optional) – the desired memory format of

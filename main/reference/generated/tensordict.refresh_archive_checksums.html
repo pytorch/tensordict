@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4313+gec899b121.d20260913)
+                  main (0.14.0.dev4327+gd7d62313b.d20260918)
                 </div>
               
             
@@ -363,7 +363,7 @@
 <h1>refresh_archive_checksums<a class="headerlink" href="#refresh-archive-checksums" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.refresh_archive_checksums">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">refresh_archive_checksums</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">archive_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.refresh_archive_checksums" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">refresh_archive_checksums</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">archive_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.refresh_archive_checksums" title="Permalink to this definition">¶</a></dt>
 <dd><p>Recomputes the CRC-32 checksums of a memmap archive after in-place writes.</p>
 <p>A tensordict loaded with <code class="docutils literal notranslate"><span class="pre">TensorDict.load_memmap(path,</span> <span class="pre">mode=&quot;r+&quot;)</span></code>
 writes through to the archive without updating the CRC-32 that the zip
@@ -373,7 +373,7 @@ the modified archive to tools that do (<code class="docutils literal notranslate
 <a class="reference internal" href="tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em>) – path to the archive to fix up.</p>
+<dd class="field-odd"><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em>) – path to the archive to fix up.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>the path to the archive.</p>

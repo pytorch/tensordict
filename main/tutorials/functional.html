@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4313+gec899b121.d20260913)
+                  main (0.14.0.dev4327+gd7d62313b.d20260918)
                 </div>
               
             
@@ -435,11 +435,11 @@ exit.</p>
         [0.],
         [0.],
         [0.]], grad_fn=&lt;AddmmBackward0&gt;)
-Output with original params: tensor([[0.6326],
-        [0.4115],
-        [0.4380],
-        [0.3743],
-        [0.4651]], grad_fn=&lt;AddmmBackward0&gt;)
+Output with original params: tensor([[-0.5254],
+        [-0.6608],
+        [-0.4701],
+        [-0.9218],
+        [-0.8792]], grad_fn=&lt;AddmmBackward0&gt;)
 </pre></div>
 </div>
 </section>
@@ -480,9 +480,9 @@ convert it to a regular dict and pass it directly.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.func</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="torch.func.functional_call" class="sphx-glr-backref-module-torch-func sphx-glr-backref-type-py-function"><span class="n">functional_call</span></a>
 
 <span class="n">flat_params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span>
-<a href="https://docs.python.org/3/library/stdtypes.html#dict" title="builtins.dict" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">state_dict</span></a> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">flat_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+<a href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="builtins.dict" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">state_dict</span></a> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">flat_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
 <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="torch.func.functional_call" class="sphx-glr-backref-module-torch-func sphx-glr-backref-type-py-function"><span class="n">functional_call</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">module</span></a><span class="p">,</span> <a href="https://docs.python.org/3/library/stdtypes.html#dict" title="builtins.dict" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">state_dict</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call" title="torch.func.functional_call" class="sphx-glr-backref-module-torch-func sphx-glr-backref-type-py-function"><span class="n">functional_call</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">module</span></a><span class="p">,</span> <a href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="builtins.dict" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">state_dict</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"functional_call output:"</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">y</span><span class="o">.</span><span class="n">shape</span></a><span class="p">)</span>
 </pre></div>
 </div>
