@@ -261,6 +261,46 @@ class MyDataFrozen:
 
 
 class TestTensorClass:
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("frozen", [False, True])
+    @pytest.mark.parametrize("device", [None, "cpu", "cpu:0", "meta"])
+    def test_tensor_schema_initialization(self, tensor_only, frozen, device):
+        @tensorclass(tensor_only=tensor_only, frozen=frozen)
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        x = torch.randn(3, requires_grad=True)
+        y = x.square()
+        data = Data(x, y=y, batch_size=[3], device=device)
+        assert data.is_locked == frozen
+        assert data.device == (torch.device(device) if device is not None else None)
+        if device != "meta":
+            if device == "cpu:0":
+                assert data.x is not x and data.y is not y
+            else:
+                assert data.x is x and data.y is y
+            (data.x + data.y).sum().backward()
+            torch.testing.assert_close(x.grad, 1 + 2 * x.detach())
+        else:
+            assert data.x.device.type == data.y.device.type == "meta"
+            assert x.device.type == "cpu"
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            Data(x=x, y=torch.zeros(2), batch_size=[3], device=device)
+        with pytest.raises(TypeError, match="torch.Size"):
+            Data(x=x, y=y, batch_size="bad")
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            Data(x=x, y=y, batch_size=[2], device="cuda")
+        with pytest.raises(TypeError, match="missing.*y"):
+            Data(x=x)
+        with pytest.raises(ValueError, match="already set"):
+            Data(x, x=x, y=y)
+        if not tensor_only:
+            with pytest.raises(AttributeError, match="expected attributes"):
+                Data(x=x, y=y, extra=x)
+        # None values must still enter non-tensor storage.
+        assert Data(x=x, y=None, batch_size=[3]).y is None
+
     def test_recursive_properties_common_ops(self):
         @tensorclass
         class MyDataNested:

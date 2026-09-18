@@ -1346,6 +1346,24 @@ def _init_wrapper(
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
+    fields = dataclasses.fields(cls)
+    field_names = tuple(field.name for field in fields)
+    required_fields = frozenset(field_names)
+    # Specialize only complete schemas without defaults or user initialization
+    # hooks. All other constructors retain the general field-setting path.
+    can_init_tensors = (
+        not shadow
+        and not _has_custom_setattr
+        and cls.__mro__[1].__setattr__
+        in (object.__setattr__, _setattr, _setattr_tensor_only)
+        and all(
+            field.init
+            and field.default is dataclasses.MISSING
+            and field.default_factory is dataclasses.MISSING
+            for field in fields
+        )
+        and set(required_params) == required_fields
+    )
     # if not required_params and hasattr(cls, "__init_parent__"):
     #     init_sig_parent = inspect.signature(cls.__init_parent__)
     #     params_parent = list(init_sig_parent.parameters.values())
@@ -1384,11 +1402,15 @@ def _init_wrapper(
         if not is_compiling():
             # zip not supported by dynamo
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
-            expected_keys_list = [
-                key
-                for key in type(self).__dataclass_fields__
-                if key in self.__expected_keys__
-            ]
+            expected_keys_list = (
+                field_names
+                if type(self) is cls
+                else [
+                    key
+                    for key in type(self).__dataclass_fields__
+                    if key in self.__expected_keys__
+                ]
+            )
 
             # Check that we don't have too many positional arguments
             if len(args) > len(expected_keys_list):
@@ -1400,6 +1422,36 @@ def _init_wrapper(
                 if key in kwargs:
                     raise ValueError(f"The key {key} is already set in kwargs")
                 kwargs[key] = value
+            if (
+                can_init_tensors
+                and type(self) is cls
+                and names is None
+                and not cls._autocast
+                and not cls._is_non_tensor
+                and cls.set is _set
+                and not hasattr(cls, "__post_init__")
+                and kwargs.keys() == required_fields
+                and all(type(value) is torch.Tensor for value in kwargs.values())
+            ):
+                # Construct once instead of routing every field through set().
+                # Unindexed accelerator devices retain the general path:
+                # TensorDict normalizes them, whereas tensorclass does not.
+                batch_size = torch.Size(batch_size)
+                device = torch.device(device) if device is not None else None
+                if (
+                    device is None
+                    or device.index is not None
+                    or device.type in ("cpu", "meta")
+                ):
+                    td = TensorDict(
+                        kwargs, batch_size=batch_size, device=device, non_blocking=False
+                    )
+                    object.__setattr__(self, "_tensordict", td)
+                    object.__setattr__(self, "_non_tensordict", {})
+                    object.__setattr__(self, "_is_initialized", True)
+                    if lock:
+                        td.lock_()
+                    return
         else:
             if args:
                 raise RuntimeError(
@@ -1485,9 +1537,9 @@ def _init_wrapper(
                             value, check_shape=True, non_blocking=False
                         )
             else:
-                _set = type(self).set
+                set_value = type(self).set
                 for key, value in kwargs.items():
-                    _set(self, key, value)
+                    set_value(self, key, value)
             if hasattr(type(self), "__post_init__"):
                 self.__post_init__()
         if lock:

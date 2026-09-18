@@ -2212,6 +2212,28 @@ def _count_compiles(fn, *args):
     TORCH_VERSION < version.parse("2.4.0"), reason="requires torch>=2.4"
 )
 class TestGuardCount:
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_tc_construction_eager_and_compiled(self, tensor_only):
+        @tensorclass(tensor_only=tensor_only)
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        def build(x, y):
+            return Data(x=x, y=y, batch_size=[3], device="cpu")
+
+        def use(data):
+            return data.x + data.y
+
+        x, y = torch.randn(3), torch.randn(3)
+        eager = build(x, y)
+        compiled = torch.compile(build, backend="eager", fullgraph=True)(x, y)
+        counter = CompileCounterWithBackend("eager")
+        compiled_use = torch.compile(use, backend=counter, fullgraph=True)
+        torch.testing.assert_close(compiled_use(eager), x + y)
+        torch.testing.assert_close(compiled_use(compiled), x + y)
+        assert counter.frame_count == 1
+
     """Tests that verify compile guard/recompile counts for optimized paths."""
 
     def test_clone_recurse_false_no_recompile(self):
