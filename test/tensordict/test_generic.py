@@ -781,6 +781,28 @@ class TestGeneric:
         td = TensorDict(a=1, b=1, batch_size=[])
         assert td.batch_size == ()
 
+    @pytest.mark.parametrize("device", [None, "cpu", "meta"])
+    def test_construct_mixed_tensor_validation(self, device):
+        x = torch.randn(3, 4, requires_grad=True)
+        parameter = nn.Parameter(torch.randn(3, 4))
+        source = {"x": x, "parameter": parameter, ("child", "y"): x.detach()}
+        td = TensorDict(source, [3], device=device, names=["batch"], lock=True)
+        assert td.is_locked and td["child"].names == ["batch"]
+        assert ("child", "y") in source and "child" not in source
+        if device != "meta":
+            assert td["x"] is x and td["parameter"] is parameter
+            (td["x"] + td["parameter"]).sum().backward()
+            torch.testing.assert_close(x.grad, torch.ones_like(x))
+            torch.testing.assert_close(parameter.grad, torch.ones_like(parameter))
+        else:
+            assert all(value.device.type == "meta" for value in td.values(True, True))
+            assert x.device.type == "cpu" and parameter.device.type == "cpu"
+        with td.unlock_():
+            td.set("extra", td["x"])
+        assert "extra" not in source
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            TensorDict({"x": x, "bad": torch.zeros(2, 4)}, [3], device=device)
+
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
         [
