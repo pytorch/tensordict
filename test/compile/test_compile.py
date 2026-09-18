@@ -2294,9 +2294,16 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
-    def test_update_inplace_no_recompile(self):
+    @pytest.mark.parametrize("method", ["update_", "update", "set"])
+    def test_update_inplace_no_recompile(self, method):
         def fn(td, src):
-            td.update_(src)
+            # Replacement must not change aliasing between the two inputs.
+            src = src + 1
+            if method == "set":
+                td.set("a", src["a"])
+                td.set("b", src["b"])
+            else:
+                getattr(td, method)(src)
             return td["a"] + 0
 
         td = TensorDict(

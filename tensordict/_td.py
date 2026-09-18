@@ -2619,6 +2619,69 @@ class TensorDict(TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         return self._tensordict.popitem()
 
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
+        ignore_lock: bool = False,
+        **kwargs,
+    ) -> Self:
+        if (
+            not is_compiling()
+            and type(self) is TensorDict
+            and not self._is_locked
+            and not (clone or inplace or update_batch_size or ignore_lock)
+            and (not kwargs or input_dict_or_td is None)
+            and keys_to_update is None
+            and (is_leaf is None or is_leaf is _is_leaf_nontensor)
+        ):
+            source = kwargs if input_dict_or_td is None else input_dict_or_td
+            if source is self:
+                return self
+            batch_size = self._batch_size
+            batch_dims = len(batch_size)
+            device = self._device
+            if type(source) is TensorDict:
+                if batch_size[: source.batch_dims] == source.batch_size[:batch_dims]:
+                    source = source._tensordict
+            if type(source) is dict:
+                # Validate before writing so a fallback preserves the general
+                # path's ordering of conversions, errors and partial updates.
+                for key, value in source.items():
+                    if (
+                        type(key) is not str
+                        or type(value) is not Tensor
+                        or (
+                            batch_dims
+                            and (
+                                value.is_nested
+                                or value.shape[:batch_dims] != batch_size
+                            )
+                        )
+                        or (device is not None and value.device != device)
+                    ):
+                        break
+                else:
+                    self._tensordict.update(source)
+                    return self
+        return super().update(
+            input_dict_or_td,
+            clone=clone,
+            inplace=inplace,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
+            update_batch_size=update_batch_size,
+            ignore_lock=ignore_lock,
+            **kwargs,
+        )
+
     def _set_str(
         self,
         key: NestedKey,
@@ -2632,6 +2695,20 @@ class TensorDict(TensorDictBase):
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
+        if (
+            not validated
+            and type(value) is Tensor
+            and type(self) is TensorDict
+            and not is_compiling()
+        ):
+            batch_size = self._batch_size
+            device = self._device
+            validated = (
+                not batch_size
+                or (
+                    not value.is_nested and value.shape[: len(batch_size)] == batch_size
+                )
+            ) and (device is None or value.device == device)
         if not validated:
             value = self._validate_value(
                 value, check_shape=True, non_blocking=non_blocking
