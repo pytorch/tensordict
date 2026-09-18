@@ -475,12 +475,14 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         prefix="",
         filter_empty: bool = True,
-        _convert_buffers=None,
+        _memo=None,
     ):
         if isinstance(module, TensorDictBase):
             from tensordict.nn import TensorDictParams
 
             if isinstance(module, TensorDictParams):
+                if _memo is not None:
+                    _memo["has_params"] = True
                 return module
         if (
             as_module
@@ -490,7 +492,8 @@ class TensorDict(TensorDictBase):
         ):
             from tensordict.nn.params import _maybe_make_param_or_buffer
 
-            _convert_buffers = _maybe_make_param_or_buffer
+            _memo = {"convert_buffers": _maybe_make_param_or_buffer}
+        convert_buffers = _memo["convert_buffers"] if _memo is not None else None
         destination = {}
         if use_state_dict:
             keep_vars = False
@@ -509,8 +512,8 @@ class TensorDict(TensorDictBase):
             for name, buffer in module._buffers.items():
                 if buffer is None:
                     continue
-                if _convert_buffers is not None:
-                    buffer = _convert_buffers(buffer)
+                if convert_buffers is not None:
+                    buffer = convert_buffers(buffer)
                 destination[name] = buffer
 
         if use_state_dict:
@@ -537,7 +540,7 @@ class TensorDict(TensorDictBase):
                         use_state_dict=use_state_dict,
                         prefix=prefix + name + ".",
                         filter_empty=filter_empty,
-                        _convert_buffers=_convert_buffers,
+                        _memo=_memo,
                     )
                 else:
                     subtd = cls._from_module(
@@ -560,9 +563,11 @@ class TensorDict(TensorDictBase):
         if as_module:
             from tensordict.nn.params import TensorDictParams
 
-            if _convert_buffers is not None:
+            if _memo is not None and not _memo.get("has_params", False):
                 # The capture traversal already converted buffers. Avoid the
                 # wrapper constructor's second conversion/unlock traversal.
+                # Existing TensorDictParams children still need that traversal
+                # to preserve its recursive unlock behavior.
                 result = TensorDictParams(destination, no_convert="skip")
                 result.no_convert = True
                 return result

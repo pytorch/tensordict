@@ -3161,7 +3161,8 @@ class TestEnsembleModule:
 class TestTensorDictParams:
     @pytest.mark.parametrize("filter_empty", [False, True])
     @pytest.mark.parametrize("lock", [False, True])
-    def test_capture_module_leaf_contracts(self, filter_empty, lock):
+    @pytest.mark.parametrize("nested_params", [False, True])
+    def test_capture_module_leaf_contracts(self, filter_empty, lock, nested_params):
         leaf = torch.ones(3, requires_grad=True)
         child = nn.Module()
         child.register_parameter("p", nn.Parameter(torch.ones(3)))
@@ -3171,12 +3172,15 @@ class TestTensorDictParams:
         module = nn.Module()
         module.left = module.right = child
         module.empty = nn.Identity()
-        module.params = TensorDictParams(p=nn.Parameter(torch.ones(3)))
+        if nested_params:
+            module.params = TensorDictParams(p=nn.Parameter(torch.ones(3))).lock_()
         captured = TensorDict.from_module(
             module, as_module=True, filter_empty=filter_empty, lock=lock
         )
         assert captured["left", "p"] is captured["right", "p"] is child.p
-        assert captured["params"] is module.params
+        if nested_params:
+            assert captured["params"] is module.params
+            assert module.params.is_locked is lock
         assert captured["left", "b"].data_ptr() == child.b.data_ptr()
         assert isinstance(captured["left", "b"], Buffer)
         assert captured["left", "grad"].grad_fn is child.grad.grad_fn
