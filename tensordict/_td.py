@@ -320,7 +320,8 @@ class TensorDict(TensorDictBase):
             # (`not ___dict_contains('_td_dim_names', __dict__)` guard).
             self._td_dim_names = None
             # TODO: this breaks when stacking tensorclasses with dynamo
-            if not is_compiling():
+            is_eager = not is_compiling()
+            if is_eager:
                 self._set_names(names)
 
             # Fast path: use dict.update() to establish all keys in one
@@ -330,10 +331,30 @@ class TensorDict(TensorDictBase):
             _tensordict = self._tensordict
             _validate_value = self._validate_value
             _tensordict.update(source)
+            # Exact tensors need neither conversion nor collection dispatch.
+            # Keep subclasses (including TensorDict subclasses with custom
+            # validation), nested tensors and device moves on the general path.
+            validate_tensor = is_eager and type(self) is TensorDict
+            batch_size = self._batch_size
+            batch_dims = len(batch_size)
             for key in list(_tensordict):
                 if isinstance(key, str):
+                    value = _tensordict[key]
+                    if (
+                        validate_tensor
+                        and type(value) is torch.Tensor
+                        and (
+                            not batch_dims
+                            or (
+                                not value.is_nested
+                                and value.shape[:batch_dims] == batch_size
+                            )
+                        )
+                        and (device is None or value.device == device)
+                    ):
+                        continue
                     _tensordict[key] = _validate_value(
-                        _tensordict[key],
+                        value,
                         check_shape=True,
                         non_blocking=sub_non_blocking,
                     )
