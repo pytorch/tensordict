@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19T06:24:18.552077+00:00",
+  "generated_at": "2026-09-20T06:24:22.285954+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
     "start": "2026-08-14",
@@ -31,14 +31,6 @@
       ],
       "confirmed_revisions": [
         {
-          "sha": "0ded7286cebc61d0d671df4aa8edeb0af916b0ed",
-          "date": "2026-09-05T09:48:27+00:00",
-          "environment": "test-linux.yml / test-results-cpu-3.11",
-          "run_ids": [
-            33958973896
-          ]
-        },
-        {
           "sha": "5847b5f6a82d870d3e7df46f72a3f0c5ea9a9fc0",
           "date": "2026-09-13T06:05:46+00:00",
           "environment": "test-linux.yml / test-results-cpu-3.11",
@@ -50,7 +42,7 @@
       "failures": 3,
       "failure_rate": 0.1034,
       "avg_duration_s": 28.232,
-      "first_seen_flaky": "2026-09-05T09:48:27+00:00",
+      "first_seen_flaky": "2026-09-13T06:05:46+00:00",
       "last_failed": "2026-09-13T06:05:46+00:00",
       "is_new": false
     }
