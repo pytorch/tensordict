@@ -10,6 +10,7 @@ import inspect
 import platform
 import sys
 import warnings
+import weakref
 from pathlib import Path
 from typing import Any, Callable
 
@@ -70,6 +71,28 @@ pytestmark = pytest.mark.skipif(
     sys.version_info >= (3, 14),
     reason="torch.compile is not supported on python 3.14+ ",
 )
+
+
+@pytest.mark.parametrize("is_tensordict_module", [False, True])
+def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
+    if is_tensordict_module:
+        module = TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"])
+    else:
+
+        def module(x):
+            return x
+
+    with _exclude_td_from_pytree():
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            wrapper = CudaGraphModule(module)
+
+        wrapper_ref = weakref.ref(wrapper)
+        del wrapper
+        assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
