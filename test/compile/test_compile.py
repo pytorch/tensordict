@@ -82,16 +82,17 @@ def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
         def module(x):
             return x
 
-    with (
-        pytest.warns(UserWarning)
-        if not torch.cuda.is_available()
-        else contextlib.nullcontext()
-    ):
-        wrapper = CudaGraphModule(module)
+    with _exclude_td_from_pytree():
+        with (
+            pytest.warns(UserWarning)
+            if not torch.cuda.is_available()
+            else contextlib.nullcontext()
+        ):
+            wrapper = CudaGraphModule(module)
 
-    wrapper_ref = weakref.ref(wrapper)
-    del wrapper
-    assert wrapper_ref() is None
+        wrapper_ref = weakref.ref(wrapper)
+        del wrapper
+        assert wrapper_ref() is None
 
 
 @pytest.fixture(autouse=True)
