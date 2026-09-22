@@ -78,6 +78,7 @@ def test_cudagraph_module_is_released_without_gc(is_tensordict_module):
     if is_tensordict_module:
         module = TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"])
     else:
+
         def module(x):
             return x
 
