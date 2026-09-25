@@ -865,7 +865,7 @@ def erase_cache(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
-_GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
 
 
 class _StringKeys(KeysView):
