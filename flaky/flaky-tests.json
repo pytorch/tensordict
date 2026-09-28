@@ -1,22 +1,20 @@
 {
-  "generated_at": "2026-09-27T06:26:35.765211+00:00",
+  "generated_at": "2026-09-28T06:38:10.436341+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
-    "start": "2026-06-30",
-    "end": "2026-08-21",
-    "runs_analyzed": 26
+    "start": "2026-08-14",
+    "end": "2026-09-18",
+    "runs_analyzed": 24
   },
   "summary": {
-    "total_tests": 45654,
+    "total_tests": 45939,
     "flaky_count": 0,
     "flaky_case_count": 0,
     "new_flaky_count": 0,
-    "resolved_count": 1
+    "resolved_count": 0
   },
   "flaky_tests": [],
-  "resolved_test_families": [
-    "test.tensordict.test_mp.TestMap::test_map_seed_single"
-  ],
+  "resolved_test_families": [],
   "thresholds": {
     "active_failure_days": 14,
     "evidence": "fail_and_pass_on_same_revision_and_environment"
