@@ -18,6 +18,7 @@ __all__ = [
     "_get_local_idx",
     "_getitem_result_shape",
     "_is_scattered_index",
+    "_prepare_indexed_value",
     "_str_to_dtype",
     "_tensor_to_bytes",
 ]
@@ -228,6 +229,27 @@ def _getitem_result_shape(
         return [n] + rest
 
     return list(torch.zeros(shape)[idx].shape)
+
+
+def _prepare_indexed_value(
+    value: torch.Tensor, shape: list[int], dtype: torch.dtype, idx
+) -> torch.Tensor:
+    """Apply assignment dtype and broadcasting rules before writing raw bytes."""
+    if isinstance(idx, tuple) and len(idx) == 1:
+        idx = idx[0]
+    if isinstance(idx, torch.Tensor) and idx.ndim == 0 and idx.dtype != torch.bool:
+        idx = idx.item()
+    if _is_scattered_index(idx) and value.dtype != dtype:
+        raise RuntimeError(
+            "Index put requires the source and destination dtypes match, "
+            f"got {dtype} for the destination and {value.dtype} for the source."
+        )
+    result_shape = _getitem_result_shape(shape, idx)
+    if list(value.shape) == result_shape and value.dtype == dtype:
+        return value
+    result = torch.empty(result_shape, dtype=dtype, device=value.device)
+    result[...] = value
+    return result
 
 
 for _name in __all__:

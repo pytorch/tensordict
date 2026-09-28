@@ -67,6 +67,7 @@ from tensordict.store._utils import (
     _is_scattered_index,
     _LUA_GETRANGES,
     _LUA_SETRANGES,
+    _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
 )
@@ -1117,6 +1118,7 @@ class TensorDictStore(TensorDictBase):
         for kp in direct_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             byte_offset, _ = ranges[0]
             pipe.setrange(
@@ -1129,6 +1131,7 @@ class TensorDictStore(TensorDictBase):
         for kp in lua_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             value_bytes = _tensor_to_bytes(value.contiguous())
             argv: list = []
@@ -3772,7 +3775,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
         dtype = _str_to_dtype(raw_meta["dtype"])
         homogeneous = self._is_key_homogeneous(raw_meta)
 
-        value = value.contiguous().cpu()
+        shape = (
+            json.loads(raw_meta["shape"])
+            if homogeneous
+            else [self._count] + json.loads(raw_meta["shapes"])[pos]
+        )
+        value = _prepare_indexed_value(value, shape, dtype, pos)
         raw_bytes = _tensor_to_bytes(value)
 
         if homogeneous:
@@ -3909,6 +3917,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
             key_parts = kp.split(_KEY_SEP)
             raw_key = tuple(key_parts) if len(key_parts) > 1 else key_parts[0]
             value = value_td.get(raw_key)
+            shape = (
+                json.loads(meta["shape"])
+                if homogeneous
+                else [self._count] + json.loads(meta["shapes"])[pos]
+            )
+            value = _prepare_indexed_value(value, shape, dtype, pos)
 
             if homogeneous:
                 full_shape = json.loads(meta["shape"])
@@ -3964,6 +3978,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         for kp in direct_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             byte_offset, _ = ranges[0]
             pipe.setrange(
@@ -3976,6 +3991,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         for kp in lua_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             value_bytes = _tensor_to_bytes(value.contiguous())
             argv: list = []

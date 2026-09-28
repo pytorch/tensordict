@@ -1053,6 +1053,71 @@ class TestLazyStackedTensorDictStore:
             store_td.close()
 
 
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx",
+    [
+        0,
+        torch.tensor(0),
+        slice(0, 2),
+        slice(0, 4, 2),
+        [0, 2],
+        torch.tensor([0, 2]),
+        (0, slice(None)),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.int32, torch.int64])
+@pytest.mark.parametrize("value_shape", [(), (3,), (1, 3), (2, 3), (4,)])
+def test_indexed_write_value_semantics(store_kwargs, stacked, idx, dtype, value_shape):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    if stacked:
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(source.unbind(0)), **store_kwargs
+        )
+    else:
+        store = TensorDictStore.from_tensordict(source, **store_kwargs)
+    try:
+        value = torch.full(value_shape, 7, dtype=dtype)
+        expected = source["x"].clone()
+        try:
+            expected[idx] = value
+        except RuntimeError:
+            with pytest.raises(RuntimeError):
+                store.set_at_("x", value, idx)
+            expected = source["x"]
+        else:
+            store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], expected)
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("heterogeneous", [False, True])
+@pytest.mark.parametrize("method", ["element", "key"])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.int32, torch.int64])
+def test_stack_element_write_dtype(store_kwargs, heterogeneous, method, dtype):
+    tds = [
+        TensorDict(x=torch.zeros(2 + i if heterogeneous else 2), batch_size=[])
+        for i in range(3)
+    ]
+    store = LazyStackedTensorDictStore.from_lazy_stack(lazy_stack(tds), **store_kwargs)
+    try:
+        value = torch.full_like(tds[0]["x"], 7, dtype=dtype)
+        if method == "element":
+            store[0] = TensorDict(x=value, batch_size=[])
+        else:
+            store[0].set_("x", value)
+        torch.testing.assert_close(store[0]["x"], value.to(torch.float32))
+        for i in [1, 2]:
+            torch.testing.assert_close(store[i]["x"], tds[i]["x"])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
 class TestBackendParam:
     """Tests for backend parameter."""
 
