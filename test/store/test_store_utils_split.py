@@ -5,6 +5,7 @@
 
 import importlib
 
+import pytest
 import torch
 
 
@@ -41,3 +42,13 @@ def test_store_tensor_byte_roundtrip():
     restored = helper_module._bytes_to_tensor(data, [3, 2], torch.float32)
 
     assert torch.equal(restored, tensor)
+
+
+@pytest.mark.parametrize("size", [0, 3])
+@pytest.mark.parametrize("side", ["lower", "upper"])
+@pytest.mark.parametrize("helper", ["_compute_byte_ranges", "_compute_covering_range"])
+def test_store_scalar_index_bounds(size, side, helper):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    idx = -size - 1 if side == "lower" else size
+    with pytest.raises(IndexError):
+        getattr(helper_module, helper)([size, 2], torch.float32, idx)

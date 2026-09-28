@@ -725,6 +725,98 @@ class TestTensorDictStore:
         assert key_path not in store_td._meta_cache
 
 
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx",
+    [
+        10,
+        -11,
+        [0, 10],
+        [-11, 0],
+        torch.tensor([0, 10]),
+        torch.tensor([-11, 0]),
+        range(9, 11),
+        range(-11, -9),
+    ],
+)
+def test_store_index_bounds(store_kwargs, stacked, idx):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    if stacked:
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(source.unbind(0)), **store_kwargs
+        )
+    else:
+        store = TensorDictStore.from_tensordict(source, **store_kwargs)
+    try:
+        with pytest.raises(IndexError):
+            store.get_at("x", idx)
+        with pytest.raises(IndexError):
+            store[idx]
+        value = torch.ones(3) if isinstance(idx, int) else torch.ones(2, 3)
+        with pytest.raises(IndexError):
+            store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], source["x"])
+        with pytest.raises(IndexError):
+            store[idx] = TensorDict(x=value, batch_size=[])
+        torch.testing.assert_close(store["x"], source["x"])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx",
+    [
+        -1,
+        -10,
+        [0, -1, -10],
+        torch.tensor([0, -1, -10]),
+        range(-2, 2),
+        range(-1, -4, -1),
+    ],
+)
+def test_store_negative_indices(store_kwargs, stacked, idx):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    if stacked:
+        store = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(source.unbind(0)), **store_kwargs
+        )
+    else:
+        store = TensorDictStore.from_tensordict(source, **store_kwargs)
+    try:
+        expected = source["x"].clone()
+        torch.testing.assert_close(store.get_at("x", idx), expected[idx])
+        torch.testing.assert_close(store[idx]["x"], expected[idx])
+        value = torch.full_like(expected[idx], 7)
+        expected[idx] = value
+        store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], expected)
+        expected[idx] = value + 1
+        store[idx] = TensorDict(x=value + 1, batch_size=[])
+        torch.testing.assert_close(store["x"], expected)
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("idx", [10, -11, [0, 10], torch.tensor([-11, 0])])
+def test_first_indexed_write_bounds(store_kwargs, idx):
+    store = TensorDictStore(batch_size=[10], **store_kwargs)
+    try:
+        value = torch.ones(3) if isinstance(idx, int) else torch.ones(2, 3)
+        with pytest.raises(IndexError):
+            store.set_at_("x", value, idx)
+        assert not list(store.keys())
+    finally:
+        store.clear_redis()
+        store.close()
+
+
 class TestLazyStackedTensorDictStore:
     """Tests for LazyStackedTensorDictStore requiring a running store server."""
 

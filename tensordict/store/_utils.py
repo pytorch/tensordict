@@ -18,6 +18,7 @@ __all__ = [
     "_get_local_idx",
     "_getitem_result_shape",
     "_is_scattered_index",
+    "_normalize_index",
     "_str_to_dtype",
     "_tensor_to_bytes",
 ]
@@ -84,6 +85,15 @@ def _decode_meta(raw_meta: dict) -> dict[str, str]:
     }
 
 
+def _normalize_index(idx: int, size: int) -> int:
+    """Check an integer index and convert a valid negative index to an offset."""
+    if not -size <= idx < size:
+        raise IndexError(
+            f"index {idx} is out of bounds for dimension 0 with size {size}"
+        )
+    return idx + size if idx < 0 else idx
+
+
 def _compute_byte_ranges(
     shape: list[int],
     dtype: torch.dtype,
@@ -105,26 +115,28 @@ def _compute_byte_ranges(
         row_size *= s
 
     if isinstance(idx, int):
-        pos = idx % shape[0]
+        pos = _normalize_index(idx, shape[0])
         return [(pos * row_size, row_size)]
 
-    if isinstance(idx, (slice, range)):
-        positions = range(*idx.indices(shape[0])) if isinstance(idx, slice) else idx
+    if isinstance(idx, slice):
+        positions = range(*idx.indices(shape[0]))
         if len(positions) == 0:
             return []
         if positions.step == 1:
             return [(positions[0] * row_size, len(positions) * row_size)]
         return [(p * row_size, row_size) for p in positions]
 
-    if isinstance(idx, list):
-        return [(int(p) * row_size, row_size) for p in idx]
+    if isinstance(idx, (list, range)):
+        return [(_normalize_index(int(p), shape[0]) * row_size, row_size) for p in idx]
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
             positions = idx.nonzero(as_tuple=False).squeeze(-1).tolist()
         else:
             positions = idx.reshape(-1).tolist()
-        return [(int(p) * row_size, row_size) for p in positions]
+        return [
+            (_normalize_index(int(p), shape[0]) * row_size, row_size) for p in positions
+        ]
 
     return None
 
@@ -148,11 +160,11 @@ def _compute_covering_range(
         row_size *= s
 
     if isinstance(idx, int):
-        pos = idx % shape[0]
+        pos = _normalize_index(idx, shape[0])
         return (pos * row_size, row_size)
 
-    if isinstance(idx, (slice, range)):
-        positions = range(*idx.indices(shape[0])) if isinstance(idx, slice) else idx
+    if isinstance(idx, slice):
+        positions = range(*idx.indices(shape[0]))
         if len(positions) == 0:
             return (0, 0)
         start = positions[0]
@@ -170,8 +182,8 @@ def _get_local_idx(idx, shape_0: int):
         return None
     if isinstance(idx, int):
         return None
-    if isinstance(idx, (slice, range)):
-        positions = range(*idx.indices(shape_0)) if isinstance(idx, slice) else idx
+    if isinstance(idx, slice):
+        positions = range(*idx.indices(shape_0))
         if len(positions) == 0 or positions.step == 1:
             return None
         return slice(None, None, positions.step)
@@ -179,14 +191,14 @@ def _get_local_idx(idx, shape_0: int):
 
 
 def _is_scattered_index(idx) -> bool:
-    """Return True when *idx* is tensor / list / bool."""
+    """Return True when *idx* selects rows with a tensor, list, or range."""
     if isinstance(idx, tuple):
         idx = idx[0] if len(idx) == 1 else idx
     if idx is Ellipsis:
         return False
-    if isinstance(idx, (int, slice, range)):
+    if isinstance(idx, (int, slice)):
         return False
-    if isinstance(idx, (list, torch.Tensor)):
+    if isinstance(idx, (list, range, torch.Tensor)):
         return True
     return False
 
