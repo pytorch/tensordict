@@ -202,7 +202,8 @@ def pack_memmap(
     Args:
         prefix (str or Path): path to a directory previously produced by
             :meth:`~tensordict.TensorDictBase.memmap` and similar methods.
-        archive_path (str or Path): path of the archive to create.
+        archive_path (str or Path): path of the archive to create. Must be
+            outside the source directory and must not alias a source file.
 
     Keyword Args:
         compression (str or int, optional): one of ``"stored"`` (default),
@@ -254,9 +255,18 @@ def _pack_dir(
     from the (possibly empty) staging file. This is what lets the direct
     writer stage metadata-only (sparse) directories.
     """
+    # Snapshot inputs before creating output that may be reachable via symlinks.
+    files = list(_iter_memmap_dir(prefix))
+    if archive_path.resolve().is_relative_to(prefix.resolve()) or (
+        archive_path.exists() and any(path.samefile(archive_path) for path in files)
+    ):
+        raise ValueError(
+            f"The archive path {archive_path} must be outside the source directory "
+            f"{prefix} and must not alias a source file."
+        )
     compress_type = _resolve_compression(compression)
     with zipfile.ZipFile(archive_path, "w", allowZip64=True) as zf:
-        for filepath in _iter_memmap_dir(prefix):
+        for filepath in files:
             arcname = filepath.relative_to(prefix).as_posix()
             align = filepath.suffix == ".memmap"
             entry_compression = compress_type if align else zipfile.ZIP_STORED
