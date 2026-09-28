@@ -255,39 +255,46 @@ def _pack_dir(
     writer stage metadata-only (sparse) directories.
     """
     compress_type = _resolve_compression(compression)
-    with zipfile.ZipFile(archive_path, "w", allowZip64=True) as zf:
-        for filepath in _iter_memmap_dir(prefix):
-            arcname = filepath.relative_to(prefix).as_posix()
-            align = filepath.suffix == ".memmap"
-            entry_compression = compress_type if align else zipfile.ZIP_STORED
-            source = (
-                file_to_source.get(filepath.resolve())
-                if file_to_source is not None
-                else None
-            )
-            if source is not None:
-                chunks = _tensor_chunks(source)
-                size = source.numel() * source.element_size()
-                if size != filepath.stat().st_size:
-                    raise RuntimeError(
-                        f"Mismatch between the source tensor of entry "
-                        f"{arcname!r} ({size} bytes) and its staged layout "
-                        f"({filepath.stat().st_size} bytes). This is an "
-                        f"internal error; please file an issue on the "
-                        f"tensordict repository."
-                    )
-            else:
-                chunks = _file_chunks(filepath)
-                size = filepath.stat().st_size
-            _write_entry(
-                zf,
-                arcname,
-                chunks,
-                size,
-                compress_type=entry_compression,
-                compresslevel=compresslevel,
-                align=align,
-            )
+    # Replacing a completed file keeps any source mappings valid while we
+    # stream their bytes, including when the destination aliases the source.
+    with tempfile.TemporaryDirectory(
+        dir=archive_path.parent, prefix=f".{archive_path.name}."
+    ) as temporary_dir:
+        temporary_archive = Path(temporary_dir) / archive_path.name
+        with zipfile.ZipFile(temporary_archive, "w", allowZip64=True) as zf:
+            for filepath in _iter_memmap_dir(prefix):
+                arcname = filepath.relative_to(prefix).as_posix()
+                align = filepath.suffix == ".memmap"
+                entry_compression = compress_type if align else zipfile.ZIP_STORED
+                source = (
+                    file_to_source.get(filepath.resolve())
+                    if file_to_source is not None
+                    else None
+                )
+                if source is not None:
+                    chunks = _tensor_chunks(source)
+                    size = source.numel() * source.element_size()
+                    if size != filepath.stat().st_size:
+                        raise RuntimeError(
+                            f"Mismatch between the source tensor of entry "
+                            f"{arcname!r} ({size} bytes) and its staged layout "
+                            f"({filepath.stat().st_size} bytes). This is an "
+                            f"internal error; please file an issue on the "
+                            f"tensordict repository."
+                        )
+                else:
+                    chunks = _file_chunks(filepath)
+                    size = filepath.stat().st_size
+                _write_entry(
+                    zf,
+                    arcname,
+                    chunks,
+                    size,
+                    compress_type=entry_compression,
+                    compresslevel=compresslevel,
+                    align=align,
+                )
+        os.replace(temporary_archive, archive_path)
 
 
 def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:

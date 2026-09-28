@@ -23,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict._archive as tensordict_archive
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
@@ -5354,6 +5355,54 @@ class TestMemmapArchive:
             td.memmap(archive, existsok=False)
         # overwriting is fine by default
         td.save(archive)
+
+    @pytest.mark.parametrize("mode", ["r", "r+"])
+    @pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+    def test_archive_overwrite_mapped_source(self, tmp_path, monkeypatch, mode, alias):
+        archive = tmp_path / "data.tdz"
+        td = TensorDict(x=torch.arange(16384, dtype=torch.float32), batch_size=[16384])
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive, mode=mode)
+        loaded["x"].add_(1)
+        expected = loaded.clone()
+        target = archive
+        if alias != "same":
+            target = tmp_path / "alias.tdz"
+            if alias == "symlink":
+                target.symlink_to(archive)
+            else:
+                target.hardlink_to(archive)
+
+        before = archive.read_bytes()
+        tensor_chunks = tensordict_archive._tensor_chunks
+
+        def checked_chunks(tensor):
+            # Fail before reading a truncated mapping, which can cause SIGBUS.
+            assert archive.read_bytes() == before
+            yield from tensor_chunks(tensor)
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", checked_chunks)
+        saved = loaded.save(target)
+        assert (saved == expected).all()
+        assert (loaded == expected).all()
+        assert (TensorDict.load_memmap(target) == expected).all()
+        with zipfile.ZipFile(target) as zf:
+            assert zf.testzip() is None
+
+    def test_archive_failed_overwrite_preserves_target(self, tmp_path, monkeypatch):
+        archive = tmp_path / "data.tdz"
+        td = self._nested_td()
+        td.save(archive)
+        before = archive.read_bytes()
+
+        def fail_chunks(tensor):
+            raise RuntimeError("failed to read tensor")
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", fail_chunks)
+        with pytest.raises(RuntimeError, match="failed to read tensor"):
+            td.save(archive)
+        assert archive.read_bytes() == before
+        assert list(tmp_path.iterdir()) == [archive]
 
     def test_archive_bad_file(self, tmp_path):
         bad = tmp_path / "bad.tdz"
