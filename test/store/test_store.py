@@ -737,6 +737,8 @@ class TestTensorDictStore:
         torch.tensor([-11, 0]),
         range(9, 11),
         range(-11, -9),
+        torch.tensor([True] + [False] * 8),
+        torch.tensor([True] + [False] * 10),
     ],
 )
 def test_store_index_bounds(store_kwargs, stacked, idx):

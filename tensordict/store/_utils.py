@@ -132,6 +132,11 @@ def _compute_byte_ranges(
 
     if isinstance(idx, torch.Tensor):
         if idx.dtype == torch.bool:
+            if idx.ndim == 1 and idx.shape[0] != shape[0]:
+                raise IndexError(
+                    f"The shape of the mask {list(idx.shape)} does not match "
+                    f"dimension 0 with size {shape[0]}"
+                )
             positions = idx.nonzero(as_tuple=False).squeeze(-1).tolist()
         else:
             positions = idx.reshape(-1).tolist()
