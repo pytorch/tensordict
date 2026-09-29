@@ -42,6 +42,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from tensordict.nn.functional_modules import _exclude_td_from_pytree
+from tensordict.store._utils import _prepare_indexed_value
 
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import unravel_keys
@@ -78,6 +79,19 @@ def _reset_dynamo_code_caches():
     # between tests keeps recompile/guard-count assertions reliable and prevents
     # one test's frame from leaking into the next.
     torch._dynamo.reset_code_caches()
+
+
+@pytest.mark.parametrize("value_shape", [(), (3,)])
+def test_store_indexed_value_compile(value_shape):
+    idx = torch.tensor([[0, 2], [1, 3]])
+    value = torch.full(value_shape, 7.0, requires_grad=True)
+    compiled = torch.compile(_prepare_indexed_value, fullgraph=True)
+    actual = compiled(value, [5, 3], torch.float32, idx)
+    torch.testing.assert_close(actual, torch.full((2, 2, 3), 7.0))
+    actual.sum().backward()
+    torch.testing.assert_close(
+        value.grad, torch.full_like(value, actual.numel() / value.numel())
+    )
 
 
 def test_vmap_compile():

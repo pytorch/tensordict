@@ -5,6 +5,7 @@
 
 import importlib
 
+import pytest
 import torch
 
 
@@ -41,3 +42,28 @@ def test_store_tensor_byte_roundtrip():
     restored = helper_module._bytes_to_tensor(data, [3, 2], torch.float32)
 
     assert torch.equal(restored, tensor)
+
+
+@pytest.mark.parametrize("size", [0, 3])
+@pytest.mark.parametrize("side", ["lower", "upper"])
+@pytest.mark.parametrize("helper", ["_compute_byte_ranges", "_compute_covering_range"])
+def test_store_scalar_index_bounds(size, side, helper):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    idx = -size - 1 if side == "lower" else size
+    with pytest.raises(IndexError):
+        getattr(helper_module, helper)([size, 2], torch.float32, idx)
+
+
+@pytest.mark.parametrize("value_shape", [(), (1,)])
+def test_store_masked_scalar_gradient(value_shape):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    value = torch.full(value_shape, 7.0, requires_grad=True)
+    mask = torch.tensor([True, False, True])
+    expected = torch.zeros(3, 2, dtype=torch.float64)
+    expected[mask] = value
+    actual = helper_module._prepare_indexed_value(value, [3, 2], torch.float64, mask)
+    torch.testing.assert_close(actual, expected[mask])
+    torch.testing.assert_close(
+        torch.autograd.grad(actual.sum(), value)[0],
+        torch.autograd.grad(expected.sum(), value)[0],
+    )
