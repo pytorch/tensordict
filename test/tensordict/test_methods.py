@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import functools
 import gc
 import importlib.util
@@ -14,6 +15,7 @@ import os
 import pickle
 import platform
 import re
+import stat
 import struct
 import sys
 import sysconfig
@@ -5355,6 +5357,169 @@ class TestMemmapArchive:
             td.memmap(archive, existsok=False)
         # overwriting is fine by default
         td.save(archive)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX filename limits")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("length", [246, 255])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_archive_long_filename(self, tmp_path, method, length, existing):
+        if os.pathconf(tmp_path, "PC_NAME_MAX") < length:
+            pytest.skip("filesystem filename limit is smaller than this case")
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        mapped = td.memmap(prefix)
+        archive = tmp_path / ("a" * (length - 4) + ".tdz")
+        if existing:
+            archive.write_bytes(b"existing contents")
+        if method == "save":
+            mapped.save(archive)
+        else:
+            pack_memmap(prefix, archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("mode", [None, 0o600, 0o640, 0o664])
+    def test_archive_destination_permissions(self, tmp_path, method, mode):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        previous_umask = os.umask(0o022)
+        try:
+            if mode is not None:
+                td.save(archive)
+                archive.chmod(mode)
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+            expected_mode = 0o644 if mode is None else mode
+            assert stat.S_IMODE(archive.stat().st_mode) == expected_mode
+            assert (TensorDict.load_memmap(archive) == td).all()
+        finally:
+            os.umask(previous_umask)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file ownership")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("copy_error", [False, True])
+    def test_archive_destination_group(self, tmp_path, monkeypatch, method, copy_error):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        groups = set(os.getgroups()) - {archive.stat().st_gid}
+        if not groups:
+            pytest.skip("requires membership in another group")
+        group = next(iter(groups))
+        os.chown(archive, -1, group)
+        archive.chmod(0o640)
+        owner = archive.stat().st_uid
+        before = archive.read_bytes()
+        entries_before = set(tmp_path.iterdir())
+        if copy_error:
+
+            def fail_chown(*args, **kwargs):
+                raise PermissionError(errno.EPERM, "cannot preserve ownership")
+
+            monkeypatch.setattr(os, "chown", fail_chown)
+        error_context = (
+            pytest.raises(PermissionError, match="cannot preserve ownership")
+            if copy_error
+            else contextlib.nullcontext()
+        )
+        with error_context:
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+        if copy_error:
+            assert archive.read_bytes() == before
+            assert set(tmp_path.iterdir()) == entries_before
+        result = archive.stat()
+        assert (result.st_uid, result.st_gid) == (owner, group)
+        assert stat.S_IMODE(result.st_mode) == 0o640
+        assert (TensorDict.load_memmap(archive) == td).all()
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux POSIX ACLs")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("existing_acl", [False, True])
+    @pytest.mark.parametrize("copy_error", [False, True])
+    def test_archive_destination_acl(
+        self, tmp_path, monkeypatch, method, existing_acl, copy_error
+    ):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        archive.chmod(0o640)
+        acl_name = "system.posix_acl_access"
+        # Linux ACL xattr format: version, then (tag, permissions, ID).
+        # The directory default grants a named user access to new files.
+        default_acl = struct.pack("<I", 2) + b"".join(
+            struct.pack("<HHI", tag, permissions, identifier)
+            for tag, permissions, identifier in [
+                (1, 7, 0xFFFFFFFF),
+                (2, 5, 65534),
+                (4, 5, 0xFFFFFFFF),
+                (16, 5, 0xFFFFFFFF),
+                (32, 0, 0xFFFFFFFF),
+            ]
+        )
+        try:
+            os.setxattr(tmp_path, "system.posix_acl_default", default_acl)
+        except OSError as error:
+            if error.errno == errno.ENOTSUP:
+                pytest.skip("filesystem does not support POSIX ACLs")
+            raise
+        if existing_acl:
+            # Deny that named user, despite other users having read access.
+            acl = struct.pack("<I", 2) + b"".join(
+                struct.pack("<HHI", tag, permissions, identifier)
+                for tag, permissions, identifier in [
+                    (1, 6, 0xFFFFFFFF),
+                    (2, 0, 65534),
+                    (4, 4, 0xFFFFFFFF),
+                    (16, 4, 0xFFFFFFFF),
+                    (32, 4, 0xFFFFFFFF),
+                ]
+            )
+            os.setxattr(archive, acl_name, acl)
+        else:
+            assert acl_name not in os.listxattr(archive)
+        before = archive.read_bytes()
+        entries_before = set(tmp_path.iterdir())
+        if copy_error:
+
+            def fail_acl(*args, **kwargs):
+                raise PermissionError(errno.EPERM, "cannot preserve ACL")
+
+            monkeypatch.setattr(
+                os, "setxattr" if existing_acl else "removexattr", fail_acl
+            )
+        error_context = (
+            pytest.raises(PermissionError, match="cannot preserve ACL")
+            if copy_error
+            else contextlib.nullcontext()
+        )
+        with error_context:
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+        if copy_error:
+            assert archive.read_bytes() == before
+            assert set(tmp_path.iterdir()) == entries_before
+        if existing_acl:
+            assert os.getxattr(archive, acl_name) == acl
+        else:
+            assert acl_name not in os.listxattr(archive)
+        assert stat.S_IMODE(archive.stat().st_mode) == (
+            0o644 if existing_acl else 0o640
+        )
+        assert (TensorDict.load_memmap(archive) == td).all()
 
     @pytest.mark.parametrize("mode", ["r", "r+"])
     @pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])

@@ -19,6 +19,7 @@ loadable archive (unaligned entries silently fall back to a copying read).
 """
 from __future__ import annotations
 
+import errno
 import io
 import os
 import posixpath
@@ -239,6 +240,39 @@ def pack_memmap(
     return archive_path
 
 
+def _copy_archive_permissions(source: Path, destination: Path) -> None:
+    """Copy ownership, permissions, and the access control list (ACL)."""
+    try:
+        source_stat = source.stat()
+    except FileNotFoundError:
+        return
+    if hasattr(os, "chown"):
+        destination_stat = destination.stat()
+        if (source_stat.st_uid, source_stat.st_gid) != (
+            destination_stat.st_uid,
+            destination_stat.st_gid,
+        ):
+            os.chown(destination, source_stat.st_uid, source_stat.st_gid)
+    # chown can clear permission bits, so apply the mode afterward.
+    shutil.copymode(source, destination)
+    if hasattr(os, "getxattr"):
+        acl_name = "system.posix_acl_access"
+        try:
+            acl = os.getxattr(source, acl_name)
+        except OSError as error:
+            if error.errno not in (errno.ENODATA, errno.ENOTSUP):
+                raise
+            # A new file can inherit an ACL that the old archive did not have.
+            try:
+                os.removexattr(destination, acl_name)
+            except OSError as error:
+                if error.errno not in (errno.ENODATA, errno.ENOTSUP):
+                    raise
+        else:
+            # Keep the original archive if the ACL cannot be copied.
+            os.setxattr(destination, acl_name, acl)
+
+
 def _pack_dir(
     prefix: Path,
     archive_path: Path,
@@ -255,10 +289,10 @@ def _pack_dir(
     writer stage metadata-only (sparse) directories.
     """
     compress_type = _resolve_compression(compression)
-    # Replacing a completed file keeps any source mappings valid while we
-    # stream their bytes, including when the destination aliases the source.
+    # Write the new archive before replacing the old file.
+    # This keeps mapped source tensors readable, even at the same path.
     with tempfile.TemporaryDirectory(
-        dir=archive_path.parent, prefix=f".{archive_path.name}."
+        dir=archive_path.parent, prefix=".tdz-"
     ) as temporary_dir:
         temporary_archive = Path(temporary_dir) / archive_path.name
         with zipfile.ZipFile(temporary_archive, "w", allowZip64=True) as zf:
@@ -294,6 +328,7 @@ def _pack_dir(
                     compresslevel=compresslevel,
                     align=align,
                 )
+        _copy_archive_permissions(archive_path, temporary_archive)
         os.replace(temporary_archive, archive_path)
 
 
