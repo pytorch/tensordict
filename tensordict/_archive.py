@@ -19,7 +19,6 @@ loadable archive (unaligned entries silently fall back to a copying read).
 """
 from __future__ import annotations
 
-import errno
 import io
 import os
 import posixpath
@@ -203,7 +202,11 @@ def pack_memmap(
     Args:
         prefix (str or Path): path to a directory previously produced by
             :meth:`~tensordict.TensorDictBase.memmap` and similar methods.
-        archive_path (str or Path): path of the archive to create.
+        archive_path (str or Path): path of the archive to create. Keep it
+            outside the source directory. It must not refer to a source file.
+            An existing file is replaced rather than rewritten in place: a
+            symlink is followed, but other hard links to the old file keep
+            the old contents.
 
     Keyword Args:
         compression (str or int, optional): one of ``"stored"`` (default),
@@ -240,39 +243,6 @@ def pack_memmap(
     return archive_path
 
 
-def _copy_archive_permissions(source: Path, destination: Path) -> None:
-    """Copy ownership, permissions, and the access control list (ACL)."""
-    try:
-        source_stat = source.stat()
-    except FileNotFoundError:
-        return
-    if hasattr(os, "chown"):
-        destination_stat = destination.stat()
-        if (source_stat.st_uid, source_stat.st_gid) != (
-            destination_stat.st_uid,
-            destination_stat.st_gid,
-        ):
-            os.chown(destination, source_stat.st_uid, source_stat.st_gid)
-    # chown can clear permission bits, so apply the mode afterward.
-    shutil.copymode(source, destination)
-    if hasattr(os, "getxattr"):
-        acl_name = "system.posix_acl_access"
-        try:
-            acl = os.getxattr(source, acl_name)
-        except OSError as error:
-            if error.errno not in (errno.ENODATA, errno.ENOTSUP):
-                raise
-            # A new file can inherit an ACL that the old archive did not have.
-            try:
-                os.removexattr(destination, acl_name)
-            except OSError as error:
-                if error.errno not in (errno.ENODATA, errno.ENOTSUP):
-                    raise
-        else:
-            # Keep the original archive if the ACL cannot be copied.
-            os.setxattr(destination, acl_name, acl)
-
-
 def _pack_dir(
     prefix: Path,
     archive_path: Path,
@@ -288,15 +258,27 @@ def _pack_dir(
     from the (possibly empty) staging file. This is what lets the direct
     writer stage metadata-only (sparse) directories.
     """
+    # List the source files before creating the archive.
+    # A directory symlink can make the output reachable from the source.
+    files = list(_iter_memmap_dir(prefix))
+    if archive_path.resolve().is_relative_to(prefix.resolve()) or (
+        archive_path.exists() and any(path.samefile(archive_path) for path in files)
+    ):
+        raise ValueError(
+            f"The archive path {archive_path} must be outside the source directory "
+            f"{prefix} and must not alias a source file."
+        )
     compress_type = _resolve_compression(compression)
-    # Write the new archive before replacing the old file.
-    # This keeps mapped source tensors readable, even at the same path.
-    with tempfile.TemporaryDirectory(
-        dir=archive_path.parent, prefix=".tdz-"
-    ) as temporary_dir:
-        temporary_archive = Path(temporary_dir) / archive_path.name
-        with zipfile.ZipFile(temporary_archive, "w", allowZip64=True) as zf:
-            for filepath in _iter_memmap_dir(prefix):
+    # Write to a temporary file and then replace the destination. Tensors
+    # mapped from an existing archive at the same path stay readable while
+    # their bytes are streamed. Symlinks are followed so that the file they
+    # point to is updated.
+    target = archive_path.resolve()
+    with tempfile.TemporaryDirectory(dir=target.parent, prefix=".tdz-") as tmp_dir:
+        # Reuse the target name: a longer name could exceed the filename limit.
+        tmp_archive = Path(tmp_dir) / target.name
+        with zipfile.ZipFile(tmp_archive, "w", allowZip64=True) as zf:
+            for filepath in files:
                 arcname = filepath.relative_to(prefix).as_posix()
                 align = filepath.suffix == ".memmap"
                 entry_compression = compress_type if align else zipfile.ZIP_STORED
@@ -328,8 +310,9 @@ def _pack_dir(
                     compresslevel=compresslevel,
                     align=align,
                 )
-        _copy_archive_permissions(archive_path, temporary_archive)
-        os.replace(temporary_archive, archive_path)
+        if target.exists():
+            shutil.copymode(target, tmp_archive)
+        os.replace(tmp_archive, target)
 
 
 def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
