@@ -23,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict._archive as tensordict_archive
 import tensordict.base as tensordict_base
 import torch
 from packaging import version
@@ -5214,6 +5215,83 @@ class TestMemmapArchive:
         assert (TensorDict.load_memmap(archive) == td).all()
         unpack_memmap(archive, tmp_path / "unpacked")
         assert (TensorDict.load_memmap(tmp_path / "unpacked") == td).all()
+
+    @pytest.mark.parametrize("method", ["pack", "save"])
+    @pytest.mark.parametrize("location", ["root", "nested", "symlink"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_archive_inside_source(
+        self, tmp_path, monkeypatch, method, location, existing
+    ):
+        prefix = tmp_path / "plain"
+        td = self._nested_td().memmap(prefix)
+        parent = prefix
+        if location == "nested":
+            parent = prefix / "archives"
+            parent.mkdir()
+        elif location == "symlink":
+            parent = tmp_path / "alias"
+            parent.symlink_to(prefix, target_is_directory=True)
+        archive = parent / "packed.tdz"
+        if existing:
+            archive.write_bytes(b"existing contents")
+
+        def fail_open(*args, **kwargs):
+            # Reject the path before opening the archive.
+            # Reading the output while writing it can make it grow without limit.
+            pytest.fail("opened an archive inside its source directory")
+
+        monkeypatch.setattr(zipfile, "ZipFile", fail_open)
+        with pytest.raises(ValueError, match="outside the source directory"):
+            if method == "pack":
+                pack_memmap(prefix, archive)
+            else:
+                td.save(archive)
+        if existing:
+            assert archive.read_bytes() == b"existing contents"
+        else:
+            assert not archive.exists()
+        assert (TensorDict.load_memmap(prefix) == td).all()
+
+    @pytest.mark.parametrize("link", ["symlink", "hardlink"])
+    def test_archive_source_file_alias(self, tmp_path, monkeypatch, link):
+        prefix = tmp_path / "plain"
+        expected = self._nested_td()
+        td = expected.memmap(prefix)
+        archive = tmp_path / "packed.tdz"
+        if link == "symlink":
+            archive.symlink_to(prefix / "a.memmap")
+        else:
+            archive.hardlink_to(prefix / "a.memmap")
+        before = archive.read_bytes()
+
+        def fail_open(*args, **kwargs):
+            pytest.fail("opened an archive aliasing a source file")
+
+        monkeypatch.setattr(zipfile, "ZipFile", fail_open)
+        with pytest.raises(ValueError, match="outside the source directory"):
+            pack_memmap(prefix, archive)
+        assert archive.read_bytes() == before
+        assert (td == expected).all()
+
+    def test_archive_output_reachable_through_symlink(self, tmp_path, monkeypatch):
+        prefix = tmp_path / "plain"
+        td = self._nested_td().memmap(prefix)
+        output = tmp_path / "output"
+        output.mkdir()
+        (prefix / "linked").symlink_to(output, target_is_directory=True)
+        archive = output / "packed.tdz"
+        file_chunks = tensordict_archive._file_chunks
+
+        def checked_chunks(path):
+            # Stop the writer before it reads its own output.
+            assert not path.samefile(archive)
+            yield from file_chunks(path)
+
+        monkeypatch.setattr(tensordict_archive, "_file_chunks", checked_chunks)
+        pack_memmap(prefix, archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+        with zipfile.ZipFile(archive) as zf:
+            assert all(not name.endswith(".tdz") for name in zf.namelist())
 
     @pytest.mark.parametrize("compression", ["deflate", "lzma"])
     def test_archive_compression(self, tmp_path, compression):
