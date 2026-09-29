@@ -5476,6 +5476,30 @@ class TestMemmapArchive:
         finally:
             os.umask(previous_umask)
 
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="root can write read-only files",
+    )
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    def test_archive_read_only_destination(self, tmp_path, method):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        archive.chmod(0o444)
+        before = archive.read_bytes()
+        entries_before = set(tmp_path.iterdir())
+        with pytest.raises(PermissionError, match="not writable"):
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+        assert archive.read_bytes() == before
+        assert stat.S_IMODE(archive.stat().st_mode) == 0o444
+        assert set(tmp_path.iterdir()) == entries_before
+
     @pytest.mark.parametrize("mode", ["r", "r+"])
     @pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
     def test_archive_overwrite_mapped_source(self, tmp_path, monkeypatch, mode, alias):

@@ -206,7 +206,8 @@ def pack_memmap(
             outside the source directory. It must not refer to a source file.
             An existing file is replaced rather than rewritten in place: a
             symlink is followed, but other hard links to the old file keep
-            the old contents.
+            the old contents. Overwriting requires write access to both the
+            existing file and its directory.
 
     Keyword Args:
         compression (str or int, optional): one of ``"stored"`` (default),
@@ -274,6 +275,12 @@ def _pack_dir(
     # their bytes are streamed. Symlinks are followed so that the file they
     # point to is updated.
     target = archive_path.resolve()
+    # os.replace only needs a writable directory. Refuse to replace an
+    # existing archive that the user cannot write, as an in-place write would.
+    if target.exists() and not os.access(target, os.W_OK):
+        raise PermissionError(
+            f"Cannot overwrite {archive_path}: the file is not writable."
+        )
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".tdz-") as tmp_dir:
         # Reuse the target name: a longer name could exceed the filename limit.
         tmp_archive = Path(tmp_dir) / target.name
