@@ -5236,8 +5236,8 @@ class TestMemmapArchive:
             archive.write_bytes(b"existing contents")
 
         def fail_open(*args, **kwargs):
-            # Reject before opening the output: reading it while writing can
-            # otherwise grow the archive without bound.
+            # Reject the path before opening the archive.
+            # Reading the output while writing it can make it grow without limit.
             pytest.fail("opened an archive inside its source directory")
 
         monkeypatch.setattr(zipfile, "ZipFile", fail_open)
@@ -5283,7 +5283,7 @@ class TestMemmapArchive:
         file_chunks = tensordict_archive._file_chunks
 
         def checked_chunks(path):
-            # Stop a regressed writer before it starts consuming its own output.
+            # Stop the writer before it reads its own output.
             assert not path.samefile(archive)
             yield from file_chunks(path)
 

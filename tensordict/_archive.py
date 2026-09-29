@@ -202,8 +202,8 @@ def pack_memmap(
     Args:
         prefix (str or Path): path to a directory previously produced by
             :meth:`~tensordict.TensorDictBase.memmap` and similar methods.
-        archive_path (str or Path): path of the archive to create. Must be
-            outside the source directory and must not alias a source file.
+        archive_path (str or Path): path of the archive to create. Keep it
+            outside the source directory. It must not refer to a source file.
 
     Keyword Args:
         compression (str or int, optional): one of ``"stored"`` (default),
@@ -255,7 +255,8 @@ def _pack_dir(
     from the (possibly empty) staging file. This is what lets the direct
     writer stage metadata-only (sparse) directories.
     """
-    # Snapshot inputs before creating output that may be reachable via symlinks.
+    # List the source files before creating the archive.
+    # A directory symlink can make the output reachable from the source.
     files = list(_iter_memmap_dir(prefix))
     if archive_path.resolve().is_relative_to(prefix.resolve()) or (
         archive_path.exists() and any(path.samefile(archive_path) for path in files)
