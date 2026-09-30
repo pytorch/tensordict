@@ -80,6 +80,21 @@ def _reset_dynamo_code_caches():
     torch._dynamo.reset_code_caches()
 
 
+@pytest.mark.parametrize("indices_or_sections", [2, (4, 2), (-2,), (7,), (-7,), ()])
+@pytest.mark.parametrize("dim", [0, 1, -1])
+def test_tensor_split_compile(indices_or_sections, dim):
+    def split(td):
+        return td.tensor_split(indices_or_sections, dim=dim)
+
+    compiled = torch.compile(split, backend="eager", fullgraph=True)
+    td = TensorDict({"a": {"b": torch.arange(30).reshape(5, 6)}}, [5, 6])
+    expected = split(td)
+    actual = compiled(td)
+    assert len(actual) == len(expected)
+    for result, reference in zip(actual, expected):
+        assert_close(result, reference)
+
+
 def test_vmap_compile():
     # Since we monkey patch vmap we need to make sure compile is happy with it
     def func(x, y):
