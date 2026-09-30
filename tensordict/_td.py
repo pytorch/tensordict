@@ -4369,7 +4369,12 @@ class _SubTensorDict(TensorDictBase):
         )
 
     def entry_class(self, key: NestedKey) -> type:
-        source_type = type(self._source.get(key))
+        # Let the source resolve the type: it may avoid reading the entry
+        # (e.g. PersistentTensorDict only inspects the storage node).
+        try:
+            source_type = self._source.entry_class(key)
+        except NotImplementedError:
+            source_type = type(self._source.get(key))
         if _is_tensor_collection(source_type):
             return type(self)
         return source_type
