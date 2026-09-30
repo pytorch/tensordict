@@ -116,12 +116,13 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         key_tuple = _unravel_key_to_tuple(key)
         if len(key_tuple) > 1 and not self.include_nested:
             return False
-        # "/" is the storage path separator: such a key cannot be a stored entry
-        if any("/" in subkey for subkey in key_tuple):
+        # "/" is the storage path separator and "", "." and ".." are resolved as
+        # paths by the storage library: such keys cannot be stored entries
+        if any("/" in subkey or subkey in ("", ".", "..") for subkey in key_tuple):
             return False
         try:
             metadata = self.tensordict._get_metadata(key)
-        except KeyError:
+        except (KeyError, ValueError):
             return False
         return self._accepts(key, metadata)
 
@@ -1113,33 +1114,37 @@ class PersistentTensorDict(TensorDictBase):
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        array = self._get_array(key, default)
-        if self._backend.is_array(array):
-            return self._read_array_at(array, idx)
-        elif array is not default:
-            out = self._nested_tensordicts.get(key)
-            if out is None:
-                out = self._make_nested(key, array)
-            return out._get_sub_tensordict(idx)
-        else:
-            return default
+        # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
+        return self._get_at_tuple(key, idx, default)
 
     def _read_array_at(self, array, idx):
-        """Reads ``array[idx]`` from storage without loading the whole array when possible."""
+        """Reads ``array[idx]``, loading only the required part of the array when possible.
+
+        Only indices that the storage library reads with the same semantics as
+        torch, and efficiently, are delegated to it. Other indices are read in
+        full and indexed in memory.
+        """
         if self.device is not None:
             device = self.device
         else:
             device = torch.device("cpu")
-        try:
-            # indexing must be done before converting to tensor.
-            out = self._backend.read_at(array, self._process_index(idx, array), device)
-        except (TypeError, ValueError, IndexError):
-            # The storage library rejects some indices torch accepts (e.g. h5py
-            # requires increasing, unique fancy indices): index in memory instead.
-            out = None
+        out = None
+        if _is_basic_index(idx):
+            try:
+                out = self._backend.read_at(array, idx, device)
+            except (TypeError, ValueError, IndexError, OSError):
+                # e.g. out of bounds: torch raises the error below
+                pass
+        elif len(array.shape):
+            span = _index_span(idx, array.shape[0])
+            if span is not None:
+                # Read the rows between the first and last selected ones as a
+                # slice: point selection is slow in h5py and requires sorted,
+                # unique indices.
+                start, stop, local_idx = span
+                out = self._backend.read_at(array, slice(start, stop), device)
+                out = out[local_idx.to(out.device)]
         if out is None:
-            # Outside the except block so a genuine indexing error (e.g. out of
-            # bounds) is reported by torch alone, without the storage traceback.
             out = torch.as_tensor(self._backend.read_full(array), device=device)[idx]
         if self._pin_mem:
             return out.pin_memory()
@@ -2250,3 +2255,68 @@ def _is_non_tensor_h5(val):
     ):
         return True
     return False
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, (int, np.integer)) and not isinstance(value, bool)
+
+
+def _is_basic_index(idx) -> bool:
+    """Whether ``idx`` only holds integers, positive-step slices and at most one Ellipsis.
+
+    Storage libraries read such indices as hyperslabs, with the same result as torch.
+    """
+    items = idx if isinstance(idx, tuple) else (idx,)
+    num_ellipsis = 0
+    for item in items:
+        if item is Ellipsis:
+            num_ellipsis += 1
+        elif isinstance(item, slice):
+            if not all(
+                bound is None or _is_int(bound)
+                for bound in (item.start, item.stop, item.step)
+            ):
+                return False
+            if item.step is not None and item.step <= 0:
+                return False
+        elif not _is_int(item):
+            return False
+    return num_ellipsis <= 1
+
+
+def _index_span(idx, size: int) -> tuple[int, int, Tensor] | None:
+    """Returns ``(start, stop, local_idx)`` such that ``array[start:stop][local_idx]`` equals ``array[idx]``.
+
+    Only 1-D integer indices and 1-D boolean masks along the first dimension are
+    supported; ``None`` is returned for any other index, or an out-of-bounds one.
+    """
+    if isinstance(idx, tuple) and len(idx) == 1:
+        # sub-tensordicts store their index as a tuple
+        idx = idx[0]
+    if isinstance(idx, (list, range)):
+        try:
+            idx = torch.as_tensor(idx)
+        except (TypeError, ValueError, RuntimeError):
+            return None
+    elif isinstance(idx, np.ndarray):
+        idx = torch.from_numpy(idx)
+    elif not isinstance(idx, Tensor):
+        return None
+    if idx.ndim != 1 or not idx.numel():
+        return None
+    if idx.dtype is torch.bool:
+        if idx.shape[0] != size:
+            return None
+        idx = idx.nonzero().squeeze(-1)
+        if not idx.numel():
+            return None
+    elif idx.is_floating_point() or idx.is_complex() or idx.dtype is torch.uint8:
+        # uint8 tensors are masks for torch
+        return None
+    idx = idx.to(device="cpu", dtype=torch.long)
+    if idx.min() < -size or idx.max() >= size:
+        return None
+    idx = torch.where(idx < 0, idx + size, idx)
+    start = int(idx.min())
+    stop = int(idx.max()) + 1
+    return start, stop, idx - start

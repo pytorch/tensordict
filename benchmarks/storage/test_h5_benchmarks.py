@@ -56,8 +56,14 @@ def test_h5_index_many_keys(benchmark, many_keys, idx):
 
 @pytest.mark.parametrize(
     "idx",
-    [slice(100, 356), torch.arange(0, 100_000, 400)],
-    ids=["slice", "sorted_fancy"],
+    [
+        slice(100, 356),
+        torch.arange(0, 100_000, 400),
+        # many selected rows: h5py point selection is quadratic in their number
+        torch.arange(0, 100_000, 2),
+        torch.arange(100_000) % 2 == 0,
+    ],
+    ids=["slice", "sorted_fancy", "dense_fancy", "dense_mask"],
 )
 def test_h5_index_large_arrays(benchmark, large_arrays, idx):
     benchmark(lambda: large_arrays[idx].to_tensordict())

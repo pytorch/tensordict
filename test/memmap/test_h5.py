@@ -191,7 +191,14 @@ class TestH5Indexing:
             torch.tensor([2, 2, 5]),
             torch.tensor([-1, 0]),
             [0, 3],
+            range(1, 4),
+            np.int64(2),
+            torch.tensor(3),
+            torch.tensor([], dtype=torch.long),
             torch.tensor([True, False] * 5),
+            torch.zeros(10, dtype=torch.bool),
+            # h5py reads uint8 as integer indices, torch as a mask
+            torch.tensor([1, 0] * 5, dtype=torch.uint8),
             (None,),
         ],
     )
@@ -214,6 +221,9 @@ class TestH5Indexing:
             (Ellipsis, torch.tensor([1, 2])),
             (None, torch.tensor([0, 3])),
             (-1, -2),
+            (torch.tensor(1), torch.tensor(2)),
+            torch.tensor([[0, 1], [2, 3]]),
+            torch.rand(10, 6) > 0.5,
         ],
     )
     def test_index_multidim_batch(self, tmp_path, idx):
@@ -232,6 +242,15 @@ class TestH5Indexing:
             assert result.get(key).shape == expected.get(key).shape, key
             assert (result.get(key) == expected.get(key)).all(), key
 
+    @pytest.mark.parametrize("idx", [True, False])
+    def test_index_bool(self, data, idx):
+        # h5py reads True / False as the integers 1 / 0
+        td, h5td = data
+        for key in ("a", ("nested", "c")):
+            expected = td.get(key)[idx]
+            assert h5td[idx].get(key).shape == expected.shape, key
+            assert (h5td[idx].get(key) == expected).all(), key
+
     def test_index_reads_only_selected_rows(self, data, monkeypatch):
         # Slicing must not load whole datasets from storage
         _, h5td = data
@@ -245,6 +264,45 @@ class TestH5Indexing:
         assert result["nested", "c"].shape == (3, 2)
         assert result.to_tensordict().batch_size == (3,)
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            torch.arange(0, 1000, 2),
+            torch.tensor([900, 10, 10, -1]),
+            torch.arange(1000) % 3 == 0,
+        ],
+    )
+    def test_fancy_index_reads_a_slice(self, tmp_path, monkeypatch, idx):
+        # Integer indices and masks are read as a single slice: h5py point
+        # selection is quadratic in the number of selected rows
+        td = TensorDict({"a": torch.randn(1000, 4)}, batch_size=[1000])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        backend = h5td._backend
+        read_at = backend.read_at
+        indices = []
+
+        def recording_read_at(node, index, device):
+            indices.append(index)
+            return read_at(node, index, device)
+
+        def read_full(node):
+            raise AssertionError(f"full read of {node.name}")
+
+        monkeypatch.setattr(backend, "read_at", recording_read_at)
+        monkeypatch.setattr(backend, "read_full", read_full)
+        assert (h5td[idx]["a"] == td[idx]["a"]).all()
+        assert indices and all(isinstance(index, slice) for index in indices)
+
+    def test_get_at(self, data):
+        td, h5td = data
+        assert (h5td.get_at("a", torch.tensor([7, 1])) == td["a"][[7, 1]]).all()
+        assert h5td.get_at("s", 0).data == b"a string!"
+        assert h5td.get_at("s", slice(2, 5)).batch_size == (3,)
+        assert h5td.get_at(("nested", "c"), 3).shape == (2,)
+        assert h5td.get_at("missing", 0, None) is None
+        with pytest.raises(KeyError):
+            h5td.get_at("missing", 0)
+
     def test_keys_contains(self, data):
         _, h5td = data
         assert "a" in h5td.keys()
@@ -256,6 +314,9 @@ class TestH5Indexing:
         assert "s" in h5td.keys(True, True, is_leaf=_is_leaf_nontensor)
         # "/" is the storage separator, not a valid key character
         assert "nested/c" not in h5td.keys(True)
+        # path components the storage library would resolve
+        for key in (".", "..", ("nested", "."), ("nested", ""), ("nested", "..")):
+            assert key not in h5td.keys(True), key
         assert "missing" not in h5td.keys()
         for include_nested, leaves_only in (
             (False, False),
