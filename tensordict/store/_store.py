@@ -37,6 +37,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
+    convert_ellipsis_to_idx,
     erase_cache,
     is_non_tensor,
     lock_blocked,
@@ -3815,6 +3816,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         pipe = self._client.pipeline()
         plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
+        fallback_kps: list[str] = []
 
         scattered = _is_scattered_index(idx)
 
@@ -3825,7 +3827,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
             if scattered:
                 ranges = _compute_byte_ranges(full_shape, dtype, idx)
-                if ranges is None or not ranges:
+                if ranges is None:
+                    fallback_kps.append(kp)
+                    continue
+                if not ranges:
                     plan.append((kp, result_shape, dtype, None, False))
                     continue
                 argv: list = []
@@ -3836,7 +3841,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             else:
                 cr = _compute_covering_range(full_shape, dtype, idx)
                 if cr is None:
-                    plan.append((kp, result_shape, dtype, None, False))
+                    fallback_kps.append(kp)
                     continue
                 byte_offset, byte_length = cr
                 if byte_length == 0:
@@ -3849,7 +3854,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 )
             plan.append((kp, result_shape, dtype, local_idx, True))
 
-        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
+        # Other indices (e.g. multi-element tuples or None): fetch the whole
+        # tensor in the same pipeline and index it locally.
+        for kp in fallback_kps:
+            pipe.get(self._data_key(kp))
+
+        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan) or fallback_kps
         raw_results = await pipe.execute() if has_cmds else []
 
         result: dict[str, torch.Tensor] = {}
@@ -3868,6 +3878,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
             if local_idx is not None:
                 tensor = tensor[local_idx]
                 tensor = tensor.reshape(result_shape)
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            result[kp] = tensor
+
+        for kp in fallback_kps:
+            full_shape, dtype = meta_map[kp]
+            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)[idx]
+            ri += 1
             if self._device is not None:
                 tensor = tensor.to(self._device)
             result[kp] = tensor
@@ -4105,6 +4123,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
         # Integer index on the stack dim: return write-through view
         if isinstance(index, int) and self._stack_dim == 0:
             return _StoreStackElementView(self, index)
+
+        # As in TensorDictBase.__getitem__, an Ellipsis stands for the
+        # remaining batch dimensions, not the leaf dimensions.
+        if isinstance(index, tuple) and any(idx is Ellipsis for idx in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
 
         # General indexing via _index_tensordict
         return self._index_tensordict(index)

@@ -849,6 +849,28 @@ class TestLazyStackedTensorDictStore:
         assert torch.allclose(sub["a"][1], tds[3]["a"])
         assert torch.allclose(sub["a"][2], tds[4]["a"])
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (0, slice(None)),
+            (slice(1, 3), 0),
+            (1, 2),
+            (torch.tensor([0, 2]), 1),
+            (slice(1, 3), ...),
+            (..., 1),
+            None,
+        ],
+    )
+    def test_getitem_multidim_index(self, store_stack, idx):
+        # These indices are not handled by the byte-range reads.
+        store_td, tds, lazy_td = store_stack
+        torch.testing.assert_close(store_td.get_at("a", idx), lazy_td.get_at("a", idx))
+        sub = store_td[idx]
+        expected = lazy_td[idx]
+        assert sub.batch_size == expected.batch_size
+        torch.testing.assert_close(sub["a"], expected["a"])
+        torch.testing.assert_close(sub["b"], expected["b"])
+
     # ---- Write: td[int] = subtd ----
 
     def test_setitem_int(self, store_stack):
