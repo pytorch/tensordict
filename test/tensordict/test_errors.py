@@ -23,7 +23,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictParams
-from tensordict.utils import _LOCK_ERROR
+from tensordict.utils import _GENERIC_NESTED_ERR, _LOCK_ERROR
 from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -109,6 +109,30 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+    @staticmethod
+    @pytest.mark.parametrize("key", [1, None, (1, "a")])
+    def test_non_str_key(key):
+        err = re.escape(_GENERIC_NESTED_ERR.format(key))
+        value = torch.zeros(2)
+        td = TensorDict({"a": value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict({key: value}, [2])
+        with pytest.raises(KeyError, match=err):
+            TensorDict.from_dict({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.set(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.set_(key, value)
+        with pytest.raises(KeyError, match=err):
+            td.update({key: value})
+        with pytest.raises(KeyError, match=err):
+            td.get(key)
+        with pytest.raises(KeyError, match=err):
+            td.get_at(key, 0)
+        with pytest.raises(KeyError, match=err):
+            td.pop(key)
+        assert list(td.keys()) == ["a"]
 
 
 class TestErrors:
