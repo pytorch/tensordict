@@ -1019,6 +1019,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
+    init = cls.__dict__.get("__init__")
+    # Already-decorated dataclasses carry an exec-generated __init__. Keep
+    # their field-setting path, including the frozen/default handling.
+    _has_custom_init = init is not None and not (
+        dataclasses.is_dataclass(cls)
+        and getattr(getattr(init, "__code__", None), "co_filename", None) == "<string>"
+    )
     cls = dataclass(cls, frozen=frozen)
     _TENSORCLASS_MEMO[cls] = True
 
@@ -1072,7 +1079,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
     cls.__init__ = _init_wrapper(
-        cls.__init__, cls, frozen, shadow, tensor_only, _has_custom_setattr
+        cls.__init__,
+        cls,
+        frozen,
+        shadow,
+        tensor_only,
+        _has_custom_setattr,
+        _has_custom_init,
     )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
@@ -1341,11 +1354,18 @@ def _init_wrapper(
     shadow: bool,
     tensor_only: bool,
     _has_custom_setattr: bool = False,
+    _has_custom_init: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
-    required_params = [p.name for p in params[1:] if p.default is inspect._empty]
+    required_params = [
+        p.name
+        for p in params[1:]
+        if p.default is inspect._empty
+        and p.kind
+        not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    ]
     fields = dataclasses.fields(cls)
     field_names = tuple(field.name for field in fields)
     required_fields = frozenset(field_names)
@@ -1354,6 +1374,7 @@ def _init_wrapper(
     can_init_tensors = (
         not shadow
         and not _has_custom_setattr
+        and not _has_custom_init
         and cls.__mro__[1].__setattr__
         in (object.__setattr__, _setattr, _setattr_tensor_only)
         and all(
@@ -1397,20 +1418,13 @@ def _init_wrapper(
             lock = None
         else:
             lock = kwargs.pop("lock", None)
+        lock_requested = lock
         if lock is None:
             lock = frozen
-        if not is_compiling():
+        if not is_compiling() and not _has_custom_init:
             # zip not supported by dynamo
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
-            expected_keys_list = (
-                field_names
-                if type(self) is cls
-                else [
-                    key
-                    for key in type(self).__dataclass_fields__
-                    if key in self.__expected_keys__
-                ]
-            )
+            expected_keys_list = field_names
 
             # Check that we don't have too many positional arguments
             if len(args) > len(expected_keys_list):
@@ -1452,7 +1466,7 @@ def _init_wrapper(
                     if lock:
                         td.lock_()
                     return
-        else:
+        elif is_compiling():
             if args:
                 raise RuntimeError(
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
@@ -1462,9 +1476,11 @@ def _init_wrapper(
         # under torch.compile, Dynamo can't proxy `_MISSING_TYPE` for `==`
         # comparisons against a tensor default value.
         _missing_type = getattr(dataclasses, "_MISSING_TYPE", type(dataclasses.MISSING))
-        for key, field in type(self).__dataclass_fields__.items():
+        for key, field in (
+            () if _has_custom_init else type(self).__dataclass_fields__.items()
+        ):
             # Only process fields that are in __expected_keys__ (excludes ClassVar fields)
-            if key in self.__expected_keys__:
+            if key in required_fields:
                 if field.default_factory is not dataclasses.MISSING and not isinstance(
                     field.default_factory, _missing_type
                 ):
@@ -1474,7 +1490,9 @@ def _init_wrapper(
                 if default is not None and not isinstance(default, _missing_type):
                     kwargs.setdefault(key, default)
 
-        missing_params = [p for p in required_params if p not in kwargs]
+        missing_params = (
+            [] if _has_custom_init else [p for p in required_params if p not in kwargs]
+        )
         if missing_params:
             n_missing = len(missing_params)
             raise TypeError(
@@ -1483,21 +1501,37 @@ def _init_wrapper(
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
-        super(type(self), self).__setattr__(
-            "_tensordict",
-            TensorDict._new_unsafe(
-                {},
-                batch_size=torch.Size(batch_size),
-                device=device,
-                names=names,
-            ),
+        # A custom subclass constructor can call a wrapped parent constructor.
+        # Keep the container and metadata initialized by the outer wrapper.
+        initializing_container = type(self) is cls or not self.__dict__.get(
+            "_is_initialized", False
         )
-        # super(type(self), self).__setattr__("_non_tensordict", {})
-        # super(type(self), self).__setattr__("_is_initialized", True)
-        object.__setattr__(self, "_non_tensordict", {})
-        object.__setattr__(self, "_is_initialized", True)
+        if initializing_container:
+            object.__setattr__(
+                self,
+                "_tensordict",
+                TensorDict._new_unsafe(
+                    {},
+                    batch_size=torch.Size(batch_size),
+                    device=device,
+                    names=names,
+                ),
+            )
+            object.__setattr__(self, "_non_tensordict", {})
+            object.__setattr__(self, "_is_initialized", True)
 
-        if _has_custom_setattr:
+        if _has_custom_init:
+            __init__(self, *args, **kwargs)
+            # Frozen constructors use object.__setattr__, bypassing our
+            # field setter. Move those values into the backing container.
+            for key in self.__expected_keys__:
+                if key in self.__dict__:
+                    value = getattr(self, key)
+                    # Reach the object slot without a frozen/custom guard.
+                    # Dynamo can trace this super call, unlike object.__delattr__.
+                    super(type(self).__mro__[-2], self).__delattr__(key)
+                    self.set(key, value)
+        elif _has_custom_setattr:
             # The class defines a custom __setattr__ that must be
             # respected during init. Fall back to the dataclass __init__
             # which routes through __setattr__ for each field.
@@ -1514,7 +1548,7 @@ def _init_wrapper(
             # Fields with None defaults are intentionally skipped by the
             # default-handling above, but the dataclass __init__ would
             # still assign them. Ensure every expected key is present.
-            for key in self.__expected_keys__:
+            for key in required_fields:
                 kwargs.setdefault(key, None)
             if tensor_only:
                 # Fast path: validate and assign directly to the
@@ -1542,7 +1576,7 @@ def _init_wrapper(
                     set_value(self, key, value)
             if hasattr(type(self), "__post_init__"):
                 self.__post_init__()
-        if lock:
+        if lock and (initializing_container or lock_requested is not None):
             self._tensordict.lock_()
 
     if not shadow:
@@ -1576,7 +1610,12 @@ def _init_wrapper(
             new_params.append(
                 inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None)
             )
-    wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
+    new_params = [p for p in new_params if p.name not in init_sig.parameters]
+    if params and params[-1].kind is inspect.Parameter.VAR_KEYWORD:
+        params = params[:-1] + new_params + params[-1:]
+    else:
+        params = params + new_params
+    wrapper.__signature__ = init_sig.replace(parameters=params)
 
     return wrapper
 
