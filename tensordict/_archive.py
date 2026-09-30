@@ -204,6 +204,10 @@ def pack_memmap(
             :meth:`~tensordict.TensorDictBase.memmap` and similar methods.
         archive_path (str or Path): path of the archive to create. Keep it
             outside the source directory. It must not refer to a source file.
+            An existing file is replaced rather than rewritten in place: a
+            symlink is followed, but other hard links to the old file keep
+            the old contents. Overwriting requires write access to both the
+            existing file and its directory.
 
     Keyword Args:
         compression (str or int, optional): one of ``"stored"`` (default),
@@ -266,39 +270,56 @@ def _pack_dir(
             f"{prefix} and must not alias a source file."
         )
     compress_type = _resolve_compression(compression)
-    with zipfile.ZipFile(archive_path, "w", allowZip64=True) as zf:
-        for filepath in files:
-            arcname = filepath.relative_to(prefix).as_posix()
-            align = filepath.suffix == ".memmap"
-            entry_compression = compress_type if align else zipfile.ZIP_STORED
-            source = (
-                file_to_source.get(filepath.resolve())
-                if file_to_source is not None
-                else None
-            )
-            if source is not None:
-                chunks = _tensor_chunks(source)
-                size = source.numel() * source.element_size()
-                if size != filepath.stat().st_size:
-                    raise RuntimeError(
-                        f"Mismatch between the source tensor of entry "
-                        f"{arcname!r} ({size} bytes) and its staged layout "
-                        f"({filepath.stat().st_size} bytes). This is an "
-                        f"internal error; please file an issue on the "
-                        f"tensordict repository."
-                    )
-            else:
-                chunks = _file_chunks(filepath)
-                size = filepath.stat().st_size
-            _write_entry(
-                zf,
-                arcname,
-                chunks,
-                size,
-                compress_type=entry_compression,
-                compresslevel=compresslevel,
-                align=align,
-            )
+    # Write to a temporary file and then replace the destination. Tensors
+    # mapped from an existing archive at the same path stay readable while
+    # their bytes are streamed. Symlinks are followed so that the file they
+    # point to is updated.
+    target = archive_path.resolve()
+    # os.replace only needs a writable directory. Refuse to replace an
+    # existing archive that the user cannot write, as an in-place write would.
+    if target.exists() and not os.access(target, os.W_OK):
+        raise PermissionError(
+            f"Cannot overwrite {archive_path}: the file is not writable."
+        )
+    with tempfile.TemporaryDirectory(dir=target.parent, prefix=".tdz-") as tmp_dir:
+        # Reuse the target name: a longer name could exceed the filename limit.
+        tmp_archive = Path(tmp_dir) / target.name
+        with zipfile.ZipFile(tmp_archive, "w", allowZip64=True) as zf:
+            for filepath in files:
+                arcname = filepath.relative_to(prefix).as_posix()
+                align = filepath.suffix == ".memmap"
+                entry_compression = compress_type if align else zipfile.ZIP_STORED
+                source = (
+                    file_to_source.get(filepath.resolve())
+                    if file_to_source is not None
+                    else None
+                )
+                if source is not None:
+                    chunks = _tensor_chunks(source)
+                    size = source.numel() * source.element_size()
+                    if size != filepath.stat().st_size:
+                        raise RuntimeError(
+                            f"Mismatch between the source tensor of entry "
+                            f"{arcname!r} ({size} bytes) and its staged layout "
+                            f"({filepath.stat().st_size} bytes). This is an "
+                            f"internal error; please file an issue on the "
+                            f"tensordict repository."
+                        )
+                else:
+                    chunks = _file_chunks(filepath)
+                    size = filepath.stat().st_size
+                _write_entry(
+                    zf,
+                    arcname,
+                    chunks,
+                    size,
+                    compress_type=entry_compression,
+                    compresslevel=compresslevel,
+                    align=align,
+                )
+        if target.exists():
+            shutil.copymode(target, tmp_archive)
+        os.replace(tmp_archive, target)
 
 
 def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
