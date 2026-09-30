@@ -43,23 +43,36 @@ else
     esac
 fi
 
-# Start Dragonfly server on port 6380 (non-fatal if unavailable)
+# Start Dragonfly on port 6380. The store tests run against both Redis and
+# Dragonfly, so a Linux x86_64 job fails if Dragonfly cannot be started.
 if command -v dragonfly &> /dev/null; then
-    dragonfly --daemonize --port 6380 --dbfilename "" || true
+    dragonfly_bin="dragonfly"
+elif [ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]; then
+    # Update the checksum when changing the version.
+    DRAGONFLY_VERSION="v1.27.1"
+    DRAGONFLY_SHA256="b61e8580076392ced641f2ed3d3d6edf7e10e6e5329437ef8fa2ad832b7f9faa"
+    DRAGONFLY_URL="https://github.com/dragonflydb/dragonfly/releases/download/${DRAGONFLY_VERSION}/dragonfly-x86_64.tar.gz"
+    # wget is installed by setup_env.sh; the image has no curl.
+    wget --no-verbose -O /tmp/dragonfly.tar.gz "$DRAGONFLY_URL"
+    echo "${DRAGONFLY_SHA256}  /tmp/dragonfly.tar.gz" | sha256sum --check -
+    tar -xzf /tmp/dragonfly.tar.gz -C /tmp
+    dragonfly_bin="/tmp/dragonfly-x86_64"
 else
-    case "$(uname -s)" in
-        Linux*)
-            DRAGONFLY_VERSION="v1.27.1"
-            DRAGONFLY_URL="https://github.com/dragonflydb/dragonfly/releases/download/${DRAGONFLY_VERSION}/dragonfly-x86_64.tar.gz"
-            curl -fsSL "$DRAGONFLY_URL" -o /tmp/dragonfly.tar.gz && \
-              tar -xzf /tmp/dragonfly.tar.gz -C /tmp && \
-              /tmp/dragonfly-x86_64 --daemonize --port 6380 --dbfilename "" || \
-              echo "Dragonfly server not available, dragonfly tests will be skipped"
-            ;;
-        *)
-            echo "Dragonfly server not available on this platform, dragonfly tests will be skipped"
-            ;;
-    esac
+    echo "Dragonfly is not set up on $(uname -s)-$(uname -m), dragonfly tests will be skipped"
+fi
+if [ -n "${dragonfly_bin:-}" ]; then
+    # Dragonfly has no --daemonize flag, so run it in the background.
+    "$dragonfly_bin" --port 6380 --dbfilename "" --logtostderr > /tmp/dragonfly.log 2>&1 &
+    ping_dragonfly="import redis; redis.Redis(port=6380, socket_connect_timeout=1).ping()"
+    for _ in $(seq 30); do
+        python -c "$ping_dragonfly" 2> /dev/null && break
+        sleep 1
+    done
+    if ! python -c "$ping_dragonfly"; then
+        echo "Dragonfly did not start on port 6380:"
+        cat /tmp/dragonfly.log
+        exit 1
+    fi
 fi
 
 JUNIT_DIR="${RUNNER_ARTIFACT_DIR:-.}"
