@@ -1,3 +1,4 @@
 pytest-benchmark
 tenacity
 zarr>=3.0; python_version >= "3.11"
+h5py

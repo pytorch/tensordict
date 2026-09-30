@@ -162,6 +162,118 @@ def test_kwargs_passthrough_nested(tmpdir):
         assert (td_recon[key] == td[key]).all(), key
 
 
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+class TestH5Indexing:
+    @pytest.fixture
+    def data(self, tmp_path):
+        td = TensorDict(
+            {
+                "a": torch.arange(60.0).view(10, 6),
+                "b": torch.randint(0, 2, (10, 3), dtype=torch.bool),
+                "nested": {"c": torch.randn(10, 2)},
+                "s": "a string!",
+            },
+            batch_size=[10],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        return td, h5td
+
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            0,
+            -1,
+            slice(2, 7),
+            slice(None, None, 3),
+            torch.tensor([1, 4, 7]),
+            # indices h5py cannot read directly: unsorted, repeated, negative
+            torch.tensor([7, 1, 4]),
+            torch.tensor([2, 2, 5]),
+            torch.tensor([-1, 0]),
+            [0, 3],
+            torch.tensor([True, False] * 5),
+            (None,),
+        ],
+    )
+    def test_index_matches_tensordict(self, data, idx):
+        td, h5td = data
+        result = h5td[idx]
+        expected = td[idx]
+        assert result.batch_size == expected.batch_size
+        for key in expected.keys(True, True):
+            assert result.get(key).shape == expected.get(key).shape, key
+            assert result.get(key).dtype == expected.get(key).dtype, key
+            assert (result.get(key) == expected.get(key)).all(), key
+        assert result["s"] == b"a string!"
+
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (torch.tensor([0, 2]), torch.tensor([1, 3])),
+            (slice(1, 4), torch.tensor([5, 0])),
+            (Ellipsis, torch.tensor([1, 2])),
+            (None, torch.tensor([0, 3])),
+            (-1, -2),
+        ],
+    )
+    def test_index_multidim_batch(self, tmp_path, idx):
+        td = TensorDict(
+            {
+                "a": torch.arange(180.0).view(10, 6, 3),
+                "nested": {"b": torch.arange(60).view(10, 6)},
+            },
+            batch_size=[10, 6],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        result = h5td[idx]
+        expected = td[idx]
+        assert result.batch_size == expected.batch_size
+        for key in expected.keys(True, True):
+            assert result.get(key).shape == expected.get(key).shape, key
+            assert (result.get(key) == expected.get(key)).all(), key
+
+    def test_index_reads_only_selected_rows(self, data, monkeypatch):
+        # Slicing must not load whole datasets from storage
+        _, h5td = data
+
+        def read_full(node):
+            raise AssertionError(f"full read of {node.name}")
+
+        monkeypatch.setattr(h5td._backend, "read_full", read_full)
+        result = h5td[2:5]
+        assert (result["a"] == torch.arange(12.0, 30.0).view(3, 6)).all()
+        assert result["nested", "c"].shape == (3, 2)
+        assert result.to_tensordict().batch_size == (3,)
+
+    def test_keys_contains(self, data):
+        _, h5td = data
+        assert "a" in h5td.keys()
+        assert "nested" in h5td.keys()
+        assert "nested" not in h5td.keys(True, True)
+        assert ("nested", "c") in h5td.keys(True)
+        assert ("nested", "c") not in h5td.keys()
+        assert "s" in h5td.keys()
+        assert "s" in h5td.keys(True, True, is_leaf=_is_leaf_nontensor)
+        # "/" is the storage separator, not a valid key character
+        assert "nested/c" not in h5td.keys(True)
+        assert "missing" not in h5td.keys()
+        for include_nested, leaves_only in (
+            (False, False),
+            (True, False),
+            (True, True),
+        ):
+            keys = h5td.keys(include_nested, leaves_only)
+            assert all(key in keys for key in keys)
+
+    def test_entry_class(self, data):
+        _, h5td = data
+        assert h5td.entry_class("a") is torch.Tensor
+        assert h5td.entry_class("nested") is PersistentTensorDict
+        assert h5td.entry_class("s") is NonTensorData
+        for key in h5td.keys(True):
+            assert h5td.entry_class(key) is type(h5td.get(key)), key
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

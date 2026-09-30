@@ -87,10 +87,6 @@ class _Visitor:
 
 class _PersistentTDKeysView(_TensorDictKeysView):
     def __iter__(self):
-        # For consistency with tensordict where currently a non-tensor is stored in a
-        # tensorclass and hence can be seen as a nested tensordict
-        # that situation should be clarified
-        read_non_tensor = self.is_leaf is _is_leaf_nontensor or not self.leaves_only
         td = self.tensordict
         if self.include_nested:
             visitor = (
@@ -100,22 +96,34 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         else:
             visitor = td._backend.keys(td.file)
         for key in visitor:
-            metadata = self.tensordict._get_metadata(key)
-            if metadata.get("non_tensor"):
-                if read_non_tensor:
-                    yield key
-                else:
-                    continue
-            elif metadata.get("array"):
+            if self._accepts(key, td._get_metadata(key)):
                 yield key
-            elif not self.leaves_only and (
-                not isinstance(key, tuple) or self.include_nested
-            ):
-                yield key
+
+    def _accepts(self, key, metadata) -> bool:
+        if metadata.get("non_tensor"):
+            # For consistency with tensordict where currently a non-tensor is stored in a
+            # tensorclass and hence can be seen as a nested tensordict
+            # that situation should be clarified
+            return self.is_leaf is _is_leaf_nontensor or not self.leaves_only
+        if metadata.get("array"):
+            return True
+        return not self.leaves_only and (
+            not isinstance(key, tuple) or self.include_nested
+        )
 
     def __contains__(self, key):
         key = unravel_key(key)
-        return key in list(self)
+        key_tuple = _unravel_key_to_tuple(key)
+        if len(key_tuple) > 1 and not self.include_nested:
+            return False
+        # "/" is the storage path separator: such a key cannot be a stored entry
+        if any("/" in subkey for subkey in key_tuple):
+            return False
+        try:
+            metadata = self.tensordict._get_metadata(key)
+        except KeyError:
+            return False
+        return self._accepts(key, metadata)
 
 
 class _PersistentBackend:
@@ -1107,17 +1115,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> CompatibleType:
         array = self._get_array(key, default)
         if self._backend.is_array(array):
-            if self.device is not None:
-                device = self.device
-            else:
-                device = torch.device("cpu")
-            # indexing must be done before converting to tensor.
-            idx = self._process_index(idx, array)
-            # `get_at` is there to save us.
-            out = self._backend.read_at(array, idx, device)
-            if self._pin_mem:
-                return out.pin_memory()
-            return out
+            return self._read_array_at(array, idx)
         elif array is not default:
             out = self._nested_tensordicts.get(key)
             if out is None:
@@ -1125,6 +1123,37 @@ class PersistentTensorDict(TensorDictBase):
             return out._get_sub_tensordict(idx)
         else:
             return default
+
+    def _read_array_at(self, array, idx):
+        """Reads ``array[idx]`` from storage without loading the whole array when possible."""
+        if self.device is not None:
+            device = self.device
+        else:
+            device = torch.device("cpu")
+        try:
+            # indexing must be done before converting to tensor.
+            out = self._backend.read_at(array, self._process_index(idx, array), device)
+        except (TypeError, ValueError, IndexError):
+            # The storage library rejects some indices torch accepts (e.g. h5py
+            # requires increasing, unique fancy indices): index in memory instead.
+            out = None
+        if out is None:
+            # Outside the except block so a genuine indexing error (e.g. out of
+            # bounds) is reported by torch alone, without the storage traceback.
+            out = torch.as_tensor(self._backend.read_full(array), device=device)[idx]
+        if self._pin_mem:
+            return out.pin_memory()
+        return out
+
+    def _get_at_str(self, key, idx, default, **kwargs):
+        array = self._get_array(key, default)
+        if array is default:
+            return default
+        if self._backend.is_array(array) and not self._backend.is_non_tensor(array):
+            return self._read_array_at(array, idx)
+        return super()._get_at_str(key, idx, default, **kwargs)
+
+    _get_at_tuple = _get_at_str
 
     def _get_metadata(self, key):
         """Gets the metadata for an entry.
@@ -1384,14 +1413,15 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def entry_class(self, key: NestedKey) -> type:
-        entry_class = self._get_metadata(key)
-        is_array = entry_class.get("array")
-        if is_array:
-            return torch.Tensor
-        elif is_array is False:
+        # Inspects the node only: no data is read from storage.
+        array = self._get_array(key)
+        if not self._backend.is_array(array):
             return PersistentTensorDict
-        else:
-            raise RuntimeError(f"Encountered a non-numeric data {key}.")
+        if self._backend.is_non_tensor(array):
+            from tensordict.tensorclass import NonTensorData
+
+            return NonTensorData
+        return torch.Tensor
 
     def is_contiguous(self):
         return False
