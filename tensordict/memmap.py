@@ -104,6 +104,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     _filename: str | Path = None
     _handler: _FileHandler = None
+    _mode: str | None = None
     _clear: bool
     index: Any
     parent_shape: torch.Size
@@ -214,6 +215,8 @@ class MemoryMappedTensor(torch.Tensor):
                 input._filename is not None
                 and filename is not None
                 and Path(filename).absolute() == Path(input.filename).absolute()
+                # a copy-on-write mapping can hold writes that its file lacks
+                and input._mode != "r"
             ):
                 # either location was not specified, or memmap is already in the
                 # correct location, so just return the MemmapTensor unmodified
@@ -761,7 +764,7 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     @classmethod
-    def from_filename(cls, filename, dtype, shape, index=None):
+    def from_filename(cls, filename, dtype, shape, index=None, mode: str | None = None):
         # noqa: D417
         """Loads a MemoryMappedTensor from a given filename.
 
@@ -773,9 +776,21 @@ class MemoryMappedTensor(torch.Tensor):
                 instance.
             index (torch-compatible index type): an index to use to build the
                 tensor.
+            mode (str, optional): ``"r"`` maps the file copy-on-write:
+                in-place writes stay in memory. ``"r+"`` maps it shared:
+                in-place writes reach the file, and a :class:`PermissionError`
+                is raised if the file is not writable. Defaults to ``None``,
+                which maps the file shared if it is writable and copy-on-write
+                otherwise.
 
         """
-        writable = _is_writable(filename)
+        if mode not in (None, "r", "r+"):
+            raise ValueError(f"mode must be 'r', 'r+' or None, got {mode!r}.")
+        writable = mode != "r" and _is_writable(filename)
+        if mode == "r+" and not writable:
+            raise PermissionError(
+                f"Cannot open {filename} with mode='r+': the file is not writable."
+            )
 
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
@@ -820,6 +835,7 @@ class MemoryMappedTensor(torch.Tensor):
         out = cls(tensor)
         out.filename = filename
         out._handler = None
+        out._mode = mode
         out.index = index
         out.parent_shape = shape
         return out
@@ -897,6 +913,7 @@ class MemoryMappedTensor(torch.Tensor):
                 "dtype": self.dtype,
                 "shape": self.parent_shape,
                 "index": self.index,
+                "mode": self._mode,
             }
         else:
             raise RuntimeError("Could not find handler or filename.")
@@ -913,12 +930,11 @@ class MemoryMappedTensor(torch.Tensor):
                 self.index,
             )
         elif getattr(self, "_filename", None) is not None:
-            return type(self).from_filename, (
-                self._filename,
-                self.dtype,
-                self.parent_shape,
-                self.index,
-            )
+            args = (self._filename, self.dtype, self.parent_shape, self.index)
+            if self._mode is not None:
+                # Only when set, so that earlier versions can load other pickles.
+                args += (self._mode,)
+            return type(self).from_filename, args
         else:
             raise RuntimeError("Could not find handler or filename.")
 
@@ -982,6 +998,7 @@ class MemoryMappedTensor(torch.Tensor):
         tensor = MemoryMappedTensor(tensor)
         tensor._handler = getattr(self, "_handler", None)
         tensor.filename = getattr(self, "_filename", None)
+        tensor._mode = self._mode
         tensor.index = item
         tensor.parent_shape = getattr(self, "parent_shape", None)
         return tensor

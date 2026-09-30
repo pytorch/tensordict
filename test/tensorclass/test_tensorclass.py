@@ -2762,6 +2762,27 @@ class TestMemmap:
         assert isinstance(tc.a, TensorDict)
         assert tc.batch_size == torch.Size([10])
 
+    @pytest.mark.parametrize("mode", [None, "r", "r+"])
+    def test_load_mode(self, tmp_path, mode):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            td: TensorDict
+
+        MyClass(
+            x=torch.zeros(3),
+            td=TensorDict(y=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        ).memmap(tmp_path)
+        loaded = MyClass.load(tmp_path, mode=mode)
+        loaded.x.add_(1)
+        loaded.td["y"].add_(1)
+        # "r" keeps in-place writes in memory
+        expected = 0 if mode == "r" else 1
+        on_disk = MyClass.load(tmp_path)
+        assert (on_disk.x == expected).all()
+        assert (on_disk.td["y"] == expected).all()
+
     def test_load_scenarios(self, tmpdir):
         @tensorclass
         class MyClass:

@@ -3267,6 +3267,7 @@ class TensorDict(TensorDictBase):
         *,
         robust_key,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ) -> Self:
         if metadata.get("device", "None") == "None":
             metadata["device"] = None
@@ -3353,6 +3354,7 @@ class TensorDict(TensorDictBase):
                         (prefix / f"{safe_key}.memmap").with_suffix(".shape.memmap"),
                         shape=shape,
                         dtype=torch.long,
+                        mode=mode,
                     )
                 else:
                     shape = torch.Size(shape)
@@ -3360,6 +3362,7 @@ class TensorDict(TensorDictBase):
                     prefix / f"{safe_key}.memmap",
                     dtype=_STR_DTYPE_TO_DTYPE[dtype],
                     shape=shape,
+                    mode=mode,
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
@@ -3398,6 +3401,7 @@ class TensorDict(TensorDictBase):
                     path,
                     robust_key=robust_key,
                     allow_pickle=allow_pickle,
+                    mode=mode,
                 )
             else:
                 result._set_str(
@@ -3408,14 +3412,18 @@ class TensorDict(TensorDictBase):
                         non_blocking=True,
                         robust_key=robust_key,
                         allow_pickle=allow_pickle,
+                        mode=mode,
                     ),
                     inplace=False,
                     validated=False,
                 )
-        # Archive paths are read-only views inside a zip file: they cannot be
-        # used as a target for a subsequent memmap_()/refresh, so only real
-        # directories are recorded.
-        result._memmap_prefix = prefix if isinstance(prefix, Path) else None
+        # Archive paths are read-only views inside a zip file, and directories
+        # mapped copy-on-write can hold writes that their files lack: neither
+        # can be used as a target for a subsequent memmap_()/refresh, so only
+        # the other directories are recorded.
+        result._memmap_prefix = (
+            prefix if isinstance(prefix, Path) and mode != "r" else None
+        )
         return result
 
     def _make_memmap_subtd(self, key, *, robust_key):
@@ -4875,6 +4883,7 @@ class _SubTensorDict(TensorDictBase):
         robust_key,
         out=None,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         index = _str_to_index(metadata["index"])
         if out is not None:
@@ -4889,6 +4898,7 @@ class _SubTensorDict(TensorDictBase):
                 out=out._source,
                 robust_key=robust_key,
                 allow_pickle=allow_pickle,
+                mode=mode,
             )
             return out
         return _SubTensorDict(
@@ -4897,6 +4907,7 @@ class _SubTensorDict(TensorDictBase):
                 device=device,
                 robust_key=robust_key,
                 allow_pickle=allow_pickle,
+                mode=mode,
             ),
             index,
         )

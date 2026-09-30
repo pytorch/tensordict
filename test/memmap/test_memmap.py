@@ -5,6 +5,7 @@
 import argparse
 import gc
 import os
+import pickle
 import stat
 from contextlib import nullcontext
 from pathlib import Path
@@ -820,6 +821,34 @@ class TestReadWrite:
             filename=file_path, shape=[2, 3], dtype=torch.float64
         )
         assert (mmap.reshape(-1) == torch.arange(6)).all()
+        with pytest.raises(PermissionError, match="not writable"):
+            MemoryMappedTensor.from_filename(
+                filename=file_path, shape=[2, 3], dtype=torch.float64, mode="r+"
+            )
+
+    def test_mode(self, tmpdir):
+        file_path = Path(tmpdir) / "elt.mmap"
+        MemoryMappedTensor.from_tensor(torch.zeros(4), filename=file_path)
+
+        def load(mode=None):
+            return MemoryMappedTensor.from_filename(
+                filename=file_path, shape=[4], dtype=torch.float32, mode=mode
+            )
+
+        # "r" maps the file copy-on-write: in-place writes stay in memory
+        cow = load("r")
+        cow.fill_(1)
+        assert (load() == 0).all()
+        # "r+" maps it shared: in-place writes reach the file
+        load("r+").fill_(2)
+        assert (load() == 2).all()
+        assert (cow == 1).all()
+        # the mode survives pickling, also for indexed views
+        for tensor in (cow, cow[1:]):
+            pickle.loads(pickle.dumps(tensor)).fill_(3)
+        assert (load() == 2).all()
+        with pytest.raises(ValueError, match="mode must be"):
+            load("w")
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
