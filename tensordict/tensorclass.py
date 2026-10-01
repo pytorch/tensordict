@@ -1021,9 +1021,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # if not dataclasses.is_dataclass(cls):
     init = cls.__dict__.get("__init__")
     # Already-decorated dataclasses carry an exec-generated __init__. Keep
-    # their field-setting path, including the frozen/default handling.
+    # their field-setting path, including the frozen/default handling. Check
+    # the class's own namespace: tensorclass subclasses inherit dataclass
+    # fields, but an __init__ they define themselves is user-written.
     _has_custom_init = init is not None and not (
-        dataclasses.is_dataclass(cls)
+        "__dataclass_fields__" in cls.__dict__
         and getattr(getattr(init, "__code__", None), "co_filename", None) == "<string>"
     )
     cls = dataclass(cls, frozen=frozen)
@@ -1466,7 +1468,7 @@ def _init_wrapper(
                     if lock:
                         td.lock_()
                     return
-        elif is_compiling():
+        elif is_compiling() and not _has_custom_init:
             if args:
                 raise RuntimeError(
                     "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
@@ -1526,11 +1528,7 @@ def _init_wrapper(
             # field setter. Move those values into the backing container.
             for key in self.__expected_keys__:
                 if key in self.__dict__:
-                    value = getattr(self, key)
-                    # Reach the object slot without a frozen/custom guard.
-                    # Dynamo can trace this super call, unlike object.__delattr__.
-                    super(type(self).__mro__[-2], self).__delattr__(key)
-                    self.set(key, value)
+                    self.set(key, self.__dict__.pop(key))
         elif _has_custom_setattr:
             # The class defines a custom __setattr__ that must be
             # respected during init. Fall back to the dataclass __init__

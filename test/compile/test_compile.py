@@ -2211,6 +2211,20 @@ class TestTCCustomInitCompile:
             torch.autograd.grad(actual.sum(), x)[0], x.new_full(x.shape, 2)
         )
 
+    def test_custom_init_positional(self):
+        class Data(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x, scale):
+                self.x = x * scale
+
+        def build(x):
+            return Data(x, 2.0, batch_size=[2]).x
+
+        x = torch.arange(6.0).reshape(2, 3)
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        torch.testing.assert_close(actual, x * 2)
+
     @pytest.mark.parametrize("tensor_only", [False, True])
     def test_custom_init_super(self, tensor_only):
         base = TensorClass["tensor_only"] if tensor_only else TensorClass

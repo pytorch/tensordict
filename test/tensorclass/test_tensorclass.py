@@ -188,6 +188,33 @@ class TestCustomInitialization:
         assert data.is_locked == frozen
 
     @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    def test_custom_init_compiled_from_string(self, api):
+        # dataclass compiles generated methods under the same filename.
+        namespace = {}
+        source = "def init(self, x):\n    self.x = x * 2\n"
+        exec(compile(source, "<string>", "exec"), namespace)
+        if api == "decorator":
+
+            @tensorclass
+            class Parent:
+                x: torch.Tensor
+
+            @tensorclass
+            class Child(Parent):
+                __init__ = namespace["init"]
+
+        else:
+
+            class Parent(TensorClass):
+                x: torch.Tensor
+
+            class Child(Parent):
+                __init__ = namespace["init"]
+
+        data = Child(x=torch.ones(2), batch_size=[2])
+        torch.testing.assert_close(data.x, torch.full((2,), 2.0))
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
     @pytest.mark.parametrize("tensor_only", [False, True])
     def test_custom_frozen_init(self, api, tensor_only):
         def init(self, x):
