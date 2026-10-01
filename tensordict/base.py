@@ -8110,10 +8110,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
             allow_pickle=allow_pickle,
             mode=mode,
         )
-        # memmap_() binds the tensordict to the directory just loaded. Without
-        # one (archive, lazy stack, directory loaded with mode="r"), it would
-        # copy every leaf into anonymous memory: leave the tensordict unlocked
-        # and not memory-mapped instead, like the result of load_memmap().
+        # Without a directory (archive, lazy stack, mode="r"), memmap_() would
+        # copy every leaf into memory: leave the tensordict unlocked instead.
         if is_memmap and self._memmap_prefix is not None:
             self.memmap_()
         return self
