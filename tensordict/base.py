@@ -8100,16 +8100,21 @@ class TensorDictBase(MutableMapping, TensorCollection):
         See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
         """
         is_memmap = self.is_memmap()
-        with self.unlock_() if is_memmap else contextlib.nullcontext():
-            self.load_memmap(
-                prefix=prefix,
-                device=self.device,
-                out=self,
-                robust_key=robust_key,
-                allow_pickle=allow_pickle,
-                mode=mode,
-            )
         if is_memmap:
+            self.unlock_()
+        self.load_memmap(
+            prefix=prefix,
+            device=self.device,
+            out=self,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
+        # memmap_() binds the tensordict to the directory just loaded. Without
+        # one (archive, lazy stack, directory loaded with mode="r"), it would
+        # copy every leaf into anonymous memory: leave the tensordict unlocked
+        # and not memory-mapped instead, like the result of load_memmap().
+        if is_memmap and self._memmap_prefix is not None:
             self.memmap_()
         return self
 

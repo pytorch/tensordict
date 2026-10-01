@@ -5028,6 +5028,50 @@ class TestMemmapLoadMode:
         load_memmap(tmp_path, mode="r").add_(1)
         assert (TensorDict.load_memmap(tmp_path) == 0).all()
 
+    @pytest.mark.parametrize("mode", [None, "r+"])
+    def test_load_memmap_into_memmap(self, tmp_path, mode):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode=mode)
+        # the tensordict is memory-mapped again, in the loaded directory
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        dest.add_(1)
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+    def test_mode_r_load_memmap_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode="r")
+        dest.add_(1)
+        # the leaves stay mapped copy-on-write from the files: they are not
+        # copied into memory, and in-place writes do not reach the files
+        assert dest["a"].filename == str(tmp_path / "src" / "a.memmap")
+        assert (TensorDict.load_memmap(tmp_path / "src") == 0).all()
+        # like a load_memmap() result, the tensordict is neither memory-mapped
+        # nor locked, so it can be loaded into again
+        assert not dest.is_memmap() and not dest.is_locked
+        dest.load_memmap_(tmp_path / "src", mode="r")
+        assert (dest == 0).all()
+
+    def test_mode_rplus_load_memmap_archive_into_memmap(self, tmp_path):
+        td = self._save(tmp_path / "src")
+        td.save(tmp_path / "src.tdz", archive=True)
+        dest = td.memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src.tdz", mode="r+")
+        dest.add_(1)
+        # in-place writes reach the archive
+        assert (TensorDict.load_memmap(tmp_path / "src.tdz") == 1).all()
+
+    def test_load_memmap_into_memmap_lazy_stack(self, tmp_path):
+        def make():
+            return lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)])
+
+        make().memmap(tmp_path / "src")
+        dest = make().memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        dest.add_(1)
+        # a lazy stack has no directory of its own: its leaves keep the
+        # mapping of the files instead of being copied into memory
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
 
 class TestBackward:
     def test_scalar_implicit_gradient(self):
