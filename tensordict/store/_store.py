@@ -37,6 +37,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
+    convert_ellipsis_to_idx,
     erase_cache,
     is_non_tensor,
     lock_blocked,
@@ -67,6 +68,8 @@ from tensordict.store._utils import (
     _is_scattered_index,
     _LUA_GETRANGES,
     _LUA_SETRANGES,
+    _normalize_index,
+    _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
 )
@@ -1067,6 +1070,7 @@ class TensorDictStore(TensorDictBase):
                 else:
                     elem_shape = list(value.shape[1:]) if value.ndim > 0 else []
                 full_shape = [batch_dim] + elem_shape
+                _compute_byte_ranges(full_shape, value.dtype, idx)
                 elem_size = value.element_size()
                 numel = batch_dim * (
                     int(torch.tensor(elem_shape).prod().item()) if elem_shape else 1
@@ -1117,6 +1121,7 @@ class TensorDictStore(TensorDictBase):
         for kp in direct_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             byte_offset, _ = ranges[0]
             pipe.setrange(
@@ -1129,6 +1134,7 @@ class TensorDictStore(TensorDictBase):
         for kp in lua_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             value_bytes = _tensor_to_bytes(value.contiguous())
             argv: list = []
@@ -2683,7 +2689,7 @@ class _StoreStackElementView(TensorDictBase):
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
-        self._element_idx = element_idx % parent._count
+        self._element_idx = _normalize_index(element_idx, parent._count)
 
         self._locked_tensordicts = []
         self._lock_id = set()
@@ -3574,7 +3580,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             full_shape = json.loads(meta["shape"])
             elem_shape = full_shape[1:]
             row_bytes = self._row_bytes(elem_shape, dtype)
-            pos = element_idx % self._count
+            pos = _normalize_index(element_idx, self._count)
             offset = pos * row_bytes
             data = await self._client.getrange(
                 self._data_key(key_path), offset, offset + row_bytes - 1
@@ -3582,7 +3588,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             tensor = _bytes_to_tensor(data, elem_shape, dtype)
         else:
             # Read offsets
-            pos = element_idx % self._count
+            pos = _normalize_index(element_idx, self._count)
             off_data = await self._client.getrange(
                 self._idx_key(key_path), pos * 8, (pos + 2) * 8 - 1
             )
@@ -3608,7 +3614,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             pipe.hgetall(self._meta_key(kp))
         raw_metas = await pipe.execute()
 
-        pos = element_idx % self._count
+        pos = _normalize_index(element_idx, self._count)
 
         # Prepare data fetches
         pipe = self._client.pipeline()
@@ -3671,7 +3677,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         if not key_paths:
             return {}
 
-        pos = element_idx % self._count
+        pos = _normalize_index(element_idx, self._count)
 
         # Fetch metadata
         pipe = self._client.pipeline()
@@ -3734,7 +3740,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         self, element_idx: int, key_path: str, value: torch.Tensor
     ):
         """Write a single key for one stack element via SETRANGE."""
-        pos = element_idx % self._count
+        pos = _normalize_index(element_idx, self._count)
         raw_meta = _decode_meta(await self._client.hgetall(self._meta_key(key_path)))
 
         # Key doesn't exist yet — need to register and upload
@@ -3772,22 +3778,16 @@ class LazyStackedTensorDictStore(TensorDictBase):
         dtype = _str_to_dtype(raw_meta["dtype"])
         homogeneous = self._is_key_homogeneous(raw_meta)
 
-        value = value.contiguous().cpu()
+        shape = (
+            json.loads(raw_meta["shape"])
+            if homogeneous
+            else [self._count] + json.loads(raw_meta["shapes"])[pos]
+        )
+        value = _prepare_indexed_value(value, shape, dtype, pos)
         raw_bytes = _tensor_to_bytes(value)
 
         if homogeneous:
-            full_shape = json.loads(raw_meta["shape"])
-            elem_shape = full_shape[1:]
-            row_bytes = self._row_bytes(elem_shape, dtype)
-            if len(raw_bytes) != row_bytes:
-                raise ValueError(
-                    f"Shape mismatch for homogeneous key {key_path!r}: "
-                    f"expected {row_bytes} bytes (shape {elem_shape}), "
-                    f"got {len(raw_bytes)} bytes (shape {list(value.shape)}). "
-                    f"To change the shape of a homogeneous key, reassign the "
-                    f"full stacked tensor via the parent."
-                )
-            offset = pos * row_bytes
+            offset = pos * len(raw_bytes)
             await self._client.setrange(self._data_key(key_path), offset, raw_bytes)
         else:
             off_data = await self._client.getrange(
@@ -3815,6 +3815,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
         pipe = self._client.pipeline()
         plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
+        fallback_kps: list[str] = []
 
         scattered = _is_scattered_index(idx)
 
@@ -3825,7 +3826,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
 
             if scattered:
                 ranges = _compute_byte_ranges(full_shape, dtype, idx)
-                if ranges is None or not ranges:
+                if ranges is None:
+                    fallback_kps.append(kp)
+                    continue
+                if not ranges:
                     plan.append((kp, result_shape, dtype, None, False))
                     continue
                 argv: list = []
@@ -3836,7 +3840,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
             else:
                 cr = _compute_covering_range(full_shape, dtype, idx)
                 if cr is None:
-                    plan.append((kp, result_shape, dtype, None, False))
+                    fallback_kps.append(kp)
                     continue
                 byte_offset, byte_length = cr
                 if byte_length == 0:
@@ -3849,7 +3853,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 )
             plan.append((kp, result_shape, dtype, local_idx, True))
 
-        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
+        # Other indices (e.g. multi-element tuples or None): fetch the whole
+        # tensor in the same pipeline and index it locally.
+        for kp in fallback_kps:
+            pipe.get(self._data_key(kp))
+
+        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan) or fallback_kps
         raw_results = await pipe.execute() if has_cmds else []
 
         result: dict[str, torch.Tensor] = {}
@@ -3872,6 +3881,14 @@ class LazyStackedTensorDictStore(TensorDictBase):
                 tensor = tensor.to(self._device)
             result[kp] = tensor
 
+        for kp in fallback_kps:
+            full_shape, dtype = meta_map[kp]
+            tensor = _bytes_to_tensor(raw_results[ri], full_shape, dtype)[idx]
+            ri += 1
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            result[kp] = tensor
+
         return result
 
     # ---- element access (writes) ----
@@ -3879,7 +3896,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
     async def _aset_element(self, element_idx: int, value_td: TensorDictBase):
         """Write all keys for a single stack element via pipelined SETRANGE."""
         all_keys = sorted(await self._aget_all_keys())
-        pos = element_idx % self._count
+        pos = _normalize_index(element_idx, self._count)
 
         # Pipeline: fetch all metadata + offset tables in one round-trip
         meta_pipe = self._client.pipeline()
@@ -3909,6 +3926,12 @@ class LazyStackedTensorDictStore(TensorDictBase):
             key_parts = kp.split(_KEY_SEP)
             raw_key = tuple(key_parts) if len(key_parts) > 1 else key_parts[0]
             value = value_td.get(raw_key)
+            shape = (
+                json.loads(meta["shape"])
+                if homogeneous
+                else [self._count] + json.loads(meta["shapes"])[pos]
+            )
+            value = _prepare_indexed_value(value, shape, dtype, pos)
 
             if homogeneous:
                 full_shape = json.loads(meta["shape"])
@@ -3964,6 +3987,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         for kp in direct_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             byte_offset, _ = ranges[0]
             pipe.setrange(
@@ -3976,6 +4000,7 @@ class LazyStackedTensorDictStore(TensorDictBase):
         for kp in lua_kps:
             value, idx = items[kp]
             shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
             ranges = _compute_byte_ranges(shape, dtype, idx)
             value_bytes = _tensor_to_bytes(value.contiguous())
             argv: list = []
@@ -4105,6 +4130,11 @@ class LazyStackedTensorDictStore(TensorDictBase):
         # Integer index on the stack dim: return write-through view
         if isinstance(index, int) and self._stack_dim == 0:
             return _StoreStackElementView(self, index)
+
+        # As in TensorDictBase.__getitem__, an Ellipsis stands for the
+        # remaining batch dimensions, not the leaf dimensions.
+        if isinstance(index, tuple) and any(idx is Ellipsis for idx in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
 
         # General indexing via _index_tensordict
         return self._index_tensordict(index)

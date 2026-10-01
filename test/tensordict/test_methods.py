@@ -14,6 +14,7 @@ import os
 import pickle
 import platform
 import re
+import stat
 import struct
 import sys
 import sysconfig
@@ -5342,7 +5343,7 @@ class TestMemmapArchive:
 
         def checked_chunks(path):
             # Stop the writer before it reads its own output.
-            assert not path.samefile(archive)
+            assert not path.resolve().is_relative_to(output.resolve())
             yield from file_chunks(path)
 
         monkeypatch.setattr(tensordict_archive, "_file_chunks", checked_chunks)
@@ -5490,6 +5491,127 @@ class TestMemmapArchive:
             td.memmap(archive, existsok=False)
         # overwriting is fine by default
         td.save(archive)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX filename limits")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("length", [246, 255])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_archive_long_filename(self, tmp_path, method, length, existing):
+        if os.pathconf(tmp_path, "PC_NAME_MAX") < length:
+            pytest.skip("filesystem filename limit is smaller than this case")
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        mapped = td.memmap(prefix)
+        archive = tmp_path / ("a" * (length - 4) + ".tdz")
+        if existing:
+            archive.write_bytes(b"existing contents")
+        if method == "save":
+            mapped.save(archive)
+        else:
+            pack_memmap(prefix, archive)
+        assert (TensorDict.load_memmap(archive) == td).all()
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    @pytest.mark.parametrize("mode", [None, 0o600, 0o640, 0o664])
+    def test_archive_destination_permissions(self, tmp_path, method, mode):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        previous_umask = os.umask(0o022)
+        try:
+            if mode is not None:
+                td.save(archive)
+                archive.chmod(mode)
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+            expected_mode = 0o644 if mode is None else mode
+            assert stat.S_IMODE(archive.stat().st_mode) == expected_mode
+            assert (TensorDict.load_memmap(archive) == td).all()
+        finally:
+            os.umask(previous_umask)
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="POSIX file permissions")
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="root can write read-only files",
+    )
+    @pytest.mark.parametrize("method", ["save", "pack_memmap"])
+    def test_archive_read_only_destination(self, tmp_path, method):
+        td = self._nested_td()
+        prefix = tmp_path / "source"
+        td.memmap(prefix)
+        archive = tmp_path / "data.tdz"
+        td.save(archive)
+        archive.chmod(0o444)
+        before = archive.read_bytes()
+        entries_before = set(tmp_path.iterdir())
+        with pytest.raises(PermissionError, match="not writable"):
+            if method == "save":
+                td.save(archive)
+            else:
+                pack_memmap(prefix, archive)
+        assert archive.read_bytes() == before
+        assert stat.S_IMODE(archive.stat().st_mode) == 0o444
+        assert set(tmp_path.iterdir()) == entries_before
+
+    @pytest.mark.parametrize("mode", ["r", "r+"])
+    @pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+    def test_archive_overwrite_mapped_source(self, tmp_path, monkeypatch, mode, alias):
+        archive = tmp_path / "data.tdz"
+        td = TensorDict(x=torch.arange(16384, dtype=torch.float32), batch_size=[16384])
+        td.save(archive)
+        loaded = TensorDict.load_memmap(archive, mode=mode)
+        loaded["x"].add_(1)
+        expected = loaded.clone()
+        target = archive
+        if alias != "same":
+            target = tmp_path / "alias.tdz"
+            if alias == "symlink":
+                target.symlink_to(archive)
+            else:
+                target.hardlink_to(archive)
+
+        before = archive.read_bytes()
+        tensor_chunks = tensordict_archive._tensor_chunks
+
+        def checked_chunks(tensor):
+            # Fail before reading a truncated mapping, which can cause SIGBUS.
+            assert archive.read_bytes() == before
+            yield from tensor_chunks(tensor)
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", checked_chunks)
+        saved = loaded.save(target)
+        assert (saved == expected).all()
+        assert (loaded == expected).all()
+        assert (TensorDict.load_memmap(target) == expected).all()
+        with zipfile.ZipFile(target) as zf:
+            assert zf.testzip() is None
+        if alias == "symlink":
+            # The link is kept and the file it points to is updated.
+            assert target.is_symlink()
+            assert (TensorDict.load_memmap(archive) == expected).all()
+        elif alias == "hardlink":
+            # Replacing the file detaches the other hard link.
+            assert archive.read_bytes() == before
+
+    def test_archive_failed_overwrite_preserves_target(self, tmp_path, monkeypatch):
+        archive = tmp_path / "data.tdz"
+        td = self._nested_td()
+        td.save(archive)
+        before = archive.read_bytes()
+
+        def fail_chunks(tensor):
+            raise RuntimeError("failed to read tensor")
+
+        monkeypatch.setattr(tensordict_archive, "_tensor_chunks", fail_chunks)
+        with pytest.raises(RuntimeError, match="failed to read tensor"):
+            td.save(archive)
+        assert archive.read_bytes() == before
+        assert list(tmp_path.iterdir()) == [archive]
 
     def test_archive_bad_file(self, tmp_path):
         bad = tmp_path / "bad.tdz"

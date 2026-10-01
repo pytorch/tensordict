@@ -7621,7 +7621,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 mutually convertible with :func:`~tensordict.pack_memmap` /
                 :func:`~tensordict.unpack_memmap` (or any zip tool). Note that
                 archives are written sequentially (single data pass) and
-                ``num_threads`` has no effect on them.
+                ``num_threads`` has no effect on them. An existing archive
+                is replaced by a new file rather than rewritten in place: a
+                symlink is followed, but other hard links to the old file
+                keep the old contents.
             compression (str or int, optional): compression for archive
                 entries (``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``
                 or a :mod:`zipfile` constant). Defaults to ``"stored"``

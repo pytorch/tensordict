@@ -725,6 +725,199 @@ class TestTensorDictStore:
         assert key_path not in store_td._meta_cache
 
 
+def _indexed_store(store_kwargs, stacked, source):
+    if stacked:
+        return LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(source.unbind(0)), **store_kwargs
+        )
+    return TensorDictStore.from_tensordict(source, **store_kwargs)
+
+
+# One case per store write path. The assignment rules themselves are checked
+# against PyTorch in test_store_utils_split.py.
+_MASK = torch.zeros(10, dtype=torch.bool)
+_MASK[[0, 2]] = True
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx,value_shape",
+    [
+        (-1, (3,)),  # single row
+        (slice(0, 2), ()),  # contiguous slice, broadcast scalar
+        (slice(0, 4, 2), (3,)),  # stepped slice, broadcast row
+        (range(4, 0, -2), (2, 3)),  # range, reversed
+        ([0, -1], (2, 3)),  # list with a negative index
+        (torch.tensor([[0, -1], [2, 3]]), (3,)),  # multidimensional tensor
+        (_MASK, ()),  # boolean mask
+    ],
+)
+def test_store_indexed_write_matches_torch(store_kwargs, stacked, idx, value_shape):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        # float64 is converted for slices and integers, and rejected for list
+        # and tensor indices, as in PyTorch.
+        value = torch.full(value_shape, 7.0, dtype=torch.float64)
+        expected = source["x"].clone()
+        try:
+            expected[idx] = value
+        except RuntimeError:
+            with pytest.raises(RuntimeError):
+                store.set_at_("x", value, idx)
+            expected[idx] = value.float()
+            store.set_at_("x", value.float(), idx)
+        else:
+            store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], expected)
+        torch.testing.assert_close(store.get_at("x", idx), expected[idx])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize("idx", [10, [-11, 0], range(9, 11), _MASK[:9]])
+def test_store_index_bounds(store_kwargs, stacked, idx):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        with pytest.raises(IndexError):
+            store.get_at("x", idx)
+        with pytest.raises(IndexError):
+            store[idx]
+        value = torch.ones(3)
+        with pytest.raises(IndexError):
+            store.set_at_("x", value, idx)
+        with pytest.raises(IndexError):
+            store[idx] = TensorDict(x=value, batch_size=[])
+        torch.testing.assert_close(store["x"], source["x"])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx,value_shape",
+    [
+        ((0, slice(None)), (3,)),  # tuple index: full read-modify-write
+        (slice(5, 5), (3,)),  # empty selection: nothing is written
+    ],
+)
+def test_store_indexed_write_fallbacks(store_kwargs, stacked, idx, value_shape):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        value = torch.full(value_shape, 7, dtype=torch.int64)
+        expected = source["x"].clone()
+        expected[idx] = value
+        store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], expected)
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx", [0, slice(0, 2), slice(0, 4, 2), [0, 2], (0, slice(None))]
+)
+def test_store_rejected_write_keeps_data(store_kwargs, stacked, idx):
+    source = TensorDict(
+        x=torch.arange(30, dtype=torch.float32).reshape(10, 3), batch_size=[10]
+    )
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        with pytest.raises(RuntimeError):
+            source["x"].clone()[idx] = torch.ones(4)
+        with pytest.raises(RuntimeError):
+            store.set_at_("x", torch.ones(4), idx)
+        torch.testing.assert_close(store["x"], source["x"])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("idx", [10, torch.tensor([-11, 0])])
+def test_first_indexed_write_bounds(store_kwargs, idx):
+    store = TensorDictStore(batch_size=[10], **store_kwargs)
+    try:
+        value = torch.ones(3) if isinstance(idx, int) else torch.ones(2, 3)
+        with pytest.raises(IndexError):
+            store.set_at_("x", value, idx)
+        assert not list(store.keys())
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("heterogeneous", [False, True])
+@pytest.mark.parametrize("method", ["element", "key"])
+def test_stack_element_write_value(store_kwargs, heterogeneous, method):
+    tds = [
+        TensorDict(x=torch.zeros(2 + i if heterogeneous else 2), batch_size=[])
+        for i in range(3)
+    ]
+    store = LazyStackedTensorDictStore.from_lazy_stack(lazy_stack(tds), **store_kwargs)
+    try:
+        # int64 is converted to the stored float32; a scalar is broadcast.
+        for value in [torch.full((2,), 7), torch.tensor(8)]:
+            if method == "element":
+                store[-3] = TensorDict(x=value, batch_size=[])
+            else:
+                store[-3].set_("x", value)
+            torch.testing.assert_close(store[0]["x"], value.float().expand(2))
+        for i in [1, 2]:
+            torch.testing.assert_close(store[i]["x"], tds[i]["x"])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize(
+    "idx,value",
+    [
+        (slice(0, 4, 2), lambda: torch.full((3,), 7.0, device="cuda")),
+        (
+            [[0, 2], [1, 3]],
+            lambda: torch.full((2, 2, 3), 7.0, device="cuda"),
+        ),
+        ("mask", lambda: torch.tensor(7.0)),
+        ("mask", lambda: torch.tensor(7.0, device="cuda")),
+    ],
+)
+def test_store_indexed_write_cuda(store_kwargs, stacked, idx, value):
+    source = TensorDict(
+        x=torch.arange(15, dtype=torch.float32, device="cuda").reshape(5, 3),
+        batch_size=[5],
+        device="cuda",
+    )
+    if idx == "mask":
+        idx = torch.tensor([True, False, True, False, False], device="cuda")
+    elif isinstance(idx, list):
+        idx = torch.tensor(idx, device="cuda")
+    value = value()
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        expected = source["x"].clone()
+        expected[idx] = value
+        store.set_at_("x", value, idx)
+        torch.testing.assert_close(store["x"], expected)
+        torch.testing.assert_close(store.get_at("x", idx), expected[idx])
+    finally:
+        store.clear_redis()
+        store.close()
+
+
 class TestLazyStackedTensorDictStore:
     """Tests for LazyStackedTensorDictStore requiring a running store server."""
 
@@ -848,6 +1041,28 @@ class TestLazyStackedTensorDictStore:
         assert torch.allclose(sub["a"][0], tds[0]["a"])
         assert torch.allclose(sub["a"][1], tds[3]["a"])
         assert torch.allclose(sub["a"][2], tds[4]["a"])
+
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (0, slice(None)),
+            (slice(1, 3), 0),
+            (1, 2),
+            (torch.tensor([0, 2]), 1),
+            (slice(1, 3), ...),
+            (..., 1),
+            None,
+        ],
+    )
+    def test_getitem_multidim_index(self, store_stack, idx):
+        # These indices are not handled by the byte-range reads.
+        store_td, tds, lazy_td = store_stack
+        torch.testing.assert_close(store_td.get_at("a", idx), lazy_td.get_at("a", idx))
+        sub = store_td[idx]
+        expected = lazy_td[idx]
+        assert sub.batch_size == expected.batch_size
+        torch.testing.assert_close(sub["a"], expected["a"])
+        torch.testing.assert_close(sub["b"], expected["b"])
 
     # ---- Write: td[int] = subtd ----
 
