@@ -1528,7 +1528,11 @@ def _init_wrapper(
             # field setter. Move those values into the backing container.
             for key in self.__expected_keys__:
                 if key in self.__dict__:
-                    self.set(key, self.__dict__.pop(key))
+                    value = getattr(self, key)
+                    # Reach the object slot without a frozen/custom guard.
+                    # Dynamo 2.10 cannot trace dict.pop on this object.
+                    super(type(self).__mro__[-2], self).__delattr__(key)
+                    self.set(key, value)
         elif _has_custom_setattr:
             # The class defines a custom __setattr__ that must be
             # respected during init. Fall back to the dataclass __init__
