@@ -22,6 +22,7 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    from_dataclass,
     NonTensorData,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
@@ -2154,6 +2155,43 @@ class _FactoryDefaultTC:
 class _NoneDefaultTC:
     x: torch.Tensor
     y: torch.Tensor = None
+
+
+class TestConvertedFactoryCompile:
+    @pytest.mark.parametrize("mode", ["decorated", "class_copy", "class_inplace"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("provided", ["omitted", "tensor", "none"])
+    def test_converted_factory(self, mode, tensor_only, provided):
+        @dataclasses.dataclass
+        class Source:
+            cache: torch.Tensor = dataclasses.field(
+                default_factory=lambda: torch.zeros(3)
+            )
+
+        if mode == "decorated":
+            Data = tensorclass(Source, tensor_only=tensor_only)
+        else:
+            Data = from_dataclass(
+                Source, inplace=mode == "class_inplace", tensor_only=tensor_only
+            )
+
+        def build(x):
+            if provided == "omitted":
+                return Data(batch_size=[3]).cache
+            value = x if provided == "tensor" else None
+            return Data(cache=value, batch_size=[3]).cache
+
+        x = torch.arange(3.0)
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        expected = (
+            torch.zeros(3)
+            if provided == "omitted"
+            else (x if provided == "tensor" else None)
+        )
+        if expected is None:
+            assert actual is None
+        else:
+            torch.testing.assert_close(actual, expected)
 
 
 class TestTCPostInitCompile:
