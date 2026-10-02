@@ -112,8 +112,12 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 fi
 
-# submodules
-git submodule sync && git submodule update --init --recursive
+# No submodules: this repo has no .gitmodules, so the sync/update pair was
+# always a no-op. It is only removed rather than guarded because it also
+# needs a .git, which a runner whose image lacks git does not get --
+# actions/checkout falls back to a REST API tarball there. If submodules
+# are ever added, linux_job_v3's `submodules:` input is where to ask for
+# them, so the checkout fetches them properly.
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
