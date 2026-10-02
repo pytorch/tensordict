@@ -224,6 +224,8 @@ For a longer tour, start with [GETTING_STARTED.md](GETTING_STARTED.md) or the
 
 ## Installation
 
+TensorDict requires PyTorch 2.13 or later.
+
 **With pip**:
 
 ```bash
