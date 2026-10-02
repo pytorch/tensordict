@@ -21,10 +21,7 @@ fi
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-# Derived from this script's own path rather than `git rev-parse
-# --show-toplevel`: on a runner whose image has no git, actions/checkout
-# falls back to a REST API tarball, which has the sources but no .git.
-root_dir="$( cd "${this_dir}/../../../.." >/dev/null 2>&1 && pwd )"
+root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 

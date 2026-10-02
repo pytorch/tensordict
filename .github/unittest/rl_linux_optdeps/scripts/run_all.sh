@@ -38,10 +38,7 @@ this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-# Derived from this script's own path rather than `git rev-parse
-# --show-toplevel`: on a runner whose image has no git, actions/checkout
-# falls back to a REST API tarball, which has the sources but no .git.
-root_dir="$( cd "${this_dir}/../../../.." >/dev/null 2>&1 && pwd )"
+root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/venv"
 
 cd "${root_dir}"
@@ -119,12 +116,8 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 fi
 
-# No submodules: this repo has no .gitmodules, so the sync/update pair was
-# always a no-op. It is only removed rather than guarded because it also
-# needs a .git, which a runner whose image lacks git does not get --
-# actions/checkout falls back to a REST API tarball there. If submodules
-# are ever added, linux_job_v3's `submodules:` input is where to ask for
-# them, so the checkout fetches them properly.
+# submodules
+git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then

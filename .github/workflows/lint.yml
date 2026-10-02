@@ -18,12 +18,11 @@ concurrency:
 
 jobs:
   python-source-and-configs:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@osdc/v3-python-fallback
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     permissions:
       id-token: write
       contents: read
     with:
-      test-infra-ref: osdc/v3-python-fallback
       repository: pytorch/tensordict
       script: |
         set -euo pipefail
@@ -50,12 +49,11 @@ jobs:
         echo '::endgroup::'
 
   c-source:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@osdc/v3-python-fallback
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     permissions:
       id-token: write
       contents: read
     with:
-      test-infra-ref: osdc/v3-python-fallback
       repository: pytorch/tensordict
       script: |
         set -euo pipefail
