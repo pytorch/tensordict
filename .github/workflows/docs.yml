@@ -25,86 +25,131 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
+    runs-on: "mt-l-x86aavx2-11-41-a10g"
+    container:
+      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+    timeout-minutes: 120
     permissions:
       id-token: write
       contents: read
-    with:
-      repository: pytorch/tensordict
-      upload-artifact: docs
-      runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
-      timeout: 120
-      script: |
-        set -e
-        set -v
+    # setup_env.sh bootstraps and sources conda, so a login shell.
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
+      RUNNER_DOCS_DIR: ${{ github.workspace }}/docs-preview
+    steps:
+      # Before checkout on purpose: actions/checkout needs git in the
+      # container, and this image has none -- without it the checkout
+      # degrades to a REST API tarball with no .git, which setup_env.sh needs.
+      - name: Install git
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y git
 
-        # Set up environment variables
-        export PYTHON_VERSION=3.10
-        export CU_VERSION="cpu"
-        export TORCH_VERSION=nightly
-        export ARCH=x86_64
+      - name: Check out code
+        uses: actions/checkout@v4
 
-        # Use existing setup script
-        bash .github/unittest/linux/scripts/setup_env.sh
+      - name: Build docs
+        run: |
+          mkdir -p "${RUNNER_ARTIFACT_DIR}" "${RUNNER_DOCS_DIR}"
+          set -e
+          set -v
 
-        # Install additional tools needed for docs build
-        apt update && apt install -y unzip
+          # Set up environment variables
+          export PYTHON_VERSION=3.10
+          export CU_VERSION="cpu"
+          export TORCH_VERSION=nightly
+          export ARCH=x86_64
 
-        # Activate the conda environment
-        eval "$(./conda/bin/conda shell.bash hook)"
-        conda activate "./env"
+          # Use existing setup script
+          bash .github/unittest/linux/scripts/setup_env.sh
 
-        # Install PyTorch and torchvision (CPU version for docs)
-        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          # Install additional tools needed for docs build
+          apt update && apt install -y unzip
 
-        # Install tensordict runtime deps explicitly (except torch which is handled above),
-        # then install tensordict without resolving dependencies to avoid any solver changing the
-        # PyTorch build (stable vs nightly).
-        python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
+          # Activate the conda environment
+          eval "$(./conda/bin/conda shell.bash hook)"
+          conda activate "./env"
 
-        # Set up versioning environment (conditional on release branch/tag)
-        export GITHUB_REF_TYPE=${{ github.ref_type }}
-        export GITHUB_REF_NAME=${{ github.ref_name }}
-        source .github/scripts/version_script.sh
+          # Install PyTorch and torchvision (CPU version for docs)
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
 
-        # Install tensordict -- install as develop if not on a release branch
-        if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]] || [[ ${{ github.ref_type }} == tag ]]; then
-          python -m pip install . --no-deps
-        else
-          python -m pip install -e . --no-deps
-        fi
+          # Install tensordict runtime deps explicitly (except torch which is handled above),
+          # then install tensordict without resolving dependencies to avoid any solver changing the
+          # PyTorch build (stable vs nightly).
+          python -m pip install -U packaging pyvers importlib_metadata --quiet --root-user-action=ignore
 
-        # Install docs requirements
-        export TD_GET_DEFAULTS_TO_NONE='1'
-        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+          # Set up versioning environment (conditional on release branch/tag)
+          export GITHUB_REF_TYPE=${{ github.ref_type }}
+          export GITHUB_REF_NAME=${{ github.ref_name }}
+          source .github/scripts/version_script.sh
 
-        # Test tensordict installation
-        mkdir _tmp
-        cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
-        cd ..
+          # Install tensordict -- install as develop if not on a release branch
+          if [[ ${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/* ]] || [[ ${{ github.ref_type }} == tag ]]; then
+            python -m pip install . --no-deps
+          else
+            python -m pip install -e . --no-deps
+          fi
 
-        # Set sanitize version for releases
-        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          echo '::group::Enable version string sanitization'
-          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
-          # See docs/source/conf.py for details
-          export TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS=1
-          echo '::endgroup::'
-        fi
+          # Install docs requirements
+          export TD_GET_DEFAULTS_TO_NONE='1'
+          python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
-        # Build documentation
-        cd ./docs
-        make docs
-        cd ..
+          # Test tensordict installation
+          mkdir _tmp
+          cd _tmp
+          PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
+          cd ..
 
-        # Copy artifacts
-        cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
-        echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
-          cp -r docs/build/html/* "${RUNNER_DOCS_DIR}"
-        fi
+          # Set sanitize version for releases
+          if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+            echo '::group::Enable version string sanitization'
+            # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+            # See docs/source/conf.py for details
+            export TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS=1
+            echo '::endgroup::'
+          fi
+
+          # Build documentation
+          cd ./docs
+          make docs
+          cd ..
+
+          # Copy artifacts
+          cp -r docs/build/html/* "${RUNNER_ARTIFACT_DIR}"
+          echo $(ls "${RUNNER_ARTIFACT_DIR}")
+          if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+            cp -r docs/build/html/* "${RUNNER_DOCS_DIR}"
+          fi
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: ${{ github.workspace }}/artifacts
+
+      # Was linux_job_v3's "Upload documentation to S3" step, which is what
+      # puts a rendered preview on the pull request.
+      - name: Configure AWS credentials
+        if: ${{ github.event.pull_request.number != '' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: arn:aws:iam::308535385114:role/arc
+          aws-region: us-east-1
+
+      - name: Upload docs preview to S3
+        if: ${{ github.event.pull_request.number != '' }}
+        uses: pytorch/test-infra/.github/actions/upload-artifact-s3@main
+        with:
+          retention-days: 14
+          s3-bucket: doc-previews
+          if-no-files-found: error
+          path: ${{ env.RUNNER_DOCS_DIR }}
+          s3-prefix: ${{ github.repository }}/${{ github.event.pull_request.number }}
+          overwrite: true
 
   upload:
     needs: build-docs
