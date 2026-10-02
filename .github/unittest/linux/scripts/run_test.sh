@@ -32,10 +32,7 @@ if command -v redis-server &> /dev/null; then
 else
     case "$(uname -s)" in
         Linux*)
-            { { command -v apt > /dev/null 2>&1 && apt update -y && apt install -y redis-server; } ||
-              { command -v yum > /dev/null 2>&1 && yum install -y redis; } ; } &&
-              redis-server --daemonize yes --port 6379 --save "" --appendonly no ||
-              echo "Redis server not available, redis tests will be skipped"
+            apt update -y && apt install -y redis-server && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
             ;;
         Darwin*)
             brew install redis 2>/dev/null && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
