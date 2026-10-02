@@ -36,7 +36,7 @@ jobs:
     with:
       test-infra-ref: osdc/v3-python-fallback
       runner: mt-l-x86aavx2-11-41-a10g
-      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      docker-image: "pytorch/manylinux2_28-builder:cuda12.8"
       repository: pytorch/tensordict
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}

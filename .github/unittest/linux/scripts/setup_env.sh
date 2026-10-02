@@ -11,7 +11,12 @@ set -v
 export DEBIAN_FRONTEND=noninteractive
 export TZ=Etc/UTC
 
-apt update -y && apt install git wget gcc -y
+# Only on a Debian image. The RHEL-based builder this runs on already has
+# git, wget and gcc, and has no apt -- which under `set -e` would end the
+# script here.
+if command -v apt > /dev/null 2>&1; then
+  apt update -y && apt install git wget gcc -y
+fi
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -49,9 +54,17 @@ if [ ! -d "${env_dir}" ]; then
     if [ "${PYTHON_VERSION}" == "3.14t" ]; then
         # Install free-threaded Python 3.14 using pyenv with --disable-gil
         # Install build dependencies
-        apt install -y build-essential libssl-dev zlib1g-dev \
-            libbz2-dev libreadline-dev libsqlite3-dev curl git \
-            libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+        # pyenv builds CPython from source, so these are the build deps.
+        # Same set either way, under each distro's names.
+        if command -v apt > /dev/null 2>&1; then
+            apt install -y build-essential libssl-dev zlib1g-dev \
+                libbz2-dev libreadline-dev libsqlite3-dev curl git \
+                libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+        else
+            yum install -y gcc gcc-c++ make openssl-devel zlib-devel \
+                bzip2-devel readline-devel sqlite-devel curl git \
+                ncurses-devel xz xz-devel tk-devel libxml2-devel xmlsec1-devel libffi-devel
+        fi
 
         # Install pyenv
         export PYENV_ROOT="${root_dir}/.pyenv"
@@ -92,8 +105,11 @@ pip install pip --upgrade
 
 if [ "${PYTHON_VERSION}" == "3.14t" ]; then
     # For free-threaded Python, install dependencies via pip
-    # Install build tools from apt
-    apt install -y cmake
+    if command -v apt > /dev/null 2>&1; then
+        apt install -y cmake
+    else
+        yum install -y cmake
+    fi
     # Install test dependencies (mirrors environment.yml)
     pip install pybind11 numpy expecttest pyyaml hypothesis future cloudpickle \
         pytest pytest-benchmark pytest-cov pytest-mock pytest-instafail \

@@ -12,16 +12,23 @@ export TZ="${TZ:-Etc/UTC}"
 ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime || true
 echo "${TZ}" > /etc/timezone || true
 
-apt-get update
-apt-get install -y --no-install-recommends tzdata
-dpkg-reconfigure -f noninteractive tzdata || true
+# Only on a Debian image. The RHEL-based builder this runs on has no apt, and
+# already carries git, wget, cmake, curl, gcc and g++. freeglut is the one
+# thing it does not, so take it from yum where that is what exists.
+if command -v apt-get > /dev/null 2>&1; then
+  apt-get update
+  apt-get install -y --no-install-recommends tzdata
+  dpkg-reconfigure -f noninteractive tzdata || true
 
-apt-get upgrade -y
-apt-get install -y vim git wget cmake curl python3-dev gcc g++ freeglut3 freeglut3-dev
+  apt-get upgrade -y
+  apt-get install -y vim git wget cmake curl python3-dev gcc g++ freeglut3 freeglut3-dev
 
-if [ "${CU_VERSION:-}" == cpu ] ; then
-  apt-get upgrade -y libstdc++6
-  apt-get dist-upgrade -y
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+    apt-get upgrade -y libstdc++6
+    apt-get dist-upgrade -y
+  fi
+elif command -v yum > /dev/null 2>&1; then
+  yum install -y freeglut freeglut-devel || echo "freeglut unavailable; GL tests may skip"
 fi
 
 # ==================================================================================== #
