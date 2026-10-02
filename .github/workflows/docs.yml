@@ -25,11 +25,12 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@osdc/v3-python-fallback
     permissions:
       id-token: write
       contents: read
     with:
+      test-infra-ref: osdc/v3-python-fallback
       repository: pytorch/tensordict
       upload-artifact: docs
       runner: "mt-l-x86aavx2-11-41-a10g"
@@ -112,12 +113,13 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@osdc/v3-python-fallback
     with:
+      test-infra-ref: osdc/v3-python-fallback
       repository: pytorch/tensordict
       download-artifact: docs
       ref: gh-pages
-      test-infra-ref: main
+      test-infra-ref: osdc/v3-python-fallback
       script: |
         set -euo pipefail
 

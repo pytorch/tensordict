@@ -29,11 +29,12 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@osdc/v3-python-fallback
     permissions:
       id-token: write
       contents: read
     with:
+      test-infra-ref: osdc/v3-python-fallback
       runner: mt-l-x86aavx2-11-41-a10g
       docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
       repository: pytorch/tensordict
