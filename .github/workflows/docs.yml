@@ -112,7 +112,7 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/tensordict
       download-artifact: docs
@@ -151,7 +151,10 @@ jobs:
         rm -rf "${TARGET_FOLDER}"/*
 
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        # Was rsync, which linux_job.yml's conda-builder image had.
+        # almalinux-builder, the v3 default, does not; a plain recursive
+        # copy is all this needed.
+        cp -a "${RUNNER_ARTIFACT_DIR}"/. "${TARGET_FOLDER}"/
         git add "${TARGET_FOLDER}" || true
 
         if [[ "${TARGET_FOLDER}" == "main" ]] ; then
