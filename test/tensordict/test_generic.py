@@ -1692,6 +1692,22 @@ class TestGeneric:
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
 
+    def test_getitem_bool_list(self):
+        # A list of bools is a boolean mask, as in torch
+        td = TensorDict(
+            {"a": torch.arange(12).view(3, 4), "n": {"b": torch.arange(3)}}, [3]
+        )
+        sub = td[[True, False, True]]
+        assert sub.batch_size == torch.Size([2])
+        assert sub["n"].batch_size == torch.Size([2])
+        assert (sub["a"] == torch.tensor([[0, 1, 2, 3], [8, 9, 10, 11]])).all()
+        assert (sub["n", "b"] == torch.tensor([0, 2])).all()
+
+        td = TensorDict({"a": torch.arange(12).view(3, 4)}, [3, 4])
+        sub = td[:, [True, False, True, False]]
+        assert sub.batch_size == torch.Size([3, 2])
+        assert (sub["a"] == torch.tensor([[0, 2], [4, 6], [8, 10]])).all()
+
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])

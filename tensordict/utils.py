@@ -2244,7 +2244,10 @@ def _getitem_batch_size(batch_size, index):
     bools = []
     for i, idx in enumerate(index):
         boolean = False
-        if isinstance(idx, (range, list)):
+        if isinstance(idx, list) and idx and all(isinstance(elt, bool) for elt in idx):
+            # like torch, a list of bools is a boolean mask
+            shape = torch.Size([sum(idx)])
+        elif isinstance(idx, (range, list)):
             shape = len(idx)
         elif isinstance(idx, torch.Tensor):
             if idx.dtype == torch.bool:
