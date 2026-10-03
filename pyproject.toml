@@ -33,7 +33,6 @@ classifiers = [
     "Development Status :: 4 - Beta"
 ]
 dependencies = [
-    # a0 also accepts source and NGC builds of torch 2.13, which report 2.13.0a0+<sha>
     "torch>=2.13.0a0",
     "numpy",
     "cloudpickle",
