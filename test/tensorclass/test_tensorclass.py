@@ -55,6 +55,231 @@ from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 
+
+class TestCustomInitialization:
+    @staticmethod
+    def make_class(init, api, tensor_only):
+        if api != "inheritance":
+
+            class Data:
+                x: torch.Tensor
+                __init__ = init
+
+            if api == "dataclass":
+                Data = dataclasses.dataclass(Data)
+            return tensorclass(Data, tensor_only=tensor_only)
+
+        base = TensorClass["tensor_only"] if tensor_only else TensorClass
+
+        class Data(base):
+            x: torch.Tensor
+            __init__ = init
+
+        return Data
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("positional", [False, True])
+    def test_custom_init_body(self, api, tensor_only, positional):
+        calls = []
+
+        def init(self, x):
+            calls.append(self.batch_size)
+            self.x = x * 2
+
+        data_cls = self.make_class(init, api, tensor_only)
+        x = torch.arange(6.0).reshape(2, 3)
+        options = {"batch_size": [2], "device": "cpu", "names": ["rows"]}
+        data = data_cls(x, **options) if positional else data_cls(x=x, **options)
+        torch.testing.assert_close(data.x, x * 2)
+        assert calls == [torch.Size([2])]
+        assert data.batch_size == torch.Size([2])
+        assert data.names == ["rows"]
+        assert data.device == torch.device("cpu")
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("style", ["default", "kwargs", "varargs", "posonly"])
+    def test_custom_init_parameters(self, api, tensor_only, style):
+        x = torch.arange(6.0).reshape(2, 3)
+        if style == "default":
+
+            def init(self, x, scale=3.0):
+                self.x = x * scale
+
+            args, kwargs = (), {"x": x}
+        elif style == "kwargs":
+
+            def init(self, x, **options):
+                self.x = x * options.pop("scale")
+                assert not options
+
+            args, kwargs = (), {"x": x, "scale": 3.0}
+        elif style == "varargs":
+
+            def init(self, *values, scale=3.0):
+                self.x = (values[0] + values[1]) * scale
+
+            args, kwargs = (x / 2, x / 2), {}
+        else:
+
+            def init(self, left, right, /, *, scale):
+                self.x = (left + right) * scale
+
+            args, kwargs = (x / 2, x / 2), {"scale": 3.0}
+        data_cls = self.make_class(init, api, tensor_only)
+        data = data_cls(*args, **kwargs, batch_size=[2])
+        torch.testing.assert_close(data.x, x * 3)
+        assert data.batch_size == torch.Size([2])
+        signature = inspect.signature(data_cls)
+        assert signature.parameters["batch_size"].kind is inspect.Parameter.KEYWORD_ONLY
+        if style == "kwargs":
+            assert list(signature.parameters)[-1] == "options"
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("parent_frozen", [False, True])
+    def test_custom_init_super(self, tensor_only, lock, parent_frozen):
+        calls = []
+
+        class Parent(TensorClass, tensor_only=tensor_only, frozen=parent_frozen):
+            x: torch.Tensor
+
+        class Child(Parent, frozen=parent_frozen):
+            def __init__(self, *args, **kwargs):
+                calls.append(self.batch_size)
+                super().__init__(*args, **kwargs)
+                calls.append(self.batch_size)
+                if parent_frozen and not tensor_only:
+                    object.__setattr__(self, "x", self.x * 2)
+                else:
+                    self.set("x", self.x * 2)
+
+        x = torch.arange(6.0).reshape(2, 3)
+        data = Child(x, batch_size=[2], names=["rows"], lock=lock)
+        torch.testing.assert_close(data.x, x * 2)
+        assert calls == [torch.Size([2]), torch.Size([2])]
+        assert data.names == ["rows"]
+        assert data.is_locked == lock
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    def test_custom_init_exception(self, api):
+        def init(self, x):
+            raise RuntimeError("custom init sentinel")
+
+        data_cls = self.make_class(init, api, False)
+        with pytest.raises(RuntimeError, match="custom init sentinel"):
+            data_cls(x=torch.ones(2), batch_size=[2])
+
+    @pytest.mark.parametrize("frozen", [False, True])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_predecorated_dataclass(self, frozen, tensor_only):
+        @tensorclass(frozen=frozen, tensor_only=tensor_only)
+        @dataclasses.dataclass
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        x = torch.ones(2)
+        data = Data(x=x, y=torch.zeros(2), batch_size=[2])
+        torch.testing.assert_close(data.x, x)
+        torch.testing.assert_close(data.y, torch.zeros(2))
+        assert set(data.to_tensordict().keys()) == {"x", "y"}
+        assert data.is_locked == frozen
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    def test_custom_init_compiled_from_string(self, api):
+        # dataclass compiles generated methods under the same filename.
+        namespace = {}
+        source = "def init(self, x):\n    self.x = x * 2\n"
+        exec(compile(source, "<string>", "exec"), namespace)
+        if api == "decorator":
+
+            @tensorclass
+            class Parent:
+                x: torch.Tensor
+
+            @tensorclass
+            class Child(Parent):
+                __init__ = namespace["init"]
+
+        else:
+
+            class Parent(TensorClass):
+                x: torch.Tensor
+
+            class Child(Parent):
+                __init__ = namespace["init"]
+
+        data = Child(x=torch.ones(2), batch_size=[2])
+        torch.testing.assert_close(data.x, torch.full((2,), 2.0))
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_frozen_init(self, api, tensor_only):
+        def init(self, x):
+            if tensor_only:
+                self.set("x", x * 2)
+            else:
+                object.__setattr__(self, "x", x * 2)
+
+        if api == "decorator":
+
+            class Data:
+                x: torch.Tensor
+                __init__ = init
+
+            Data = tensorclass(Data, frozen=True, tensor_only=tensor_only)
+        else:
+
+            class Data(TensorClass, frozen=True, tensor_only=tensor_only):
+                x: torch.Tensor
+                __init__ = init
+
+        x = torch.ones(2)
+        data = Data(x=x, batch_size=[2])
+        torch.testing.assert_close(data.x, x * 2)
+        torch.testing.assert_close(data.to_tensordict()["x"], x * 2)
+        assert "x" not in data.__dict__
+        assert data.is_locked
+
+    @pytest.mark.parametrize("api", ["decorator", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_metadata_signature(self, api, tensor_only):
+        def init(self, x, *, batch_size=None, device=None, names=None):
+            assert self.batch_size == torch.Size([2])
+            assert self.device == torch.device("cpu")
+            assert self.names == ["rows"]
+            self.x = x * 2
+
+        data_cls = self.make_class(init, api, tensor_only)
+        data = data_cls(x=torch.ones(2), batch_size=[2], device="cpu", names=["rows"])
+        torch.testing.assert_close(data.x, torch.full([2], 2.0))
+        assert set(inspect.signature(data_cls).parameters) == {
+            "x",
+            "batch_size",
+            "device",
+            "names",
+        }
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_preserves_child_field(self, tensor_only):
+        class Parent(TensorClass, tensor_only=tensor_only):
+            x: torch.Tensor
+
+        class Child(Parent):
+            y: torch.Tensor
+
+            def __init__(self, x):
+                self.y = x + 1
+                super().__init__(x=x)
+
+        x = torch.arange(2.0)
+        data = Child(x=x, batch_size=[2])
+        torch.testing.assert_close(data.x, x)
+        torch.testing.assert_close(data.y, x + 1)
+
+
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
     from pytorch.tensordict.test._utils_internal import get_available_devices

@@ -2178,6 +2178,99 @@ class TestTCPostInitCompile:
         torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
 
 
+class TestTCCustomInitCompile:
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init(self, api, tensor_only):
+        def init(self, x, **options):
+            self.x = x * options.pop("scale")
+
+        if api != "inheritance":
+
+            class Data:
+                x: torch.Tensor
+                __init__ = init
+
+            if api == "dataclass":
+                Data = dataclasses.dataclass(Data)
+            Data = tensorclass(Data, tensor_only=tensor_only)
+        else:
+            base = TensorClass["tensor_only"] if tensor_only else TensorClass
+
+            class Data(base):
+                x: torch.Tensor
+                __init__ = init
+
+        def build(x):
+            return Data(x=x, scale=2.0, batch_size=[2]).x
+
+        x = torch.arange(6.0).reshape(2, 3).requires_grad_()
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        torch.testing.assert_close(actual, x * 2)
+        torch.testing.assert_close(
+            torch.autograd.grad(actual.sum(), x)[0], x.new_full(x.shape, 2)
+        )
+
+    def test_custom_init_positional(self):
+        class Data(TensorClass):
+            x: torch.Tensor
+
+            def __init__(self, x, scale):
+                self.x = x * scale
+
+        def build(x):
+            return Data(x, 2.0, batch_size=[2]).x
+
+        x = torch.arange(6.0).reshape(2, 3)
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        torch.testing.assert_close(actual, x * 2)
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_super(self, tensor_only):
+        base = TensorClass["tensor_only"] if tensor_only else TensorClass
+
+        class Parent(base):
+            x: torch.Tensor
+
+        class Child(Parent):
+            y: torch.Tensor
+
+            def __init__(self, **kwargs):
+                self.y = kwargs["x"] + 1
+                super().__init__(**kwargs)
+                self.x = self.x * 2
+
+        def build(x):
+            return Child(x=x, batch_size=[2])
+
+        x = torch.arange(6.0).reshape(2, 3)
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        torch.testing.assert_close(actual.x, x * 2)
+        torch.testing.assert_close(actual.y, x + 1)
+        assert actual.batch_size == torch.Size([2])
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_frozen_init(self, tensor_only):
+        @tensorclass(frozen=True, tensor_only=tensor_only)
+        class Data:
+            x: torch.Tensor
+
+            def __init__(self, x):
+                if tensor_only:
+                    self.set("x", x * 2)
+                else:
+                    object.__setattr__(self, "x", x * 2)
+
+        def build(x):
+            return Data(x=x, batch_size=[2])
+
+        x = torch.arange(6.0).reshape(2, 3)
+        actual = torch.compile(build, backend="eager", fullgraph=True)(x)
+        torch.testing.assert_close(actual.x, x * 2)
+        torch.testing.assert_close(actual.to_tensordict()["x"], x * 2)
+        assert actual.is_locked
+
+
 class TestTCDefaultsCompile:
     """@tensorclass field defaults must be applied under torch.compile (gh-1710)."""
 
