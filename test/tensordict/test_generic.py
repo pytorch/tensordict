@@ -2666,6 +2666,41 @@ class TestGeneric:
         assert ref() is None
 
     @pytest.mark.parametrize("inplace", [True, False])
+    def test_roll_feature_dims(self, inplace):
+        # dims are batch dims: negative dims and the default (flattened batch)
+        # must leave the feature dims of the leaves in place
+        a = torch.arange(24).view(2, 3, 4)
+        b = torch.arange(12).view(2, 3, 2)
+        td = TensorDict({"a": a, "nested": TensorDict({"b": b}, [2, 3, 2])}, [2, 3])
+
+        out = td.clone().roll(1, -1, inplace=inplace)
+        assert (out["a"] == a.roll(1, 1)).all()
+        assert (out["nested", "b"] == b.roll(1, 1)).all()
+
+        out = td.clone().roll(1, inplace=inplace)
+        assert (out["a"] == a.view(6, 4).roll(1, 0).view(2, 3, 4)).all()
+        assert (out["nested", "b"] == b.view(6, 2).roll(1, 0).view(2, 3, 2)).all()
+
+    @pytest.mark.parametrize(
+        "dims,batch_size,leaf_reps",
+        [
+            ((2,), [2, 6], (1, 2, 1)),
+            ((2, 1), [4, 3], (2, 1, 1)),
+            ((3, 1, 1), [3, 2, 3], (3, 1, 1, 1)),
+        ],
+    )
+    def test_tile_feature_dims(self, dims, batch_size, leaf_reps):
+        # dims are aligned with the batch dims, feature dims are not tiled
+        a = torch.arange(24).view(2, 3, 4)
+        td = TensorDict(
+            {"a": a, "nested": TensorDict({"b": a.clone()}, [2, 3, 4])}, [2, 3]
+        )
+        out = td.tile(dims)
+        assert out.batch_size == torch.Size(batch_size)
+        assert (out["a"] == a.tile(leaf_reps)).all()
+        assert (out["nested", "b"] == a.tile(leaf_reps)).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
     def test_gather_inplace(self, inplace):
         td = self._build_nested_td(batch_size=(3, 4))
         index = torch.tensor([[0, 2], [1, 3], [2, 0]])

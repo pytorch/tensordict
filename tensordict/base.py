@@ -5618,13 +5618,32 @@ class TensorDictBase(MutableMapping, TensorCollection):
                     [0, 1, 2]])
         """
 
-        def _roll(tensor):
-            return tensor.roll(shifts, dims)
+        # dims index the batch dims: resolve negative dims against the batch
+        # size, and roll the flattened batch (not the whole leaf) by default,
+        # so that the feature dims of the leaves are left in place.
+        batch_dims = self.batch_dims
+        if dims is None:
+
+            def _roll(tensor):
+                flat = tensor.reshape(-1, *tensor.shape[batch_dims:])
+                return flat.roll(shifts, 0).reshape(tensor.shape)
+
+        else:
+            if isinstance(dims, int):
+                dims = _maybe_correct_neg_dim(dims, self.batch_size)
+            else:
+                dims = tuple(_maybe_correct_neg_dim(d, self.batch_size) for d in dims)
+
+            def _roll(tensor):
+                return tensor.roll(shifts, dims)
 
         if inplace:
 
             def nested_fn(nested):
-                nested.roll(shifts, dims, inplace=True)
+                if dims is None:
+                    nested.update_(_roll(nested))
+                else:
+                    nested.roll(shifts, dims, inplace=True)
 
             return self._inplace_rebind_leaves(_roll, nested_fn, None)
 
@@ -5793,8 +5812,11 @@ class TensorDictBase(MutableMapping, TensorCollection):
             for i, d in enumerate(dims):
                 new_batch_size[offset + i] *= d
 
+        # Align dims with the batch dims and leave the feature dims untiled
+        reps = (1,) * (ndim - len(dims)) + tuple(dims)
+
         def _tile(tensor):
-            return tensor.tile(dims)
+            return tensor.tile(reps + (1,) * (tensor.ndim - ndim))
 
         result = self._fast_apply(
             _tile,
