@@ -1017,6 +1017,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
+    # A prior dataclass pass removes Field descriptors with factory defaults.
+    # Restore the declarations so another pass preserves their metadata.
+    previous_fields = cls.__dict__.get("__dataclass_fields__", {})
+    for name in getattr(cls, "__annotations__", {}):
+        if name in previous_fields:
+            setattr(cls, name, copy(previous_fields[name]))
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1468,7 +1475,11 @@ def _init_wrapper(
                 if field.default_factory is not dataclasses.MISSING and not isinstance(
                     field.default_factory, _missing_type
                 ):
-                    default = field.default_factory()
+                    default = (
+                        field.default_factory()
+                        if key not in kwargs
+                        else dataclasses.MISSING
+                    )
                 else:
                     default = field.default
                 if default is not None and not isinstance(default, _missing_type):

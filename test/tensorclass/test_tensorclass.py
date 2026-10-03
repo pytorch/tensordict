@@ -2722,6 +2722,111 @@ class TestTensorClass:
         assert (grads == 1).all()
 
 
+class TestDataclassFactories:
+    @staticmethod
+    def make_class(mode, factory, tensor_only=False, **field_options):
+        class Data:
+            cache: torch.Tensor = field(default_factory=factory, **field_options)
+
+        if mode == "direct":
+            return tensorclass(Data, tensor_only=tensor_only)
+        Data = dataclasses.dataclass(Data)
+        if mode == "decorated":
+            return tensorclass(Data, tensor_only=tensor_only)
+        if mode == "instance":
+            source = Data(cache=torch.zeros(2))
+            return type(from_dataclass(source, batch_size=[2], tensor_only=tensor_only))
+        return from_dataclass(
+            Data, inplace=mode == "class_inplace", tensor_only=tensor_only
+        )
+
+    @pytest.mark.parametrize(
+        "mode", ["direct", "decorated", "class_copy", "class_inplace", "instance"]
+    )
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize("provided", ["omitted", "tensor", "none"])
+    def test_factory_value_and_calls(self, mode, tensor_only, provided):
+        calls = []
+
+        def factory():
+            calls.append("called")
+            return torch.tensor([3.0, 4.0])
+
+        Data = self.make_class(mode, factory, tensor_only)
+        assert not calls
+        assert dataclasses.fields(Data)[0].default_factory is factory
+        if provided == "omitted":
+            data = Data(batch_size=[2])
+            torch.testing.assert_close(data.cache, torch.tensor([3.0, 4.0]))
+            assert calls == ["called"]
+        else:
+            value = torch.tensor([7.0, 8.0]) if provided == "tensor" else None
+            data = Data(cache=value, batch_size=[2])
+            if value is None:
+                assert data.cache is None
+            else:
+                assert data.cache is value
+            assert not calls
+
+    @pytest.mark.parametrize("mode", ["decorated", "class_copy", "class_inplace"])
+    def test_factory_fresh_per_instance(self, mode):
+        calls = []
+
+        def factory():
+            calls.append("called")
+            return torch.zeros(2)
+
+        Data = self.make_class(mode, factory)
+        first, second = Data(batch_size=[2]), Data(batch_size=[2])
+        assert calls == ["called", "called"]
+        assert first.cache.data_ptr() != second.cache.data_ptr()
+        first.cache.add_(1)
+        torch.testing.assert_close(second.cache, torch.zeros(2))
+
+    @pytest.mark.parametrize("mode", ["decorated", "class_copy", "class_inplace"])
+    @pytest.mark.parametrize("init", [False, True])
+    @pytest.mark.parametrize("kw_only", [False, True])
+    def test_factory_field_metadata(self, mode, init, kw_only):
+        def factory():
+            return torch.ones(2)
+
+        Data = self.make_class(
+            mode,
+            factory,
+            init=init,
+            kw_only=kw_only,
+            repr=False,
+            compare=False,
+            metadata={"origin": "cache"},
+        )
+        descriptor = dataclasses.fields(Data)[0]
+        assert descriptor.default_factory is factory
+        assert descriptor.init == init
+        assert descriptor.kw_only == kw_only
+        assert not descriptor.repr
+        assert not descriptor.compare
+        assert descriptor.metadata == {"origin": "cache"}
+        torch.testing.assert_close(Data(batch_size=[2]).cache, torch.ones(2))
+
+    @pytest.mark.parametrize("mode", ["decorated", "class_copy", "class_inplace"])
+    def test_inherited_factories(self, mode):
+        @dataclasses.dataclass
+        class Parent:
+            first: torch.Tensor = field(default_factory=lambda: torch.ones(2))
+
+        @dataclasses.dataclass
+        class Child(Parent):
+            second: torch.Tensor = field(default_factory=lambda: torch.full([2], 2.0))
+
+        if mode == "decorated":
+            Data = tensorclass(Child)
+        else:
+            Data = from_dataclass(Child, inplace=mode == "class_inplace")
+        data = Data(batch_size=[2])
+        torch.testing.assert_close(data.first, torch.ones(2))
+        torch.testing.assert_close(data.second, torch.full([2], 2.0))
+
+
 class TestMemmap:
     def test_empty_tensor_roundtrip(self, tmp_path):
         @tensorclass
