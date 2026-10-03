@@ -1,22 +1,51 @@
 {
-  "generated_at": "2026-10-02T06:26:15.509286+00:00",
+  "generated_at": "2026-10-03T06:27:04.133967+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
-    "start": "2026-07-06",
-    "end": "2026-09-29",
-    "runs_analyzed": 4
+    "start": "2026-08-25",
+    "end": "2026-09-30",
+    "runs_analyzed": 17
   },
   "summary": {
-    "total_tests": 45954,
-    "flaky_count": 0,
-    "flaky_case_count": 0,
-    "new_flaky_count": 0,
-    "resolved_count": 1
+    "total_tests": 46528,
+    "flaky_count": 1,
+    "flaky_case_count": 1,
+    "new_flaky_count": 1,
+    "resolved_count": 0
   },
-  "flaky_tests": [],
-  "resolved_test_families": [
-    "test.tensordict.test_mp.TestMap::test_map_seed_single"
+  "flaky_tests": [
+    {
+      "nodeid": "test.tensordict.test_mp.TestMap::test_map_seed_single",
+      "family": "test.tensordict.test_mp.TestMap::test_map_seed_single",
+      "executions": 18,
+      "passed": 17,
+      "failed": 1,
+      "error": 0,
+      "recent_failures": [
+        "2026-09-30T15:36:45Z"
+      ],
+      "environments": [
+        "test-linux.yml / test-results-stable-cpu-3.10"
+      ],
+      "confirmed_revisions": [
+        {
+          "sha": "16c48b3da226097ee5be1c25ccfafd999021b41a",
+          "date": "2026-09-30T15:36:45+00:00",
+          "environment": "test-linux.yml / test-results-stable-cpu-3.10",
+          "run_ids": [
+            36738062670
+          ]
+        }
+      ],
+      "failures": 1,
+      "failure_rate": 0.0556,
+      "avg_duration_s": 23.761,
+      "first_seen_flaky": "2026-09-30T15:36:45+00:00",
+      "last_failed": "2026-09-30T15:36:45+00:00",
+      "is_new": true
+    }
   ],
+  "resolved_test_families": [],
   "thresholds": {
     "active_failure_days": 14,
     "evidence": "fail_and_pass_on_same_revision_and_environment"
