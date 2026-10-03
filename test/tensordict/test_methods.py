@@ -3780,6 +3780,31 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_split[0].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
         assert td_split[1].batch_size == torch.Size([4, 3, 1, *td.shape[3:]])
 
+    @pytest.mark.parametrize(
+        "indices_or_sections",
+        [torch.tensor(2), torch.tensor([4, 2]), [4, 2], [-2], [7], [-7], ()],
+    )
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_tensor_split_indices(self, td_name, device, indices_or_sections, dim):
+        td = getattr(self, td_name)(device)
+        result = td.tensor_split(indices_or_sections, dim=dim)
+        expected_shapes = torch.tensor_split(
+            torch.empty(td.batch_size), indices_or_sections, dim=dim
+        )
+        assert len(result) == len(expected_shapes)
+        for split, expected in zip(result, expected_shapes):
+            assert split.batch_size == expected.shape
+        for key in ("a", "b", "c"):
+            expected = torch.tensor_split(
+                td.get(key), indices_or_sections, dim=dim % td.ndim
+            )
+            for split, expected_value in zip(result, expected):
+                if isinstance(split, LazyStackedTensorDict) and not split.tensordicts:
+                    # Empty lazy stacks have no members or keys to materialize.
+                    assert expected_value.numel() == 0
+                    continue
+                torch.testing.assert_close(split.get(key), expected_value)
+
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)
         np.random.seed(1)
@@ -4849,6 +4874,39 @@ class TestTensorDicts(TestTensorDictsBase):
         outputs = inputs + 1
         outputs.backward(torch.ones_like(outputs))
         assert (inputs.grad == 1).all()
+
+
+class TestTensorSplit:
+    @pytest.mark.parametrize("indices", [[4, 2], [-2], [7], [-7]])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_views(self, indices, dim):
+        value = torch.arange(30).reshape(5, 6)
+        td = TensorDict({"nested": {"value": value}}, batch_size=[5, 6])
+        actual = td.tensor_split(indices, dim=dim)
+        expected = torch.tensor_split(value, indices, dim=dim)
+        for split, reference in zip(actual, expected):
+            leaf = split.get(("nested", "value"))
+            assert (
+                leaf.untyped_storage().data_ptr() == value.untyped_storage().data_ptr()
+            )
+            torch.testing.assert_close(leaf, reference)
+            leaf.add_(1)
+            torch.testing.assert_close(leaf, reference)
+
+    @pytest.mark.parametrize(
+        "indices",
+        [
+            torch.tensor(2.0),
+            torch.tensor([1.0]),
+            torch.tensor([1], dtype=torch.int32),
+            torch.tensor([[1]]),
+            torch.empty(1, dtype=torch.long, device="meta"),
+        ],
+    )
+    def test_invalid_tensor_indices(self, indices):
+        td = TensorDict({"value": torch.arange(5)}, batch_size=[5])
+        with pytest.raises(ValueError, match="indices_or_sections"):
+            td.tensor_split(indices)
 
 
 class TestEmptyTensorMemmapRoundtrip:

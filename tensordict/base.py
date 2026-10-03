@@ -4333,6 +4333,20 @@ class TensorDictBase(MutableMapping, TensorCollection):
             msg = "tensor_split: received a rank zero tensor, but expected a tensor of rank one or greater!"
             raise ValueError(msg)
 
+        if isinstance(indices_or_sections, torch.Tensor):
+            if (
+                indices_or_sections.device.type != "cpu"
+                or indices_or_sections.dtype != torch.long
+            ):
+                raise ValueError(
+                    "tensor_split: indices_or_sections must be a long tensor on the CPU"
+                )
+            if indices_or_sections.ndim > 1:
+                raise ValueError(
+                    "tensor_split: indices_or_sections must be zero-dimensional or one-dimensional"
+                )
+            indices_or_sections = indices_or_sections.tolist()
+
         # Case 0 -- indices_or_sections is an integer or a scalar tensor n and a is split along dim into n parts of equal-ish length
         if isinstance(indices_or_sections, int):
             sections: int = indices_or_sections  # type: ignore[assignment]
@@ -4357,10 +4371,12 @@ class TensorDictBase(MutableMapping, TensorCollection):
             return tuple(self.split(split_sizes, dim=dim))
         # Case 1 -- indices_or_sections is a sequence of integers or a 1D tensor describing the splits
         else:
-            indices = indices_or_sections
-            indices = [0] + list(indices) + [self.shape[dim]]
-            split_sizes = [indices[i + 1] - indices[i] for i in range(len(indices) - 1)]
-            return tuple(self.split(split_sizes, dim=dim))
+            indices = [0, *indices_or_sections, self.shape[dim]]
+            prefix = (slice(None),) * dim
+            return tuple(
+                self[prefix + (slice(start, end),)]
+                for start, end in zip(indices[:-1], indices[1:])
+            )
 
     @abc.abstractmethod
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorCollection, ...]:
