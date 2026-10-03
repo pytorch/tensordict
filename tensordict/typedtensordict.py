@@ -819,6 +819,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         *,
         robust_key,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         td = TensorDict._load_memmap(
             prefix,
@@ -827,6 +828,7 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
             out=out,
             robust_key=robust_key,
             allow_pickle=allow_pickle,
+            mode=mode,
         )
         return cls._wrap_td(td)
 

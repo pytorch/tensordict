@@ -732,18 +732,22 @@ class _ArchivePath:
 
 
 def _memmap_tensor_from_path(
-    path, *, dtype: torch.dtype, shape: torch.Size | torch.Tensor
+    path,
+    *,
+    dtype: torch.dtype,
+    shape: torch.Size | torch.Tensor,
+    mode: str | None = None,
 ) -> torch.Tensor:
     """Loads a memmap leaf from either a real file or an archive entry.
 
     Real files yield :class:`~tensordict.MemoryMappedTensor` instances
-    backed by their own file; archive entries yield zero-copy views into
-    the shared mapping of the archive.
+    backed by their own file, mapped according to ``mode``; archive entries
+    yield zero-copy views into the shared mapping of the archive.
     """
     if isinstance(path, _ArchivePath):
         return path.reader.leaf_tensor(path.at, dtype, shape)
     return MemoryMappedTensor.from_filename(
-        filename=str(path), dtype=dtype, shape=shape
+        filename=str(path), dtype=dtype, shape=shape, mode=mode
     )
 
 
