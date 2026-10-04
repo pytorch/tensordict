@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-10-03T06:27:04.133967+00:00",
+  "generated_at": "2026-10-04T08:08:00.744414+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
-    "start": "2026-08-25",
-    "end": "2026-09-30",
+    "start": "2026-08-26",
+    "end": "2026-10-03",
     "runs_analyzed": 17
   },
   "summary": {
     "total_tests": 46528,
     "flaky_count": 1,
     "flaky_case_count": 1,
-    "new_flaky_count": 1,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -39,10 +39,10 @@
       ],
       "failures": 1,
       "failure_rate": 0.0556,
-      "avg_duration_s": 23.761,
+      "avg_duration_s": 23.637,
       "first_seen_flaky": "2026-09-30T15:36:45+00:00",
       "last_failed": "2026-09-30T15:36:45+00:00",
-      "is_new": true
+      "is_new": false
     }
   ],
   "resolved_test_families": [],
