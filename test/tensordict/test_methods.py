@@ -33,6 +33,7 @@ from tensordict import (
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
+    load_memmap,
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
@@ -4940,6 +4941,126 @@ class TestSubTensorDictMemmapRoundtrip:
             ["slice", {"start": 0, "stop": 2, "step": None}],
         ]
         assert _str_to_index(legacy) == (slice(None), slice(0, 2))
+
+
+class TestMemmapLoadMode:
+    """``load_memmap(..., mode=...)`` on memmap directories."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {
+                "a": torch.zeros(3, 4),
+                "nested": {"b": torch.zeros(3)},
+                "stack": lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(path)
+        return td
+
+    @pytest.mark.parametrize("mode", [None, "r", "r+"])
+    def test_in_place_writes(self, tmp_path, mode):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode=mode)
+        loaded.add_(1)
+        # a pickled copy maps the files the same way
+        pickle.loads(pickle.dumps(loaded)).add_(1)
+        # "r" keeps in-place writes in memory, the other modes write them
+        # to the files
+        in_memory, on_disk = (1, 0) if mode == "r" else (2, 2)
+        assert (loaded == in_memory).all()
+        assert (TensorDict.load_memmap(tmp_path) == on_disk).all()
+
+    def test_mode_r_maps_copy_on_write(self, tmp_path, monkeypatch):
+        # Shared writable mappings make page faults take write locks on some
+        # network file systems (e.g. Lustre), which stalls concurrent readers.
+        td = self._save(tmp_path / "td")
+        td._get_sub_tensordict((slice(0, 2),)).memmap(tmp_path / "sub")
+        nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)])
+        TensorDict({"nt": nt}, batch_size=[]).memmap(tmp_path / "nt")
+        shared = []
+        from_file = torch.from_file
+
+        def spy(*args, **kwargs):
+            shared.append(kwargs["shared"])
+            return from_file(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "from_file", spy)
+        for name in ("td", "sub", "nt"):
+            loaded = TensorDict.load_memmap(tmp_path / name, mode="r")
+            pickle.loads(pickle.dumps(loaded))
+        assert shared and not any(shared)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.getuid() == 0, reason="root can write to read-only files"
+    )
+    def test_mode_rplus_requires_writable_files(self, tmp_path):
+        self._save(tmp_path)
+        (tmp_path / "a.memmap").chmod(stat.S_IREAD)
+        with pytest.raises(PermissionError, match="not writable"):
+            TensorDict.load_memmap(tmp_path, mode="r+")
+
+    def test_mode_r_memmap_(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # the loaded tensordict is not bound to the directory
+        loaded.memmap_()
+        assert (loaded == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    def test_mode_r_save(self, tmp_path):
+        self._save(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path, mode="r")
+        loaded.add_(1)
+        # saving to the directory writes the values held in memory
+        saved = loaded.save(tmp_path)
+        assert (saved == 1).all()
+        assert (TensorDict.load_memmap(tmp_path) == 1).all()
+
+    def test_load_memmap_(self, tmp_path):
+        td = self._save(tmp_path)
+        dest = td.clone()
+        dest.load_memmap_(tmp_path, mode="r")
+        dest.add_(1)
+        # the free function forwards the mode too
+        load_memmap(tmp_path, mode="r").add_(1)
+        assert (TensorDict.load_memmap(tmp_path) == 0).all()
+
+    @pytest.mark.parametrize("mode", [None, "r+"])
+    def test_load_memmap_into_memmap(self, tmp_path, mode):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode=mode)
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        dest.add_(1)
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
+
+    def test_mode_r_load_memmap_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "src").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", mode="r")
+        dest.add_(1)
+        # the leaves keep their copy-on-write mapping of the files
+        assert dest["a"].filename == str(tmp_path / "src" / "a.memmap")
+        assert (TensorDict.load_memmap(tmp_path / "src") == 0).all()
+        # like a load_memmap() result
+        assert not dest.is_memmap() and not dest.is_locked
+
+    def test_mode_rplus_load_memmap_archive_into_memmap(self, tmp_path):
+        dest = self._save(tmp_path / "td.tdz").memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "td.tdz", mode="r+")
+        dest.add_(1)
+        # in-place writes reach the archive
+        assert (TensorDict.load_memmap(tmp_path / "td.tdz") == 1).all()
+
+    def test_load_memmap_into_memmap_lazy_stack(self, tmp_path):
+        td = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)])
+        td.memmap(tmp_path / "src")
+        dest = td.memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        dest.add_(1)
+        # in-place writes reach the files
+        assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
 
 
 class TestBackward:

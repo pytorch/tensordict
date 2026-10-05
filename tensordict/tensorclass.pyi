@@ -959,6 +959,7 @@ class TensorClass:
         out: TensorCollection | None = None,
         robust_key: bool | None = True,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ) -> Self: ...
     def load_memmap_(
         self,
@@ -966,6 +967,7 @@ class TensorClass:
         robust_key: bool | None = True,
         *,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ) -> Self: ...
     def memmap_refresh_(self, *, allow_pickle: bool | None = None) -> Self: ...
     def entry_class(self, key: NestedKey) -> type: ...

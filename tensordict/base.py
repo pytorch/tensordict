@@ -7864,7 +7864,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         out: TensorDictBase | None = None,
         robust_key: bool | None = True,
         subpath: NestedKey | None = None,
-        mode: str = "r",
+        mode: str | None = None,
         num_threads: int = 0,
         allow_pickle: bool | None = None,
     ) -> Self:
@@ -7880,7 +7880,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 view into the mapping: only the pages of the leaves that are
                 actually accessed are read from disk. Unlike directory-backed
                 tensordicts, in-place writes to the leaves of an
-                archive-loaded tensordict do not propagate to the file.
+                archive-loaded tensordict do not propagate to the file by
+                default (see ``mode``).
             device (torch.device or equivalent, optional): if provided, the
                 data will be asynchronously cast to that device.
                 Supports `"meta"` device, in which case the data isn't loaded
@@ -7901,12 +7902,23 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
                 archives.
-            mode (str, optional): ``"r"`` (default) or ``"r+"``. Only
-                relevant when loading an archive: with ``"r"`` the archive is
-                mapped copy-on-write and in-place writes to the leaves stay
-                in memory; with ``"r+"`` the mapping is shared and in-place
-                writes propagate to the file, like directory-backed
-                tensordicts. ``"r+"`` requires uncompressed, aligned tensor
+            mode (str, optional): how the files are memory-mapped. With
+                ``"r"``, the mapping is copy-on-write: in-place writes to the
+                leaves stay in memory. They reach the files only if the
+                tensordict is saved there, and :meth:`~.memmap_` without a
+                prefix does not write back to ``prefix``. With ``"r+"``, the
+                mapping is shared: in-place writes propagate to the files,
+                and a file that is not writable raises a
+                :class:`PermissionError`. Defaults to ``None``, which maps
+                archives as with ``"r"``, and each file of a directory as with
+                ``"r+"`` if the process can write it, as with ``"r"``
+                otherwise. Prefer ``"r"`` for data that is only read: on some
+                network file systems (e.g. Lustre), page faults on a shared
+                writable mapping take write locks, so readers on different
+                nodes block each other. On Linux, copy-on-write mappings count
+                against the memory commit limit, so a file larger than the
+                available RAM and swap can fail to map with ``"r"``. With
+                archives, ``"r+"`` requires uncompressed, aligned tensor
                 payloads (i.e. archives written by tensordict without
                 ``compression``) and is not available for nested-tensor
                 leaves. In-place writes do not update the per-entry CRC-32
@@ -7914,8 +7926,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 checksums, but call
                 :func:`~tensordict.refresh_archive_checksums` before handing
                 a modified archive to tools that verify them (``unzip``,
-                :func:`~tensordict.unpack_memmap`, ...). Directory prefixes
-                are always write-through and ignore this argument.
+                :func:`~tensordict.unpack_memmap`, ...).
             num_threads (int, optional): number of threads used to decompress
                 the leaves of a compressed archive (deflate entries are
                 inflated in parallel, which scales nearly linearly). Without
@@ -7982,8 +7993,8 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 is_shared=False)
 
         """
-        if mode not in ("r", "r+"):
-            raise ValueError(f"mode must be 'r' or 'r+', got {mode!r}.")
+        if mode not in (None, "r", "r+"):
+            raise ValueError(f"mode must be 'r', 'r+' or None, got {mode!r}.")
         if allow_pickle is not None and not isinstance(allow_pickle, bool):
             raise TypeError("allow_pickle must be a bool or None.")
         if not isinstance(prefix, _ArchivePath):
@@ -8060,10 +8071,13 @@ class TensorDictBase(MutableMapping, TensorCollection):
             "robust_key": robust_key,
         }
         # Avoid changing the default call contract of third-party registered
-        # tensor collection loaders. They only see the new private keyword
-        # when the caller explicitly selects a pickle policy.
+        # tensor collection loaders. They only see the new private keywords
+        # when the caller explicitly selects a pickle policy, or a mode for
+        # the files of a directory (an archive is mapped once, above).
         if allow_pickle is not None:
             load_kwargs["allow_pickle"] = allow_pickle
+        if mode is not None and not isinstance(prefix, _ArchivePath):
+            load_kwargs["mode"] = mode
         out = other_cls._load_memmap(prefix, metadata, **load_kwargs)
         if (
             not non_blocking
@@ -8079,21 +8093,26 @@ class TensorDictBase(MutableMapping, TensorCollection):
         robust_key: bool | None = True,
         *,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
 
         See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
         """
         is_memmap = self.is_memmap()
-        with self.unlock_() if is_memmap else contextlib.nullcontext():
-            self.load_memmap(
-                prefix=prefix,
-                device=self.device,
-                out=self,
-                robust_key=robust_key,
-                allow_pickle=allow_pickle,
-            )
         if is_memmap:
+            self.unlock_()
+        self.load_memmap(
+            prefix=prefix,
+            device=self.device,
+            out=self,
+            robust_key=robust_key,
+            allow_pickle=allow_pickle,
+            mode=mode,
+        )
+        # Without a directory (archive, lazy stack, mode="r"), memmap_() would
+        # copy every leaf into memory: leave the tensordict unlocked instead.
+        if is_memmap and self._memmap_prefix is not None:
             self.memmap_()
         return self
 
@@ -8127,6 +8146,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         robust_key,
         out=None,
         allow_pickle: bool | None = None,
+        mode: str | None = None,
     ):
         raise NotImplementedError
 
