@@ -541,6 +541,15 @@ class TestTensorDictStore:
         assert result.shape == torch.Size([3, 3])
         assert torch.allclose(result, obs[mask])
 
+    def test_indexed_read_bool_list(self, store_td):
+        """td[list_of_bools] is a boolean mask, as for a tensor."""
+        obs = torch.randn(10, 3)
+        store_td["obs"] = obs
+        mask = [i in (0, 3, 9) for i in range(10)]
+        sub = store_td[mask]
+        assert sub.batch_size == torch.Size([3])
+        assert torch.allclose(sub["obs"], obs[torch.tensor(mask)])
+
     def test_indexed_read_multiple_keys(self, store_td):
         """Indexed read should work across multiple leaf keys."""
         obs = torch.randn(10, 4)
@@ -836,6 +845,15 @@ class TestLazyStackedTensorDictStore:
         assert torch.allclose(sub["a"][0], tds[0]["a"])
         assert torch.allclose(sub["a"][1], tds[2]["a"])
         assert torch.allclose(sub["a"][2], tds[4]["a"])
+
+    # ---- Read: td[list_of_bools] ----
+
+    def test_getitem_bool_list(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        mask = [True, False, False, True, True]
+        sub = store_td[mask]
+        assert sub.batch_size == torch.Size([3, 4])
+        torch.testing.assert_close(sub["a"], lazy_td[torch.tensor(mask)]["a"])
 
     # ---- Read: td[tensor_index] ----
 
