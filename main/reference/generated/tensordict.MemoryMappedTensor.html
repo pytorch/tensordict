@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4387+g03172b8c3.d20261003)
+                  main (0.14.0.dev4389+g8244653af.d20261005)
                 </div>
               
             
@@ -478,7 +478,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.from_filename">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_filename" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_filename" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a MemoryMappedTensor from a given filename.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -490,6 +490,12 @@ a tensor is provided, it is assumed that the tensor is a nested_tensor
 instance.</p></li>
 <li><p><strong>index</strong> (<em>torch-compatible index type</em>) – an index to use to build the
 tensor.</p></li>
+<li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code> maps the file copy-on-write:
+in-place writes stay in memory. <code class="docutils literal notranslate"><span class="pre">&quot;r+&quot;</span></code> maps it shared:
+in-place writes reach the file, and a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#PermissionError" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">PermissionError</span></code></a>
+is raised if the file is not writable. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+which maps the file shared if it is writable and copy-on-write
+otherwise.</p></li>
 </ul>
 </dd>
 </dl>

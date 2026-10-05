@@ -214,6 +214,24 @@ possible behaviours.
   This feature is implemented to prevent users from inadvertently copying memory-mapped
   tensors from one location to another.
 
+Copy-on-write loading
+~~~~~~~~~~~~~~~~~~~~~
+
+By default, :meth:`~tensordict.TensorDictBase.load_memmap` maps each file of a
+directory shared if the process can write it, so in-place writes to the leaves
+reach the files. Data that is only read can be loaded with ``mode="r"``
+instead: the files are then mapped copy-on-write, and in-place writes stay in
+memory.
+
+  >>> td = TensorDict.load_memmap("/path/to/dataset", mode="r")
+  >>> td["a"].add_(1)  # the file is unchanged
+
+Prefer ``mode="r"`` for datasets on network file systems. On some of them
+(e.g. Lustre), page faults on a shared writable mapping take write locks, so
+readers of the same files on different nodes block each other.
+``mode="r+"`` requests the shared mapping explicitly and raises an error if a
+file is not writable.
+
 Single-file memmap archives
 ---------------------------
 

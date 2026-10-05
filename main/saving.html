@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4387+g03172b8c3.d20261003)
+                  main (0.14.0.dev4389+g8244653af.d20261005)
                 </div>
               
             
@@ -557,6 +557,23 @@ tensors from one location to another.</p>
 </li>
 </ul>
 </section>
+<section id="copy-on-write-loading">
+<h3>Copy-on-write loading<a class="headerlink" href="#copy-on-write-loading" title="Permalink to this heading">¶</a></h3>
+<p>By default, <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> maps each file of a
+directory shared if the process can write it, so in-place writes to the leaves
+reach the files. Data that is only read can be loaded with <code class="docutils literal notranslate"><span class="pre">mode=&quot;r&quot;</span></code>
+instead: the files are then mapped copy-on-write, and in-place writes stay in
+memory.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">"/path/to/dataset"</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># the file is unchanged</span>
+</pre></div>
+</div>
+<p>Prefer <code class="docutils literal notranslate"><span class="pre">mode=&quot;r&quot;</span></code> for datasets on network file systems. On some of them
+(e.g. Lustre), page faults on a shared writable mapping take write locks, so
+readers of the same files on different nodes block each other.
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;r+&quot;</span></code> requests the shared mapping explicitly and raises an error if a
+file is not writable.</p>
+</section>
 </section>
 <section id="single-file-memmap-archives">
 <h2>Single-file memmap archives<a class="headerlink" href="#single-file-memmap-archives" title="Permalink to this heading">¶</a></h2>
@@ -853,6 +870,7 @@ mimics the TensorDict’s one.</p>
 <li><a class="reference internal" href="#pickled-non-tensor-data">Pickled non-tensor data</a></li>
 <li><a class="reference internal" href="#filesystem-considerations">Filesystem considerations</a><ul>
 <li><a class="reference internal" href="#handling-existing-memorymappedtensor">Handling existing <code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a></li>
+<li><a class="reference internal" href="#copy-on-write-loading">Copy-on-write loading</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#single-file-memmap-archives">Single-file memmap archives</a></li>
