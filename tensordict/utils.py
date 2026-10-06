@@ -2211,6 +2211,24 @@ class BufferLegacy(_parent_buffer_cls):
         return t
 
 
+def _is_list_of_bools(index) -> bool:
+    """Whether ``index`` is a non-empty list of bools (a boolean mask for torch)."""
+    return (
+        isinstance(index, list)
+        and bool(index)
+        and all(isinstance(elt, bool) for elt in index)
+    )
+
+
+def _bool_lists_to_masks(index):
+    """Converts the lists of bools in an index to boolean tensors."""
+    if isinstance(index, tuple):
+        return tuple(_bool_lists_to_masks(idx) for idx in index)
+    if _is_list_of_bools(index):
+        return torch.tensor(index)
+    return index
+
+
 def _getitem_batch_size(batch_size, index):
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
@@ -2244,7 +2262,10 @@ def _getitem_batch_size(batch_size, index):
     bools = []
     for i, idx in enumerate(index):
         boolean = False
-        if isinstance(idx, (range, list)):
+        if _is_list_of_bools(idx):
+            # like torch, a list of bools is a boolean mask
+            shape = torch.Size([sum(idx)])
+        elif isinstance(idx, (range, list)):
             shape = len(idx)
         elif isinstance(idx, torch.Tensor):
             if idx.dtype == torch.bool:

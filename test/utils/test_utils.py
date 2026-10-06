@@ -59,7 +59,7 @@ from tensordict.utils import (
         torch.arange(2),
         range(2),
         torch.tensor([[0, 1], [0, 1]]),
-        # [True, False, True],
+        [True, False, True],
         Ellipsis,
     ],
 )
@@ -76,7 +76,7 @@ from tensordict.utils import (
         torch.arange(2),
         range(2),
         torch.tensor([[0, 1], [0, 1]]),
-        # [True, False, True, False],
+        [True, False, True, False],
         Ellipsis,
     ],
 )
@@ -93,7 +93,7 @@ from tensordict.utils import (
         torch.arange(2),
         range(2),
         torch.tensor([[0, 1], [0, 1]]),
-        # [True, False, False, False, True],
+        [True, False, False, False, True],
         Ellipsis,
     ],
 )

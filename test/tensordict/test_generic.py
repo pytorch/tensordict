@@ -1692,6 +1692,38 @@ class TestGeneric:
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
 
+    def test_getitem_bool_list(self):
+        # A list of bools is a boolean mask, as in torch
+        td = TensorDict(
+            {"a": torch.arange(12).view(3, 4), "n": {"b": torch.arange(3)}}, [3]
+        )
+        sub = td[[True, False, True]]
+        assert sub.batch_size == torch.Size([2])
+        assert sub["n"].batch_size == torch.Size([2])
+        assert (sub["a"] == torch.tensor([[0, 1, 2, 3], [8, 9, 10, 11]])).all()
+        assert (sub["n", "b"] == torch.tensor([0, 2])).all()
+
+        td = TensorDict({"a": torch.arange(12).view(3, 4)}, [3, 4])
+        sub = td[:, [True, False, True, False]]
+        assert sub.batch_size == torch.Size([3, 2])
+        assert (sub["a"] == torch.tensor([[0, 2], [4, 6], [8, 10]])).all()
+
+    @pytest.mark.parametrize("index", [[True, False, True], [0, 2]])
+    @pytest.mark.parametrize("batch_size", [[3], [3, 4]])
+    def test_setitem_list_index_new_key(self, index, batch_size):
+        # "new" is missing from td, so it is written through a sub-tensordict
+        td = TensorDict({"a": torch.zeros(batch_size)}, batch_size)
+        value_shape = [2, *batch_size[1:]]
+        td[index] = TensorDict(
+            {"a": torch.ones(value_shape), "new": torch.ones(value_shape)},
+            value_shape,
+        )
+        expected = torch.zeros(batch_size)
+        expected[[0, 2]] = 1
+        assert (td["a"] == expected).all()
+        assert td["new"].shape == torch.Size(batch_size)
+        assert (td["new"] == expected).all()
+
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])

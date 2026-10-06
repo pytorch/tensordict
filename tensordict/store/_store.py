@@ -33,6 +33,7 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _as_context_manager,
+    _bool_lists_to_masks,
     _getitem_batch_size,
     _is_tensorclass,
     _KEY_ERROR,
@@ -1336,8 +1337,12 @@ class TensorDictStore(TensorDictBase):
         prefix = (self._prefix + _KEY_SEP) if self._prefix else ""
         leaf_kps = sorted(k for k in all_keys if k.startswith(prefix) or not prefix)
 
-        # Single batched pipeline for all keys
-        result_map = self._run_sync(self._abatch_index(leaf_kps, index))
+        # Single batched pipeline for all keys. The byte-range planner reads a
+        # list as integer positions, so a list of bools is passed as a mask
+        # to match new_batch_size.
+        result_map = self._run_sync(
+            self._abatch_index(leaf_kps, _bool_lists_to_masks(index))
+        )
 
         # Build nested source dict from flat key paths
         prefix_len = len(prefix)
@@ -4099,7 +4104,10 @@ class LazyStackedTensorDictStore(TensorDictBase):
             names = self._get_names_idx(index)
 
         all_keys = sorted(self._get_all_keys())
-        result_map = self._run_sync(self._abatch_get_at(all_keys, index))
+        # As in TensorDictStore._index_tensordict: a list of bools is a mask.
+        result_map = self._run_sync(
+            self._abatch_get_at(all_keys, _bool_lists_to_masks(index))
+        )
 
         source: dict = {}
         for kp, value in result_map.items():
