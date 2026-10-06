@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4389+g8244653af.d20261005)
+                  main (0.14.0.dev4392+g653b8132d.d20261006)
                 </div>
               
             
@@ -419,7 +419,7 @@ multiple outputs from a single tensor.</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.0000, 0.7070, 0.9443, 0.0000]], grad_fn=&lt;ReluBackward0&gt;), tensor([[ 0.2544, -0.1057, -0.1626, -0.2380]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[ 0.2544, -0.1057]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.9009, 0.8572]], grad_fn=&lt;ClampMinBackward0&gt;))
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>(tensor([[0.1653, 0.0000, 1.5708, 0.7317]], grad_fn=&lt;ReluBackward0&gt;), tensor([[-0.0977,  0.0587, -0.2787,  0.5822]], grad_fn=&lt;AddmmBackward0&gt;), tensor([[-0.0977,  0.0587]], grad_fn=&lt;SplitBackward0&gt;), tensor([[0.8341, 1.4031]], grad_fn=&lt;ClampMinBackward0&gt;))
 </pre></div>
 </div>
 <p>As expected, running the model with a tensor input returns as many tensors as the module’s output keys! For large
@@ -492,8 +492,8 @@ def forward(self, x):
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Time for exported module: </span><span class="si">{</span><span class="p">(</span><a href="https://docs.python.org/3/library/time.html#time.time" title="time.time" class="sphx-glr-backref-module-time sphx-glr-backref-type-py-function"><span class="n">time</span><span class="o">.</span><span class="n">time</span></a><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><a href="https://docs.python.org/3/builtins/functions.html#float" title="builtins.float" class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">t0</span></a><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2"> 4.2f</span><span class="si">}</span><span class="s2"> micro-seconds"</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  421.76 micro-seconds
-Time for exported module:  345.95 micro-seconds
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Time for TDModule:  509.98 micro-seconds
+Time for exported module:  425.82 micro-seconds
 </pre></div>
 </div>
 <p>and the FX graph:</p>
@@ -502,51 +502,51 @@ Time for exported module:  345.95 micro-seconds
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>class GraphModule(torch.nn.Module):
     def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
         linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
         relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
 
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
         linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+        # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
         chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
         getitem: "f32[1, 2]" = chunk[0]
         getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
 
-        # File: /pytorch/tensordict/tensordict/nn/utils.py:71 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+        # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:71 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
         add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+        # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
         clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         return (relu, linear_1, getitem, clamp_min)
 
 fx graph: class GraphModule(torch.nn.Module):
     def forward(self, p_module_0_module_weight: "f32[4, 3]", p_module_0_module_bias: "f32[4]", p_module_2_module_weight: "f32[4, 4]", p_module_2_module_bias: "f32[4]", x: "f32[1, 3]"):
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
         linear: "f32[1, 4]" = torch.ops.aten.linear.default(x, p_module_0_module_weight, p_module_0_module_bias);  x = p_module_0_module_weight = p_module_0_module_bias = None
 
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:143 in forward, code: return F.relu(input, inplace=self.inplace)
         relu: "f32[1, 4]" = torch.ops.aten.relu.default(linear);  linear = None
 
-        # File: /pytorch/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
+        # File: /__w/tensordict/tensordict/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
         linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias);  p_module_2_module_weight = p_module_2_module_bias = None
 
-        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
+        # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:85 in forward, code: loc, scale = tensor.chunk(2, -1)
         chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
         getitem: "f32[1, 2]" = chunk[0]
         getitem_1: "f32[1, 2]" = chunk[1];  chunk = None
 
-        # File: /pytorch/tensordict/tensordict/nn/utils.py:71 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+        # File: /__w/tensordict/tensordict/tensordict/nn/utils.py:71 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
         add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335);  getitem_1 = None
         softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add);  add = None
         add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01);  softplus = None
 
-        # File: /pytorch/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+        # File: /__w/tensordict/tensordict/tensordict/nn/distributions/continuous.py:86 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
         clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001);  add_1 = None
         return (relu, linear_1, getitem, clamp_min)
 </pre></div>
@@ -624,7 +624,7 @@ When an <cite>x</cite> input is provided, we expect our model to output a single
 <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">x</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[ 0.2544, -0.1057]], grad_fn=&lt;SplitBackward0&gt;)
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[-0.0977,  0.0587]], grad_fn=&lt;SplitBackward0&gt;)
 </pre></div>
 </div>
 <p>We see that the output is now a single tensor.
@@ -681,7 +681,7 @@ to learn more about this feature. Exporting to ONNX is very similar to <cite>tor
 <li><p>For deployment of PyTorch code on servers without python environment, check the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTInductor</a> documentation.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.345 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.357 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>
