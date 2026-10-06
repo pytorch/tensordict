@@ -3140,6 +3140,14 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim = metadata["stack_dim"]
         if out is not None:
             out = out.unbind(stack_dim)
+            num_saved = 0
+            while (prefix / str(num_saved)).exists():
+                num_saved += 1
+            if num_saved != len(out):
+                raise ValueError(
+                    f"Cannot load {num_saved} stacked tensordicts into a stack "
+                    f"of {len(out)} tensordicts."
+                )
         while (prefix / str(i)).exists():
             tensordicts.append(
                 TensorDict.load_memmap(

@@ -775,6 +775,27 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
 
+    def test_load_memmap_refreshes_non_tensor(self, tmp_path):
+        def make(version):
+            return TensorDict(
+                {
+                    "a": torch.full((2,), float(version)),
+                    "data": NonTensorData(f"v{version}", batch_size=[2]),
+                    "stack": NonTensorStack(f"s{version}", f"t{version}"),
+                    "nested": {"data": NonTensorData(f"w{version}", batch_size=[2])},
+                },
+                batch_size=[2],
+            )
+
+        make(2).memmap(tmp_path / "src")
+        dest = make(1).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src", allow_pickle=False)
+        assert (dest["a"] == 2).all()
+        assert dest["data"] == "v2"
+        assert list(dest["stack"]) == ["s2", "t2"]
+        assert dest["nested", "data"] == "w2"
+        assert dest.is_memmap()
+
     @pytest.mark.parametrize("allow_pickle", [0, 1, np.bool_(False), np.bool_(True)])
     def test_memmap_pickle_policy_requires_bool(self, tmp_path, allow_pickle):
         td = TensorDict(

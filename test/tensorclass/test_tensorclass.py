@@ -2813,6 +2813,89 @@ class TestMemmap:
         data3 = MyOtherClass.load_memmap(tmpdir, allow_pickle=True)
         assert isinstance(data3, MyClass)
 
+    def test_load_memmap_out(self, tmp_path):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            string: str
+            other: Any = None
+
+        MyClass(x=torch.ones(3), string="new", batch_size=[3]).memmap(tmp_path)
+        out = MyClass(x=torch.zeros(3), string="old", other="stale", batch_size=[3])
+        loaded = MyClass.load_memmap(tmp_path, out=out)
+        assert loaded is out
+        assert (out.x == 1).all()
+        assert out.string == "new"
+        assert out.other is None
+
+    @pytest.mark.parametrize("memmap", [False, True])
+    def test_load_memmap_(self, tmp_path, memmap):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            string: str
+            other: Any = None
+
+        MyClass(x=torch.ones(3), string="new", other="set", batch_size=[3]).memmap(
+            tmp_path / "src"
+        )
+        dest = MyClass(x=torch.zeros(3), string="old", batch_size=[3])
+        if memmap:
+            dest.memmap_(tmp_path / "dest")
+        assert dest.load_memmap_(tmp_path / "src") is dest
+        assert (dest.x == 1).all()
+        assert dest.string == "new"
+        assert dest.other == "set"
+        assert dest.is_memmap() is memmap
+        if memmap:
+            assert dest.saved_path == tmp_path / "src" / "_tensordict"
+            MyClass(x=torch.full((3,), 2.0), string="newer", batch_size=[3]).memmap(
+                tmp_path / "src"
+            )
+            dest.memmap_refresh_()
+            assert (dest.x == 2).all()
+            assert dest.string == "newer"
+
+    def test_load_memmap_redefined_class(self, tmp_path, monkeypatch):
+        # The saved class is looked up by name, so the lookup can return
+        # another class with the same name, e.g. one that is redefined in a
+        # notebook. An instance of the redefined class is still loaded in place.
+        def make_class():
+            @tensorclass
+            class MyClass:
+                x: torch.Tensor
+                string: str
+
+            return MyClass
+
+        saved_cls, dest_cls = make_class(), make_class()
+        saved_cls(x=torch.ones(3), string="new", batch_size=[3]).memmap(tmp_path)
+        # make the lookup by name return saved_cls
+        monkeypatch.setattr(
+            tensordict.base,
+            "_ACCEPTED_CLASSES",
+            (saved_cls,) + tensordict.base._ACCEPTED_CLASSES,
+        )
+        dest = dest_cls(x=torch.zeros(3), string="old", batch_size=[3])
+        assert dest.load_memmap_(tmp_path) is dest
+        assert (dest.x == 1).all()
+        assert dest.string == "new"
+
+    def test_load_memmap_other_class(self, tmp_path):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        @tensorclass
+        class OtherClass:
+            x: torch.Tensor
+
+        MyClass(x=torch.ones(3), batch_size=[3]).memmap(tmp_path)
+        dest = OtherClass(x=torch.zeros(3), batch_size=[3])
+        with pytest.raises(ValueError, match="Cannot load a saved MyClass in place"):
+            dest.load_memmap_(tmp_path)
+        assert (dest.x == 0).all()
+
     def test_memmap_overwrite_removes_stale_pickle(self, tmp_path):
         @tensorclass
         class MyClass:
