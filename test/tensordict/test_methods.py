@@ -5063,6 +5063,91 @@ class TestMemmapLoadMode:
         assert (TensorDict.load_memmap(tmp_path / "src") == 1).all()
 
 
+class TestLoadMemmapOut:
+    """``load_memmap(..., out=...)`` and ``load_memmap_``."""
+
+    @staticmethod
+    def _save(path):
+        td = TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3)}}, batch_size=[3]
+        )
+        td.memmap(path)
+        return td
+
+    def test_nested_device(self, tmp_path):
+        self._save(tmp_path)
+        # out has no device, so only the requested device can place the
+        # leaves of its existing nested containers
+        out = TensorDict(
+            {
+                "a": torch.zeros(3, device="meta"),
+                "nested": {"b": torch.zeros(3, device="meta")},
+            },
+            batch_size=[3],
+        )
+        loaded = TensorDict.load_memmap(tmp_path, device="meta", out=out)
+        assert loaded is out
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_from_out(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict({"nested": {}}, batch_size=[3], device="meta")
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded["a"].device == torch.device("meta")
+        assert loaded["nested", "b"].device == torch.device("meta")
+
+    def test_device_mismatch(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(batch_size=[3], device="meta")
+        with pytest.raises(ValueError, match="Cannot load a tensordict on device"):
+            TensorDict.load_memmap(tmp_path, device="cpu", out=out)
+
+    def test_stale_keys(self, tmp_path):
+        self._save(tmp_path)
+        out = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+                "stale_nested": {"c": torch.zeros(3)},
+            },
+            batch_size=[3],
+        )
+        nested = out["nested"]
+        loaded = TensorDict.load_memmap(tmp_path, out=out)
+        assert loaded is out
+        assert loaded["nested"] is nested
+        assert set(loaded.keys(True, True)) == {"a", ("nested", "b")}
+        assert (loaded == 1).all()
+
+    def test_load_memmap_stale_keys_into_memmap(self, tmp_path):
+        self._save(tmp_path / "src")
+        dest = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "stale": torch.zeros(3),
+                "nested": {"b": torch.zeros(3), "stale": torch.zeros(3)},
+            },
+            batch_size=[3],
+        ).memmap(tmp_path / "dest")
+        dest.load_memmap_(tmp_path / "src")
+        assert set(dest.keys(True, True)) == {"a", ("nested", "b")}
+        assert (dest == 1).all()
+        assert dest.is_memmap() and dest.saved_path == tmp_path / "src"
+        assert dest["nested"].is_memmap()
+        assert dest["nested"].saved_path == tmp_path / "src" / "nested"
+        assert dest["nested", "b"].filename == str(
+            tmp_path / "src" / "nested" / "b.memmap"
+        )
+
+    def test_lazy_stack_length_mismatch(self, tmp_path):
+        lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]).memmap(tmp_path)
+        out = lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(2)])
+        with pytest.raises(ValueError, match="Cannot load 3 stacked tensordicts"):
+            TensorDict.load_memmap(tmp_path, out=out)
+
+
 class TestBackward:
     def test_scalar_implicit_gradient(self):
         x = torch.randn(3, requires_grad=True)

@@ -3282,9 +3282,28 @@ class TensorDict(TensorDictBase):
                 device=metadata.pop("device") if device is None else device,
             )
         else:
+            if is_tensorclass(out):
+                # A tensordict save, such as the ``_tensordict`` directory
+                # refreshed by ``memmap_refresh_``, loads into the tensordict
+                # of a tensorclass.
+                out = out._tensordict
             result = out
+            if out.device is not None:
+                # An unindexed device (e.g. "cuda") matches any index of its type.
+                if device is not None and (
+                    device.type != out.device.type
+                    or device.index is not None
+                    and out.device.index is not None
+                    and device.index != out.device.index
+                ):
+                    raise ValueError(
+                        f"Cannot load a tensordict on device {device} into a "
+                        f"tensordict on device {out.device}."
+                    )
+                device = out.device
 
         paths = []
+        loaded_keys = set()
         for key, entry_metadata in metadata.items():
             if not isinstance(entry_metadata, dict):
                 # there can be other metadata
@@ -3338,6 +3357,7 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     non_blocking=False,
                 )
+                loaded_keys.add(key)
                 continue
             try:
                 # this was absent in earlier versions of pytorch
@@ -3379,6 +3399,7 @@ class TensorDict(TensorDictBase):
                 inplace=False,
                 non_blocking=False,
             )
+            loaded_keys.add(key)
         # Load collection directories named by metadata. New saves use robust
         # encoding; safe single-component legacy names remain readable.
         for key in paths:
@@ -3396,27 +3417,27 @@ class TensorDict(TensorDictBase):
             if not path.is_dir():
                 continue
             existing_elt = result._get_str(key, default=None)
-            if existing_elt is not None:
-                existing_elt.load_memmap_(
-                    path,
-                    robust_key=robust_key,
-                    allow_pickle=allow_pickle,
-                    mode=mode,
-                )
-            else:
-                result._set_str(
-                    key,
-                    TensorDict.load_memmap(
-                        path,
-                        device=device,
-                        non_blocking=True,
-                        robust_key=robust_key,
-                        allow_pickle=allow_pickle,
-                        mode=mode,
-                    ),
-                    inplace=False,
-                    validated=False,
-                )
+            if existing_elt is not None and not _is_tensor_collection(
+                type(existing_elt)
+            ):
+                existing_elt = None
+            loaded = TensorDict.load_memmap(
+                path,
+                device=device,
+                non_blocking=True,
+                out=existing_elt,
+                robust_key=robust_key,
+                allow_pickle=allow_pickle,
+                mode=mode,
+            )
+            if loaded is not existing_elt:
+                result._set_str(key, loaded, inplace=False, validated=False)
+            loaded_keys.add(key)
+        if out is not None:
+            # Keys of ``out`` that are absent from the saved data are stale.
+            for key in list(result.keys()):
+                if key not in loaded_keys:
+                    result.del_(key)
         # Archive paths are read-only views inside a zip file, and directories
         # mapped copy-on-write can hold writes that their files lack: neither
         # can be used as a target for a subsequent memmap_()/refresh, so only
