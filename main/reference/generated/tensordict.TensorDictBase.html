@@ -227,7 +227,7 @@
               
               
                 <div class="version">
-                  main (0.14.0.dev4402+gc8707be53.d20261006)
+                  main (0.14.0.dev4403+g6b6526666.d20261006)
                 </div>
               
             
@@ -4223,7 +4223,14 @@ without actually opening any file.</p></li>
 <li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, synchronize won’t be
 called after loading tensors on device. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>out</strong> (<a class="reference internal" href="#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – optional tensordict where the data
-should be written.</p></li>
+should be loaded. Its nested containers are reused, but its
+leaves are rebound to the loaded tensors, so their storage is
+not reused. Keys of <code class="docutils literal notranslate"><span class="pre">out</span></code> that are missing from the saved
+data are removed. If <code class="docutils literal notranslate"><span class="pre">out</span></code> has a device, the data is loaded
+on it, and a different <code class="docutils literal notranslate"><span class="pre">device</span></code> raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.
+To write the data into the preallocated storage of <code class="docutils literal notranslate"><span class="pre">out</span></code>,
+use <code class="docutils literal notranslate"><span class="pre">out.update_(TensorDict.load_memmap(prefix,</span> <span class="pre">device=device))</span></code>
+instead.</p></li>
 <li><p><strong>robust_key</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), expects robust key encoding was used
 when saving and decodes filenames accordingly. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, uses legacy
 behavior. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the default robust behavior.</p></li>
@@ -4333,6 +4340,12 @@ as a fake tensor.</p>
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.load_memmap_">
 <span class="sig-name descname"><span class="pre">load_memmap_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">pathlib.Path</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">robust_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_pickle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><span class="pre">Optional</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.load_memmap_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads the content of a memory-mapped tensordict within the tensordict where <code class="docutils literal notranslate"><span class="pre">load_memmap_</span></code> is called.</p>
+<p>The tensordict and its nested containers are reused, but the leaves
+are rebound to the loaded tensors, so their storage is not reused.
+Keys that are missing from the saved data are removed. To write the
+data into the existing storage, use
+<code class="docutils literal notranslate"><span class="pre">td.update_(TensorDict.load_memmap(prefix,</span> <span class="pre">device=td.device))</span></code>
+instead.</p>
 <p>See <a class="reference internal" href="#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> for more info.</p>
 </dd></dl>
 
