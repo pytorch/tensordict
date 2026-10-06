@@ -98,6 +98,7 @@ _MASK[[0, 2]] = True
         torch.tensor([0, 2]),
         torch.tensor([[0, 2], [1, 3]]),
         _MASK,
+        _MASK.tolist(),
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.int32, torch.int64])
@@ -160,6 +161,8 @@ def test_store_masked_scalar_overflow(value_shape, dtype, number, boundary):
         torch.tensor([-11, 0]),
         torch.tensor([True] + [False] * 8),
         torch.tensor([True] + [False] * 10),
+        [True] + [False] * 8,
+        [True] + [False] * 10,
     ],
 )
 def test_store_byte_ranges_reject_out_of_bounds(idx):
@@ -186,3 +189,13 @@ def test_store_byte_ranges_normalize_negative_indices(idx):
     assert helper_module._compute_byte_ranges([10, 3], torch.float32, idx) == [
         (row * 12, 12) for row in rows
     ]
+
+
+@pytest.mark.parametrize("idx", [_MASK.tolist(), (_MASK.tolist(),)])
+def test_store_bool_list_is_a_mask(idx):
+    helper_module = importlib.import_module("tensordict.store._utils")
+    rows = torch.arange(10)[idx].tolist()
+    assert helper_module._compute_byte_ranges([10, 3], torch.float32, idx) == [
+        (row * 12, 12) for row in rows
+    ]
+    assert helper_module._getitem_result_shape([10, 3], idx) == [len(rows), 3]
