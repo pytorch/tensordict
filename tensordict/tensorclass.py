@@ -128,6 +128,8 @@ if (major, minor) < (3, 11):
 
 else:
     _AnyType = Any
+if (major, minor) >= (3, 14):
+    import annotationlib
 
 _TensorTypes = (
     torch.FloatTensor,
@@ -973,6 +975,31 @@ def tensorclass(
     return wrap(cls)
 
 
+def _own_annotation_names(cls: type) -> list[str]:
+    """Return the names annotated in the body of ``cls`` itself."""
+    annotations = cls.__dict__.get("__annotations__")
+    if annotations is None:
+        if (major, minor) < (3, 14):
+            return []
+        # Python 3.14+ evaluates annotations lazily
+        annotations = annotationlib.get_annotations(
+            cls, format=annotationlib.Format.FORWARDREF
+        )
+    return list(annotations)
+
+
+def _is_reserved_field_name(name: str) -> bool:
+    return name in dir(TensorDict) and name not in ("_is_non_tensor", "data")
+
+
+def _raise_reserved_field_name(name: str) -> None:
+    raise AttributeError(
+        f"Attribute name {name} can't be used with @tensorclass or TensorClass. To allow it, please indicate "
+        f"that builtin names can be overwritten by using the allow_names keyword argument (@tensorclass(shadow=True) "
+        f"or TensorClass['shadow']."
+    )
+
+
 @dataclass_transform()
 def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     def __torch_function__(
@@ -1017,6 +1044,21 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
+    # dataclass() takes an inherited attribute as the default of the field with
+    # the same name, so a field named after a TensorClass method or property
+    # (e.g. "sum") would get that attribute as its default.
+    inherited_reserved_fields = [
+        name
+        for name in _own_annotation_names(cls)
+        if name not in cls.__dict__ and _is_reserved_field_name(name)
+        if hasattr(cls, name)
+    ]
+    if not shadow:
+        for name in inherited_reserved_fields:
+            _raise_reserved_field_name(name)
+    for name in inherited_reserved_fields:
+        setattr(cls, name, dataclasses.field())
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
@@ -1030,12 +1072,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     if not shadow:
         for attr in expected_keys:
-            if attr in dir(TensorDict) and attr not in ("_is_non_tensor", "data"):
-                raise AttributeError(
-                    f"Attribute name {attr} can't be used with @tensorclass or TensorClass. To allow it, please indicate "
-                    f"that builtin names can be overwritten by using the allow_names keyword argument (@tensorclass(shadow=True) "
-                    f"or TensorClass['shadow']."
-                )
+            if _is_reserved_field_name(attr):
+                _raise_reserved_field_name(attr)
 
     cls.fields = classmethod(dataclasses.fields)
     for field in cls.fields():
@@ -1246,6 +1284,13 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.grad = property(_grad)
     if not hasattr(cls, "to_dict") and "to_dict" not in expected_keys:
         cls.to_dict = _to_dict
+
+    if shadow and not tensor_only:
+        # Attribute lookup would find a TensorClass method or property of the
+        # same name (e.g. "sum") before the field, which _getattr serves.
+        for name in expected_keys:
+            if hasattr(cls, name):
+                setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
