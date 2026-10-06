@@ -991,6 +991,110 @@ class TestLazyStackedTensorDict:
         assert (td["a"][index] == tdset["a"]).all()
         assert (td["a"][index] == tdset["a"]).all()
 
+    @pytest.mark.parametrize(
+        "batch_size,index",
+        [
+            # the examples of issue #1834
+            ((3, 4), (torch.tensor([True, False, True]), torch.tensor([0, 3]))),
+            ((3, 4), (torch.tensor([0, 2]), torch.tensor([True, False, True, False]))),
+            ((2, 2), (torch.tensor([True, True]), torch.tensor([1, 0]))),
+            # int list and second mask as the other advanced index
+            ((3, 4, 2), (torch.tensor([True, False, True]), [3, 1])),
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([True, False, True]),
+                    torch.tensor([False, True, False, True]),
+                ),
+            ),
+            # mask on a middle dim, after a slice, an int or an ellipsis
+            (
+                (3, 4, 2),
+                (
+                    slice(None),
+                    torch.tensor([True, False, True, True]),
+                    torch.tensor([1, 0, 1]),
+                ),
+            ),
+            (
+                (3, 4, 2),
+                (0, torch.tensor([True, False, True, True]), torch.tensor([1, 0, 1])),
+            ),
+            (
+                (3, 4, 2),
+                (
+                    Ellipsis,
+                    torch.tensor([True, False, True, True]),
+                    torch.tensor([1, 0, 1]),
+                ),
+            ),
+            # an int between the mask and the other advanced index
+            ((3, 4, 2), (torch.tensor([True, False, True]), 0, torch.tensor([1, 0]))),
+            # three advanced indices, two of them masks
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([True, False, True]),
+                    torch.tensor([1]),
+                    torch.tensor([False, True]),
+                ),
+            ),
+            # 2-dim masks before and after the other advanced index
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor(
+                        [
+                            [True, False, False, True],
+                            [False, False, False, False],
+                            [False, True, False, False],
+                        ]
+                    ),
+                    torch.tensor([0, 1, 1]),
+                ),
+            ),
+            (
+                (3, 4, 2),
+                (
+                    torch.tensor([2, 0]),
+                    torch.tensor(
+                        [[False, True], [False, False], [True, False], [False, False]]
+                    ),
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    @pytest.mark.parametrize("op", ["getitem", "setitem", "set_at_"])
+    def test_lazy_mask_with_advanced_index(self, batch_size, index, stack_dim, op):
+        # a mask combined with other advanced indices must behave like its
+        # nonzero() indices, as in torch and in the dense TensorDict
+        numel = torch.Size(batch_size).numel()
+        dense = TensorDict(
+            {
+                "a": torch.arange(numel).view(batch_size),
+                "b": torch.arange(numel * 2).view(*batch_size, 2),
+            },
+            batch_size,
+        )
+        lazy = LazyStackedTensorDict.lazy_stack(
+            dense.clone().unbind(stack_dim), stack_dim
+        )
+        if op == "getitem":
+            result = lazy[index]
+            expected = dense[index]
+            assert result.batch_size == expected.batch_size
+            assert (result == expected).all()
+            return
+        value = dense[index].apply(lambda x: -x - 1)
+        if op == "setitem":
+            lazy[index] = value
+            dense[index] = value
+        else:
+            lazy.set_at_("a", value["a"], index)
+            dense.set_at_("a", value["a"], index)
+        assert (lazy.to_tensordict() == dense).all()
+
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_lazy_stack_stack(self, batch_size):
         obs = self.nested_lazy_het_td(batch_size)
