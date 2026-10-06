@@ -4102,6 +4102,20 @@ class TestGeneric:
             else:
                 assert other.shape == td[k[:-1]].shape
 
+    def test_cummin_cummax_reduce(self):
+        td = TensorDict(
+            a=torch.randn(3, 4, 5),
+            b=TensorDict(
+                c=torch.randn(3, 4, 5), d=torch.randn(3, 4, 5), batch_size=(3, 4, 5)
+            ),
+            batch_size=(3, 4),
+        )
+        cummax = td.cummax(reduce=True, dim=0)
+        cummin = (-td).cummin(reduce=True, dim=0)
+        assert isinstance(cummax, torch.return_types.cummax)
+        torch.testing.assert_close(cummax.values, -cummin.values)
+        torch.testing.assert_close(cummax.indices, cummin.indices)
+
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
     )
