@@ -94,6 +94,8 @@ from tensordict.utils import (
     _lock_warn,
     _make_dtype_promotion,
     _maybe_correct_neg_dim,
+    _nested_list_to_tensor,
+    _num_indexed_dims,
     _parse_to,
     _pass_through,
     _pass_through_cls,
@@ -5953,26 +5955,41 @@ class TensorDictBase(MutableMapping, TensorCollection):
         else:
             if not isinstance(idx, tuple):
                 idx = (idx,)
-            if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
+            if sum(_num_indexed_dims(_idx) for _idx in idx) < self.ndim:
                 idx = (*idx, Ellipsis)
             idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
+            idx_names = [_nested_list_to_tensor(_idx) for _idx in idx_names]
+            # scalar bools and 0-d masks add an unnamed dim, unless they
+            # broadcast with another tensor-like index
+            add_0d_dim = not any(
+                isinstance(_idx, (list, range))
+                or (isinstance(_idx, (torch.Tensor, np.ndarray)) and _idx.ndim)
+                for _idx in idx_names
+            )
             # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
             count = 0
             idx_to_take = []
             no_more_tensors = False
             for _idx in idx_names:
+                num_dims = _num_indexed_dims(_idx)
                 if _idx is None:
                     idx_to_take.append(None)
+                elif not num_dims:
+                    if add_0d_dim:
+                        idx_to_take.append(None)
+                        add_0d_dim = False
                 elif _is_number(_idx):
                     count += 1
                 elif isinstance(_idx, (torch.Tensor, np.ndarray)):
                     if not no_more_tensors:
-                        idx_to_take.extend([count] * _idx.ndim)
-                        count += 1
+                        if num_dims == 1:
+                            idx_to_take.extend([count] * _idx.ndim)
+                        else:
+                            # an N-D mask merges the dims it consumes into one
+                            idx_to_take.append(None)
                         no_more_tensors = True
-                    else:
-                        # skip this one
-                        count += 1
+                    # the other tensors are skipped
+                    count += num_dims
                 else:
                     idx_to_take.append(count)
                     count += 1

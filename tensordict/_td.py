@@ -907,17 +907,26 @@ class TensorDict(TensorDictBase):
         ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         # Convert index like (True,) or True to (0,) over unsqueezed self
+        # (False selects nothing, like a 0-d False mask, so it is not converted)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if isinstance(index, (bool, type(None))) or (
-            isinstance(index, torch.Tensor)
-            and index.shape == ()
-            and index.dtype == torch.bool
-            and index.all()
+        if (
+            index is True
+            or index is None
+            or (
+                isinstance(index, torch.Tensor)
+                and index.shape == ()
+                and index.dtype == torch.bool
+                and index.all()
+            )
         ):
             with self.unsqueeze(0) as td_unsqueezed:
                 td_unsqueezed[:] = value
             return
+        if isinstance(index, list):
+            # Index with (list,), as __getitem__ does: torch reads a bare nested
+            # list, and _SubTensorDict any bare list, as per-dim indices
+            index = (index,)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -953,11 +962,7 @@ class TensorDict(TensorDictBase):
                     )
                 else:
                     if subtd is None:
-                        # _SubTensorDict reads a bare list as a tuple of
-                        # per-dim indices: wrap it to keep it a list index
-                        subtd = self._get_sub_tensordict(
-                            index if isinstance(index, tuple) else (index,)
-                        )
+                        subtd = self._get_sub_tensordict(index)
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
             for key in self.keys():
@@ -1714,7 +1719,7 @@ class TensorDict(TensorDictBase):
         def _check_for_invalid_index(index):
             if batch_size:
                 return
-            if index is None:
+            if index is None or isinstance(index, (bool, np.bool_)):
                 return
             if (
                 isinstance(index, torch.Tensor)
