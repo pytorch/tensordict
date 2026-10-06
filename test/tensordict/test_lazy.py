@@ -934,6 +934,54 @@ class TestLazyStackedTensorDict:
         assert tdmask["a"].shape == td["a"][index].shape
         assert (tdmask["a"] == td["a"][index]).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3])
+    @pytest.mark.parametrize(
+        "pattern",
+        [
+            "ts t",
+            "t st",
+            "ts ts",
+            "st st",
+            "ts s t",
+            "t s s t",
+            "t is t",
+            "t s i t",
+            "s t s t",
+        ],
+    )
+    def test_lazy_separated_tensor_indices(self, stack_dim, pattern):
+        # tensor indices separated by a slice put the broadcast dim first,
+        # as in the dense tensordict
+        shape = (3, 4, 2)
+        tds = [
+            TensorDict({"x": torch.randn(*shape)}, list(shape)) for _ in range(5)
+        ]
+        lazy = lazy_stack(tds, stack_dim)
+        dense = lazy.to_tensordict()
+        index = []
+        for code, size in zip(pattern.replace(" ", ""), lazy.batch_size):
+            if code == "t":
+                index.append(torch.randint(0, size, (2,)))
+            elif code == "s":
+                index.append(slice(None))
+            else:
+                index.append(0)
+        index = tuple(index)
+        expected = dense[index]
+        result = lazy[index]
+        assert result.batch_size == expected.batch_size
+        assert (result["x"] == expected["x"]).all()
+
+    def test_lazy_separated_tensor_indices_slice_bounds(self):
+        tds = [TensorDict({"x": torch.randn(3, 4)}, [3, 4]) for _ in range(5)]
+        lazy = lazy_stack(tds, 2)
+        dense = lazy.to_tensordict()
+        index = (torch.tensor([0, 2]), slice(1, 3), torch.tensor([4, 1]))
+        result = lazy[index]
+        expected = dense[index]
+        assert result.batch_size == expected.batch_size
+        assert (result["x"] == expected["x"]).all()
+
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(
             TensorDict({"a": torch.ones(())}),
