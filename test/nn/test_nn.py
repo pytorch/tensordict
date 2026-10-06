@@ -2848,6 +2848,43 @@ class TestProbabilisticTensorDictModule:
             mod.log_prob(mod(td.copy()))
             mod.log_prob_key
 
+    @pytest.mark.parametrize("error", [NotImplementedError, AttributeError])
+    def test_mean_falls_back_to_empirical_estimate(self, error):
+        class BrokenMeanNormal(Normal):
+            @property
+            def mean(self):
+                raise error
+
+        n_empirical_estimate = 8
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=BrokenMeanNormal,
+            default_interaction_type="mean",
+            n_empirical_estimate=n_empirical_estimate,
+        )
+        td = TensorDict(loc=torch.zeros(4), scale=torch.ones(4))
+        torch.manual_seed(0)
+        sample = module(td)["sample"]
+        torch.manual_seed(0)
+        dist = BrokenMeanNormal(td["loc"], td["scale"])
+        expected = dist.rsample((n_empirical_estimate,)).mean(0)
+        torch.testing.assert_close(sample, expected)
+
+    def test_mean_does_not_sample_when_implemented(self):
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=Normal,
+            default_interaction_type="mean",
+        )
+        td = TensorDict(loc=torch.tensor([1.0, 2.0, 3.0]), scale=torch.ones(3))
+        torch.manual_seed(0)
+        state_before = torch.get_rng_state()
+        sample = module(td)["sample"]
+        assert torch.equal(torch.get_rng_state(), state_before)
+        assert torch.equal(sample, td["loc"])
+
     # ------------------------------------------------------------------
     # generator argument: Generator object, int seed, and tensordict-key forms
     # ------------------------------------------------------------------
