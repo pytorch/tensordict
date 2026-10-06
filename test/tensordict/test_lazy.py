@@ -953,6 +953,31 @@ class TestLazyStackedTensorDict:
         assert (td["c", "d"] == 0).all()
         assert (td == 0).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            (torch.tensor([True, False, True]), torch.tensor([0, 3])),
+            (torch.tensor([True, False, True]), [0, 3]),
+            (torch.tensor([0, 2]), torch.tensor([True, False, True, False])),
+            (
+                torch.tensor([True, False, True]),
+                torch.tensor([True, False, False, True]),
+            ),
+            (torch.tensor([True, True, True]), torch.tensor([1, 0, 2])),
+        ],
+    )
+    def test_lazy_mask_with_advanced_index(self, stack_dim, index):
+        # a boolean mask combined with another tensor index must broadcast
+        # together with it, as in the dense tensordict
+        dense = TensorDict({"x": torch.arange(12).view(3, 4)}, [3, 4])
+        lazy = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+        expected = dense[index]
+        result = lazy[index]
+        assert result.batch_size == expected.batch_size
+        assert result["x"].shape == expected["x"].shape
+        assert (result["x"] == expected["x"]).all()
+
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
     @pytest.mark.parametrize("single_mask_dim", [True, False])
