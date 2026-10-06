@@ -53,6 +53,20 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      # torchrl's distributed transport does
+      # socket.gethostbyname(socket.gethostname()) to pick the TCPStore
+      # address. Under linux_job_v2 the script ran in a plain `docker run`,
+      # which writes the container hostname into /etc/hosts; an OSDC job
+      # container gets no such entry and the lookup raises
+      # "gaierror: [Errno -2] Name or service not known". Everything that
+      # talks to that store lives in this container, so loopback is the
+      # right answer.
+      - name: Make the container hostname resolvable
+        run: |
+          set -eux
+          echo "127.0.0.1 $(hostname)" >> /etc/hosts
+          getent hosts "$(hostname)"
+
       - name: Run tests
         env:
           PYTHON_VERSION: ${{ matrix.python_version }}
