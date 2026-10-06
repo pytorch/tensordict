@@ -1724,6 +1724,53 @@ class TestGeneric:
         assert td["new"].shape == torch.Size(batch_size)
         assert (td["new"] == expected).all()
 
+    @pytest.mark.parametrize(
+        "index",
+        [
+            [np.True_, np.False_, np.True_],
+            np.array([True, False, True]),
+            [[0, 1], [1, 2]],
+            (slice(None), [[0, 1], [1, 2]]),
+            [[True, False, True, False], [False, True, False, True], [True] * 4],
+            True,
+            False,
+            (slice(None), False),
+            (True, [0, 2]),
+            (torch.ones(3, 4, dtype=torch.bool), ...),
+            (..., torch.ones(4, 5, dtype=torch.bool)),
+            (slice(None), [2], None, torch.tensor([2])),
+        ],
+    )
+    def test_index_types_follow_torch(self, index):
+        # a bare nested list is a single index, as for (index,) in torch
+        torch_index = index if isinstance(index, tuple) else (index,)
+        tensor = torch.arange(60.0).view(3, 4, 5)
+        expected = tensor[torch_index]
+        td = TensorDict({"a": tensor, "n": {"b": tensor}}, [3, 4, 5])
+        sub = td[index]
+        assert sub.batch_size == expected.shape
+        assert (sub["a"] == expected).all()
+        assert (sub["n", "b"] == expected).all()
+
+        # write a tensordict with an existing and a new key, and a scalar
+        written = tensor.clone()
+        written[torch_index] = -1
+        new = torch.zeros(3, 4, 5)
+        new[torch_index] = -1
+        td = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+        value = -torch.ones(expected.shape)
+        td[index] = TensorDict({"a": value, "new": value}, expected.shape)
+        assert (td["a"] == written).all()
+        assert (td["new"] == new).all()
+        td = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+        td[index] = -1.0
+        assert (td["a"] == written).all()
+
+    def test_getitem_scalar_bool_0d(self):
+        td = TensorDict({"a": torch.tensor(1.0)}, [])
+        assert td[True].batch_size == torch.Size([1])
+        assert td[False].batch_size == torch.Size([0])
+
     def test_getitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])

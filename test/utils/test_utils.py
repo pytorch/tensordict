@@ -132,6 +132,30 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
     assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        [np.True_, np.False_, np.True_],
+        np.array([True, False, True]),
+        (slice(None), [[0, 1], [1, 2]]),
+        ([[True, False, True, False], [False, True, False, True], [True] * 4],),
+        True,
+        False,
+        (slice(None), False),
+        (True, [0, 2]),
+        (True, slice(None), [0, 1]),
+        (torch.ones(3, 4, dtype=torch.bool), Ellipsis),
+        (Ellipsis, torch.ones(4, 5, dtype=torch.bool)),
+        (slice(None), [2], None, torch.tensor([2])),
+    ],
+)
+def test_getitem_batch_size_index_types(index):
+    tensor = torch.zeros(3, 4, 5)
+    expected = tensor[index].shape
+    index = convert_ellipsis_to_idx(index, tensor.shape)
+    assert _getitem_batch_size(tensor.shape, index) == expected
+
+
 def test_make_cache_key():
     Q = torch.rand(3)
     V = torch.zeros(2)

@@ -232,6 +232,19 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdbool.names == [None, "c", "d"]
         assert tdbool.ndim == 3
 
+    def test_index_scalar_bool_and_nd_mask(self):
+        td = TensorDict(batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        # a scalar bool or a 0-d mask adds an unnamed dim
+        assert td[True].names == [None, "a", "b", "c", "d"]
+        assert td[True, 0, 0, 0].names == [None, "d"]
+        assert td[:, False].names == ["a", None, "b", "c", "d"]
+        assert td[torch.tensor(True)].names == [None, "a", "b", "c", "d"]
+        # an N-D mask merges the dims it consumes into an unnamed dim
+        mask = torch.ones(4, 5, dtype=torch.bool)
+        assert td[:, mask].names == ["a", None, "d"]
+        assert td[..., mask, :].names == ["a", None, "d"]
+        assert td[[[True] * 4] * 3].names == [None, "c", "d"]
+
     def test_masked_fill(self):
         td = TensorDict(batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         tdm = td.masked_fill(torch.zeros(3, 4, 1, dtype=torch.bool), 1.0)
