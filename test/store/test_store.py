@@ -690,6 +690,20 @@ class TestTensorDictStore:
 
     # ---- set_at_ via byte-range ----
 
+    def test_get_at_set_at_bool_list(self, store_td):
+        """get_at and set_at_ read a list of bools as a mask, as store[mask] does."""
+        obs = torch.randn(10, 3)
+        store_td["obs"] = obs
+        mask = [i in (0, 3, 9) for i in range(10)]
+        torch.testing.assert_close(store_td.get_at("obs", mask), obs[mask])
+        store_td.set_at_("obs", torch.ones(3, 3), mask)
+        obs[mask] = 1
+        torch.testing.assert_close(store_td["obs"], obs)
+        # one row per list element is not the selected shape
+        with pytest.raises(RuntimeError):
+            store_td.set_at_("obs", torch.zeros(10, 3), mask)
+        torch.testing.assert_close(store_td["obs"], obs)
+
     def test_set_at_byte_range(self, store_td):
         """set_at_ should use SETRANGE for a single key."""
         store_td["obs"] = torch.zeros(10, 3)
@@ -1047,6 +1061,15 @@ class TestLazyStackedTensorDictStore:
         sub = store_td[mask]
         assert sub.batch_size == torch.Size([3, 4])
         torch.testing.assert_close(sub["a"], lazy_td[torch.tensor(mask)]["a"])
+
+    def test_get_at_set_at_bool_list(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        mask = [True, False, False, True, True]
+        expected = lazy_td["a"]
+        torch.testing.assert_close(store_td.get_at("a", mask), expected[mask])
+        store_td.set_at_("a", torch.zeros(3, 4, 3), mask)
+        expected[mask] = 0
+        torch.testing.assert_close(store_td["a"], expected)
 
     # ---- Read: td[tensor_index] ----
 
