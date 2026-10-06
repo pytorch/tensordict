@@ -779,6 +779,24 @@ def test_store_indexed_write_matches_torch(store_kwargs, stacked, idx, value_sha
 
 
 @pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize("key", ["x", ("nested", "x")])
+@pytest.mark.parametrize("write", [False, True], ids=["read", "write"])
+def test_store_per_key_bool_list(store_kwargs, stacked, key, write):
+    source = TensorDict({key: torch.arange(3)}, [3])
+    store = _indexed_store(store_kwargs, stacked, source)
+    try:
+        mask = [True, False, True]
+        if write:
+            store.set_at_(key, torch.tensor([-1, -2]), mask)
+            torch.testing.assert_close(store[key], torch.tensor([-1, 1, -2]))
+        else:
+            torch.testing.assert_close(store.get_at(key, mask), torch.tensor([0, 2]))
+    finally:
+        store.clear_redis()
+        store.close()
+
+
+@pytest.mark.parametrize("stacked", [False, True])
 @pytest.mark.parametrize("idx", [10, [-11, 0], range(9, 11), _MASK[:9]])
 def test_store_index_bounds(store_kwargs, stacked, idx):
     source = TensorDict(
@@ -1531,6 +1549,54 @@ class TestNonTensorIndexing:
             local = store.to_tensordict()
             tags = [local[i]["tag"] for i in range(3)]
             assert tags == ["x", "y", "x"]
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize("key", ["label", ("nested", "label")])
+    @pytest.mark.parametrize("per_key", [False, True], ids=["getitem", "get_at"])
+    @pytest.mark.parametrize(
+        "index,expected",
+        [
+            (slice(1, 4), ["a", "a", "d"]),
+            ([0, 3], ["a", "d"]),
+            (torch.tensor([0, 3]), ["a", "d"]),
+            (torch.tensor([True, False, False, True, False]), ["a", "d"]),
+        ],
+    )
+    def test_non_tensor_indexed_read(self, store_kwargs, key, per_key, index, expected):
+        store = TensorDictStore.from_tensordict(
+            TensorDict({key: "a"}, [5]), **store_kwargs
+        )
+        try:
+            store[3] = TensorDict({key: "d"}, [])
+            if per_key:
+                result = store.get_at(key, index)
+            else:
+                sub = store[index]
+                assert sub.batch_size == torch.Size([len(expected)])
+                result = sub.get(key)
+            assert result.batch_size == torch.Size([len(expected)])
+            assert result.tolist() == expected
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize("per_key", [False, True], ids=["setitem", "set_at"])
+    @pytest.mark.parametrize("as_list", [False, True], ids=["tensor", "list"])
+    def test_non_tensor_masked_write(self, store_kwargs, per_key, as_list):
+        store = TensorDictStore.from_tensordict(
+            TensorDict({"label": "a"}, [5]), **store_kwargs
+        )
+        try:
+            mask = [True, False, False, True, False]
+            if not as_list:
+                mask = torch.tensor(mask)
+            if per_key:
+                store.set_at_("label", "z", mask)
+            else:
+                store[mask] = TensorDict({"label": "z"}, [2])
+            assert [store[i]["label"] for i in range(5)] == ["z", "a", "a", "z", "a"]
         finally:
             store.clear_redis()
             store.close()

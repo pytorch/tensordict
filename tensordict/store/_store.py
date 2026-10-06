@@ -31,6 +31,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
+from tensordict.tensorclass import NonTensorStack
 from tensordict.utils import (
     _as_context_manager,
     _getitem_batch_size,
@@ -69,6 +70,7 @@ from tensordict.store._utils import (
     _LUA_GETRANGES,
     _LUA_SETRANGES,
     _normalize_index,
+    _normalize_non_tensor_index,
     _prepare_indexed_value,
     _str_to_dtype,
     _tensor_to_bytes,
@@ -489,6 +491,7 @@ class TensorDictStore(TensorDictBase):
         single-blob (``json`` / ``pickle``) to a ``json_array`` of length
         ``batch_size[0]``, enabling future per-element reads and writes.
         """
+        idx = _normalize_non_tensor_index(idx)
         pipe = self._client.pipeline()
         pipe.get(self._data_key(key_path))
         pipe.hgetall(self._meta_key(key_path))
@@ -512,12 +515,6 @@ class TensorDictStore(TensorDictBase):
             array[idx] = value
         elif isinstance(idx, slice):
             indices = range(*idx.indices(len(array)))
-            if not isinstance(value, (list, tuple)):
-                value = [value] * len(indices)
-            for i, v in zip(indices, value):
-                array[i] = v
-        elif isinstance(idx, torch.Tensor):
-            indices = idx.reshape(-1).tolist()
             if not isinstance(value, (list, tuple)):
                 value = [value] * len(indices)
             for i, v in zip(indices, value):
@@ -555,6 +552,7 @@ class TensorDictStore(TensorDictBase):
         """
         if not items:
             return
+        idx = _normalize_non_tensor_index(idx)
 
         # Phase 1: pipeline GET all keys + metadata
         pipe = self._client.pipeline()
@@ -585,12 +583,6 @@ class TensorDictStore(TensorDictBase):
                 array[idx] = value
             elif isinstance(idx, slice):
                 indices = range(*idx.indices(len(array)))
-                if not isinstance(value, (list, tuple)):
-                    value = [value] * len(indices)
-                for j, v in zip(indices, value):
-                    array[j] = v
-            elif isinstance(idx, torch.Tensor):
-                indices = idx.reshape(-1).tolist()
                 if not isinstance(value, (list, tuple)):
                     value = [value] * len(indices)
                 for j, v in zip(indices, value):
@@ -773,101 +765,6 @@ class TensorDictStore(TensorDictBase):
         return result
 
     # ---- Byte-range batch operations ----
-
-    async def _abatch_get_at(
-        self, key_paths: list[str], idx
-    ) -> dict[str, torch.Tensor]:
-        """Batch-fetch indexed slices of multiple tensors.
-
-        Two strategies per key (always exactly **K** pipeline commands for
-        **K** keys):
-
-        * **int / slice (any step)** — a single ``GETRANGE`` fetches the
-          covering range.  A local post-index (``[::step]``) is applied when
-          the step is > 1.
-        * **list / tensor / bool mask** — the ``GETRANGES`` Lua script
-          executes all per-row ``GETRANGE`` calls server-side in one ``EVAL``,
-          returning concatenated bytes.
-
-        Falls back to full ``GET`` + local indexing for unsupported index types.
-        """
-        if not key_paths:
-            return {}
-
-        meta_map = await self._aget_metadata_batch(key_paths)
-        scattered = _is_scattered_index(idx)
-
-        pipe = self._client.pipeline()
-        # (key_path, result_shape, dtype, local_idx, has_cmd)
-        plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
-        fallback_kps: list[str] = []
-
-        for kp in key_paths:
-            shape, dtype = meta_map[kp]
-            result_shape = _getitem_result_shape(shape, idx)
-            local_idx = _get_local_idx(idx, shape[0])
-
-            if scattered:
-                ranges = _compute_byte_ranges(shape, dtype, idx)
-                if ranges is None:
-                    fallback_kps.append(kp)
-                    continue
-                if not ranges:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                argv: list[int] = []
-                for byte_offset, byte_length in ranges:
-                    argv.append(byte_offset)
-                    argv.append(byte_length)
-                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
-            else:
-                cr = _compute_covering_range(shape, dtype, idx)
-                if cr is None:
-                    fallback_kps.append(kp)
-                    continue
-                byte_offset, byte_length = cr
-                if byte_length == 0:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                pipe.getrange(
-                    self._data_key(kp),
-                    byte_offset,
-                    byte_offset + byte_length - 1,
-                )
-            plan.append((kp, result_shape, dtype, local_idx, True))
-
-        has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
-        raw_results = await pipe.execute() if has_cmds else []
-
-        result: dict[str, torch.Tensor] = {}
-        ri = 0
-        for kp, result_shape, dtype, local_idx, has_cmd in plan:
-            if not has_cmd:
-                result[kp] = torch.empty(result_shape, dtype=dtype)
-                continue
-            data = raw_results[ri]
-            ri += 1
-            # For Lua path: data is already exactly the needed rows.
-            # For GETRANGE path: data may be a covering range needing post-index.
-            tensor = _bytes_to_tensor(
-                data,
-                result_shape if local_idx is None else [-1] + list(meta_map[kp][0][1:]),
-                dtype,
-            )
-            if local_idx is not None:
-                tensor = tensor[local_idx]
-                tensor = tensor.reshape(result_shape)
-            if self._device is not None:
-                tensor = tensor.to(self._device)
-            result[kp] = tensor
-
-        # Fallback: full GET + local index
-        if fallback_kps:
-            tensors = await self._aget_batch_tensors(fallback_kps)
-            for kp, tensor in tensors.items():
-                result[kp] = tensor[idx]
-
-        return result
 
     async def _abatch_index(
         self, key_paths: list[str], idx
@@ -1253,23 +1150,15 @@ class TensorDictStore(TensorDictBase):
 
         if encoding == "json_array":
             array = json.loads(text)
+            idx = _normalize_non_tensor_index(idx)
             if idx is not None:
                 if isinstance(idx, int):
                     return array[idx]
                 if isinstance(idx, slice):
-                    return array[idx]
-                if isinstance(idx, (list, torch.Tensor)):
-                    indices = idx
-                    if isinstance(indices, torch.Tensor):
-                        indices = indices.tolist()
-                    return [array[i] for i in indices]
-            # Full-batch read: wrap in NonTensorStack for TensorClass compat
-            from tensordict._lazy import LazyStackedTensorDict
-            from tensordict.tensorclass import NonTensorData
-
-            return LazyStackedTensorDict(
-                *[NonTensorData(data=v, batch_size=[]) for v in array]
-            )
+                    array = array[idx]
+                elif isinstance(idx, (list, range)):
+                    array = [array[i] for i in idx]
+            return NonTensorStack(*array)
 
         # Scalar encoding — return the single stored value (broadcast).
         if encoding == "json":
@@ -1484,7 +1373,7 @@ class TensorDictStore(TensorDictBase):
                 return default
             raise KeyError(f"key {key} not found in {type(self).__name__}")
 
-        result = self._run_sync(self._abatch_get_at([key_path], idx))
+        result = self._run_sync(self._abatch_index([key_path], idx))
         tensor = result.get(key_path)
         if tensor is None:
             if default is not NO_DEFAULT:
@@ -1503,7 +1392,7 @@ class TensorDictStore(TensorDictBase):
         all_keys = self._get_all_keys()
 
         if full_path in all_keys:
-            result = self._run_sync(self._abatch_get_at([full_path], idx))
+            result = self._run_sync(self._abatch_index([full_path], idx))
             tensor = result.get(full_path)
             if tensor is not None:
                 return tensor

@@ -98,6 +98,7 @@ _MASK[[0, 2]] = True
         torch.tensor([0, 2]),
         torch.tensor([[0, 2], [1, 3]]),
         _MASK,
+        _MASK.tolist(),
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.int32, torch.int64])
@@ -160,6 +161,8 @@ def test_store_masked_scalar_overflow(value_shape, dtype, number, boundary):
         torch.tensor([-11, 0]),
         torch.tensor([True] + [False] * 8),
         torch.tensor([True] + [False] * 10),
+        [True] + [False] * 8,
+        [True] + [False] * 10,
     ],
 )
 def test_store_byte_ranges_reject_out_of_bounds(idx):

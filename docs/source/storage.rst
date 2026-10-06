@@ -425,6 +425,12 @@ back to pickle for non-JSON-serialisable objects):
    >>> store = TensorDictStore(batch_size=[4])  # doctest: +SKIP
    >>> store["label"] = NonTensorData(data="cat", batch_size=[4])  # doctest: +SKIP
 
+Indexed writes to a non-tensor entry create one value per row. Subsequent
+slices, integer index lists and boolean masks select those rows, including
+when using ``get_at`` and ``set_at_`` for an individual key. Boolean masks
+select the positions of ``True`` entries rather than treating the boolean
+values as the integer positions 0 and 1.
+
 
 Typed wrappers
 --------------

@@ -19,6 +19,7 @@ __all__ = [
     "_getitem_result_shape",
     "_is_scattered_index",
     "_normalize_index",
+    "_normalize_non_tensor_index",
     "_prepare_indexed_value",
     "_str_to_dtype",
     "_tensor_to_bytes",
@@ -95,6 +96,19 @@ def _normalize_index(idx: int, size: int) -> int:
     return idx + size if idx < 0 else idx
 
 
+def _normalize_non_tensor_index(idx):
+    """Convert a row mask to positions before indexing a Python list."""
+    if isinstance(idx, tuple) and len(idx) == 1:
+        idx = idx[0]
+    if isinstance(idx, list):
+        idx = torch.tensor(idx)
+    if isinstance(idx, torch.Tensor):
+        if idx.dtype == torch.bool:
+            idx = idx.nonzero(as_tuple=False).squeeze(-1)
+        idx = idx.reshape(-1).tolist()
+    return idx
+
+
 def _compute_byte_ranges(
     shape: list[int],
     dtype: torch.dtype,
@@ -106,6 +120,8 @@ def _compute_byte_ranges(
             idx = idx[0]
         else:
             return None
+    if isinstance(idx, list):
+        idx = torch.tensor(idx)
 
     if idx is Ellipsis:
         idx = slice(None)
@@ -127,7 +143,7 @@ def _compute_byte_ranges(
             return [(positions[0] * row_size, len(positions) * row_size)]
         return [(p * row_size, row_size) for p in positions]
 
-    if isinstance(idx, (list, range)):
+    if isinstance(idx, range):
         return [(_normalize_index(int(p), shape[0]) * row_size, row_size) for p in idx]
 
     if isinstance(idx, torch.Tensor):
@@ -219,6 +235,8 @@ def _getitem_result_shape(
             idx = idx[0]
         else:
             return list(torch.zeros(shape)[idx].shape)
+    if isinstance(idx, list):
+        idx = torch.tensor(idx)
 
     if idx is Ellipsis:
         idx = slice(None)
@@ -233,9 +251,6 @@ def _getitem_result_shape(
         return [n] + rest
 
     if isinstance(idx, range):
-        return [len(idx)] + rest
-
-    if isinstance(idx, list):
         return [len(idx)] + rest
 
     if isinstance(idx, torch.Tensor):
@@ -253,6 +268,8 @@ def _prepare_indexed_value(
     """Match the selected shape and data type before converting values to bytes."""
     if isinstance(idx, tuple) and len(idx) == 1:
         idx = idx[0]
+    if isinstance(idx, list):
+        idx = torch.tensor(idx)
     if isinstance(idx, torch.Tensor) and idx.ndim == 0 and idx.dtype != torch.bool:
         idx = idx.item()
     # A boolean mask accepts one CPU value with a different data type.
