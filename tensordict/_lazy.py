@@ -160,6 +160,35 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         return f"{type(self).__name__}({tuple(self)})"
 
 
+def _masks_to_nonzero(index: tuple) -> tuple:
+    """Replace the boolean masks of an index by their ``nonzero()`` indices if it has other advanced indices.
+
+    In torch, a boolean mask is equivalent to its ``nonzero()`` integer indices
+    (one per mask dimension), which broadcast with the other advanced indices.
+    An index with a lone mask is returned unchanged, so that the per-element
+    mask split of :meth:`LazyStackedTensorDict._split_index` handles it.
+    """
+    tensors = {}
+    for i, idx in enumerate(index):
+        if isinstance(idx, (range, list, np.ndarray, Tensor)):
+            idx = torch.as_tensor(idx)
+            # scalar booleans are handled as new axes by _split_index
+            if idx.dtype != torch.bool or idx.ndim:
+                tensors[i] = idx
+    if len(tensors) < 2 or all(
+        tensor.dtype != torch.bool for tensor in tensors.values()
+    ):
+        return index
+    new_index = []
+    for i, idx in enumerate(index):
+        tensor = tensors.get(i)
+        if tensor is not None and tensor.dtype == torch.bool:
+            new_index.extend(tensor.nonzero().unbind(-1))
+        else:
+            new_index.append(idx)
+    return tuple(new_index)
+
+
 def _fails_exclusive_keys(func):
     @wraps(func)
     def newfunc(self, *args, **kwargs):
@@ -837,6 +866,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if not isinstance(index, tuple):
             index = (index,)
         index = convert_ellipsis_to_idx(index, self.batch_size)
+        index = _masks_to_nonzero(index)
         index = _broadcast_tensors(index)
         out = []
         num_single = 0
