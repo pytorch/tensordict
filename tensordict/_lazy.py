@@ -175,6 +175,38 @@ def _fails_exclusive_keys(func):
     return newfunc
 
 
+def _mask_with_advanced_index_to_integers(index):
+    """Rewrites boolean masks that share an index with other advanced indices.
+
+    When a boolean mask is combined with another tensor (or list) index, the
+    indices are broadcast together, so ``x[mask, idx]`` is
+    ``x[mask.nonzero(as_tuple=True) + (idx,)]``. Spelling the mask as integer
+    indices lets the lazy stack follow the same path as any other combination
+    of advanced indices instead of splitting the mask along the stack dimension.
+    """
+    if not isinstance(index, tuple):
+        return index
+    n_advanced = 0
+    has_mask = False
+    for idx in index:
+        if isinstance(idx, (list, np.ndarray)):
+            idx = torch.as_tensor(idx)
+        if isinstance(idx, torch.Tensor) and idx.ndim > 0:
+            n_advanced += 1
+            has_mask = has_mask or idx.dtype == torch.bool
+    if not has_mask or n_advanced < 2:
+        return index
+    out = []
+    for idx in index:
+        if isinstance(idx, (list, np.ndarray)):
+            idx = torch.as_tensor(idx)
+        if isinstance(idx, torch.Tensor) and idx.ndim > 0 and idx.dtype == torch.bool:
+            out.extend(idx.nonzero(as_tuple=True))
+        else:
+            out.append(idx)
+    return tuple(out)
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A Lazy stack of TensorDicts.
 
@@ -2608,6 +2640,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 return result
             # x[False] (or a scalar False mask) adds a zero-sized leading dim
             return result[0:0]
+        index = _mask_with_advanced_index_to_integers(index)
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
