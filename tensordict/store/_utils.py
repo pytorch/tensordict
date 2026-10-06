@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import torch
+from tensordict.utils import _bool_lists_to_masks
 
 __all__ = [
     "_LUA_GETRANGES",
@@ -101,6 +102,8 @@ def _compute_byte_ranges(
     idx,
 ) -> list[tuple[int, int]] | None:
     """Compute per-row ``(byte_offset, byte_length)`` pairs for the write path."""
+    # like torch, a list of bools is a boolean mask
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple):
         if len(idx) == 1:
             idx = idx[0]
@@ -214,6 +217,7 @@ def _getitem_result_shape(
     idx,
 ) -> list[int]:
     """Compute the result shape of ``tensor[idx]`` without creating a tensor."""
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple):
         if len(idx) == 1:
             idx = idx[0]
@@ -251,6 +255,7 @@ def _prepare_indexed_value(
     value: torch.Tensor, shape: list[int], dtype: torch.dtype, idx
 ) -> torch.Tensor:
     """Match the selected shape and data type before converting values to bytes."""
+    idx = _bool_lists_to_masks(idx)
     if isinstance(idx, tuple) and len(idx) == 1:
         idx = idx[0]
     if isinstance(idx, torch.Tensor) and idx.ndim == 0 and idx.dtype != torch.bool:
