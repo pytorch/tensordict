@@ -1293,6 +1293,20 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(TypeError, match="Invalid index"):
                 td[idx]
 
+    def test_getitem_bool_list(self, td_name, device):
+        # a list of bools is a boolean mask, as in torch
+        td = getattr(self, td_name)(device)
+        mask0 = [True, False, True, False]
+        mask1 = [False, True, True]
+        for index, mask_index in (
+            (mask0, torch.tensor(mask0)),
+            ((slice(None), mask1), (slice(None), torch.tensor(mask1))),
+        ):
+            result, expected = td[index], td[mask_index]
+            # assert_allclose_td does not compare batch sizes
+            assert result.batch_size == expected.batch_size
+            assert_allclose_td(result, expected)
+
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

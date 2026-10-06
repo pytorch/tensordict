@@ -953,7 +953,11 @@ class TensorDict(TensorDictBase):
                     )
                 else:
                     if subtd is None:
-                        subtd = self._get_sub_tensordict(index)
+                        # _SubTensorDict reads a bare list as a tuple of
+                        # per-dim indices: wrap it to keep it a list index
+                        subtd = self._get_sub_tensordict(
+                            index if isinstance(index, tuple) else (index,)
+                        )
                     subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
             for key in self.keys():
