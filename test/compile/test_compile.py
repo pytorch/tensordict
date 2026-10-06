@@ -199,6 +199,17 @@ class TestTD:
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
 
+    def test_td_index_bool_mask(self, mode):
+        # the masked size depends on the data, so this graph-breaks
+        def add_one(td, mask):
+            return td[mask] + 1
+
+        add_one_c = torch.compile(add_one, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        result = add_one_c(data, torch.tensor([True, False, True]))
+        assert result.shape == torch.Size([2])
+        assert (result["a", "b"] == torch.tensor([1, 3])).all()
+
     def test_stack(self, mode):
         def stack_tds(td0, td1):
             # return TensorDict.stack([td0, td1])
