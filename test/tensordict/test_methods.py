@@ -1970,6 +1970,8 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [2])
     def test_memmap_threads(self, td_name, device, use_dir, tmpdir, num_threads):
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor memmap support not yet implemented")
         td = getattr(self, td_name)(device)
         tdmmap = td.memmap(
             prefix=tmpdir if use_dir else None,
