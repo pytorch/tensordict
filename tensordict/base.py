@@ -3561,7 +3561,10 @@ class TensorDictBase(MutableMapping, TensorCollection):
                 :class:`~torch.nn.Parameter` and buffer registrations are
                 preserved when writing tensor leaves to ``module``: parameters
                 remain parameters with their original ``requires_grad`` value,
-                and buffers remain registered buffers. If ``False``, tensor
+                and buffers remain registered buffers. Leaves that are not
+                parameters but require gradients, or that are batched by
+                :func:`~torch.vmap`, are registered as they are, so that
+                gradients still reach them. If ``False``, tensor
                 leaves are written with the historical replacement semantics,
                 which may deregister an existing parameter when the source leaf
                 is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
