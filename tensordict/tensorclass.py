@@ -215,6 +215,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_reduce_get_metadata",
     "_set_device",
     "_set_names",
+    "_sync_all",
     "_values_list",
     "all_gather",
     "all_reduce",
@@ -464,7 +465,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "lerp_",
     "lgamma",
     "lgamma_",
-    "load_memmap_",
     "lock_",
     "log",
     "log10",
@@ -1192,6 +1192,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.load_memmap = TensorDictBase.load_memmap
     if not hasattr(cls, "load") and "load" not in expected_keys:
         cls.load = TensorDictBase.load
+    if not hasattr(cls, "load_memmap_") and "load_memmap_" not in expected_keys:
+        cls.load_memmap_ = _load_memmap_
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict") and "from_dict" not in expected_keys:
@@ -1932,19 +1934,69 @@ def _load_memmap(
                 allow_pickle=allow_pickle,
             )
         )
+    out = kwargs.pop("out", None)
+    tc_out = None
+    if is_tensorclass(out):
+        # Only an instance of the saved class can be loaded in place. The
+        # saved class is looked up by name, so compare names: a class that is
+        # redefined under the same name (e.g. in a notebook) also matches.
+        tc_out = out if str(type(out)) == str(cls) else None
+        out = tc_out._tensordict if tc_out is not None else None
     if (prefix / "_tensordict").exists():
         td = TensorDict.load_memmap(
             prefix / "_tensordict",
             **kwargs,
             non_blocking=False,
+            out=out,
             robust_key=robust_key,
             allow_pickle=allow_pickle,
         )
     else:
         if not issubclass(cls, NonTensorDataBase):
             raise ValueError("The _tensordict directory seems to be missing.")
-        td = TensorDict(device="cpu")
-    return cls._from_tensordict(td, non_tensordict)
+        td = TensorDict(device="cpu") if tc_out is None else tc_out._tensordict
+    result = cls._from_tensordict(td, non_tensordict)
+    if tc_out is not None:
+        tc_out._non_tensordict.clear()
+        tc_out._non_tensordict.update(result._non_tensordict)
+        return tc_out
+    return result
+
+
+def _load_memmap_(
+    self,
+    prefix: str | Path,
+    robust_key: bool | None = True,
+    *,
+    allow_pickle: bool | None = None,
+):
+    """Loads the content of a memory-mapped tensorclass within the tensorclass where ``load_memmap_`` is called.
+
+    See :meth:`~tensordict.TensorDictBase.load_memmap_` for more info.
+    """
+    # Lock and memmap state live on the tensordict, but loading through the
+    # tensorclass also refreshes the non-tensor fields.
+    td = self._tensordict
+    is_memmap = td.is_memmap()
+    if is_memmap:
+        td.unlock_()
+    loaded = type(self).load_memmap(
+        prefix,
+        device=td.device,
+        out=self,
+        robust_key=robust_key,
+        allow_pickle=allow_pickle,
+    )
+    # A tensordict save (e.g. the ``_tensordict`` directory refreshed by
+    # ``memmap_refresh_``) is loaded into ``td``.
+    if loaded is not self and loaded is not td:
+        raise ValueError(
+            f"Cannot load a saved {type(loaded).__name__} in place into an "
+            f"instance of {type(self).__name__}."
+        )
+    if is_memmap and td._memmap_prefix is not None:
+        td.memmap_()
+    return self
 
 
 def _getstate(self) -> dict[str, Any]:
@@ -3512,6 +3564,7 @@ def _patch_tc(cls):
     cls.share_memory_ = _share_memory_
     cls.load_memmap = TensorDictBase.load_memmap
     cls.load = TensorDictBase.load
+    cls.load_memmap_ = _load_memmap_
     cls.from_dict_instance = _from_dict_instance
 
     # # Methods from lists
