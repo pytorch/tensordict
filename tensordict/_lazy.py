@@ -175,6 +175,13 @@ def _fails_exclusive_keys(func):
     return newfunc
 
 
+def _is_advanced_index(idx):
+    return (
+        isinstance(idx, (list, np.ndarray))
+        or (isinstance(idx, torch.Tensor) and idx.ndim > 0)
+    ) and not (isinstance(idx, torch.Tensor) and idx.dtype == torch.bool)
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A Lazy stack of TensorDicts.
 
@@ -2587,6 +2594,44 @@ class LazyStackedTensorDict(TensorDictBase):
             return any(item is td for td in self.tensordicts)
         return super().__contains__(item)
 
+    def _getitem_separated_advanced(self, index):
+        """Handles integer-tensor indices that are separated by a slice.
+
+        Like torch, ``x[idx0, :, idx1]`` puts the broadcast index dimension
+        first, ahead of the dimensions that were sliced. The lazy stack
+        indexing path always leaves it where the first tensor index was, so
+        for these indices the integers and slices are applied first, the
+        indexed dimensions are moved to the front and the tensors are applied
+        next to each other. Returns ``None`` if ``index`` is not of that form.
+        """
+        if not isinstance(index, tuple):
+            return None
+        index = convert_ellipsis_to_idx(index, self.batch_size)
+        kinds = []
+        for idx in index:
+            if _is_advanced_index(idx):
+                kinds.append("t")
+            elif isinstance(idx, slice):
+                kinds.append("s")
+            elif isinstance(idx, int) and not isinstance(idx, bool):
+                kinds.append("i")
+            else:
+                return None
+        if kinds.count("t") < 2:
+            return None
+        # positions of the tensors once the integers have removed their dims
+        remaining = [k for k in kinds if k != "i"]
+        positions = [i for i, k in enumerate(remaining) if k == "t"]
+        if positions[-1] - positions[0] == len(positions) - 1:
+            return None
+        first = tuple(
+            slice(None) if k == "t" else idx for idx, k in zip(index, kinds)
+        )
+        tensors = tuple(idx for idx, k in zip(index, kinds) if k == "t")
+        result = self[first]
+        order = positions + [d for d in range(result.batch_dims) if d not in positions]
+        return result.permute(*order)[tensors]
+
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
@@ -2608,6 +2653,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 return result
             # x[False] (or a scalar False mask) adds a zero-sized leading dim
             return result[0:0]
+        separated = self._getitem_separated_advanced(index)
+        if separated is not None:
+            return separated
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
