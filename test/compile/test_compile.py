@@ -1439,6 +1439,28 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @pytest.mark.parametrize("mean_raises", [False, True])
+    def test_prob_module_mean(self, mode, mean_raises):
+        class NoMeanNormal(torch.distributions.Normal):
+            @property
+            def mean(self):
+                raise NotImplementedError
+
+        dist_cls = NoMeanNormal if mean_raises else torch.distributions.Normal
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=dist_cls,
+            default_interaction_type=InteractionType.MEAN,
+            n_empirical_estimate=8,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        sample = prob_mod_c(td.copy())["sample"]
+        assert sample.shape == td["loc"].shape
+        if not mean_raises:
+            torch.testing.assert_close(sample, td["loc"])
+
 
 @pytest.mark.skipif(
     TORCH_VERSION <= version.parse("2.4.0"), reason="requires torch>2.4"

@@ -894,11 +894,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            if hasattr(dist, "mean"):
-                try:
-                    return dist.mean
-                except NotImplementedError:
-                    pass
+            try:
+                return dist.mean
+            except (AttributeError, NotImplementedError):
+                pass
             with _use_generator(generator):
                 if dist.has_rsample:
                     return dist.rsample((self.n_empirical_estimate,)).mean(0)
