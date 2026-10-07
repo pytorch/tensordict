@@ -47,13 +47,13 @@ Quick start
   ... )
   >>> print("data:", data)
   data: MyData(
-    floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-    intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-    non_tensordata='test',
-    nested=None,
-    batch_size=torch.Size([3, 4]),
-    device=None,
-    is_shared=False)
+      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+      non_tensordata=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
+      nested=None,
+      batch_size=torch.Size([3, 4]),
+      device=None,
+      is_shared=False)
   >>> data.nested = MyData(
   ...     floatdata=torch.randn(3, 4, 5),
   ...     intdata=torch.randint(10, (3, 4, 1)),
@@ -69,20 +69,20 @@ preserved:
 
   >>> print("indexed:", data[:2])
   indexed: MyData(
-     floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-     intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-     non_tensordata='test',
-     nested=MyData(
-        floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-        intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-        non_tensordata='nested_test',
-        nested=None,
-        batch_size=torch.Size([2, 4]),
-        device=None,
-        is_shared=False),
-     batch_size=torch.Size([2, 4]),
-     device=None,
-     is_shared=False)
+      floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+      nested=MyData(
+          floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+          intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+          non_tensordata=NonTensorData(data=nested_test, batch_size=torch.Size([2, 4]), device=None),
+          nested=None,
+          batch_size=torch.Size([2, 4]),
+          device=None,
+          is_shared=False),
+      non_tensordata=NonTensorData(data=test, batch_size=torch.Size([2, 4]), device=None),
+      batch_size=torch.Size([2, 4]),
+      device=None,
+      is_shared=False)
 
 Tensorclasses support attribute mutation (including on nested instances), the
 usual tensor-shape operations (``stack``, ``cat``, ``reshape``, ``to(device)``,
@@ -98,9 +98,9 @@ the full list of operations.
 Flags
 -----
 
-The behaviour of a tensorclass is controlled by a handful of mutually
-intelligible flags. They can be set in three equivalent forms — pick whichever
-reads best:
+The behaviour of a tensorclass is controlled by a handful of flags that can be
+combined, except for the mutually exclusive ones noted below. They can be set
+in three equivalent forms — pick whichever reads best:
 
 .. code-block::
 
@@ -129,7 +129,12 @@ The available flags are:
   Useful when a field is conceptually a scalar, string, or enum.
 * ``nocast`` — store tensor-compatible scalars (``int``, ``float``,
   ``np.ndarray``, ...) as-is, without wrapping them in a tensor.
-* ``tensor_only`` — every field must hold a tensor (or be tensor-castable).
+* ``tensor_only`` — every field annotation must be a tensor type, a tensor
+  collection (``TensorDict``, a tensorclass) or an optional/union of these;
+  other annotations raise ``TypeError`` when the class is created. Python
+  scalars and numpy arrays are cast to tensors. A value that cannot be cast
+  (e.g. a ``str``) is stored as :class:`~tensordict.NonTensorData` without
+  error, and attribute access returns the ``NonTensorData`` wrapper.
   Skips the non-tensor storage path and yields measurable speed-ups on
   attribute access — recommended for performance-critical containers (RL
   trajectories, model I/O batches).
@@ -148,7 +153,7 @@ Auto-casting
 ~~~~~~~~~~~~
 
 .. warning:: Auto-casting is an experimental feature and subject to changes in
-  the future. Compatibility with python<=3.9 is limited.
+  the future.
 
 With ``autocast`` enabled, methods such as ``__setattr__``, ``update``,
 ``update_`` and ``from_dict`` will attempt to cast type-annotated entries to
@@ -214,7 +219,10 @@ inputs/outputs) this can save a meaningful share of per-step overhead.
     ...     reward: torch.Tensor
 
 Non-tensor inputs that are tensor-castable (Python scalars, numpy arrays) are
-still accepted — they are converted to tensors at assignment time.
+still accepted — they are converted to tensors at assignment time. Values that
+cannot be cast, such as strings, are stored as
+:class:`~tensordict.NonTensorData` without error, and attribute access returns
+the ``NonTensorData`` wrapper rather than the plain value.
 
 Immutability with ``frozen``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -300,7 +308,8 @@ Serialization
 
 A tensorclass instance can be saved with the ``memmap`` method. Tensor data is
 written as memory-mapped tensors and JSON-serializable non-tensor data is
-written as JSON; remaining data is pickled via :func:`~torch.save`.
+written as JSON; remaining non-tensor data is written with Python ``pickle``
+(to an ``other.pickle`` file, or ``pickle.pkl`` for stacked values).
 
 Loading is done with :meth:`~tensordict.TensorDict.load_memmap`. The instance
 recovers its original type provided the tensorclass is importable in the
@@ -310,54 +319,66 @@ loading process:
   >>> data_loaded = TensorDict.load_memmap("path/to/saved/directory")
   >>> assert isinstance(data_loaded, type(data))
 
+Loading pickled non-tensor data without passing ``allow_pickle`` emits a
+``FutureWarning`` in TensorDict 0.14; the default becomes
+``allow_pickle=False`` (which refuses to load it) in 0.15. Pass
+``allow_pickle=True`` only for trusted data. See :ref:`saving` for details.
+
 Edge cases
 ----------
 
 Tensorclasses support equality and inequality operators, including for nested
-instances. Non-tensor / meta data is not validated by these operators; the
-returned tensorclass has boolean leaves for tensor fields and ``None`` for
-non-tensor fields.
+instances. Non-tensor fields are compared as well: the returned tensorclass has
+boolean tensor leaves for both tensor and non-tensor fields, with the batch
+shape for non-tensor fields (``False`` where the values differ).
 
 .. code-block::
 
   >>> print(data == data2)
   MyData(
-     floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-     intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-     non_tensordata=None,
-     nested=MyData(
-         floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-         intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-         non_tensordata=None,
-         nested=None,
-         batch_size=torch.Size([3, 4]),
-         device=None,
-         is_shared=False),
-     batch_size=torch.Size([3, 4]),
-     device=None,
-     is_shared=False)
+      floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+      intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+      nested=MyData(
+          floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+          intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+          non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+          nested=None,
+          batch_size=torch.Size([3, 4]),
+          device=None,
+          is_shared=False),
+      non_tensordata=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+      batch_size=torch.Size([3, 4]),
+      device=None,
+      is_shared=False)
+  >>> data2.non_tensordata = "test_new"
+  >>> (data == data2).non_tensordata.any()
+  tensor(False)
 
-Item assignment performs an *identity* check on non-tensor / meta data rather
-than equality, for performance reasons. If the values differ, a
-``UserWarning`` is emitted; users are responsible for keeping non-tensor data
-in sync.
+Item assignment writes non-tensor values element-wise and emits no warning
+when they differ from the rest of the batch. The field then holds one value per
+element (a :class:`~tensordict.NonTensorStack`), and attribute access returns a
+nested ``list`` of those values, with one nesting level per batch dimension:
 
 .. code-block::
 
   >>> data2.non_tensordata = "test_new"
   >>> data[0] = data2[0]
-  UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
+  >>> [row[0] for row in data.non_tensordata]
+  ['test_new', 'test', 'test']
 
-``torch.cat`` / ``torch.stack`` work on tensorclasses but do not validate
-non-tensor / meta fields — the operation runs on the tensor leaves and the
-non-tensor data of the *first* instance in the list is kept. If the inputs
-disagree on a non-tensor field, the output will silently follow the first one:
+``torch.cat`` and ``torch.stack`` keep the non-tensor value of every element.
+If the inputs disagree on a non-tensor field, the field of the result is a
+:class:`~tensordict.NonTensorStack` and attribute access returns the nested
+list of values. ``torch.stack`` does this even when all inputs share the same
+value, whereas ``torch.cat`` of inputs that share a single value keeps that
+value as is.
 
 .. code-block::
 
   >>> data2.non_tensordata = "test_new"
   >>> stack_tc = torch.cat([data, data2], dim=0)
-  >>> assert stack_tc.non_tensordata == "test"  # data's value wins
+  >>> [row[0] for row in stack_tc.non_tensordata]
+  ['test_new', 'test', 'test', 'test_new', 'test_new', 'test_new']
 
 Pre-allocation
 --------------
@@ -377,11 +398,11 @@ storage is selected based on the value's type.
   >>> data.y = "testing"
   >>> print(data)
   MyClass(
-     X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-     y='testing',
-     batch_size=torch.Size([3, 4]),
-     device=None,
-     is_shared=False)
+      X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
+      batch_size=torch.Size([3, 4]),
+      device=None,
+      is_shared=False)
 
 .. _tensorclass-legacy-decorator:
 

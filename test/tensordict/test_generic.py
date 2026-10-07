@@ -1469,7 +1469,8 @@ class TestGeneric:
     @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
-    def test_from_modules(self, as_module, lazy_stack):
+    @pytest.mark.parametrize("preserve_module_state", [False, True])
+    def test_from_modules(self, as_module, lazy_stack, preserve_module_state):
         empty_module = nn.Linear(3, 4, device="meta")
         modules = [nn.Linear(3, 4) for _ in range(3)]
         if as_module and lazy_stack:
@@ -1484,7 +1485,9 @@ class TestGeneric:
         )
 
         def exec_module(params, x):
-            with params.to_module(empty_module, preserve_module_state=False):
+            with params.to_module(
+                empty_module, preserve_module_state=preserve_module_state
+            ):
                 return empty_module(x)
 
         x = torch.zeros(3)
@@ -1765,6 +1768,25 @@ class TestGeneric:
         td = TensorDict({"a": tensor.clone()}, [3, 4, 5])
         td[index] = -1.0
         assert (td["a"] == written).all()
+
+    def test_index_uint8_mask(self):
+        mask = torch.tensor([1, 0, 2], dtype=torch.uint8)
+        tensor = torch.arange(60.0).view(3, 4, 5)
+        td = TensorDict({"a": tensor, "n": {"b": tensor}}, [3, 4, 5])
+        with warnings.catch_warnings():
+            # torch reads a uint8 tensor as a mask, and warns that it is deprecated
+            warnings.filterwarnings("ignore", "indexing with dtype torch.uint8")
+            expected = tensor[mask]
+            sub = td[mask]
+            value = -torch.ones(expected.shape)
+            written = tensor.clone()
+            written[mask] = value
+            td_written = TensorDict({"a": tensor.clone()}, [3, 4, 5])
+            td_written[mask] = TensorDict({"a": value}, expected.shape)
+        assert sub.batch_size == expected.shape
+        assert (sub["a"] == expected).all()
+        assert (sub["n", "b"] == expected).all()
+        assert (td_written["a"] == written).all()
 
     def test_getitem_scalar_bool_0d(self):
         td = TensorDict({"a": torch.tensor(1.0)}, [])
