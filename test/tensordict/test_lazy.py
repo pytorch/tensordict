@@ -1859,6 +1859,102 @@ class TestLazyStackedTensorDict:
         lst[torch.tensor(False)] = TensorDict({"a": torch.full((1, 2), 5.0)}, [1, 2])
         assert lst["a"].tolist() == before
 
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize("selection", ["slice", "mask", "indices"])
+    @pytest.mark.parametrize("named", [False, True])
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    def test_lazy_empty_selection_operations(self, stack_dim, selection, named, device):
+        dense = TensorDict(
+            {"x": torch.ones(3, 4, 5), "nested": {"y": torch.zeros(3, 4, 5, 2)}},
+            [3, 4, 5],
+            device=device,
+            names=["a", "b", "c"] if named else None,
+        )
+        lazy = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+        if named:
+            lazy.names = dense.names
+        index = [slice(None)] * 3
+        index[stack_dim] = {
+            "slice": slice(0, 0),
+            "mask": torch.zeros(dense.shape[stack_dim], dtype=torch.bool),
+            "indices": torch.empty(0, dtype=torch.long),
+        }[selection]
+        index = tuple(index)
+        empty, reference = lazy[index], dense[index]
+        assert isinstance(empty, LazyStackedTensorDict)
+        assert empty.batch_size == reference.batch_size
+        assert empty.names == reference.names
+        assert empty.device == reference.device
+        # A stack with no members has no key structure, as for empty cat inputs.
+        assert not list(empty.keys())
+        assert empty.is_empty()
+        for result in (
+            empty.clone(),
+            empty.copy(),
+            empty.detach(),
+            empty.select(),
+            empty.exclude("x"),
+            empty.empty(),
+            empty.apply(lambda x: x),
+            empty == empty,
+            empty != empty,
+            empty == 0,
+            empty.to_tensordict(),
+            empty.contiguous(),
+        ):
+            assert result.batch_size == reference.batch_size
+            assert result.names == reference.names
+            assert result.device == reference.device
+        moved = empty.to("cpu")
+        assert moved.device == torch.device("cpu")
+        assert moved.batch_size == reference.batch_size
+        assert moved.names == reference.names
+        assert empty.unbind(stack_dim) == ()
+        assert_allclose_td(torch.cat([empty, lazy, empty], stack_dim), dense)
+
+        integer_index = [slice(None)] * 3
+        integer_index[(stack_dim + 1) % 3] = 0
+        for idx in ((..., slice(2)), tuple(integer_index)):
+            assert empty[idx].batch_size == reference[idx].batch_size
+            assert empty[idx].names == reference[idx].names
+        names = [f"dim{i}" for i in range(3)]
+        renamed = empty.rename(*names)
+        assert renamed.names == names
+        assert empty.names == reference.names
+        renamed.names = None
+        assert renamed.names == [None] * 3
+        assert renamed.refine_names(*names).names == names
+
+    def test_lazy_empty_apply(self):
+        empty = lazy_stack([TensorDict({}, [4])], 0)[:0]
+        assert empty.apply(lambda x: x, filter_empty=True) is None
+        assert empty.apply_(lambda x: x) is empty
+        out = empty.clone()
+        assert empty.apply(lambda x: x, out=out) is out
+        for num_threads in (0, 2):
+            result = empty.apply(lambda x: x, num_threads=num_threads)
+            assert result.batch_size == empty.batch_size
+        result = empty.apply(lambda x: x, batch_size=[0, 2])
+        assert result.batch_size == torch.Size([0, 2])
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_lazy_empty_nested_and_nonempty(self, device):
+        x = torch.ones(3, 4, device=device, requires_grad=True)
+        dense = TensorDict(x=x, batch_size=[3, 4], device=device)
+        lazy = lazy_stack(list(dense.unbind(0)))
+        empty = lazy[:0]
+        nested = TensorDict(nested=empty, batch_size=[0], device=device)
+        for result in (nested.clone(), nested.detach(), nested.to("cpu")):
+            assert result["nested"].batch_size == torch.Size([0, 4])
+        selected = lazy[torch.tensor([True, False, True])].clone()
+        assert_allclose_td(selected.to_tensordict(), dense[[0, 2]])
+        combined = torch.cat([empty, selected], 0)
+        combined["x"].sum().backward()
+        expected_grad = torch.ones_like(x)
+        expected_grad[1] = 0
+        torch.testing.assert_close(x.grad, expected_grad)
+        assert not combined.detach()["x"].requires_grad
+
     def test_lazy_empty_selection_batch_size(self):
         lst = LazyStackedTensorDict(
             *[TensorDict({"a": torch.ones(2)}, [2]) for _ in range(3)],

@@ -22,6 +22,7 @@ from packaging import version
 
 from tensordict import (
     assert_close,
+    lazy_stack,
     NonTensorData,
     PYTREE_REGISTERED_LAZY_TDS,
     PYTREE_REGISTERED_TDS,
@@ -127,6 +128,18 @@ def test_unravel_keys_compile(key):
 )
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
+    def test_empty_lazy_stack(self, mode):
+        def fn(td):
+            empty = td[:0].clone().detach()
+            return empty.to_tensordict(), empty[:, :2]
+
+        td = lazy_stack([TensorDict(x=torch.ones(4), batch_size=[4])] * 3)
+        compiled = torch.compile(fn, fullgraph=True, mode=mode)
+        dense, lazy = compiled(td)
+        assert dense.batch_size == torch.Size([0, 4])
+        assert lazy.batch_size == torch.Size([0, 2])
+        assert not list(dense.keys())
+
     def test_tensor_output(self, mode):
         def add_one(td):
             return td["a", "b"] + 1
